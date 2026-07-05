@@ -89,9 +89,12 @@ class Player extends Entity {
   /* ---------- update ---------- */
   update(dt, world, game, input) {
     const feet = this.equip.feet ? ITEMS[this.equip.feet].fx : null;
-    let speedMult = ((feet && feet.speed) || 1) * ((this.equip.chip && ITEMS[this.equip.chip].fx.speed) || 1);
+    let speedMult = ((feet && feet.speed) || 1) * ((this.equip.chip && ITEMS[this.equip.chip].fx.speed) || 1) * (this.speedAuraM || 1);
     if (game.buffActive()) speedMult *= game.buff.speed;
     const baseSpeed = 250 * speedMult;
+    // crystal heart & level scaling
+    const wantMax = 100 + (game.level - 1) * 3 + (this.gearFx('maxHp') || 0);
+    if (this.maxHp !== wantMax) { this.maxHp = wantMax; this.hp = Math.min(this.hp, this.maxHp); ui.updateHUD(); }
     this.iframes = Math.max(0, this.iframes - dt);
     this.actionCd = Math.max(0, this.actionCd - dt);
     this.swingT = Math.max(0, this.swingT - dt);
@@ -104,10 +107,24 @@ class Player extends Entity {
       if (this.regenT > 1) { this.regenT = 0; this.hp = Math.min(this.maxHp, this.hp + regen); ui.updateHUD(); }
     }
 
+    // ladder climbing (Rung Rails)
+    const ladTile = (dy2) => { const t = world.item(Math.floor(this.x / TS), Math.floor((this.y + dy2) / TS)); return t && t.fx && t.fx.ladder; };
+    this.onLadder = ladTile(0) || ladTile(this.h / 2 - 4);
+
     // dash
     if (this.dashT > 0) {
       this.dashT -= dt;
       this.vy = 0;
+    } else if (this.onLadder && !this.onGround) {
+      // climb: SPACE up, S down, else cling
+      let mx = 0;
+      if (input.left) mx -= 1;
+      if (input.right) mx += 1;
+      if (mx !== 0) this.facing = mx;
+      this.vx += (mx * baseSpeed * 0.5 - this.vx) * Math.min(1, 10 * dt);
+      this.vy = input.jump ? -170 : (input.down ? 190 : this.vy * 0.5);
+      this.jumpsUsed = 0;
+      input.jumpPressed = false;
     } else {
       // walk
       let mx = 0;
@@ -122,20 +139,47 @@ class Player extends Entity {
       const ctile = world.get(Math.floor(this.x / TS), Math.floor(this.y / TS));
       this.inWater = !!(ctile && ITEMS[ctile] && ITEMS[ctile].swim);
 
+      // gecko chip: wall slide + wall jump
+      this.wallSliding = false;
+      if (this.gearFx('wallCling') && !this.onGround && !this.inWater && this.vy > 0) {
+        const dirIn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        if (dirIn !== 0 && world.isSolid(Math.floor((this.x + dirIn * (this.w / 2 + 3)) / TS), Math.floor(this.y / TS))) {
+          this.wallSliding = true;
+          this.vy = Math.min(this.vy, 95);
+          if (Math.random() < 0.2) game.fx.dust(this.x + dirIn * this.w / 2, this.y, -dirIn);
+          if (input.jumpPressed) {
+            this.vy = -610; this.vx = -dirIn * 360; this.facing = -dirIn;
+            input.jumpPressed = false;
+            game.fx.puff(this.x + dirIn * 10, this.y, '#2de2a3');
+            game.sfx.play('bounce');
+          }
+        }
+      }
+
       // jump / double jump / swim stroke
       if (input.jumpPressed) {
         const extraJumps = (feet && feet.doubleJump) || 0;
+        const jumpV = (feet && feet.jump) || 640;
         if (this.inWater) { this.vy = -250; game.fx.puff(this.x, this.y - this.h / 2, '#9adcf0'); }
-        else if (this.onGround) { this.vy = -640; this.jumpsUsed = 0; game.fx.puff(this.x, this.y + this.h / 2, '#9fb4d0'); }
-        else if (this.jumpsUsed < extraJumps) { this.jumpsUsed++; this.vy = -580; game.fx.puff(this.x, this.y + this.h / 2, '#2de2a3'); game.sfx.play('bounce'); }
+        else if (this.onGround) { this.vy = -jumpV; this.jumpsUsed = 0; game.fx.puff(this.x, this.y + this.h / 2, '#9fb4d0'); }
+        else if (this.jumpsUsed < extraJumps) { this.jumpsUsed++; this.vy = -jumpV * 0.9; game.fx.puff(this.x, this.y + this.h / 2, '#2de2a3'); game.sfx.play('bounce'); }
         input.jumpPressed = false;
       }
 
-      // jetpack / glider
+      // jetpack / glider / hover pack
       const backFx = this.equip.back ? ITEMS[this.equip.back].fx : null;
       const jp = backFx && backFx.jetpack;
       const glide = backFx && backFx.glide;
-      this.jetting = false; this.gliding = false;
+      const hv = backFx && backFx.hover;
+      this.jetting = false; this.gliding = false; this.hovering = false;
+      if (hv && input.jump && !this.onGround && this.fuel > 0) {
+        this.hovering = true;
+        this.vy += (0 - this.vy) * Math.min(1, 12 * dt);
+        this.fuel = Math.max(0, this.fuel - hv.drain * dt);
+        this.jetting = true;
+        if (Math.random() < 0.3) game.fx.add(this.x + (Math.random() - 0.5) * 16, this.y + this.h / 2, 0, 120, 'rgba(110,231,255,0.7)', 0.3, 3, 0);
+      }
+      if (hv && this.onGround) this.fuel = Math.min(1, this.fuel + dt / hv.regen);
       if (glide && input.jump && !this.onGround && this.vy > 0 && !this.inWater) {
         this.vy = Math.min(this.vy, glide.fall);
         this.vx += this.facing * 40 * dt;
@@ -161,6 +205,22 @@ class Player extends Entity {
       }
       input.dashPressed = false;
 
+      // updraft turbines: ride the wind column
+      const ptx2 = Math.floor(this.x / TS);
+      for (let dy2 = 0; dy2 <= 8; dy2++) {
+        const ty2 = Math.floor((this.y + this.h / 2) / TS) + dy2;
+        const t2 = world.get(ptx2, ty2);
+        if (!t2) continue;
+        if (ITEMS[t2].fx && ITEMS[t2].fx.updraft) {
+          this.vy -= 3600 * dt; // beats gravity with lift to spare
+          this.vy = Math.max(this.vy, -430);
+          if (Math.random() < 0.25) game.fx.add(this.x + (Math.random() - 0.5) * 20, this.y + 20, 0, -180, 'rgba(200,235,255,0.5)', 0.4, 3, 0);
+          break;
+        }
+        if (ITEMS[t2].solid) break;
+      }
+
+      const gm = ((feet && feet.gravMult) || 1) * (this.gravAuraM || 1);
       if (this.inWater) {
         if (this.gearFx('buoy')) {
           this.vy -= 900 * dt; // buoy chip: float hard to the surface
@@ -170,8 +230,8 @@ class Player extends Entity {
           this.vy = Math.max(-260, Math.min(this.vy, 150));
         }
         this.jumpsUsed = 0;
-      } else {
-        this.vy += this.gravity * dt;
+      } else if (!this.hovering) {
+        this.vy += this.gravity * gm * dt;
         this.vy = Math.min(this.vy, 1100);
       }
     }
@@ -238,20 +298,34 @@ class Player extends Entity {
         if (it.fx.conveyor && this.onGround && Math.floor((this.y + this.h / 2 + 2) / TS) === ty) {
           onConveyor = ((world.meta[world.idx(tx, ty)] || {}).dir || 1) * it.fx.conveyor;
         }
+        if (it.fx.speedPad && this.onGround && Math.floor((this.y + this.h / 2 + 2) / TS) === ty) {
+          const dir = (world.meta[world.idx(tx, ty)] || {}).dir || 1;
+          if (Math.abs(this.vx) < it.fx.speedPad * 0.95) {
+            this.vx = dir * it.fx.speedPad;
+            game.fx.dust(this.x, this.y + this.h / 2, -dir);
+            game.sfx.play('dash');
+          }
+        }
+        if (it.fx.sticky && this.onGround) this.vx *= Math.max(0, 1 - 7 * dt);
       }
     });
     if (onConveyor) this.x += onConveyor * dt;
 
-    // heal + shield auras — scan nearby tiles
+    // heal / shield / grav / fuel / speed auras — scan nearby tiles
     const ptx = Math.floor(this.x / TS), pty = Math.floor(this.y / TS);
-    this.shieldNear = 0;
+    this.shieldNear = 0; this.gravAuraM = 1; this.speedAuraM = 1;
+    let fuelAura = false;
     for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
       const it = world.item(ptx + dx, pty + dy);
       if (!it || !it.fx) continue;
       const d = Math.hypot(dx, dy);
       if (it.fx.heal && d <= it.fx.healRange) healNear = Math.max(healNear, it.fx.heal);
       if (it.fx.shield && d <= it.fx.shieldRange) this.shieldNear = Math.max(this.shieldNear, it.fx.shield);
+      if (it.fx.gravAura && d <= it.fx.auraRange) this.gravAuraM = Math.min(this.gravAuraM, it.fx.gravAura);
+      if (it.fx.fuelAura && d <= it.fx.auraRange) fuelAura = true;
+      if (it.fx.speedAura && d <= it.fx.auraRange) this.speedAuraM = Math.max(this.speedAuraM, it.fx.speedAura);
     }
+    if (fuelAura) { this.fuel = Math.min(1, this.fuel + dt * 0.8); this.dashCd = Math.max(0, this.dashCd - dt); }
     if (healNear && this.hp < this.maxHp) {
       this._healT = (this._healT || 0) + dt;
       if (this._healT > 0.5) {
@@ -382,7 +456,7 @@ class Player extends Entity {
       if (!this.take(held.id, 1)) return;
       world.set(tx, ty, held.id);
       game.progress.stats.placed++;
-      if (held.fx && held.fx.conveyor) world.meta[i] = { dir: this.facing };
+      if (held.fx && (held.fx.conveyor || held.fx.speedPad)) world.meta[i] = { dir: this.facing };
       if (held.fx && held.fx.door && world.isHome) { world.doorIdx = i; game.toast('Respawn point set — you\'ll arrive at this door.', 'gold'); }
       if (held.fx && held.fx.sign) {
         const txt = (window.prompt('Sign text:', '') || '').slice(0, 40);
@@ -442,11 +516,15 @@ class Player extends Entity {
       this.actionCd = 1 / rate;
       this.swingT = 0.18;
       if (tool.projectile) {
-        const a = Math.atan2(wy - this.y, wx - this.x);
-        game.projectiles.push(new Projectile(this.x + Math.cos(a) * 20, this.y - 6 + Math.sin(a) * 20,
-          Math.cos(a) * tool.projectile.speed, Math.sin(a) * tool.projectile.speed,
-          Math.round(tool.dmg * this.dmgMult()), true, tool.projectile.color,
-          { pierce: tool.projectile.pierce, boomerang: tool.projectile.boomerang, knock: tool.knock, burn: tool.burn }));
+        const baseA = Math.atan2(wy - this.y, wx - this.x);
+        const n = tool.pellets || 1;
+        for (let pi2 = 0; pi2 < n; pi2++) {
+          const a = baseA + (n > 1 ? (pi2 - (n - 1) / 2) * (tool.spread / (n - 1)) * 2 : 0);
+          game.projectiles.push(new Projectile(this.x + Math.cos(a) * 20, this.y - 6 + Math.sin(a) * 20,
+            Math.cos(a) * tool.projectile.speed, Math.sin(a) * tool.projectile.speed,
+            Math.round(tool.dmg * this.dmgMult()), true, tool.projectile.color,
+            { pierce: tool.projectile.pierce, boomerang: tool.projectile.boomerang, knock: tool.knock, burn: tool.burn, chill: tool.chill }));
+        }
         game.sfx.play('shoot');
       } else {
         // melee arc
@@ -459,8 +537,9 @@ class Player extends Entity {
           const dx = e.x - this.x, dy = e.y - this.y;
           if (Math.sign(dx) !== this.facing && Math.abs(dx) > e.w) continue;
           if (Math.hypot(dx, dy) < range + e.w / 2) {
-            e.hurt(dmg, game, this.facing * 200);
+            e.hurt(dmg, game, this.facing * (tool.knock || 200));
             if (tool.burn) { e.burn = tool.burn.dps; e.burnT = tool.burn.dur; }
+            game.onPlayerDealt(dmg);
             hitSomething = true;
           }
         }

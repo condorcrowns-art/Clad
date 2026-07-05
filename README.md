@@ -56,7 +56,33 @@ sectors** wait behind portals, each ending in a boss fight.
   awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic
-Every splice result is *functional*:
+**71 splice recipes** form a true network — results splice with other results, four tiers deep,
+and every recipe is reachable starting from the six natural blocks (dirt, stone, wood, sand,
+snow, ice). Highlights of the deeper web:
+
+| Chain | What you get |
+|---|---|
+| Wood + Spring → **Cloud Plank** | One-way platforms (jump up through, land on top) |
+| Wood + Conveyor → **Rung Rail** | Climbable ladders |
+| Brick + Conveyor → **Dash Pad** | Sideways launcher |
+| Conveyor + Teleporter → **Updraft Turbine** | Rideable wind-column elevators |
+| Spring + Teleporter → **Grav Well** | Low-gravity aura zone |
+| LED + Repair Node → **Grow Lamp** | Trees near it grow 2× faster |
+| Ice + Sentry → **Frost Coil** | Chills all nearby enemies to half speed |
+| Sentry + Drill → **Sentry MkII** · Sentry + Spike → **Flak Turret** | Turret tech tree |
+| Spike + Blaster → **Proximity Mine** | Enemy-triggered explosive |
+| Magnet Chip + Stone → **Magnet Pylon** | Collects all drops to one spot |
+| Dirt + Repair Node → **Compost Bin** | Feed any item, get a random seed |
+| Brick + Pickaxe → **Breaker Maul** · Conveyor + Sword → **Pulse Katana** · Spike + Sword → **Venom Edge** | Melee weapon tree |
+| Blaster + Conveyor → **Scatter Cannon** · Blaster + Ice → **Cryo Blaster** | Gun tree |
+| Drill + Laser → **Railgun** · Laser + Scatter → **Star Cannon** | Tier-4 gun capstones |
+| Jackhammer + Breaker Maul → **Omni-Tool** | Tier-4 tool capstone |
+| Glider + Jetpack → **Hover Pack** | Hold SPACE to hover in place |
+| Glass + Ladder → **Gecko Chip** | Wall-slide + wall-jump |
+| Crystal Cluster + Repair Node → **Crystal Heart** | +30 max HP |
+| …plus Moon/Rocket Boots, Scholar/Leech/Miner/Garden chips, Beacon, Disco Core, Fountain, Tar, Obsidian, Alarm, Fortress Core | |
+
+The first-tier basics:
 
 | Splice | Result | What it does |
 |---|---|---|

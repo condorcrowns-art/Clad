@@ -16,8 +16,7 @@ defItem('copper_ore', { name: 'Copper Vein', kind: 'block', hp: 6, solid: true, 
 defItem('silver_ore', { name: 'Silver Vein', kind: 'block', hp: 8, solid: true, noDrop: true, gemVal: [8, 14], color: '#c0c0cc', color2: '#7e7e8a', desc: 'Mid-depth ore. A solid payday.' });
 defItem('aurum_ore', { name: 'Aurum Vein', kind: 'block', hp: 10, solid: true, noDrop: true, gemVal: [18, 28], color: '#ffd700', color2: '#a8860b', desc: 'Deep ore. Miners dream about this.' });
 defItem('core_crystal', { name: 'Core Crystal', kind: 'block', hp: 12, solid: true, noDrop: true, gemVal: [40, 65], animated: true, fx: { glow: 4 }, color: '#ff6ec7', color2: '#a4247d', desc: 'The mineshaft\'s rarest prize. Worth a fortune, might hide a seed.' });
-defItem('snow', { name: 'Snow Block', kind: 'block', tier: 0, hp: 3, solid: true, color: '#eef3fb', color2: '#c6d4ea', desc: 'Packed frost from tundra worlds. Crunchy.' });
-defItem('ice',  { name: 'Ice Block', kind: 'block', tier: 0, hp: 3, solid: true, transparent: true, slippery: true, color: '#a8d8f0', color2: '#6fb8d4', desc: 'FUNCTION: frictionless! You (and your enemies) slide right off it. Build skating rinks or trap corridors.' });
+// (snow & ice are defined in items.js so their seeds exist for splicing)
 
 // weather programs for the home server's sky (Growtopia-style weather machines)
 const WEATHERS = [
@@ -184,7 +183,8 @@ class World {
     }
     if (it.gemVal) { // ore veins & crystal clusters burst into gems
       const [g0, g1] = it.gemVal;
-      game.spawnGems(cx, cy, g0 + Math.floor(Math.random() * (g1 - g0 + 1)));
+      const boost = game.player.gearFx('oreBoost') || 1;
+      game.spawnGems(cx, cy, Math.round((g0 + Math.floor(Math.random() * (g1 - g0 + 1))) * boost));
       if (it.id === 'core_crystal' && Math.random() < 0.25) game.spawnDrop(cx, cy, 'mystery_seed', 1);
       if (it.id === 'crystal_cluster' && Math.random() < 0.14 && ITEMS.crystal_cluster_seed) game.spawnDrop(cx, cy, 'crystal_cluster_seed', 1);
       game.sfx.play('gem');
@@ -208,7 +208,7 @@ class World {
       game.toast('Sapling destroyed — it wasn\'t ready.', 'warn');
       return true;
     }
-    const n = 1 + Math.floor(Math.random() * 3);
+    const n = 1 + Math.floor(Math.random() * 3) + (game.player.gearFx('harvestBonus') || 0);
     game.spawnDrop(cx, cy, tr.result, n);
     if (Math.random() < 0.45) game.spawnDrop(cx, cy, tr.result + '_seed', 1);
     if (Math.random() < 0.15) game.spawnDrop(cx, cy, tr.result + '_seed', 1);
@@ -223,25 +223,86 @@ class World {
 
   // ---- per-frame world logic: sentries, tesla coils ----
   update(dt, game) {
+    // all turret-family blocks (sentry, mega sentry, flak) share one brain
     this._sentryT = (this._sentryT || 0) - dt;
     if (this._sentryT <= 0) {
-      this._sentryT = 0.8;
+      this._sentryT = 0.5;
       for (let i = 0; i < this.tiles.length; i++) {
         const t = this.tiles[i];
-        if (t !== 'sentry') continue;
+        if (!t) continue;
+        const def = ITEMS[t];
+        if (!def.fx || !def.fx.sentry) continue;
+        const S = def.fx.sentry;
+        const m = this.meta[i] = this.meta[i] || {};
+        m.cd = (m.cd || 0) - 0.5;
+        if (m.cd > 0) continue;
         const tx = i % this.w, ty = Math.floor(i / this.w);
         const cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
-        let best = null, bd = 8 * TS;
+        let best = null, bd = S.range * TS;
         for (const e of game.enemies) {
           if (e.dead) continue;
           const d = Math.hypot(e.x - cx, e.y - cy);
           if (d < bd) { bd = d; best = e; }
         }
         if (best) {
-          const a = Math.atan2(best.y - cy, best.x - cx);
-          game.projectiles.push(new Projectile(cx, cy, Math.cos(a) * 560, Math.sin(a) * 560, 12, true, '#ff9e6d'));
+          m.cd = S.rate;
+          if (S.arc) {
+            const tt = 0.8;
+            game.projectiles.push(new Projectile(cx, cy - 10, (best.x - cx) / tt, (best.y - cy) / tt - 0.5 * 1100 * tt, S.dmg, true, '#ffb703', { r: 7, gravity: 1100, life: 2.2 }));
+          } else {
+            const a = Math.atan2(best.y - cy, best.x - cx);
+            game.projectiles.push(new Projectile(cx, cy, Math.cos(a) * 560, Math.sin(a) * 560, S.dmg, true, '#ff9e6d'));
+          }
           game.sfx.play('sentry');
         }
+      }
+    }
+
+    // per-second: aura caches, grow lamps, compost, alarms, fountains
+    this._auraT = (this._auraT || 0) - dt;
+    if (this._auraT <= 0) {
+      this._auraT = 1;
+      this._coils = []; this._pylons = []; this._beacons = []; this._lamps = [];
+      for (let i = 0; i < this.tiles.length; i++) {
+        const t = this.tiles[i];
+        if (!t) continue;
+        const fx = ITEMS[t].fx;
+        if (!fx) continue;
+        const cx = (i % this.w) * TS + TS / 2, cy = Math.floor(i / this.w) * TS + TS / 2;
+        if (fx.chillAura) this._coils.push({ x: cx, y: cy });
+        if (fx.pull) this._pylons.push({ x: cx, y: cy });
+        if (fx.beacon) this._beacons.push({ x: cx, y: cy });
+        if (fx.growAura) this._lamps.push({ x: cx, y: cy, r: fx.auraRange * TS, mult: fx.growAura });
+        if (fx.alarm) {
+          const near = game.enemies.some(e => !e.dead && Math.hypot(e.x - cx, e.y - cy) < fx.alarm * TS);
+          const m = this.meta[i] = this.meta[i] || {};
+          m.alarmCd = (m.alarmCd || 0) - 1;
+          if (near && m.alarmCd <= 0) { m.alarmCd = 4; game.sfx.play('error'); game.fx.spark(cx, cy - 10, '#ef476f', 8); }
+        }
+        if (fx.compost) {
+          const m = this.meta[i];
+          if (m && m.comp && Date.now() >= m.comp.until && !m.comp.done) { m.comp.done = true; game.sfx.play('plant'); game.fx.puff(cx, cy - 10, '#80b918'); }
+        }
+      }
+      // grow lamps accelerate nearby trees (adds bonus elapsed time)
+      if (this._lamps.length) {
+        this.trees.forEach((tr, i) => {
+          const cx = (i % this.w) * TS + TS / 2, cy = Math.floor(i / this.w) * TS + TS / 2;
+          for (const L of this._lamps) {
+            if (Math.hypot(L.x - cx, L.y - cy) <= L.r) { tr.plantedAt -= (L.mult - 1) * 1000; break; }
+          }
+        });
+      }
+    }
+    // fountain plumes
+    this._fntT = (this._fntT || 0) - dt;
+    if (this._fntT <= 0) {
+      this._fntT = 0.12;
+      for (let i = 0; i < this.tiles.length; i++) {
+        if (this.tiles[i] !== 'fountain') continue;
+        const cx = (i % this.w) * TS + TS / 2, cy = Math.floor(i / this.w) * TS;
+        if (Math.abs(cx - game.player.x) > game.cam.view.w) continue;
+        game.fx.add(cx + (Math.random() - 0.5) * 8, cy, (Math.random() - 0.5) * 60, -180 - Math.random() * 80, 'rgba(144,224,239,0.8)', 0.9, 3, 300);
       }
     }
     // vendor bots sell their stock over time
@@ -416,6 +477,19 @@ class World {
       }
     }
 
+    // beacon light pillars
+    if (this._beacons) {
+      for (const b of this._beacons) {
+        const bx = b.x - cam.x;
+        if (bx < -60 || bx > vw + 60) continue;
+        const grad = ctx.createLinearGradient(0, 0, 0, b.y - cam.y);
+        grad.addColorStop(0, 'rgba(72,202,228,0)');
+        grad.addColorStop(1, 'rgba(72,202,228,' + (0.22 + 0.08 * Math.sin(time * 3)) + ')');
+        ctx.fillStyle = grad;
+        ctx.fillRect(bx - 7, 0, 14, Math.max(0, b.y - cam.y - TS / 2));
+      }
+    }
+
     // player torchlight in dark worlds
     if (this.theme.dark >= 0.4 && game && game.player) {
       glows.push([game.player.x - cam.x, game.player.y - cam.y - 10, 6.5 * TS, '#ffe9c9']);
@@ -467,6 +541,26 @@ class World {
       ctx.fillStyle = it.color; ctx.fillRect(sx + 3, sy + 2, TS - 6, 14);
       ctx.fillStyle = it.color2;
       ctx.fillRect(sx + 6, sy + 6, TS - 14, 2); ctx.fillRect(sx + 6, sy + 10, TS - 18, 2);
+      return;
+    }
+    if (id === 'platform' || id === 'cloud_block') {
+      ctx.fillStyle = it.color;
+      if (id === 'cloud_block') {
+        ctx.beginPath(); ctx.arc(sx + 8, sy + 8, 7, 0, 7); ctx.arc(sx + 18, sy + 6, 8, 0, 7); ctx.arc(sx + 26, sy + 9, 6, 0, 7); ctx.fill();
+        ctx.fillRect(sx + 2, sy + 6, TS - 4, 6);
+      } else {
+        ctx.fillRect(sx, sy, TS, 9);
+        ctx.fillStyle = it.color2;
+        ctx.fillRect(sx, sy + 7, TS, 2);
+        ctx.fillRect(sx + 4, sy + 2, 2, 4); ctx.fillRect(sx + TS - 6, sy + 2, 2, 4);
+      }
+      return;
+    }
+    if (id === 'ladder') {
+      ctx.fillStyle = it.color;
+      ctx.fillRect(sx + 5, sy, 4, TS); ctx.fillRect(sx + TS - 9, sy, 4, TS);
+      ctx.fillStyle = it.color2;
+      for (let k = 0; k < 3; k++) ctx.fillRect(sx + 7, sy + 4 + k * 11, TS - 14, 4);
       return;
     }
     // neighbor-aware base render: edges only where exposed, per-material texture
@@ -624,6 +718,110 @@ class World {
         const gx = sx + 6 + k * 9, gy = sy + 8 + (k % 2) * 10;
         ctx.beginPath(); ctx.moveTo(gx, gy - 4); ctx.lineTo(gx + 4, gy); ctx.lineTo(gx, gy + 4); ctx.lineTo(gx - 4, gy); ctx.closePath(); ctx.fill();
       }
+    } else if (id === 'speed_pad') {
+      const dir = (this.meta[this.idx(tx, ty)] || {}).dir || 1;
+      ctx.fillStyle = '#0d1526';
+      for (let k = 0; k < 3; k++) {
+        const ax = sx + 5 + k * 9;
+        ctx.beginPath();
+        if (dir > 0) { ctx.moveTo(ax, sy + 8); ctx.lineTo(ax + 6, sy + 16); ctx.lineTo(ax, sy + 24); ctx.lineTo(ax + 3, sy + 16); }
+        else { ctx.moveTo(ax + 6, sy + 8); ctx.lineTo(ax, sy + 16); ctx.lineTo(ax + 6, sy + 24); ctx.lineTo(ax + 3, sy + 16); }
+        ctx.fill();
+      }
+    } else if (id === 'tar') {
+      ctx.fillStyle = 'rgba(60,55,55,0.9)';
+      for (let k = 0; k < 3; k++) {
+        const bx = sx + 5 + k * 10, bh = 4 + Math.sin(time * 2 + k * 2 + tx) * 3;
+        ctx.beginPath(); ctx.arc(bx, sy + 6 + (k % 2) * 8, 3 + bh * 0.4, 0, 7); ctx.fill();
+      }
+    } else if (id === 'obsidian') {
+      ctx.strokeStyle = 'rgba(199,125,255,0.35)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx + 4, sy + TS - 6); ctx.lineTo(sx + TS - 6, sy + 4); ctx.stroke();
+    } else if (id === 'turbine') {
+      ctx.save(); ctx.translate(sx + TS / 2, sy + TS / 2); ctx.rotate(time * 9);
+      ctx.fillStyle = '#e8f4fb';
+      for (let k = 0; k < 3; k++) { ctx.rotate(2.094); ctx.beginPath(); ctx.ellipse(0, -8, 3.5, 9, 0, 0, 7); ctx.fill(); }
+      ctx.restore();
+      // rising air streaks
+      ctx.strokeStyle = 'rgba(200,235,255,0.4)'; ctx.lineWidth = 2;
+      for (let k = 0; k < 2; k++) {
+        const off = ((time * 90 + k * 40) % 70);
+        ctx.beginPath(); ctx.moveTo(sx + 8 + k * 14, sy - off); ctx.lineTo(sx + 8 + k * 14, sy - off - 12); ctx.stroke();
+      }
+    } else if (id === 'antigrav') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
+      for (let k = 0; k < 2; k++) {
+        const r = 5 + ((time * 12 + k * 8) % 14);
+        ctx.globalAlpha = 1 - r / 16;
+        ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2, r, 0, 7); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    } else if (id === 'growth_lamp') {
+      ctx.fillStyle = 'rgba(255,255,220,' + (0.65 + 0.25 * Math.sin(time * 3)) + ')';
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 12, 8, 0, 7); ctx.fill();
+      ctx.fillStyle = '#4a6b32'; ctx.fillRect(sx + TS / 2 - 3, sy + 20, 6, 8);
+    } else if (id === 'fuel_pad') {
+      ctx.fillStyle = '#0d1526';
+      ctx.beginPath(); ctx.moveTo(sx + 18, sy + 5); ctx.lineTo(sx + 11, sy + 17); ctx.lineTo(sx + 16, sy + 17); ctx.lineTo(sx + 13, sy + 27); ctx.lineTo(sx + 22, sy + 14); ctx.lineTo(sx + 17, sy + 14); ctx.closePath(); ctx.fill();
+    } else if (id === 'beacon') {
+      ctx.save(); ctx.translate(sx + TS / 2, sy + TS / 2); ctx.rotate(time * 2);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.restore();
+    } else if (id === 'disco') {
+      ctx.fillStyle = 'hsla(' + ((time * 140 + tx * 40) % 360) + ',90%,65%,0.55)';
+      ctx.fillRect(sx + 3, sy + 3, TS - 6, TS - 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2, 5, 0, 7); ctx.fill();
+    } else if (id === 'fountain') {
+      ctx.fillStyle = '#1c4a5e'; ctx.fillRect(sx + 6, sy + 8, TS - 12, 6);
+      ctx.fillStyle = '#0d2530'; ctx.fillRect(sx + 12, sy + 14, 8, 14);
+    } else if (id === 'magnet_pylon') {
+      ctx.strokeStyle = '#e8ecf4'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 16, 8, Math.PI, 0); ctx.stroke();
+      ctx.fillStyle = '#e8ecf4'; ctx.fillRect(sx + 8, sy + 14, 5, 6); ctx.fillRect(sx + TS - 13, sy + 14, 5, 6);
+    } else if (id === 'compost') {
+      const m = this.meta[this.idx(tx, ty)];
+      ctx.fillStyle = '#2a3018'; ctx.fillRect(sx + 6, sy + 8, TS - 12, TS - 12);
+      if (m && m.comp) {
+        ctx.fillStyle = m.comp.done ? '#3ddc84' : '#80b918';
+        ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2 + 2, m.comp.done ? 6 : 4 + Math.sin(time * 3) * 1.5, 0, 7); ctx.fill();
+        if (m.comp.done) { ctx.fillStyle = '#fff'; ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.fillText('[S]', sx + TS / 2, sy - 3); }
+      }
+    } else if (id === 'alarm') {
+      ctx.fillStyle = (Math.sin(time * 10) > 0 ? '#ff173f' : '#7a0f23');
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 12, 6, Math.PI, 0); ctx.fill();
+      ctx.fillRect(sx + TS / 2 - 8, sy + 12, 16, 3);
+    } else if (id === 'barbed') {
+      ctx.strokeStyle = '#3d2a1a'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx + 3, sy + 10); ctx.lineTo(sx + TS - 3, sy + 20);
+      ctx.moveTo(sx + 3, sy + 22); ctx.lineTo(sx + TS - 3, sy + 8);
+      ctx.stroke();
+      ctx.fillStyle = '#3d2a1a';
+      for (const [bx, by] of [[10, 12], [20, 18], [16, 15]]) { ctx.fillRect(sx + bx, sy + by - 3, 2, 6); ctx.fillRect(sx + bx - 2, sy + by - 1, 6, 2); }
+    } else if (id === 'mine_trap') {
+      ctx.fillStyle = '#1c2536'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 18, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = Math.sin(time * 6) > 0 ? '#ff4d6d' : '#5a1020';
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 14, 2.5, 0, 7); ctx.fill();
+    } else if (id === 'flak_turret') {
+      ctx.fillStyle = '#1c2536';
+      ctx.save(); ctx.translate(sx + TS / 2, sy + 14); ctx.rotate(-0.8);
+      ctx.fillRect(-3, -14, 6, 14); ctx.restore();
+      ctx.fillRect(sx + 8, sy + 14, 16, 8);
+    } else if (id === 'mega_sentry') {
+      ctx.fillStyle = '#1c2536'; ctx.fillRect(sx + 6, sy + 2, 20, 12);
+      ctx.fillRect(sx + 12, sy + 5, 18, 3); ctx.fillRect(sx + 12, sy + 10, 18, 3);
+      ctx.fillStyle = '#ff4d6d'; ctx.fillRect(sx + 10, sy + 6, 4, 4);
+    } else if (id === 'frost_coil') {
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath(); ctx.moveTo(sx + 6 + k * 10, sy + 6); ctx.lineTo(sx + 9 + k * 10, sy + 16 + (k % 2) * 5); ctx.lineTo(sx + 12 + k * 10, sy + 6); ctx.fill();
+      }
+    } else if (id === 'fortress_core') {
+      ctx.fillStyle = '#7f4f24'; ctx.fillRect(sx + TS / 2 - 2, sy + 2, 4, 14);
+      ctx.fillStyle = '#c1121f';
+      ctx.beginPath(); ctx.moveTo(sx + TS / 2 + 2, sy + 3); ctx.lineTo(sx + TS / 2 + 14, sy + 6 + Math.sin(time * 4) * 2); ctx.lineTo(sx + TS / 2 + 2, sy + 10); ctx.fill();
     } else if (id === 'note_block') {
       ctx.fillStyle = '#0d1526';
       ctx.beginPath(); ctx.arc(sx + 13, sy + 20, 4, 0, 7); ctx.fill();

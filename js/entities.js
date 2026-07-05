@@ -32,6 +32,7 @@ class Entity {
     }
     this.x = nx;
     // vertical
+    const preBottom = this.y + this.h / 2;
     let ny = this.y + this.vy * dt;
     if (this.vy !== 0) {
       const dir = Math.sign(this.vy);
@@ -40,6 +41,11 @@ class Entity {
       let hit = false, hitTile = null;
       for (let tx = Math.floor((this.x - hw + 0.01) / TS); tx <= Math.floor((this.x + hw - 0.01) / TS); tx++) {
         if (world.isSolid(tx, ty)) { hit = true; hitTile = world.get(tx, ty); break; }
+        // one-way platforms: solid only when falling onto them from above
+        if (dir > 0 && !this.dropThrough) {
+          const it2 = world.item(tx, ty);
+          if (it2 && it2.fx && it2.fx.platform && preBottom <= ty * TS + 4) { hit = true; hitTile = world.get(tx, ty); break; }
+        }
       }
       if (hit) {
         ny = dir > 0 ? ty * TS - this.h / 2 - 0.01 : (ty + 1) * TS + this.h / 2 + 0.01;
@@ -47,10 +53,11 @@ class Entity {
           this.onGround = true;
           this.groundTile = hitTile;
           const it = ITEMS[hitTile];
-          if (it && it.fx && it.fx.bounce && this.vy > 200) {
-            this.vy = -it.fx.bounce;
+          const bounceStr = it && it.fx && (it.fx.bounce || (it.fx.softBounce && this.vy > 260 ? it.fx.softBounce : 0));
+          if (bounceStr && this.vy > 200) {
+            this.vy = -bounceStr;
             this.onGround = false;
-            if (game) { game.fx.puff(this.x, ny + this.h / 2, '#3ddc84'); game.sfx.play('bounce'); }
+            if (game) { game.fx.puff(this.x, ny + this.h / 2, it.fx.softBounce ? '#eef3fb' : '#3ddc84'); game.sfx.play('bounce'); }
           } else this.vy = 0;
         } else this.vy = 0;
       } else this.groundTile = null;
@@ -91,7 +98,7 @@ class Enemy extends Entity {
     this.dmg = Math.round(d.dmg * (1 + (this.lvl - 1) * 0.3));
     this.dir = Math.random() < 0.5 ? -1 : 1;
     this.t = Math.random() * 10;
-    this.burn = 0; this.burnT = 0;
+    this.burn = 0; this.burnT = 0; this.chillT = 0;
     this.shootT = 1 + Math.random() * 2;
     this.hitFlash = 0;
     if (d.ai === 'flyer') this.gravity = 0;
@@ -132,10 +139,17 @@ class Enemy extends Entity {
     }
     const p = game.player;
     const distP = Math.hypot(p.x - this.x, p.y - this.y);
+    // frost coils chill everything near them
+    this.chillT = Math.max(0, this.chillT - dt);
+    if (world._coils) for (const c of world._coils) {
+      if (Math.hypot(c.x - this.x, c.y - this.y) < 7 * TS) { this.chillT = 0.4; break; }
+    }
+    const spdM = this.chillT > 0 ? 0.5 : 1;
+    if (this.chillT > 0 && Math.random() < 0.08) game.fx.add(this.x, this.y - this.h / 2, 0, -20, '#a8d8f0', 0.4, 2.5, 0);
     const ai = this.def.ai;
     if (ai === 'walker') {
       if (distP < 9 * TS) this.dir = Math.sign(p.x - this.x) || this.dir;
-      this.vx = this.dir * this.def.speed;
+      this.vx = this.dir * this.def.speed * spdM;
       if (this.def.lobs && distP < 10 * TS) {
         this.shootT -= dt;
         if (this.shootT <= 0) {
@@ -160,8 +174,8 @@ class Enemy extends Entity {
         if (this._hopT <= 0) {
           this._hopT = 0.9 + Math.random() * 0.8;
           if (distP < 10 * TS) this.dir = Math.sign(p.x - this.x) || this.dir;
-          this.vx = this.dir * this.def.speed * 2.2;
-          this.vy = -520;
+          this.vx = this.dir * this.def.speed * 2.2 * spdM;
+          this.vy = -520 * (spdM === 1 ? 1 : 0.75);
         }
       }
       this.vy += this.gravity * dt;
@@ -173,7 +187,7 @@ class Enemy extends Entity {
       }
       this.vx *= 0.98; this.vy *= 0.98;
       this.vy += Math.sin(this.t * 3) * 30 * dt;
-      const sp = Math.hypot(this.vx, this.vy), max = this.def.speed * 1.6;
+      const sp = Math.hypot(this.vx, this.vy), max = this.def.speed * 1.6 * spdM;
       if (sp > max) { this.vx *= max / sp; this.vy *= max / sp; }
       if (this.def.shoots && distP < 9 * TS) {
         this.shootT -= dt;
@@ -187,12 +201,22 @@ class Enemy extends Entity {
     }
     this.moveAndCollide(dt, world);
     if (this.vx !== 0 && ai === 'walker' && this.onGround && Math.abs(this.vx) < 5) this.dir *= -1;
-    // hazard tiles hurt enemies too (firewall blocks!)
-    this.tilesTouching(world, (it) => {
+    // hazard tiles hurt enemies too (firewall blocks, grinders, barbed wire, mines!)
+    this.tilesTouching(world, (it, ttx, tty) => {
       if (it.fx && it.fx.enemyDamage) {
         this._fwTick = (this._fwTick || 0) - dt;
         if (this._fwTick <= 0) { this._fwTick = 0.4; this.hurt(Math.round(it.fx.enemyDamage * 0.4), game); }
       }
+      if (it.fx && it.fx.mine && !this.dead) {
+        world.breakTile(ttx, tty, game, true);
+        game.sfx.play('boom');
+        game.shake = Math.max(game.shake, 0.3);
+        game.fx.explode(ttx * TS + TS / 2, tty * TS + TS / 2, '#ffd166', 22);
+        for (const e of game.enemies) {
+          if (!e.dead && Math.hypot(e.x - ttx * TS, e.y - tty * TS) < it.fx.mine.r * TS + 24) e.hurt(it.fx.mine.dmg, game);
+        }
+      }
+      if (it.fx && it.fx.sticky) this.vx *= 0.5;
     });
     // contact damage
     if (!this.dead && this.overlaps(p)) p.hurt(this.dmg, game, Math.sign(p.x - this.x) * 260);
@@ -251,6 +275,7 @@ class Projectile {
     this.pierce = (opts && opts.pierce) || false;
     this.gravity = (opts && opts.gravity) || 0;
     this.burn = opts && opts.burn;
+    this.chill = (opts && opts.chill) || 0;
     this.knock = (opts && opts.knock) || 120;
     this.boomerang = (opts && opts.boomerang) || false;
     this.phase = 'out'; this.outT = 0.38;
@@ -298,11 +323,14 @@ class Projectile {
         if (e.dead || this._hit.has(e) || !e.overlaps(this)) continue;
         e.hurt(this.dmg, game, Math.sign(this.vx) * this.knock);
         if (this.burn) { e.burn = this.burn.dps; e.burnT = this.burn.dur; }
+        if (this.chill) e.chillT = this.chill;
+        game.onPlayerDealt(this.dmg);
         if (!this.pierce) { this.dead = true; return; }
         this._hit.add(e);
       }
       if (game.boss && !game.boss.dead && !this._hit.has(game.boss) && game.boss.overlaps(this)) {
         game.boss.hurt(this.dmg, game);
+        game.onPlayerDealt(this.dmg);
         if (!this.pierce) this.dead = true;
         else this._hit.add(game.boss);
       }
@@ -358,7 +386,21 @@ class Drop extends Entity {
       const a = Math.atan2(p.y - this.y, p.x - this.x);
       this.vx += Math.cos(a) * 1600 * dt; this.vy += Math.sin(a) * 1600 * dt;
       this.gravity = 0;
-    } else this.gravity = 1400;
+    } else {
+      this.gravity = 1400;
+      // magnet pylons collect strays
+      if (this.pickupDelay <= 0 && world._pylons) {
+        for (const py2 of world._pylons) {
+          const dp = Math.hypot(py2.x - this.x, py2.y - this.y);
+          if (dp < 7 * TS && dp > 20) {
+            const a = Math.atan2(py2.y - 14 - this.y, py2.x - this.x);
+            this.vx += Math.cos(a) * 900 * dt; this.vy += Math.sin(a) * 900 * dt;
+            this.gravity = 200;
+            break;
+          }
+        }
+      }
+    }
     this.vy += this.gravity * dt;
     this.vx *= 0.99;
     this.moveAndCollide(dt, world);

@@ -29,6 +29,11 @@ defItem('wood',  { name: 'Wood Block', kind: 'block', tier: 0, hp: 4, solid: tru
 defItem('sand',  { name: 'Sand Block', kind: 'block', tier: 0, hp: 2, solid: true, color: '#e0c068', color2: '#bfa050',
   desc: 'Loose grains of silicon. The seed of all glass and light.' });
 
+defItem('snow', { name: 'Snow Block', kind: 'block', tier: 0, hp: 3, solid: true, color: '#eef3fb', color2: '#c6d4ea',
+  desc: 'Packed frost from tundra worlds. Crunchy.' });
+defItem('ice',  { name: 'Ice Block', kind: 'block', tier: 0, hp: 3, solid: true, transparent: true, slippery: true, color: '#a8d8f0', color2: '#6fb8d4',
+  desc: 'FUNCTION: frictionless! You (and your enemies) slide right off it. Build skating rinks or trap corridors.' });
+
 defItem('brick', { name: 'Brick Block', kind: 'block', tier: 1, hp: 12, solid: true, color: '#b5484d', color2: '#8c3439',
   desc: 'Hardened composite. Takes a beating — build your vault with it.' });
 defItem('glass', { name: 'Glass Block', kind: 'block', tier: 1, hp: 3, solid: true, transparent: true, color: '#9adcf0', color2: '#6fb8d4',
@@ -176,9 +181,106 @@ defItem('bomb', { name: 'Logic Bomb', kind: 'consumable', tier: 0, bomb: { radiu
 defItem('mystery_seed', { name: 'Mystery Seed', kind: 'consumable', tier: 1, mystery: true,
   desc: 'FUNCTION: click to decode into a random spliced seed. Gambling, but botanical.' });
 
+/* ============ THE SPLICE NETWORK — 40 cross-family results ============ */
+/* construction & traversal */
+defItem('platform', { name: 'Cloud Plank', kind: 'block', tier: 2, hp: 4, solid: false, color: '#d9c8a9', color2: '#a8926b',
+  fx: { platform: true }, desc: 'FUNCTION: one-way platform — jump up through it, land on top. The builder\'s best friend.' });
+defItem('ladder', { name: 'Rung Rail', kind: 'block', tier: 2, hp: 4, solid: false, color: '#a4763f', color2: '#6e4426',
+  fx: { ladder: true }, desc: 'FUNCTION: climbable! Hold [SPACE] to climb up, [S] to slide down.' });
+defItem('speed_pad', { name: 'Dash Pad', kind: 'block', tier: 2, hp: 6, solid: true, animated: true, color: '#ffb703', color2: '#c98a02',
+  fx: { speedPad: 620 }, desc: 'FUNCTION: hurls whoever steps on it sideways at high speed. Faces your placing direction.' });
+defItem('tar', { name: 'Tar Block', kind: 'block', tier: 1, hp: 5, solid: true, animated: true, color: '#232020', color2: '#0d0b0b',
+  fx: { sticky: true }, desc: 'FUNCTION: gooey — anything standing on it slows to a crawl. Moat material.' });
+defItem('obsidian', { name: 'Obsidian Plate', kind: 'block', tier: 4, hp: 26, solid: true, color: '#231942', color2: '#120c24',
+  desc: 'FUNCTION: the toughest buildable block in the game. 26 hits. Vault-grade.' });
+defItem('cloud_block', { name: 'Nimbus Block', kind: 'block', tier: 2, hp: 4, solid: false, color: '#eef3fb', color2: '#c9d8ee',
+  fx: { platform: true, softBounce: 420 }, desc: 'FUNCTION: a one-way platform of solid vapor that gently bounces whatever lands on it.' });
+defItem('turbine', { name: 'Updraft Turbine', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#8ecae6', color2: '#4a7fa5',
+  fx: { updraft: 8 }, desc: 'FUNCTION: blasts a column of air 8 tiles high — step over it and ride the wind up. Build elevators.' });
+defItem('antigrav', { name: 'Grav Well', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#7b68ee', color2: '#483d8b',
+  fx: { gravAura: 0.45, auraRange: 6, glow: 3 }, desc: 'FUNCTION: bends gravity — you fall at half speed and jump floaty anywhere near it.' });
+/* base infrastructure */
+defItem('growth_lamp', { name: 'Grow Lamp', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#d4f7c5', color2: '#7fbf6a',
+  fx: { growAura: 2, auraRange: 5, glow: 4 }, desc: 'FUNCTION: trees within its light grow TWICE as fast. Farm real estate just got valuable.' });
+defItem('fuel_pad', { name: 'Charge Pad', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#ffe066', color2: '#c9a227',
+  fx: { fuelAura: true, auraRange: 5, glow: 3 }, desc: 'FUNCTION: recharges jetpack fuel and dash cooldowns even in mid-air near it.' });
+defItem('beacon', { name: 'Waypoint Beacon', kind: 'block', tier: 2, hp: 8, solid: true, animated: true, color: '#48cae4', color2: '#0096c7',
+  fx: { beacon: true, glow: 5 }, desc: 'FUNCTION: fires a light pillar into the sky and marks itself on your minimap. Never lose your base again.' });
+defItem('disco', { name: 'Disco Core', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#ff70a6', color2: '#b34c78',
+  fx: { disco: true, speedAura: 1.18, auraRange: 5, glow: 4 }, desc: 'FUNCTION: strobes rainbow light and makes everyone near it move 18% faster. Party utility.' });
+defItem('fountain', { name: 'Data Fountain', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#90e0ef', color2: '#4ea8c9',
+  fx: { heal: 3, healRange: 3.5, fountain: true, glow: 2 }, desc: 'FUNCTION: an ever-flowing plume of liquid data. Gently heals anyone beside it. Gorgeous.' });
+defItem('magnet_pylon', { name: 'Magnet Pylon', kind: 'block', tier: 3, hp: 10, solid: true, animated: true, color: '#e63946', color2: '#9a1f2a',
+  fx: { pull: 7 }, desc: 'FUNCTION: drags all loose drops within 7 tiles to itself. Put one under your farm and collect in one place.' });
+defItem('compost', { name: 'Compost Bin', kind: 'block', tier: 2, hp: 8, solid: true, color: '#606c38', color2: '#3a4222',
+  fx: { compost: true }, desc: 'FUNCTION: press [S] with any item selected to feed it in — 60s later it decomposes into a random SEED.' });
+defItem('alarm', { name: 'Alarm Node', kind: 'block', tier: 2, hp: 8, solid: true, animated: true, color: '#ef476f', color2: '#a62646',
+  fx: { alarm: 10 }, desc: 'FUNCTION: shrieks when an enemy comes within 10 tiles. Your base\'s early-warning system.' });
+/* defense network */
+defItem('barbed', { name: 'Barbed Block', kind: 'block', tier: 1, hp: 6, solid: true, color: '#7f5539', color2: '#4d3421',
+  fx: { enemyDamage: 12 }, desc: 'FUNCTION: wooden spikes that scratch ENEMIES on contact — harmless to you. Budget firewall.' });
+defItem('mine_trap', { name: 'Proximity Mine', kind: 'block', tier: 2, hp: 6, solid: true, animated: true, color: '#588157', color2: '#344e41',
+  fx: { mine: { dmg: 60, r: 2 } }, desc: 'FUNCTION: detonates when an ENEMY touches it — big blast, single use. Sleep soundly.' });
+defItem('flak_turret', { name: 'Flak Turret', kind: 'block', tier: 3, hp: 12, solid: true, color: '#bc6c25', color2: '#7f4a19',
+  fx: { sentry: { range: 9, rate: 1.1, dmg: 16, arc: true } }, desc: 'FUNCTION: lobs explosive arcing flak over walls. Covers the ground the sentry can\'t.' });
+defItem('mega_sentry', { name: 'Sentry MkII', kind: 'block', tier: 4, hp: 16, solid: true, color: '#ff6d00', color2: '#b34c00',
+  fx: { sentry: { range: 10, rate: 0.5, dmg: 18 }, glow: 2 }, desc: 'FUNCTION: double the range, double the fire rate, half the mercy.' });
+defItem('frost_coil', { name: 'Frost Coil', kind: 'block', tier: 3, hp: 10, solid: true, animated: true, color: '#a8d8f0', color2: '#5a9dbf',
+  fx: { chillAura: 7, glow: 3 }, desc: 'FUNCTION: radiates cold — every enemy within 7 tiles moves at HALF speed. Kiting made easy.' });
+defItem('fortress_core', { name: 'Fortress Core', kind: 'block', tier: 4, hp: 18, solid: true, animated: true, color: '#dda15e', color2: '#9c6f37',
+  fx: { heal: 4, healRange: 5, shield: 0.25, shieldRange: 5, glow: 4 }, desc: 'FUNCTION: heal aura AND a 25% damage-reduction dome in one block. The heart of any boss camp.' });
+/* weapons web */
+defItem('war_hammer', { name: 'Breaker Maul', kind: 'weapon', tier: 3, dmg: 46, rate: 1.4, range: 1.9, knock: 460, minePower: 2, mineRate: 3, color: '#adb5bd',
+  desc: 'FUNCTION: slow, colossal swings that send enemies FLYING. Also cracks blocks decently.' });
+defItem('katana', { name: 'Pulse Katana', kind: 'weapon', tier: 3, dmg: 17, rate: 6, range: 2.0, minePower: 1, mineRate: 4, color: '#e5e5e5',
+  desc: 'FUNCTION: six slashes a second. Death by a thousand cuts.' });
+defItem('venom_edge', { name: 'Venom Edge', kind: 'weapon', tier: 3, dmg: 20, rate: 3.2, range: 2.0, burn: { dps: 10, dur: 3 }, minePower: 1, mineRate: 4, color: '#80b918',
+  desc: 'FUNCTION: coats enemies in corrosive script that keeps eating them for 3 seconds after the hit.' });
+defItem('scattergun', { name: 'Scatter Cannon', kind: 'weapon', tier: 3, dmg: 9, rate: 2.2, pellets: 5, spread: 0.35, projectile: { speed: 640, color: '#ffb703' }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: five pellets per blast. Devastating point-blank, confetti at range.' });
+defItem('frost_blaster', { name: 'Cryo Blaster', kind: 'weapon', tier: 3, dmg: 12, rate: 4, chill: 2.2, projectile: { speed: 700, color: '#a8d8f0' }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: every hit CHILLS the target to half speed. Boss kiting fuel.' });
+defItem('railgun', { name: 'Railgun', kind: 'weapon', tier: 4, dmg: 62, rate: 0.9, knock: 380, projectile: { speed: 1400, color: '#c77dff', pierce: true }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: a hypersonic slug that punches through EVERYTHING in a line. Slow to charge, apocalyptic on arrival.' });
+defItem('starcannon', { name: 'Star Cannon', kind: 'weapon', tier: 4, dmg: 30, rate: 3, knock: 260, burn: { dps: 8, dur: 2 }, projectile: { speed: 900, color: '#ffd166', pierce: true }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: piercing, burning, knockback starfire at 3 rounds a second. The craftable endgame gun.' });
+/* tools web */
+defItem('jackhammer', { name: 'Jackhammer', kind: 'tool', tier: 3, minePower: 3, mineRate: 10, dmg: 8, rate: 4, range: 1.6, color: '#f4a261',
+  desc: 'FUNCTION: 10 strikes per second. Terrain simply stops existing in front of you.' });
+defItem('omni_tool', { name: 'Omni-Tool', kind: 'tool', tier: 4, minePower: 3, mineRate: 8, dmg: 28, rate: 3.2, range: 1.9, knock: 220, color: '#2de2a3',
+  desc: 'FUNCTION: elite mining AND a real weapon in one slot. The craftable do-everything.' });
+/* gear web */
+defItem('rocket_boots', { name: 'Rocket Boots', kind: 'gear', slot: 'feet', tier: 3,
+  fx: { speed: 1.2, jump: 830, doubleJump: 1 },
+  desc: 'FUNCTION: +30% jump height with thruster-assisted double jump. The vertical build enabler.' });
+defItem('moon_boots', { name: 'Moon Boots', kind: 'gear', slot: 'feet', tier: 3,
+  fx: { speed: 1.1, jump: 740, gravMult: 0.65, doubleJump: 1 },
+  desc: 'FUNCTION: personal low gravity — floaty jumps, gentle falls, lunar swagger.' });
+defItem('hover_pack', { name: 'Hover Pack', kind: 'gear', slot: 'back', tier: 4,
+  fx: { hover: { drain: 0.45, regen: 1.2 } },
+  desc: 'FUNCTION: hold [SPACE] mid-air to HOVER in place — perfect for building and boss dodging. Fuel recharges on the ground.' });
+defItem('climb_chip', { name: 'Gecko Chip', kind: 'gear', slot: 'chip', tier: 3,
+  fx: { wallCling: true },
+  desc: 'FUNCTION: press into a wall to slide down it slowly — and JUMP off it. Wall-jump like you mean it.' });
+defItem('scholar_chip', { name: 'Scholar Chip', kind: 'gear', slot: 'chip', tier: 2,
+  fx: { xpMult: 1.3 },
+  desc: 'FUNCTION: +30% XP from everything. Level while you build.' });
+defItem('leech_chip', { name: 'Leech Chip', kind: 'gear', slot: 'chip', tier: 3,
+  fx: { leech: 0.1 },
+  desc: 'FUNCTION: 10% of all damage you deal comes back as HP. Aggression is a healing strategy.' });
+defItem('miner_chip', { name: 'Miner Chip', kind: 'gear', slot: 'chip', tier: 2,
+  fx: { oreBoost: 1.6 },
+  desc: 'FUNCTION: ore veins and crystal clusters burst with 60% more gems while equipped.' });
+defItem('garden_chip', { name: 'Garden Chip', kind: 'gear', slot: 'chip', tier: 2,
+  fx: { harvestBonus: 1 },
+  desc: 'FUNCTION: every tree harvest yields one extra item. The farmer\'s edge.' });
+defItem('crystal_heart', { name: 'Crystal Heart', kind: 'gear', slot: 'chip', tier: 4,
+  fx: { maxHp: 30, regen: 1 },
+  desc: 'FUNCTION: +30 maximum HP and a slow trickle of regeneration. Life, crystallized.' });
+
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
-const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 9: 170 }; // seconds by tier
+const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 4: 240, 9: 170 }; // seconds by tier
 for (const id of Object.keys(ITEMS)) {
   const it = ITEMS[id];
   if (it.kind === 'seed' || it.noDrop || it.kind === 'consumable' || it.kind === 'special') continue;
@@ -194,7 +296,12 @@ for (const id of Object.keys(ITEMS)) {
 /* ===================== SPLICE RECIPES ===================== */
 // key: two GROWN item ids sorted + joined with '+', value: result item id
 const RECIPES = {};
-function defRecipe(a, b, result) { RECIPES[[a, b].sort().join('+')] = result; }
+function defRecipe(a, b, result) {
+  const key = [a, b].sort().join('+');
+  if (RECIPES[key]) console.warn('DUPLICATE RECIPE PAIR:', key, RECIPES[key], 'vs', result);
+  if (!ITEMS[a] || !ITEMS[b] || !ITEMS[result]) console.warn('RECIPE REFERENCES MISSING ITEM:', a, b, result);
+  RECIPES[key] = result;
+}
 // Tier 1 — natural + natural
 defRecipe('dirt', 'stone', 'brick');
 defRecipe('sand', 'stone', 'glass');
@@ -229,6 +336,52 @@ defRecipe('sand', 'glass', 'note_block');
 defRecipe('conveyor', 'glass', 'recall_disc');
 defRecipe('stone', 'led_block', 'display_shelf');
 defRecipe('sentry', 'conveyor', 'vendor_bot');
+// ---- the splice network: construction & traversal ----
+defRecipe('wood', 'spring_pad', 'platform');
+defRecipe('wood', 'conveyor', 'ladder');
+defRecipe('brick', 'conveyor', 'speed_pad');
+defRecipe('dirt', 'spike_trap', 'tar');
+defRecipe('brick', 'crystal_cluster', 'obsidian');
+defRecipe('snow', 'spring_pad', 'cloud_block');
+defRecipe('conveyor', 'teleporter', 'turbine');
+defRecipe('spring_pad', 'teleporter', 'antigrav');
+// ---- base infrastructure ----
+defRecipe('led_block', 'repair_node', 'growth_lamp');
+defRecipe('led_block', 'teleporter', 'fuel_pad');
+defRecipe('glass', 'teleporter', 'beacon');
+defRecipe('led_block', 'note_block', 'disco');
+defRecipe('glass', 'repair_node', 'fountain');
+defRecipe('magnet_chip', 'stone', 'magnet_pylon');
+defRecipe('dirt', 'repair_node', 'compost');
+defRecipe('led_block', 'sentry', 'alarm');
+// ---- defense web ----
+defRecipe('spike_trap', 'wood', 'barbed');
+defRecipe('spike_trap', 'blaster', 'mine_trap');
+defRecipe('spike_trap', 'sentry', 'flak_turret');
+defRecipe('drill', 'sentry', 'mega_sentry');
+defRecipe('ice', 'sentry', 'frost_coil');
+defRecipe('repair_node', 'shield_gen', 'fortress_core');
+// ---- weapons web ----
+defRecipe('brick', 'pickaxe', 'war_hammer');
+defRecipe('conveyor', 'sword', 'katana');
+defRecipe('spike_trap', 'sword', 'venom_edge');
+defRecipe('blaster', 'conveyor', 'scattergun');
+defRecipe('blaster', 'ice', 'frost_blaster');
+defRecipe('drill', 'laser_rifle', 'railgun');
+defRecipe('laser_rifle', 'scattergun', 'starcannon');
+// ---- tools web ----
+defRecipe('conveyor', 'drill', 'jackhammer');
+defRecipe('jackhammer', 'war_hammer', 'omni_tool');
+// ---- gear web ----
+defRecipe('speed_boots', 'spring_pad', 'rocket_boots');
+defRecipe('snow', 'speed_boots', 'moon_boots');
+defRecipe('glider_wings', 'jetpack', 'hover_pack');
+defRecipe('glass', 'ladder', 'climb_chip');
+defRecipe('led_block', 'sign', 'scholar_chip');
+defRecipe('glass', 'spike_trap', 'leech_chip');
+defRecipe('led_block', 'pickaxe', 'miner_chip');
+defRecipe('dirt', 'led_block', 'garden_chip');
+defRecipe('crystal_cluster', 'repair_node', 'crystal_heart');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
@@ -264,7 +417,7 @@ function sellPrice(id) {
   if (id === 'golden_fish') return 100;
   if (id === 'data_fish') return 8;
   if (it.tier === 9) return 0;
-  const base = { 0: 2, 1: 5, 2: 14, 3: 35 }[it.tier] || 2;
+  const base = { 0: 2, 1: 5, 2: 14, 3: 35, 4: 85 }[it.tier] || 2;
   return it.kind === 'seed' ? Math.max(1, Math.ceil(base * 0.6)) : base;
 }
 
@@ -312,7 +465,7 @@ function iconFor(id) {
       x.fillStyle = '#2a3347'; x.fillRect(6, 24, 8, 10);
       x.fillStyle = it.projectile.color; x.fillRect(28, 20, 8, 4);
     } else {
-      x.strokeStyle = id === 'flame_blade' ? '#ff5714' : '#9adcf0'; x.lineWidth = 5;
+      x.strokeStyle = id === 'flame_blade' ? '#ff5714' : (it.color || '#9adcf0'); x.lineWidth = 5;
       x.beginPath(); x.moveTo(10, 34); x.lineTo(30, 8); x.stroke();
       x.strokeStyle = '#7a5a3a'; x.lineWidth = 4;
       x.beginPath(); x.moveTo(8, 28); x.lineTo(16, 36); x.stroke();

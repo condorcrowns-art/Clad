@@ -93,7 +93,7 @@ class Game {
       if (k === ' ' || k === 'arrowup') { this.input.jump = true; this.input.jumpPressed = true; e.preventDefault(); }
       if (k === 'w') { if (!this.tryPortal()) { this.input.jump = true; this.input.jumpPressed = true; } }
       if (k === 'shift') this.input.dashPressed = true;
-      if (k === 's' || k === 'arrowdown') this.tryTeleport();
+      if (k === 's' || k === 'arrowdown') { this.input.down = true; this.tryTeleport(); }
       if (k >= '1' && k <= '9') { this.player.sel = +k - 1; ui.dirty = true; }
       if (k === 'e') ui.togglePanel('inv');
       if (k === 'b') ui.togglePanel('shop');
@@ -107,6 +107,7 @@ class Game {
       if (k === 'a' || k === 'arrowleft') this.input.left = false;
       if (k === 'd' || k === 'arrowright') this.input.right = false;
       if (k === ' ' || k === 'w' || k === 'arrowup') this.input.jump = false;
+      if (k === 's' || k === 'arrowdown') this.input.down = false;
     });
     this.canvas.addEventListener('mousemove', (e) => { this.input.mouse.x = e.clientX; this.input.mouse.y = e.clientY; });
     document.addEventListener('mousedown', (e) => {
@@ -215,6 +216,29 @@ class Game {
       if (w.isHome) this.saveSoon();
       return;
     }
+    if (w.get(tx, ty) === 'compost') { // feed / collect the bin
+      const i = w.idx(tx, ty);
+      const m = w.meta[i] = w.meta[i] || {};
+      if (m.comp && m.comp.done) {
+        const pool = ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'brick_seed', 'glass_seed', 'spring_pad_seed', 'conveyor_seed', 'led_block_seed', 'spike_trap_seed'];
+        this.spawnDrop(tx * TS + TS / 2, (ty - 1) * TS, pool[Math.floor(Math.random() * pool.length)], 1);
+        delete m.comp;
+        this.toast('The compost turned into a seed!', 'gold');
+        this.sfx.play('harvest');
+      } else if (m.comp) {
+        this.toast('Still composting… ' + Math.ceil((m.comp.until - Date.now()) / 1000) + 's to go.', '');
+      } else {
+        const held = p.heldItem();
+        if (held.id !== 'fist' && held.kind !== 'special' && held.tier !== 9 && p.count(held.id)) {
+          p.take(held.id, 1);
+          m.comp = { until: Date.now() + 60000 };
+          this.toast('Fed 1× ' + held.name + ' to the bin. Check back in 60s.', '');
+          this.sfx.play('plant');
+        } else this.toast('Select any (non-boss) item to compost it into a seed.', 'warn');
+      }
+      if (w.isHome) this.saveSoon();
+      return;
+    }
     if (w.get(tx, ty) === 'note_block') { // tune the chime
       const i = w.idx(tx, ty);
       const m = w.meta[i] = w.meta[i] || {};
@@ -254,7 +278,15 @@ class Game {
 
   /* ---------------- XP & levels ---------------- */
   xpNeed() { return Math.floor(60 * Math.pow(this.level, 1.35)); }
+  onPlayerDealt(dmg) { // leech chip lifesteal
+    const leech = this.player.gearFx('leech');
+    if (leech && this.player.hp < this.player.maxHp) {
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + dmg * leech);
+      ui.updateHUD();
+    }
+  }
   addXp(n) {
+    n = Math.max(1, Math.round(n * (this.player.gearFx('xpMult') || 1)));
     this.xp += n;
     while (this.xp >= this.xpNeed()) {
       this.xp -= this.xpNeed();
@@ -557,6 +589,7 @@ class Game {
 
   /* ---------------- save / load ---------------- */
   save() {
+    if (!this.homeWorld) return;
     try {
       const p = this.player;
       const worlds = {};
@@ -947,6 +980,7 @@ class Game {
     // markers
     const dot = (px, py, col, r) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx + px / TS * sc, my + py / TS * sc, r || 2, 0, 7); ctx.fill(); };
     for (const k of this.keyPickups) dot(k.x, k.y, '#c77dff', 2.5);
+    for (const b of (w._beacons || [])) dot(b.x, b.y, '#48cae4', 2.5);
     if (w.bossZone) dot(w.bossZone.spawnX, w.bossZone.spawnY, '#ff4d6d', 3);
     for (const p2 of w.portals) dot(p2.x, p2.y - TS, p2.locked && p2.locked() ? '#44506b' : '#2de2a3', 2);
     if (Math.floor(this.time * 4) % 2 === 0) dot(this.player.x, this.player.y, '#ffffff', 2.5);
