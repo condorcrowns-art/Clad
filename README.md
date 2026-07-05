@@ -116,6 +116,22 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **OVERDRIVE MODE** — post-Boss-Rush toggle: enemies +3 levels everywhere, all gems doubled.
 - **BOSS RUSH** now chains all **six** bosses back-to-back.
 
+### Even more Growtopia / Pixel Worlds DNA
+- **World Locks & MY WORLDS** (`[V]`) — buy a World Lock (◆1500, or find one in a Golden Cache /
+  Spire wave 10) and **found your own named world**. Each rolls a random biome — verdant, desert
+  (harvestable cacti!), tundra (snow + slippery ice + frozen ponds), or volcanic — and persists
+  exactly like home.
+- **BLACK SPIRE** — wave-defense arena (the Black Tower homage): escalating waves, elite WARDEN
+  waves every 5th, gems + drives every clear, a World Lock at wave 10. Leave between waves.
+- **DEFRAG minigame** — the Surg-E homage: Corrupted Drives drop from enemies/chests; jack in and
+  hit the right op (SCAN/PATCH/PURGE/COOL) before the timer empties, 5 operations, 3 faults and
+  the drive is lost. Flawless runs pay out big.
+- **Paint buckets** — 6 colors + stripper; click any placed block to recolor it. Paint persists.
+- **Display Shelves** — exhibit any item on a shelf (`[S]`). Build museums.
+- **Vendor Bots** — stock up to 10 of an item; the bot sells one every 25 s and pops the gems out.
+- **Fireworks** — celebration rockets that also nuke anything near the burst.
+- **Secret vaults** — every sector hides a sealed treasure room. Dig.
+
 ### Presentation & building feel
 - **Auto-tiled terrain**: neighbor-aware edges, grass-capped dirt with waving blades, real brick
   courses, wood planks with knots, glass shine, flickering corrupted blocks
@@ -145,6 +161,7 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 | `B` | Gem Exchange (shop) + Recycler |
 | `C` | Splice Codex |
 | `Q` | Quest log |
+| `V` | My Worlds (found new worlds with World Locks) |
 | `S` | Use teleporter / cycle Weather Core under your feet |
 | `W` | Enter portal |
 | `SHIFT` | Dash (Stormstep Boots) |

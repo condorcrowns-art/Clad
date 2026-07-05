@@ -7,7 +7,8 @@
 let game = null;
 const SAVE_KEY = 'glitchtopia_save_v1';
 
-const STATS_DEFAULT = { broken: 0, planted: 0, splices: 0, harvests: 0, placed: 0, kills: 0, keys: 0, fish: 0, gemsEarned: 0, maxDepth: 0, summits: 0 };
+const STATS_DEFAULT = { broken: 0, planted: 0, splices: 0, harvests: 0, placed: 0, kills: 0, keys: 0, fish: 0, gemsEarned: 0, maxDepth: 0, summits: 0, defrags: 0, spireBest: 0, painted: 0 };
+const BIOMES = ['verdant', 'desert', 'tundra', 'volcanic'];
 const RUSH_ORDER = ['firewall_daemon', 'null_wurm', 'kraken', 'storm_kernel', 'rootkit', 'admin'];
 
 /* ---------------- quests ---------------- */
@@ -28,6 +29,10 @@ const QUESTS = [
   { id: 'kraken', name: 'Depth Charge', desc: 'Purge KRAKEN.SYS', goal: 1, val: (s, g) => g.progress.beaten.kraken ? 1 : 0, reward: { gems: 150 } },
   { id: 'rootkit', name: 'Process Killer', desc: 'Purge R O O T K I T', goal: 1, val: (s, g) => g.progress.beaten.rootkit ? 1 : 0, reward: { gems: 150 } },
   { id: 'lvl5', name: 'Power User', desc: 'Reach level 5', goal: 5, val: (s, g) => g.level, reward: { gems: 100 } },
+  { id: 'defrag1', name: 'Disk Doctor', desc: 'Successfully DEFRAG a Corrupted Drive', goal: 1, val: (s) => s.defrags, reward: { gems: 80 } },
+  { id: 'spire5', name: 'Tower Defense', desc: 'Survive to wave 5 in the BLACK SPIRE', goal: 5, val: (s) => s.spireBest, reward: { gems: 200 } },
+  { id: 'paint5', name: 'Decorator', desc: 'Paint 5 blocks', goal: 5, val: (s) => s.painted || 0, reward: { items: [['paint_purple', 3]] } },
+  { id: 'world2', name: 'Land Baron', desc: 'Found a world with a World Lock', goal: 1, val: (s, g) => Object.keys(g.ownedWorlds).length, reward: { gems: 250 } },
   { id: 'boss6', name: 'Total Purge', desc: 'Purge all six corrupted processes', goal: 6, val: (s, g) => Object.keys(g.progress.beaten).length, reward: { items: [['overclock_cola', 3]] } },
   { id: 'rush1', name: 'OVERCLOCKED', desc: 'Clear the BOSS RUSH', goal: 1, val: (s, g) => g.progress.rushDone ? 1 : 0, reward: { gems: 500 } },
 ];
@@ -47,6 +52,9 @@ class Game {
     this.pet = null; this.fishing = null; this.rush = null;
     this.xp = 0; this.level = 1;
     this.buff = null;
+    this.ownedWorlds = {};   // name -> World instance
+    this.spire = null;       // wave-defense state
+    this.defrag = null;      // minigame state (owned by ui)
     this.merchant = null; this._merchantT = 60 + Math.random() * 120;
     this._rainT = 150 + Math.random() * 150; this.rain = 0;
     this.boss = null; this.bossDefeatedThisVisit = false;
@@ -91,6 +99,7 @@ class Game {
       if (k === 'b') ui.togglePanel('shop');
       if (k === 'c') ui.togglePanel('codex');
       if (k === 'q') ui.togglePanel('quest');
+      if (k === 'v') ui.togglePanel('worlds');
       if (k === 'escape') ui.closeAll();
     });
     window.addEventListener('keyup', (e) => {
@@ -163,6 +172,49 @@ class Game {
     const w = this.world;
     const p = this.player;
     const tx = Math.floor(p.x / TS), ty = Math.floor((p.y + p.h / 2 + 4) / TS);
+    // display shelf: player stands in its (non-solid) tile
+    for (const sy2 of [Math.floor(p.y / TS), Math.floor((p.y + p.h / 2 - 2) / TS)]) {
+      if (w.get(tx, sy2) === 'display_shelf') {
+        const i = w.idx(tx, sy2);
+        const m = w.meta[i] = w.meta[i] || {};
+        if (m.display) {
+          this.spawnDrop(tx * TS + TS / 2, sy2 * TS, m.display, 1);
+          delete m.display;
+          this.toast('Item taken off display.', '');
+        } else {
+          const held = p.heldItem();
+          if (held.id !== 'fist' && p.count(held.id)) {
+            p.take(held.id, 1);
+            m.display = held.id;
+            this.toast('★ ' + held.name + ' is now on display.', 'gold');
+            this.sfx.play('buy');
+          } else this.toast('Select an item in your hotbar to exhibit it.', 'warn');
+        }
+        if (w.isHome) this.saveSoon();
+        return;
+      }
+    }
+    if (w.get(tx, ty) === 'vendor_bot') { // stock / withdraw
+      const i = w.idx(tx, ty);
+      const m = w.meta[i] = w.meta[i] || {};
+      if (m.stock) {
+        this.spawnDrop(tx * TS + TS / 2, (ty - 1) * TS, m.stock.id, m.stock.n);
+        this.toast('Withdrew remaining stock.', '');
+        delete m.stock;
+      } else {
+        const held = p.heldItem();
+        const price = sellPrice(held.id);
+        if (price > 0 && p.count(held.id)) {
+          const n = Math.min(10, p.count(held.id));
+          p.take(held.id, n);
+          m.stock = { id: held.id, n, t: 0 };
+          this.toast('Stocked ' + n + '× ' + held.name + ' — sells one every 25s for ◆' + price + '.', 'gold');
+          this.sfx.play('buy');
+        } else this.toast('Select a sellable item to stock the Vendor Bot.', 'warn');
+      }
+      if (w.isHome) this.saveSoon();
+      return;
+    }
     if (w.get(tx, ty) === 'note_block') { // tune the chime
       const i = w.idx(tx, ty);
       const m = w.meta[i] = w.meta[i] || {};
@@ -245,9 +297,18 @@ class Game {
     this.zaps = []; this.keyPickups = []; this.fishing = null; this.rush = null;
     this.keysGot = 0; this.keysNeed = 0;
     this.boss = null; this.bossDefeatedThisVisit = false;
-    this.merchant = null;
+    this.merchant = null; this.spire = null;
     if (id === 'home') {
       this.world = this.homeWorld;
+    } else if (id.startsWith('world:')) {
+      const name = id.slice(6);
+      if (!this.ownedWorlds[name]) return;
+      this.world = this.ownedWorlds[name];
+      this.toast('Welcome to ' + name.toUpperCase() + ' — a ' + this.world.biome + ' world. It saves like home.', 'gold');
+    } else if (id === 'spire') {
+      this.world = World.genSpire();
+      this.spire = { wave: 0, betweenT: 4, active: false };
+      this.toast('BLACK SPIRE — survive escalating waves. Leave through the exit between waves.', 'warn');
     } else if (id === 'rush') {
       this.world = World.genRush();
       this.rush = { stage: 0, timer: 3 };
@@ -287,6 +348,54 @@ class Game {
     this.world.buildMini(this);
     ui.updateHUD();
     this.sfx.play('tp');
+  }
+
+  /* ---------------- founded worlds (World Locks) ---------------- */
+  foundWorld(rawName) {
+    const name = (rawName || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 16);
+    if (!name) { this.toast('Give your world a name (letters/numbers).', 'warn'); return false; }
+    if (name === 'home' || this.ownedWorlds[name]) { this.toast('That world name is taken.', 'warn'); return false; }
+    if (!this.player.count('world_lock')) { this.toast('You need a WORLD LOCK (shop, ◆1500 — or find one in a Golden Cache).', 'warn'); return false; }
+    this.player.take('world_lock', 1);
+    const biome = BIOMES[Math.floor(Math.random() * BIOMES.length)];
+    this.ownedWorlds[name] = World.genOwned(name, biome);
+    this.toast('★ WORLD FOUNDED: ' + name.toUpperCase() + ' — biome: ' + biome.toUpperCase() + '!', 'gold');
+    this.sfx.play('victory');
+    this.save();
+    this.enterWorld('world:' + name);
+    return true;
+  }
+
+  /* ---------------- fireworks ---------------- */
+  launchFirework(x, y) {
+    this.sfx.play('shoot');
+    this.hazards.push({
+      x, y, vy: -560, t: 0, dead: false,
+      hue: ['#ff4d6d', '#ffd166', '#3ddc84', '#6ee7ff', '#c77dff'][Math.floor(Math.random() * 5)],
+      update(dt, world, game) {
+        this.t += dt;
+        this.y += this.vy * dt;
+        if (Math.random() < 0.6) game.fx.add(this.x, this.y + 8, (Math.random() - 0.5) * 30, 60, '#ffd166', 0.3, 2.5, 0);
+        if (this.t > 0.85) {
+          this.dead = true;
+          game.sfx.play('boom');
+          game.shake = Math.max(game.shake, 0.2);
+          for (let ring = 0; ring < 2; ring++) {
+            for (let i = 0; i < 26; i++) {
+              const a = (i / 26) * 6.283;
+              const s = 150 + ring * 130;
+              game.fx.add(this.x, this.y, Math.cos(a) * s, Math.sin(a) * s, ring ? '#fff' : this.hue, 0.9, 3.5, 160);
+            }
+          }
+          const targets = game.boss && !game.boss.dead ? [...game.enemies, game.boss] : game.enemies;
+          for (const e of targets) if (!e.dead && Math.hypot(e.x - this.x, e.y - this.y) < 3 * TS) e.hurt(45, game);
+        }
+      },
+      draw(ctx, cam) {
+        ctx.fillStyle = this.hue;
+        ctx.fillRect(this.x - cam.x - 3, this.y - cam.y - 6, 6, 12);
+      },
+    });
   }
 
   /* ---------------- fishing ---------------- */
@@ -450,10 +559,12 @@ class Game {
   save() {
     try {
       const p = this.player;
+      const worlds = {};
+      for (const name in this.ownedWorlds) worlds[name] = this.ownedWorlds[name].serialize();
       localStorage.setItem(SAVE_KEY, JSON.stringify({
-        v: 2, gems: this.gems, inv: p.inv, hotbar: p.hotbar, equip: p.equip, sel: p.sel,
+        v: 3, gems: this.gems, inv: p.inv, hotbar: p.hotbar, equip: p.equip, sel: p.sel,
         hp: p.hp, xp: this.xp, level: this.level,
-        progress: this.progress, home: this.homeWorld.serialize(),
+        progress: this.progress, home: this.homeWorld.serialize(), worlds,
       }));
     } catch (e) { console.warn('save failed', e); }
     this._savePending = false;
@@ -477,6 +588,8 @@ class Game {
       this.progress.quests = this.progress.quests || {};
       this.player.equip = Object.assign({ back: null, feet: null, chip: null, pet: null }, this.player.equip);
       this.homeWorld = World.deserializeHome(s.home);
+      this.ownedWorlds = {};
+      for (const name in (s.worlds || {})) this.ownedWorlds[name] = World.deserializeOwned(name, s.worlds[name]);
       return true;
     } catch (e) { console.warn('load failed', e); return false; }
   }
@@ -575,6 +688,40 @@ class Game {
         this.sfx.play('bossroar');
         this.shake = 0.5;
         this.toast('⚠ ' + this.boss.meta.name + ' enters the arena!', 'warn');
+      }
+    }
+
+    // BLACK SPIRE wave defense
+    if (w.isSpire && this.spire) {
+      const sp = this.spire;
+      if (!sp.active) {
+        sp.betweenT -= dt;
+        if (sp.betweenT <= 0) {
+          sp.wave++; sp.active = true;
+          const count = 2 + sp.wave;
+          for (let k = 0; k < count; k++) {
+            const s = w.spawnPoints[Math.floor(Math.random() * w.spawnPoints.length)];
+            const pool = ['glitchling', 'ember', 'drone', 'zapper', 'spitter'];
+            this.enemies.push(new Enemy(pool[Math.floor(Math.random() * pool.length)], s.x * TS + TS / 2, s.y * TS - 6, 1 + Math.floor(sp.wave / 2) + (this.progress.overdrive ? 3 : 0)));
+          }
+          if (sp.wave % 5 === 0) this.enemies.push(new Enemy('warden', w.w * TS / 2, 22 * TS, Math.max(1, Math.floor(sp.wave / 4))));
+          this.toast('⚔ WAVE ' + sp.wave + (sp.wave % 5 === 0 ? ' — ELITE WAVE!' : ''), 'warn');
+          this.sfx.play('bossroar');
+          ui.updateHUD();
+        }
+      } else if (!this.enemies.some(e => !e.dead)) {
+        sp.active = false; sp.betweenT = 5;
+        const reward = 12 * sp.wave;
+        this.spawnGems(p.x, p.y - 40, reward);
+        this.addXp(15 + sp.wave * 5);
+        if (sp.wave % 3 === 0) this.spawnDrop(w.w * TS / 2, 22 * TS, 'corrupted_drive', 1);
+        if (sp.wave > (this.progress.stats.spireBest || 0)) this.progress.stats.spireBest = sp.wave;
+        if (sp.wave === 10 && !this.progress.spireLockGiven) {
+          this.progress.spireLockGiven = true;
+          this.spawnDrop(w.w * TS / 2, 22 * TS, 'world_lock', 1);
+          this.toast('★★★ WAVE 10 CONQUERED — the Spire yields a WORLD LOCK!', 'gold');
+        } else this.toast('Wave ' + sp.wave + ' cleared! +' + reward + ' ◆ — next in 5s, or take the EXIT.', 'gold');
+        this.save();
       }
     }
 
@@ -730,6 +877,13 @@ class Game {
     const id = w.id;
     if (w.isHome) {
       const wt = w.themeIdx;
+      if (w.biome === 'tundra') { // snowfall
+        for (let k = 0; k < 2; k++) this.fx.add(rx(), cam.y - 8, (Math.random() - 0.5) * 26 + 12, 50 + Math.random() * 40, 'rgba(238,243,251,0.85)', 3, 3, 0);
+      } else if (w.biome === 'volcanic') {
+        this.fx.add(rx(), cam.y + cam.view.h + 6, (Math.random() - 0.5) * 30, -50 - Math.random() * 60, 'rgba(255,87,20,0.65)', 2.2, 3, 0);
+      } else if (w.biome === 'desert' && Math.random() < 0.4) {
+        this.fx.add(cam.x - 8, ry(), 200 + Math.random() * 120, (Math.random() - 0.5) * 20, 'rgba(224,164,88,0.35)', 1.4, 3, 0);
+      }
       if (wt === 3) { // MATRIX RAIN: falling glyphs
         for (let k = 0; k < 2; k++) this.fx.add(rx(), cam.y - 10, 0, 160 + Math.random() * 120, 'rgba(70,220,110,0.8)', 2.2, 0, 0, String.fromCharCode(0x30A0 + Math.floor(Math.random() * 60)));
       } else if (wt === 4) { // VAPORWAVE: pink motes

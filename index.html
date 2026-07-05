@@ -55,6 +55,34 @@
     <div id="questList"></div>
   </div>
 
+  <!-- My Worlds -->
+  <div id="worldsPanel" class="panel hidden">
+    <div class="panelTitle">MY WORLDS <span class="panelHint">[V] close · each World Lock founds a new world with a random biome</span></div>
+    <div id="worldsList"></div>
+    <div id="worldCreate">
+      <input id="worldNameInput" maxlength="16" placeholder="new world name…">
+      <button id="worldCreateBtn">⚿ FOUND WORLD</button>
+      <span id="lockCount"></span>
+    </div>
+  </div>
+
+  <!-- DEFRAG minigame -->
+  <div id="defragPanel" class="panel hidden">
+    <div class="panelTitle">DEFRAG.EXE <span class="panelHint">hit the matching op before the bar empties · 3 faults = drive lost</span></div>
+    <div id="defragScreen">
+      <div id="defragStep"></div>
+      <div id="defragSymbol">⌕</div>
+      <div id="defragTimerBg"><div id="defragTimer"></div></div>
+      <div id="defragFaults"></div>
+    </div>
+    <div id="defragBtns">
+      <button class="dfBtn" data-op="scan">⌕ SCAN</button>
+      <button class="dfBtn" data-op="patch">⚙ PATCH</button>
+      <button class="dfBtn" data-op="purge">⚡ PURGE</button>
+      <button class="dfBtn" data-op="cool">❄ COOL</button>
+    </div>
+  </div>
+
   <!-- Splice codex -->
   <div id="codexPanel" class="panel hidden">
     <div class="panelTitle">SPLICE CODEX <span class="panelHint">[C] close · plant a seed, then plant a different seed on the sapling</span></div>
@@ -85,7 +113,7 @@
         <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
         <span><b>R-CLICK</b> build background walls</span><span><b>M-CLICK</b> pick block</span>
         <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
-        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>S</b> teleporter / weather</span><span><b>W</b> enter portal</span>
+        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>V</b> my worlds</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
         <span><b>SHIFT</b> dash (with boots)</span>
       </div>
       <button id="playBtn">▶ BOOT UP</button>

@@ -110,6 +110,26 @@ defItem('ember_pet', { name: 'Ember Kit', kind: 'gear', slot: 'pet', tier: 9, un
   fx: { pet: { dmg: 11, rate: 1.0, range: 7, color: '#ff5714', burn: { dps: 6, dur: 2 } } },
   desc: 'BOSS TECH: a baby flame daemon. Its shots IGNITE enemies. Rare drop from repeat Firewall Daemon kills.' });
 
+/* --- Growtopia-style world expansion & utility items --- */
+defItem('world_lock', { name: 'World Lock', kind: 'special', tier: 3, unspliceable: true,
+  desc: 'FUNCTION: claims a brand-new world in your name. Open MY WORLDS [V] to found it — each new world rolls a random biome.' });
+defItem('display_shelf', { name: 'Display Shelf', kind: 'block', tier: 2, hp: 6, solid: false, color: '#c9ada7', color2: '#8a7a74',
+  fx: { shelf: true }, desc: 'FUNCTION: stand on its tile and press [S] with an item selected to exhibit it. Build museums and shops. Press [S] again to take it back.' });
+defItem('vendor_bot', { name: 'Vendor Bot', kind: 'block', tier: 3, hp: 10, solid: true, animated: true, color: '#9d8189', color2: '#6d5a60',
+  fx: { vendor: true, glow: 2 }, desc: 'FUNCTION: press [S] with a sellable item selected to stock up to 10 of it. The bot sells one every 25s and spits out the gems. Idle income!' });
+defItem('firework', { name: 'Firework Rocket', kind: 'consumable', tier: 1, firework: true,
+  desc: 'FUNCTION: click to launch. Explodes in glorious color — and deals heavy damage to any enemy near the burst.' });
+defItem('corrupted_drive', { name: 'Corrupted Drive', kind: 'consumable', tier: 2, defrag: true,
+  desc: 'FUNCTION: click to jack in and DEFRAG it — a timed minigame of scans, patches and purges. Flawless work pays out big.' });
+// paint buckets (Growtopia paint!)
+const PAINTS = { paint_red: '#ff4d6d', paint_yellow: '#ffd166', paint_green: '#3ddc84', paint_cyan: '#6ee7ff', paint_purple: '#c77dff', paint_white: '#e8ecf4' };
+for (const [pid, pcol] of Object.entries(PAINTS)) {
+  defItem(pid, { name: pid.replace('paint_', '').replace(/^./, c => c.toUpperCase()) + ' Paint', kind: 'consumable', tier: 0, paint: pcol,
+    desc: 'FUNCTION: click any placed block to paint it ' + pid.replace('paint_', '') + '. One charge per block.' });
+}
+defItem('paint_clear', { name: 'Paint Stripper', kind: 'consumable', tier: 0, paint: 'clear',
+  desc: 'FUNCTION: click a painted block to strip the paint off.' });
+
 /* ===================== TOOLS ===================== */
 defItem('fist', { name: 'Fist', kind: 'tool', tier: 0, minePower: 1, mineRate: 4, dmg: 8, rate: 3, range: 1.4, noDrop: true,
   desc: 'Your bare hands. They punch blocks. Slowly.' });
@@ -161,7 +181,7 @@ defItem('mystery_seed', { name: 'Mystery Seed', kind: 'consumable', tier: 1, mys
 const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 9: 170 }; // seconds by tier
 for (const id of Object.keys(ITEMS)) {
   const it = ITEMS[id];
-  if (it.kind === 'seed' || it.noDrop || it.kind === 'consumable') continue;
+  if (it.kind === 'seed' || it.noDrop || it.kind === 'consumable' || it.kind === 'special') continue;
   if (['trophy_core', 'admin_crown', 'core_sprite', 'overclock_chip', 'torrent_lance', 'buoy_chip', 'wraith_chip', 'ember_pet'].includes(id)) continue; // one-of-a-kind
   defItem(id + '_seed', {
     name: it.name.replace(/ (Block|Pad|Belt|Trap|Node|Blade|Blaster|Pickaxe|Drill|Jetpack|Boots|Chip)$/, '') + ' Seed',
@@ -207,6 +227,8 @@ defRecipe('brick', 'stone', 'crystal_cluster');
 defRecipe('glass', 'spring_pad', 'glider_wings');
 defRecipe('sand', 'glass', 'note_block');
 defRecipe('conveyor', 'glass', 'recall_disc');
+defRecipe('stone', 'led_block', 'display_shelf');
+defRecipe('sentry', 'conveyor', 'vendor_bot');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
@@ -223,7 +245,16 @@ const SHOP = [
   { id: 'bomb', price: 40, qty: 1 },
   { id: 'fishing_rod', price: 60, qty: 1 },
   { id: 'overclock_cola', price: 55, qty: 1 },
+  { id: 'firework', price: 30, qty: 1 },
+  { id: 'paint_red', price: 18, qty: 3 },
+  { id: 'paint_yellow', price: 18, qty: 3 },
+  { id: 'paint_green', price: 18, qty: 3 },
+  { id: 'paint_cyan', price: 18, qty: 3 },
+  { id: 'paint_purple', price: 18, qty: 3 },
+  { id: 'paint_white', price: 18, qty: 3 },
+  { id: 'paint_clear', price: 8, qty: 3 },
   { id: 'mystery_seed', price: 120, qty: 1 },
+  { id: 'world_lock', price: 1500, qty: 1 },
 ];
 
 // recycler: gems paid when selling one unit (boss tech is priceless)
@@ -296,14 +327,40 @@ function iconFor(id) {
     else if (it.slot === 'feet') { x.fillStyle = id === 'storm_boots' ? '#ffd166' : '#3ddc84'; x.fillRect(8, 12, 10, 18); x.fillRect(8, 26, 18, 8); x.fillStyle = '#1c2536'; x.fillRect(8, 30, 18, 4); }
     else { x.fillStyle = id === 'admin_crown' ? '#ffd166' : '#2de2a3'; x.fillRect(8, 12, 24, 18); x.fillStyle = '#0d1526'; x.fillRect(12, 16, 4, 4); x.fillRect(20, 16, 4, 4); x.fillRect(12, 24, 12, 2);
       if (id === 'admin_crown') { x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(8, 12); x.lineTo(12, 4); x.lineTo(16, 12); x.lineTo(20, 4); x.lineTo(24, 12); x.lineTo(28, 4); x.lineTo(32, 12); x.fill(); } }
+  } else if (it.kind === 'special') {
+    // world lock: padlock with a globe
+    x.fillStyle = '#ffd166'; x.fillRect(8, 18, 24, 18);
+    x.strokeStyle = '#ffd166'; x.lineWidth = 4;
+    x.beginPath(); x.arc(20, 18, 8, Math.PI, 0); x.stroke();
+    x.fillStyle = '#0d1526'; x.beginPath(); x.arc(20, 26, 5, 0, 7); x.fill();
+    x.strokeStyle = '#0d1526'; x.lineWidth = 1.5;
+    x.beginPath(); x.arc(20, 26, 3.2, 0, 7); x.moveTo(16.8, 26); x.lineTo(23.2, 26); x.stroke();
   } else if (it.kind === 'consumable') {
-    if (id === 'data_fish' || id === 'golden_fish') {
+    if (it.paint) {
+      x.fillStyle = '#aab4c4'; x.fillRect(10, 16, 20, 18);
+      x.fillStyle = it.paint === 'clear' ? '#44506b' : it.paint;
+      x.fillRect(12, 18, 16, 6);
+      x.strokeStyle = '#7e8697'; x.lineWidth = 2;
+      x.beginPath(); x.arc(20, 16, 8, Math.PI, 0); x.stroke();
+      if (it.paint !== 'clear') { x.fillStyle = it.paint; x.beginPath(); x.arc(28, 32, 4, 0, 7); x.fill(); }
+    } else if (it.firework) {
+      x.fillStyle = '#ff4d6d'; x.fillRect(16, 6, 8, 18);
+      x.beginPath(); x.moveTo(16, 6); x.lineTo(20, 0); x.lineTo(24, 6); x.fill();
+      x.fillStyle = '#7a5a3a'; x.fillRect(19, 24, 2, 12);
+      x.fillStyle = '#ffd166'; x.fillRect(14, 8, 3, 3); x.fillRect(23, 14, 3, 3);
+    } else if (it.defrag) {
+      x.fillStyle = '#2a3347'; x.fillRect(8, 10, 24, 22);
+      x.fillStyle = '#7b2cbf'; x.fillRect(11, 13, 18, 5);
+      x.fillStyle = '#ff4d6d'; x.fillRect(11, 21, 8, 8); x.fillRect(22, 21, 7, 4);
+      x.fillStyle = '#3ddc84'; x.fillRect(22, 27, 7, 2);
+    } else if (id === 'data_fish' || id === 'golden_fish') {
       x.fillStyle = id === 'golden_fish' ? '#ffd166' : '#6ee7ff';
       x.beginPath(); x.ellipse(18, 20, 12, 7, 0, 0, 7); x.fill();
       x.beginPath(); x.moveTo(28, 20); x.lineTo(36, 13); x.lineTo(36, 27); x.closePath(); x.fill();
       x.fillStyle = '#0d1526'; x.fillRect(11, 17, 3, 3);
     } else if (it.heal) { x.fillStyle = '#e8ecf4'; x.fillRect(6, 10, 28, 22); x.fillStyle = '#ff4d6d'; x.fillRect(16, 14, 8, 14); x.fillRect(13, 17, 14, 8); }
     else if (it.bomb) { x.fillStyle = '#1c2536'; x.beginPath(); x.arc(20, 24, 12, 0, 7); x.fill(); x.strokeStyle = '#ffd166'; x.lineWidth = 2; x.beginPath(); x.moveTo(24, 14); x.quadraticCurveTo(30, 6, 34, 8); x.stroke(); x.fillStyle = '#ff5714'; x.fillRect(32, 5, 4, 4); }
+    else if (it.buff) { x.fillStyle = '#ff9e6d'; x.fillRect(12, 10, 16, 26); x.fillStyle = '#ffd166'; x.fillRect(12, 16, 16, 4); x.fillStyle = '#e8ecf4'; x.fillRect(14, 6, 12, 4); x.fillStyle = '#0d1526'; x.font = 'bold 11px monospace'; x.fillText('OC', 13, 32); }
     else { x.fillStyle = '#2a1c3a'; x.fillRect(8, 14, 24, 22); x.fillStyle = '#c77dff'; x.font = 'bold 20px monospace'; x.fillText('?', 14, 32); }
   }
   _iconCache[id] = c;

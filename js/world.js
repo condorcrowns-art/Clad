@@ -16,6 +16,8 @@ defItem('copper_ore', { name: 'Copper Vein', kind: 'block', hp: 6, solid: true, 
 defItem('silver_ore', { name: 'Silver Vein', kind: 'block', hp: 8, solid: true, noDrop: true, gemVal: [8, 14], color: '#c0c0cc', color2: '#7e7e8a', desc: 'Mid-depth ore. A solid payday.' });
 defItem('aurum_ore', { name: 'Aurum Vein', kind: 'block', hp: 10, solid: true, noDrop: true, gemVal: [18, 28], color: '#ffd700', color2: '#a8860b', desc: 'Deep ore. Miners dream about this.' });
 defItem('core_crystal', { name: 'Core Crystal', kind: 'block', hp: 12, solid: true, noDrop: true, gemVal: [40, 65], animated: true, fx: { glow: 4 }, color: '#ff6ec7', color2: '#a4247d', desc: 'The mineshaft\'s rarest prize. Worth a fortune, might hide a seed.' });
+defItem('snow', { name: 'Snow Block', kind: 'block', tier: 0, hp: 3, solid: true, color: '#eef3fb', color2: '#c6d4ea', desc: 'Packed frost from tundra worlds. Crunchy.' });
+defItem('ice',  { name: 'Ice Block', kind: 'block', tier: 0, hp: 3, solid: true, transparent: true, slippery: true, color: '#a8d8f0', color2: '#6fb8d4', desc: 'FUNCTION: frictionless! You (and your enemies) slide right off it. Build skating rinks or trap corridors.' });
 
 // weather programs for the home server's sky (Growtopia-style weather machines)
 const WEATHERS = [
@@ -148,24 +150,33 @@ class World {
     const it = this.item(tx, ty);
     if (!it || it.unbreakable) return;
     const i = this.idx(tx, ty);
+    const oldMeta = this.meta[i];
     this.tiles[i] = null;
     this.damage.delete(i);
     delete this.meta[i];
     if (i === this.doorIdx) this.doorIdx = -1;
+    // shelves/vendors give their contents back
+    if (oldMeta) {
+      if (oldMeta.display) game.spawnDrop(tx * TS + TS / 2, ty * TS + TS / 2, oldMeta.display, 1);
+      if (oldMeta.stock && oldMeta.stock.n > 0) game.spawnDrop(tx * TS + TS / 2, ty * TS + TS / 2, oldMeta.stock.id, oldMeta.stock.n);
+    }
     if (!silent) game.fx.tileBreak(tx, ty, it);
     game.progress.stats.broken++;
     if (!silent) game.addXp(1);
     const cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
     if (it.chest) { // loot caches
-      if (it.rich) { // Golden Cache (Stack summit)
+      if (it.rich) { // Golden Cache (Stack summit / secret vaults)
         game.spawnGems(cx, cy, 40 + Math.floor(Math.random() * 41));
         if (Math.random() < 0.6) game.spawnDrop(cx, cy, 'mystery_seed', 1);
         if (Math.random() < 0.4) game.spawnDrop(cx, cy, 'golden_fish', 1);
+        if (Math.random() < 0.3) game.spawnDrop(cx, cy, 'corrupted_drive', 1);
+        if (Math.random() < 0.06) { game.spawnDrop(cx, cy, 'world_lock', 1); game.toast('★★ A WORLD LOCK was inside!', 'gold'); }
         game.spawnDrop(cx, cy, 'medkit', 1);
       } else {
         game.spawnGems(cx, cy, 5 + Math.floor(Math.random() * 11));
         if (Math.random() < 0.5) game.spawnDrop(cx, cy, ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'brick_seed', 'glass_seed'][Math.floor(Math.random() * 6)], 1);
         if (Math.random() < 0.3) game.spawnDrop(cx, cy, Math.random() < 0.5 ? 'medkit' : 'bomb', 1);
+        if (Math.random() < 0.12) game.spawnDrop(cx, cy, 'corrupted_drive', 1);
         if (Math.random() < 0.06) game.spawnDrop(cx, cy, 'mystery_seed', 1);
       }
       game.sfx.play('buy');
@@ -230,6 +241,27 @@ class World {
           const a = Math.atan2(best.y - cy, best.x - cx);
           game.projectiles.push(new Projectile(cx, cy, Math.cos(a) * 560, Math.sin(a) * 560, 12, true, '#ff9e6d'));
           game.sfx.play('sentry');
+        }
+      }
+    }
+    // vendor bots sell their stock over time
+    this._vendT = (this._vendT || 0) - dt;
+    if (this._vendT <= 0) {
+      this._vendT = 1;
+      for (let i = 0; i < this.tiles.length; i++) {
+        if (this.tiles[i] !== 'vendor_bot') continue;
+        const m = this.meta[i];
+        if (!m || !m.stock || m.stock.n <= 0) continue;
+        m.stock.t = (m.stock.t || 0) + 1;
+        if (m.stock.t >= 25) {
+          m.stock.t = 0; m.stock.n--;
+          const val = sellPrice(m.stock.id);
+          const tx = i % this.w, ty = Math.floor(i / this.w);
+          game.spawnGems(tx * TS + TS / 2, ty * TS - 6, val);
+          game.fx.spark(tx * TS + TS / 2, ty * TS + 6, '#ffd166', 5);
+          game.sfx.play('gem');
+          if (m.stock.n <= 0) { delete m.stock; game.toast('A Vendor Bot sold out of stock.', ''); }
+          if (this.isHome) game.saveSoon();
         }
       }
     }
@@ -486,6 +518,12 @@ class World {
     if (openD) { ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(sx, sy + TS - 3, TS, 3); }
     if (openL) { ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(sx, sy, 2, TS); }
     if (openR) { ctx.fillStyle = 'rgba(0,0,0,0.14)'; ctx.fillRect(sx + TS - 2, sy, 2, TS); }
+    // paint tint
+    const paintM = this.meta[this.idx(tx, ty)];
+    if (paintM && paintM.tint) {
+      ctx.fillStyle = paintM.tint;
+      ctx.globalAlpha = 0.4; ctx.fillRect(sx, sy, TS, TS); ctx.globalAlpha = 1;
+    }
     // special decorations
     const fx = it.fx;
     if (!fx && !it.animated) return;
@@ -558,6 +596,23 @@ class World {
       ctx.globalAlpha = 1;
       ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1;
       ctx.strokeRect(sx + 4, sy + 4, TS - 8, TS - 8);
+    } else if (id === 'display_shelf') {
+      ctx.fillStyle = it.color2; ctx.fillRect(sx + 2, sy + 22, TS - 4, 5);
+      ctx.fillRect(sx + 4, sy + 27, 3, 5); ctx.fillRect(sx + TS - 7, sy + 27, 3, 5);
+      const m = this.meta[this.idx(tx, ty)];
+      if (m && m.display) ctx.drawImage(iconFor(m.display), sx + 6, sy + 2, 20, 20);
+    } else if (id === 'vendor_bot') {
+      ctx.fillStyle = '#1c2536'; ctx.fillRect(sx + 6, sy + 4, 20, 14);
+      ctx.fillStyle = '#3ddc84'; ctx.fillRect(sx + 9, sy + 8, 4, 4); ctx.fillRect(sx + 19, sy + 8, 4, 4);
+      const m = this.meta[this.idx(tx, ty)];
+      if (m && m.stock) {
+        ctx.drawImage(iconFor(m.stock.id), sx + 18, sy + 16, 13, 13);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'left';
+        ctx.fillText(m.stock.n, sx + 3, sy + TS - 4);
+      } else if (Math.sin(time * 2 + tx) > 0.6) {
+        ctx.fillStyle = '#ffd166'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[S]', sx + TS / 2, sy - 3);
+      }
     } else if (id === 'chest' || id === 'gold_cache') {
       ctx.fillStyle = id === 'gold_cache' ? '#fff' : '#ffd166';
       ctx.fillRect(sx + 4, sy + 14, TS - 8, 4);
@@ -642,7 +697,7 @@ class World {
     });
     const trees = [];
     this.trees.forEach((tr, i) => trees.push([i, tr.result, tr.plantedAt, tr.growTime, tr.spliced ? 1 : 0]));
-    return { pal, data, bdata, bg: Array.from(this.bg), meta: this.meta, trees, themeIdx: this.themeIdx, doorIdx: this.doorIdx };
+    return { pal, data, bdata, bg: Array.from(this.bg), meta: this.meta, trees, themeIdx: this.themeIdx, doorIdx: this.doorIdx, biome: this.biome };
   }
   static deserializeHome(s) {
     const w = World.genHome(null); // fresh shell (portals, theme, spawn)
@@ -699,27 +754,52 @@ class World {
     }
   }
 
-  static genHome() {
-    const w = new World('home', 'HOME SERVER', 100, 60, { sky: ['#12294d', '#3a6ea5'], bgWall: 'rgba(30,22,16,0.85)', dark: 0 });
-    w.isHome = true;
-    const hs = World.surfaceLine(w.w, 24, 2.5, 7);
+  // biome palettes for founded worlds (World Locks)
+  static biomeTheme(biome) {
+    return {
+      verdant:  { sky: ['#12294d', '#3a6ea5'], bgWall: 'rgba(30,22,16,0.85)', dark: 0 },
+      desert:   { sky: ['#3d2410', '#e0a458'], bgWall: 'rgba(48,32,14,0.85)', dark: 0 },
+      tundra:   { sky: ['#22304a', '#9db4d0'], bgWall: 'rgba(26,34,52,0.85)', dark: 0 },
+      volcanic: { sky: ['#1a0808', '#69201a'], bgWall: 'rgba(40,12,8,0.88)', dark: 0.35 },
+    }[biome] || { sky: ['#12294d', '#3a6ea5'], bgWall: 'rgba(30,22,16,0.85)', dark: 0 };
+  }
+
+  static genHomeLike(w, biome, seed) {
+    const hs = World.surfaceLine(w.w, 24, 2.5, seed || 7);
     for (let x = 0; x < w.w; x++) {
       for (let y = hs[x]; y < w.h; y++) {
         const depth = y - hs[x];
-        w.set(x, y, depth < 1 ? 'dirt' : depth < 7 ? 'dirt' : 'stone');
+        let id;
+        if (biome === 'desert') id = depth < 6 ? 'sand' : 'stone';
+        else if (biome === 'tundra') id = depth < 2 ? 'snow' : depth < 7 ? 'dirt' : 'stone';
+        else if (biome === 'volcanic') id = depth < 2 ? 'stone' : hash2(x, y) < 0.15 ? 'dirt' : 'stone';
+        else id = depth < 7 ? 'dirt' : 'stone';
+        w.set(x, y, id);
         if (depth >= 1) w.bg[w.idx(x, y)] = 1;
       }
     }
     World.carveCaves(w, 7, 30);
-    World.pocket(w, 'wood', 10, 26, 45, 7);
-    World.pocket(w, 'sand', 8, 25, 50, 7);
-    // two fishing ponds carved into the surface
-    for (const px of [18, 78]) {
-      const py2 = hs[px];
-      for (let dx = -4; dx <= 4; dx++) {
-        const depth = 3 - Math.floor(Math.abs(dx) * 0.7);
-        for (let dy = 0; dy < depth; dy++) w.set(px + dx, py2 + dy, 'water');
-        for (let dy = depth; dy < 4; dy++) if (!w.get(px + dx, py2 + dy)) w.set(px + dx, py2 + dy, 'dirt');
+    World.pocket(w, 'wood', biome === 'desert' ? 4 : 10, 26, 45, 7);
+    World.pocket(w, 'sand', biome === 'desert' ? 0 : 8, 25, 50, 7);
+    if (biome === 'tundra') { World.pocket(w, 'ice', 10, hs[0], 40, 7); World.pocket(w, 'snow', 6, 26, 45, 6); }
+    if (biome === 'volcanic') { World.pocket(w, 'magma', 9, 28, w.h - 6, 6); World.pocket(w, 'corrupt', 5, 30, w.h - 6, 5); }
+    if (biome === 'desert') {
+      // cacti (spike traps you can harvest!)
+      for (let c = 0; c < 8; c++) {
+        const cx2 = 6 + Math.floor(hash2(c, seed || 7) * (w.w - 12));
+        if (cx2 > 34 && cx2 < 66) continue;
+        for (let y = 2; y < w.h - 3; y++) if (w.isSolid(cx2, y)) { if (!w.get(cx2, y - 1)) w.set(cx2, y - 1, 'spike_trap'); break; }
+      }
+    }
+    // fishing ponds (frozen over in tundra, dry in desert/volcanic)
+    if (biome !== 'desert' && biome !== 'volcanic') {
+      for (const px of [18, 78]) {
+        const py2 = hs[px];
+        for (let dx = -4; dx <= 4; dx++) {
+          const depth = 3 - Math.floor(Math.abs(dx) * 0.7);
+          for (let dy = 0; dy < depth; dy++) w.set(px + dx, py2 + dy, dy === 0 && biome === 'tundra' && Math.abs(dx) > 1 ? 'ice' : 'water');
+          for (let dy = depth; dy < 4; dy++) if (!w.get(px + dx, py2 + dy)) w.set(px + dx, py2 + dy, 'dirt');
+        }
       }
     }
     // spawn platform: flatten x 36..64
@@ -727,10 +807,58 @@ class World {
     for (let x = 36; x <= 64; x++) {
       for (let y = 0; y < py; y++) { w.set(x, y, null); }
       w.set(x, py, 'bedrock');
-      for (let y = py + 1; y < py + 4; y++) if (!w.get(x, y)) w.set(x, y, 'dirt');
+      for (let y = py + 1; y < py + 4; y++) if (!w.get(x, y)) w.set(x, y, biome === 'desert' ? 'sand' : 'dirt');
     }
     w.spawn = { x: 50 * TS, y: (py - 2) * TS };
+    return py;
+  }
+
+  static genHome() {
+    const w = new World('home', 'HOME SERVER', 100, 60, World.biomeTheme('verdant'));
+    w.isHome = true;
+    w.biome = 'verdant';
+    const py = World.genHomeLike(w, 'verdant', 7);
     World.addHomePortals(w, py);
+    return w;
+  }
+
+  // a world founded with a World Lock — random biome, fully persistent
+  static genOwned(name, biome) {
+    const w = new World('world:' + name, name.toUpperCase(), 100, 60, World.biomeTheme(biome));
+    w.isHome = true; w.ownedName = name; w.biome = biome;
+    const py = World.genHomeLike(w, biome, 7 + name.length * 13 + biome.length);
+    w.portals.push({ x: 39 * TS, y: py * TS, target: 'home', label: 'HOME', color: '#2de2a3' });
+    return w;
+  }
+  static deserializeOwned(name, s) {
+    const w = World.genOwned(name, s.biome || 'verdant');
+    if (s && s.pal) {
+      w.tiles = s.data.map(v => v === 0 ? null : s.pal[v - 1] || null);
+      if (s.bdata) w.bgT = s.bdata.map(v => v === 0 ? null : s.pal[v - 1] || null);
+      w.bg = Uint8Array.from(s.bg);
+      w.meta = s.meta || {};
+      w.trees = new Map();
+      for (const [i, result, plantedAt, growTime, spliced] of s.trees) {
+        if (ITEMS[result]) w.trees.set(i, { result, plantedAt, growTime, spliced: !!spliced });
+      }
+      w.applyWeather(s.themeIdx || 0);
+      w.doorIdx = s.doorIdx === undefined ? -1 : s.doorIdx;
+    }
+    return w;
+  }
+
+  /* ---- BLACK SPIRE: wave-defense arena ---- */
+  static genSpire() {
+    const w = new World('spire', 'BLACK SPIRE', 56, 32, { sky: ['#0a0a14', '#1c1c30'], bgWall: 'rgba(16,16,30,0.9)', dark: 0.55 });
+    w.isSpire = true;
+    const fy = 24;
+    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? 'brick' : 'bedrock');
+    // side pillars for cover
+    for (const px of [14, 28, 42]) { for (let y = fy - 3; y < fy; y++) w.set(px, y, 'brick'); }
+    World.frame(w);
+    w.spawn = { x: 5 * TS, y: (fy - 2) * TS };
+    w.portals.push({ x: 2.5 * TS, y: fy * TS, target: 'home', label: 'EXIT', color: '#2de2a3' });
+    for (let x = 8; x < w.w - 4; x += 4) w.spawnPoints.push({ x, y: fy - 1 });
     return w;
   }
 
@@ -744,10 +872,11 @@ class World {
       ['sector3', 'THE CLOUD', '#6ee7ff', () => game.bossKillCount < 2],
       ['sector6', 'SHADOW PARTITION', '#8d80c9', () => game.bossKillCount < 3],
       ['sector4', 'THE CORE', '#ffd166', () => game.bossKillCount < 4],
+      ['spire', 'BLACK SPIRE', '#8d99ae', () => game.bossKillCount < 1],
       ['rush', 'BOSS RUSH', '#ff4d6d', () => !game.progress.beaten.admin],
     ];
     meta.forEach(([id, label, color, locked], k) => {
-      w.portals.push({ x: (37 + k * 3.0) * TS, y: py * TS, target: id, label, color, labelUp: k % 2 === 1, locked });
+      w.portals.push({ x: (36.6 + k * 2.8) * TS, y: py * TS, target: id, label, color, labelUp: k % 2 === 1, locked });
     });
   }
 
@@ -926,6 +1055,15 @@ class World {
       if (!s || s.x >= w.gateCol - 1) continue;
       if (!w.get(s.x, s.y) && w.isSolid(s.x, s.y + 1)) { w.set(s.x, s.y, 'chest'); placedChests++; }
     }
+    // secret vault: a sealed brick room buried somewhere — dig to find it
+    const vx = 14 + Math.floor(Math.random() * Math.max(4, w.gateCol - 24));
+    const vy = Math.min(w.h - 9, 28 + Math.floor(Math.random() * (w.h - 38)));
+    for (let dx = 0; dx < 7; dx++) for (let dy = 0; dy < 5; dy++) {
+      const edge = dx === 0 || dy === 0 || dx === 6 || dy === 4;
+      w.set(vx + dx, vy + dy, edge ? 'brick' : null);
+    }
+    w.set(vx + 3, vy + 3, 'gold_cache');
+    w.set(vx + 1, vy + 3, 'chest'); w.set(vx + 5, vy + 3, 'chest');
     return w;
   }
 }

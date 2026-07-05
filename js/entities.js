@@ -113,6 +113,7 @@ class Enemy extends Entity {
       game.spawnGems(this.x, this.y, g0 + Math.floor(Math.random() * (g1 - g0 + 1)) * this.lvl);
       if (Math.random() < 0.06) game.spawnDrop(this.x, this.y, 'medkit', 1);
       if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'bomb', 1);
+      if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'corrupted_drive', 1);
       if (this.def.miniboss) { // WARDEN treasure (Pixel Worlds nether miniboss homage)
         game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
         game.spawnDrop(this.x, this.y, 'medkit', 2);

@@ -114,7 +114,8 @@ class Player extends Entity {
       if (input.left) mx -= 1;
       if (input.right) mx += 1;
       if (mx !== 0) this.facing = mx;
-      const accel = this.onGround ? 12 : 7;
+      const onIce = this.onGround && this.groundTile && ITEMS[this.groundTile] && ITEMS[this.groundTile].slippery;
+      const accel = this.onGround ? (onIce ? 1.6 : 12) : 7;
       this.vx += (mx * baseSpeed - this.vx) * Math.min(1, accel * dt);
 
       // swimming in liquid data?
@@ -286,6 +287,37 @@ class Player extends Entity {
     // consumables
     if (held.kind === 'consumable') {
       this.actionCd = 0.35;
+      if (held.paint) {
+        if (!inReach) { game.toast('Too far to paint.', 'warn'); return; }
+        const i = world.idx(tx, ty);
+        const t = world.tiles[i];
+        if (!t || ITEMS[t].unbreakable) { game.toast('Nothing paintable there.', 'warn'); return; }
+        const m = world.meta[i] = world.meta[i] || {};
+        if (held.paint === 'clear') {
+          if (!m.tint) { game.toast('No paint on that block.', 'warn'); return; }
+          delete m.tint;
+        } else {
+          if (m.tint === held.paint) return;
+          m.tint = held.paint;
+        }
+        this.take(held.id, 1);
+        game.progress.stats.painted = (game.progress.stats.painted || 0) + 1;
+        game.fx.spark(tx * TS + TS / 2, ty * TS + TS / 2, held.paint === 'clear' ? '#fff' : held.paint, 7);
+        game.sfx.play('plant');
+        if (world.isHome) game.saveSoon();
+        return;
+      }
+      if (held.firework) {
+        this.take(held.id, 1);
+        game.launchFirework(this.x, this.y - 20);
+        return;
+      }
+      if (held.defrag) {
+        if (game.defrag) return;
+        this.take(held.id, 1);
+        ui.startDefrag();
+        return;
+      }
       if (held.heal) {
         if (this.hp >= this.maxHp) { game.toast('HP already full.', 'warn'); return; }
         this.take(held.id, 1);
