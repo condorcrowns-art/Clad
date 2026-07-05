@@ -16,6 +16,7 @@ const ui = {
       shopPanel: $('shopPanel'), shopList: $('shopList'), sellGrid: $('sellGrid'),
       questPanel: $('questPanel'), questList: $('questList'),
       keyWrap: $('keyWrap'), keyText: $('keyText'),
+      lvlText: $('lvlText'), xpBar: $('xpBar'),
       codexPanel: $('codexPanel'), codexList: $('codexList'),
       tooltip: $('tooltip'), toasts: $('toasts'),
       menu: $('menu'), deathOverlay: $('deathOverlay'), deathText: $('deathText'),
@@ -55,7 +56,9 @@ const ui = {
     this.el.hpText.textContent = Math.max(0, Math.ceil(p.hp)) + ' / ' + p.maxHp;
     this.el.gemText.textContent = game.gems;
     this.el.worldName.textContent = game.world ? game.world.name : '';
-    if (p.equip.back) {
+    this.el.lvlText.textContent = 'LV ' + game.level;
+    this.el.xpBar.style.width = Math.min(100, game.xp / game.xpNeed() * 100) + '%';
+    if (p.equip.back && ITEMS[p.equip.back].fx.jetpack) {
       this.el.fuelWrap.classList.remove('hidden');
       this.el.fuelBar.style.width = (p.fuel * 100) + '%';
     } else this.el.fuelWrap.classList.add('hidden');
@@ -150,10 +153,41 @@ const ui = {
     });
   },
 
+  shopMode: 'shop',
+  openMerchant() {
+    this.shopMode = 'merchant';
+    ['invPanel', 'codexPanel', 'questPanel'].forEach(p => this.el[p].classList.add('hidden'));
+    this.el.shopPanel.classList.remove('hidden');
+    this.renderShop();
+    game.sfx.play('buy');
+  },
+
   renderShop() {
+    const merchant = this.shopMode === 'merchant' && game.merchant;
     const list = this.el.shopList;
     list.innerHTML = '';
-    for (const row of SHOP) {
+    this.el.shopPanel.querySelector('.panelTitle').firstChild.textContent = merchant ? '❖ BLACK MARKET ' : 'GEM EXCHANGE ';
+    const stock = merchant ? game.merchant.stock : SHOP;
+    // overdrive toggle after clearing the boss rush
+    if (!merchant && game.progress.rushDone) {
+      const od = document.createElement('div');
+      od.className = 'shopRow';
+      od.innerHTML = '<div class="shopInfo"><div class="shopName" style="color:#ff4d6d">OVERDRIVE MODE: ' + (game.progress.overdrive ? 'ON' : 'OFF') +
+        '</div><div class="shopDesc">Enemies +3 levels everywhere, but all gems earned are DOUBLED.</div></div>';
+      const btn = document.createElement('button');
+      btn.className = 'shopBuy';
+      btn.textContent = game.progress.overdrive ? 'DISABLE' : 'ENABLE';
+      btn.addEventListener('click', () => {
+        game.progress.overdrive = !game.progress.overdrive;
+        game.toast(game.progress.overdrive ? '⚠ OVERDRIVE ON — good luck.' : 'Overdrive off.', 'warn');
+        game.sfx.play('bossroar');
+        game.save();
+        this.renderShop();
+      });
+      od.appendChild(btn);
+      list.appendChild(od);
+    }
+    for (const row of stock) {
       const it = ITEMS[row.id];
       const d = document.createElement('div');
       d.className = 'shopRow';
@@ -273,7 +307,7 @@ const ui = {
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
-      if (name === 'shop') this.renderShop();
+      if (name === 'shop') { this.shopMode = 'shop'; this.renderShop(); }
       if (name === 'codex') this.renderCodex();
       if (name === 'quest') this.renderQuests();
     }

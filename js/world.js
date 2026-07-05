@@ -11,6 +11,11 @@ defItem('cloudb',  { name: 'Cloud Platform', kind: 'block', hp: 4, solid: true, 
 defItem('water',   { name: 'Liquid Data', kind: 'block', hp: 2, solid: false, noDrop: true, swim: true, animated: true, color: '#3a86ff', color2: '#2667cc', desc: 'Swimmable liquid data. Cast a Data Rod into it and see what bites.' });
 defItem('gate',    { name: 'Cipher Gate', kind: 'block', hp: 9999, solid: true, unbreakable: true, noDrop: true, animated: true, color: '#3d2c52', color2: '#241a33', desc: 'Sealed by cipher keys. Find all 3 keys in this sector to open it.' });
 defItem('chest',   { name: 'Data Cache', kind: 'block', hp: 4, solid: true, noDrop: true, chest: true, color: '#8a5a2a', color2: '#5e3c1a', desc: 'A locked cache of loot. Break it open.' });
+defItem('gold_cache', { name: 'Golden Cache', kind: 'block', hp: 8, solid: true, noDrop: true, chest: true, rich: true, animated: true, color: '#ffd166', color2: '#b8860b', fx: { glow: 4 }, desc: 'The Stack\'s summit treasure. Jackpot inside.' });
+defItem('copper_ore', { name: 'Copper Vein', kind: 'block', hp: 6, solid: true, noDrop: true, gemVal: [3, 6], color: '#b87333', color2: '#7a4a1e', desc: 'Shallow ore. Pops into gems.' });
+defItem('silver_ore', { name: 'Silver Vein', kind: 'block', hp: 8, solid: true, noDrop: true, gemVal: [8, 14], color: '#c0c0cc', color2: '#7e7e8a', desc: 'Mid-depth ore. A solid payday.' });
+defItem('aurum_ore', { name: 'Aurum Vein', kind: 'block', hp: 10, solid: true, noDrop: true, gemVal: [18, 28], color: '#ffd700', color2: '#a8860b', desc: 'Deep ore. Miners dream about this.' });
+defItem('core_crystal', { name: 'Core Crystal', kind: 'block', hp: 12, solid: true, noDrop: true, gemVal: [40, 65], animated: true, fx: { glow: 4 }, color: '#ff6ec7', color2: '#a4247d', desc: 'The mineshaft\'s rarest prize. Worth a fortune, might hide a seed.' });
 
 // weather programs for the home server's sky (Growtopia-style weather machines)
 const WEATHERS = [
@@ -120,13 +125,29 @@ class World {
     if (i === this.doorIdx) this.doorIdx = -1;
     if (!silent) game.fx.tileBreak(tx, ty, it);
     game.progress.stats.broken++;
+    if (!silent) game.addXp(1);
     const cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
-    if (it.chest) { // Data Cache loot table
-      game.spawnGems(cx, cy, 5 + Math.floor(Math.random() * 11));
-      if (Math.random() < 0.5) game.spawnDrop(cx, cy, ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'brick_seed', 'glass_seed'][Math.floor(Math.random() * 6)], 1);
-      if (Math.random() < 0.3) game.spawnDrop(cx, cy, Math.random() < 0.5 ? 'medkit' : 'bomb', 1);
-      if (Math.random() < 0.06) game.spawnDrop(cx, cy, 'mystery_seed', 1);
+    if (it.chest) { // loot caches
+      if (it.rich) { // Golden Cache (Stack summit)
+        game.spawnGems(cx, cy, 40 + Math.floor(Math.random() * 41));
+        if (Math.random() < 0.6) game.spawnDrop(cx, cy, 'mystery_seed', 1);
+        if (Math.random() < 0.4) game.spawnDrop(cx, cy, 'golden_fish', 1);
+        game.spawnDrop(cx, cy, 'medkit', 1);
+      } else {
+        game.spawnGems(cx, cy, 5 + Math.floor(Math.random() * 11));
+        if (Math.random() < 0.5) game.spawnDrop(cx, cy, ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'brick_seed', 'glass_seed'][Math.floor(Math.random() * 6)], 1);
+        if (Math.random() < 0.3) game.spawnDrop(cx, cy, Math.random() < 0.5 ? 'medkit' : 'bomb', 1);
+        if (Math.random() < 0.06) game.spawnDrop(cx, cy, 'mystery_seed', 1);
+      }
       game.sfx.play('buy');
+      return;
+    }
+    if (it.gemVal) { // ore veins & crystal clusters burst into gems
+      const [g0, g1] = it.gemVal;
+      game.spawnGems(cx, cy, g0 + Math.floor(Math.random() * (g1 - g0 + 1)));
+      if (it.id === 'core_crystal' && Math.random() < 0.25) game.spawnDrop(cx, cy, 'mystery_seed', 1);
+      if (it.id === 'crystal_cluster' && Math.random() < 0.14 && ITEMS.crystal_cluster_seed) game.spawnDrop(cx, cy, 'crystal_cluster_seed', 1);
+      game.sfx.play('gem');
       return;
     }
     if (!it.noDrop) {
@@ -154,6 +175,7 @@ class World {
     game.spawnGems(cx, cy, 1 + Math.floor(Math.random() * 2));
     this.trees.delete(i);
     game.progress.stats.harvests++;
+    game.addXp(4);
     game.fx.harvest(cx, cy, ITEMS[tr.result].color || '#8f8');
     game.sfx.play('harvest');
     return true;
@@ -318,6 +340,11 @@ class World {
       }
     }
 
+    // player torchlight in dark worlds
+    if (this.theme.dark >= 0.4 && game && game.player) {
+      glows.push([game.player.x - cam.x, game.player.y - cam.y - 10, 6.5 * TS, '#ffe9c9']);
+    }
+
     // glow pass
     if (glows.length) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -447,9 +474,25 @@ class World {
       ctx.globalAlpha = 1;
       ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1;
       ctx.strokeRect(sx + 4, sy + 4, TS - 8, TS - 8);
-    } else if (id === 'chest') {
-      ctx.fillStyle = '#ffd166'; ctx.fillRect(sx + 4, sy + 14, TS - 8, 4);
+    } else if (id === 'chest' || id === 'gold_cache') {
+      ctx.fillStyle = id === 'gold_cache' ? '#fff' : '#ffd166';
+      ctx.fillRect(sx + 4, sy + 14, TS - 8, 4);
       ctx.fillRect(sx + TS / 2 - 3, sy + 12, 6, 8);
+      if (id === 'gold_cache') { ctx.globalAlpha = 0.5 + 0.4 * Math.sin(time * 5); ctx.fillStyle = '#fff'; ctx.fillText('★', sx + TS / 2, sy - 2); ctx.globalAlpha = 1; }
+    } else if (id === 'crystal_cluster' || id === 'core_crystal' || it.gemVal) {
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.4 + 0.25 * Math.sin(time * 3 + tx + ty)) + ')';
+      for (let k = 0; k < 3; k++) {
+        const gx = sx + 6 + k * 9, gy = sy + 8 + (k % 2) * 10;
+        ctx.beginPath(); ctx.moveTo(gx, gy - 4); ctx.lineTo(gx + 4, gy); ctx.lineTo(gx, gy + 4); ctx.lineTo(gx - 4, gy); ctx.closePath(); ctx.fill();
+      }
+    } else if (id === 'note_block') {
+      ctx.fillStyle = '#0d1526';
+      ctx.beginPath(); ctx.arc(sx + 13, sy + 20, 4, 0, 7); ctx.fill();
+      ctx.fillRect(sx + 15, sy + 8, 3, 12);
+      ctx.fillRect(sx + 15, sy + 8, 9, 3);
+      const pitch = (this.meta[this.idx(tx, ty)] || {}).pitch || 0;
+      ctx.fillStyle = '#fff'; ctx.font = '8px monospace'; ctx.textAlign = 'right';
+      ctx.fillText(pitch, sx + TS - 3, sy + TS - 4);
     }
   }
 
@@ -502,6 +545,7 @@ class World {
       }
       w.applyWeather(s.themeIdx || 0);
       w.doorIdx = s.doorIdx === undefined ? -1 : s.doorIdx;
+      World.ensurePlatform(w);
     }
     return w;
   }
@@ -566,25 +610,101 @@ class World {
         for (let dy = depth; dy < 4; dy++) if (!w.get(px + dx, py2 + dy)) w.set(px + dx, py2 + dy, 'dirt');
       }
     }
-    // spawn platform: flatten x 44..56
+    // spawn platform: flatten x 36..64
     const py = 22;
-    for (let x = 42; x <= 58; x++) {
+    for (let x = 36; x <= 64; x++) {
       for (let y = 0; y < py; y++) { w.set(x, y, null); }
       w.set(x, py, 'bedrock');
       for (let y = py + 1; y < py + 4; y++) if (!w.get(x, y)) w.set(x, y, 'dirt');
     }
     w.spawn = { x: 50 * TS, y: (py - 2) * TS };
-    // portals to the four corrupted sectors
-    const sectorMeta = [
-      ['sector1', 'FIREWALL SECTOR', '#ff5714', 0],
-      ['sector2', 'DATA MINES', '#c77dff', 1],
-      ['sector3', 'THE CLOUD', '#6ee7ff', 2],
-      ['sector4', 'THE CORE', '#ffd166', 3],
+    World.addHomePortals(w, py);
+    return w;
+  }
+
+  static addHomePortals(w, py) {
+    const meta = [
+      ['mine', 'MINESHAFT', '#b87333', () => false],
+      ['stack', 'THE STACK', '#f7a8d8', () => false],
+      ['sector1', 'FIREWALL SECTOR', '#ff5714', () => game.bossKillCount < 0],
+      ['sector2', 'DATA MINES', '#c77dff', () => game.bossKillCount < 1],
+      ['sector5', 'FLOODED ARCHIVE', '#38d9f5', () => game.bossKillCount < 2],
+      ['sector3', 'THE CLOUD', '#6ee7ff', () => game.bossKillCount < 2],
+      ['sector6', 'SHADOW PARTITION', '#8d80c9', () => game.bossKillCount < 3],
+      ['sector4', 'THE CORE', '#ffd166', () => game.bossKillCount < 4],
+      ['rush', 'BOSS RUSH', '#ff4d6d', () => !game.progress.beaten.admin],
     ];
-    sectorMeta.forEach(([id, label, color, req], k) => {
-      w.portals.push({ x: (42.8 + k * 3.4) * TS, y: py * TS, target: id, label, color, labelUp: k % 2 === 1, locked: () => game.bossKillCount < req });
+    meta.forEach(([id, label, color, locked], k) => {
+      w.portals.push({ x: (37 + k * 3.0) * TS, y: py * TS, target: id, label, color, labelUp: k % 2 === 1, locked });
     });
-    w.portals.push({ x: (42.8 + 4 * 3.4) * TS, y: py * TS, target: 'rush', label: 'BOSS RUSH', color: '#ff4d6d', labelUp: false, locked: () => !game.progress.beaten.admin });
+  }
+
+  // patch older saved home worlds so the wider portal row has floor
+  static ensurePlatform(w) {
+    const py = 22;
+    for (let x = 36; x <= 64; x++) {
+      for (let y = py - 6; y < py; y++) { const t = w.get(x, y); if (t && t !== 'bedrock') w.set(x, y, null); }
+      w.set(x, py, 'bedrock');
+      for (let y = py + 1; y < py + 4; y++) if (!w.get(x, y)) w.set(x, y, 'dirt');
+    }
+  }
+
+  /* ---- THE MINESHAFT: deep vertical mining world ---- */
+  static genMine() {
+    const w = new World('mine', 'THE MINESHAFT', 64, 140, { sky: ['#1a1208', '#2e2214'], bgWall: 'rgba(24,16,8,0.9)', dark: 0.8 });
+    w.isMine = true;
+    const sy = 10;
+    for (let x = 0; x < w.w; x++) for (let y = sy; y < w.h; y++) {
+      w.set(x, y, hash2(x, y) < 0.22 ? 'dirt' : 'stone');
+      w.bg[w.idx(x, y)] = 1;
+    }
+    World.carveCaves(w, 28, sy + 4);
+    World.pocket(w, 'copper_ore', 30, sy + 3, 55, 5);
+    World.pocket(w, 'silver_ore', 24, 55, 100, 5);
+    World.pocket(w, 'aurum_ore', 18, 95, w.h - 4, 4);
+    World.pocket(w, 'core_crystal', 8, 110, w.h - 4, 2);
+    World.pocket(w, 'magma', 14, 70, w.h - 4, 5);
+    // surface deck
+    for (let x = 1; x < w.w - 1; x++) { for (let y = 1; y < sy; y++) w.set(x, y, null); w.set(x, sy, 'dirt'); }
+    w.spawn = { x: 26 * TS, y: (sy - 2) * TS };
+    World.frame(w);
+    w.portals.push({ x: 20 * TS, y: sy * TS, target: 'home', label: 'EXIT', color: '#2de2a3' });
+    for (let x = 6; x < w.w - 4; x += 3) {
+      for (let y = sy + 2; y < w.h - 4; y++) {
+        if (w.isSolid(x, y) && !w.get(x, y - 1) && !w.get(x, y - 2)) { w.spawnPoints.push({ x, y: y - 1 }); break; }
+      }
+    }
+    w.enemyTypes = ['glitchling', 'brute', 'spitter'];
+    w.enemyCap = 8;
+    return w;
+  }
+
+  /* ---- THE STACK: vertical parkour gauntlet ---- */
+  static genStack() {
+    const w = new World('stack', 'THE STACK', 40, 110, { sky: ['#2b1055', '#7597de'], bgWall: 'rgba(30,20,60,0.5)', dark: 0 });
+    w.isStack = true;
+    const fy = 104;
+    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, 'brick');
+    let px = 8, y = fy - 4;
+    while (y > 16) {
+      const pw = 4 + Math.floor(hash2(y, 3) * 4);
+      for (let x = px; x < Math.min(px + pw, w.w - 2); x++) w.set(x, y, 'stone');
+      const r = hash2(y, 4);
+      if (r < 0.28) w.set(px + Math.floor(pw / 2), y - 1, 'spike_trap');
+      else if (r < 0.46) w.set(Math.min(px + pw - 1, w.w - 3), y - 1, 'spring_pad');
+      else if (r < 0.58) { const cx2 = px + 1; w.set(cx2, y - 1, 'conveyor'); w.meta[w.idx(cx2, y - 1)] = { dir: hash2(y, 9) < 0.5 ? 1 : -1 }; }
+      if (hash2(y, 5) < 0.2 && px > 5) w.set(px - 2, y, 'magma');
+      const dir = px > 24 ? -1 : (px < 8 ? 1 : (hash2(y, 6) < 0.5 ? -1 : 1));
+      px = Math.max(3, Math.min(w.w - 10, px + dir * (3 + Math.floor(hash2(y, 7) * 4))));
+      y -= 3;
+    }
+    // summit
+    for (let x = 8; x < 32; x++) w.set(x, 13, 'brick');
+    w.set(16, 12, 'gold_cache'); w.set(19, 12, 'gold_cache'); w.set(22, 12, 'gold_cache');
+    w.set(19, 11, null);
+    World.frame(w);
+    w.spawn = { x: 6 * TS, y: (fy - 2) * TS };
+    w.portals.push({ x: 3 * TS, y: fy * TS, target: 'home', label: 'EXIT', color: '#2de2a3' });
     return w;
   }
 
@@ -605,6 +725,8 @@ class World {
       2: { name: 'DATA MINES', sky: ['#0a0514', '#241448'], bgWall: 'rgba(18,8,30,0.9)', dark: 0.8, ground: 'stone', hazard: null, enemies: ['glitchling', 'ember', 'spitter'], cap: 7, boss: 'null_wurm' },
       3: { name: 'THE CLOUD', sky: ['#4a6ea8', '#a8c8e8'], bgWall: 'rgba(120,140,180,0.4)', dark: 0, ground: 'cloudb', hazard: null, enemies: ['drone', 'zapper'], cap: 7, boss: 'storm_kernel' },
       4: { name: 'THE CORE', sky: ['#14020a', '#3d0a1e'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.6, ground: 'corrupt', hazard: 'magma', enemies: ['glitchling', 'zapper', 'spitter', 'brute'], cap: 9, boss: 'admin' },
+      5: { name: 'FLOODED ARCHIVE', sky: ['#02131f', '#0a3d52'], bgWall: 'rgba(6,30,42,0.9)', dark: 0.3, ground: 'stone', hazard: null, enemies: ['drone', 'spitter', 'glitchling'], cap: 7, boss: 'kraken', flood: 24 },
+      6: { name: 'SHADOW PARTITION', sky: ['#030308', '#0d0d1a'], bgWall: 'rgba(10,10,20,0.92)', dark: 0.95, ground: 'corrupt', hazard: null, enemies: ['wraith', 'glitchling', 'zapper'], cap: 8, boss: 'rootkit' },
     }[n];
     const w = new World('sector' + n, defs.name, 130, 50, { sky: defs.sky, bgWall: defs.bgWall, dark: defs.dark });
     w.enemyTypes = defs.enemies; w.enemyCap = defs.cap; w.bossId = defs.boss; w.sectorN = n;
@@ -633,7 +755,8 @@ class World {
           let id = defs.ground;
           if (n === 1) id = depth < 4 ? 'stone' : 'stone';
           if (n === 2) id = depth < 3 ? 'dirt' : hash2(x, y) < 0.12 ? 'corrupt' : 'stone';
-          if (n === 4) id = hash2(x, y) < 0.5 ? 'corrupt' : 'stone';
+          if (n === 4 || n === 6) id = hash2(x, y) < 0.5 ? 'corrupt' : 'stone';
+          if (n === 5) id = hash2(x, y) < 0.2 ? 'sand' : 'stone';
           w.set(x, y, id);
           if (depth >= 1) w.bg[w.idx(x, y)] = 1;
         }
@@ -642,16 +765,23 @@ class World {
       if (defs.hazard) World.pocket(w, defs.hazard, n === 4 ? 14 : 10, hs[0] + 2, w.h - 6, 6);
       if (n === 2) { World.pocket(w, 'corrupt', 16, 16, w.h - 6, 8); World.pocket(w, 'wood', 6, 16, 40, 6); }
       // spawn ledge
-      for (let x = 2; x <= 8; x++) { for (let y = 0; y < hs[4]; y++) w.set(x, y, null); w.set(x, hs[4], 'bedrock'); }
-      w.spawn = { x: 5 * TS, y: (hs[4] - 2) * TS };
+      const ly = n === 5 ? 21 : hs[4];
+      for (let x = 2; x <= 8; x++) { for (let y = 0; y < ly; y++) w.set(x, y, null); w.set(x, ly, 'bedrock'); }
+      w.spawn = { x: 5 * TS, y: (ly - 2) * TS };
       // boss arena: flatten last 26 tiles
-      const ay = n === 2 ? 34 : 26;
+      const ay = n === 2 ? 34 : n === 5 ? 30 : 26;
       for (let x = w.w - 28; x < w.w - 1; x++) {
         for (let y = 2; y < ay; y++) w.set(x, y, null);
         for (let y = ay; y < w.h - 2; y++) if (!w.get(x, y)) w.set(x, y, defs.ground);
-        w.set(x, ay, n === 4 ? 'corrupt' : defs.ground);
+        w.set(x, ay, (n === 4 || n === 6) ? 'corrupt' : defs.ground);
       }
       w.bossZone = { x1: (w.w - 26) * TS, spawnX: (w.w - 13) * TS, spawnY: (ay - 7) * TS };
+      // flood pass (FLOODED ARCHIVE): open space below the waterline fills with liquid data
+      if (defs.flood) {
+        for (let x = 1; x < w.w - 1; x++) for (let y = defs.flood; y < w.h - 2; y++) {
+          if (!w.get(x, y)) w.set(x, y, 'water');
+        }
+      }
     }
     World.frame(w);
     // exit portal at spawn
@@ -662,10 +792,11 @@ class World {
         if (w.isSolid(x, y) && !w.get(x, y - 1) && !w.get(x, y - 2)) { w.spawnPoints.push({ x, y: y - 1 }); break; }
       }
     }
-    // cipher gate: seal the arena entrance column
+    // cipher gate: seal the arena entrance column (through open air AND water)
     w.gateCol = Math.floor(w.bossZone.x1 / TS) - 1;
     for (let y = 2; y < w.h - 2; y++) {
-      if (!w.get(w.gateCol, y)) w.set(w.gateCol, y, 'gate');
+      const t = w.get(w.gateCol, y);
+      if (!t || t === 'water') w.set(w.gateCol, y, 'gate');
     }
     // 3 cipher keys hidden across the sector (Pixel Worlds Netherworld style)
     const before = w.spawnPoints.filter(s => s.x < w.gateCol - 3 && s.x > 8);

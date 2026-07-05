@@ -85,17 +85,36 @@ Every splice result is *functional*:
 | Wood + LED | Data Sign | Writable sign |
 | Blaster + Glass | Lance Beam | Piercing shot, skewers a whole line |
 | Sentry + Blaster | Pocket Drone | Pet familiar that fights for you |
+| Brick + Stone | Crystal Cluster | Farmable gem deposit (6–12 gems) |
+| Glass + Spring | Glider Wings | Hold SPACE to glide, no fuel |
+| Sand + Glass | Chime Block | Musical note when stepped on, tunable with `[S]` |
+| Conveyor + Glass | Recall Disc | Boomerang blade — hits on the way out AND back |
 
 ### The bosses
 
 | Sector | Boss | Fight | First-kill drop |
 |---|---|---|---|
-| Firewall Sector | **FIREWALL DAEMON** | Fireball volleys + telegraphed fire pillars; enrages at 50% | Daemonfire Blade (burn damage) + Firewall Blocks (fire that only hurts *enemies*) |
+| Firewall Sector | **FIREWALL DAEMON** | Fireball volleys + telegraphed fire pillars; enrages at 50% | Daemonfire Blade (burn damage) + Firewall Blocks (fire that only hurts *enemies*); rare Ember Kit pet on repeat kills |
 | Data Mines | **NULL WURM** | A segmented worm that *eats the terrain* while chasing you | Wurmbore Drill (mines 3×3) |
+| Flooded Archive | **KRAKEN.SYS** | Bobs in a half-drowned sector — arcing ink volleys, tentacle columns erupting from below, phase-2 whirlpool pull | Torrent Lance (piercing knockback cannon) + Buoy Chip (float & torpedo-swim) |
 | The Cloud | **STORM KERNEL** | Teleports, homing sparks, telegraphed lightning columns | Stormstep Boots (triple jump + SHIFT lightning-dash) |
+| Shadow Partition | **ROOTKIT** | A pitch-black sector; the boss *turns invisible*, circles you, and dash-slashes along telegraphed lines while spawning wraiths | Wraith Chip (15% dodge, +10% speed) |
 | The Core | **A D M I N** | Ban-hammer slams, radial bursts, summons enforcers | ADMIN Crown (+50% dmg, armor, magnet, regen) + Network Core Trophy |
 
-Beating a boss unlocks the next portal. Bosses are re-fightable for gems.
+Beating bosses unlocks further portals. Bosses are re-fightable for gems.
+
+### Beyond the sectors
+- **THE MINESHAFT** — a 140-tile-deep vertical mining world. Copper → Silver → Aurum → Core
+  Crystal veins get richer (and enemies meaner) the deeper you dig, by torchlight.
+- **THE STACK** — a vertical parkour gauntlet of spikes, springs, conveyors and magma.
+  Three Golden Caches at the summit, repeatable.
+- **XP & levels** — everything you do earns XP; each level grants +3 max HP.
+- **The Merchant** — a hooded trader who docks at your home server with a rotating
+  black-market stock (rare seeds, pets, jetpacks) for 90 seconds at a time.
+- **Gem Rain** — occasionally the network leaks currency over your home world. Catch it.
+- **Overclock Cola** — +40% speed & damage for 30s.
+- **OVERDRIVE MODE** — post-Boss-Rush toggle: enemies +3 levels everywhere, all gems doubled.
+- **BOSS RUSH** now chains all **six** bosses back-to-back.
 
 ## Controls
 

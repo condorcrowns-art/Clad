@@ -77,6 +77,7 @@ const ENEMY_DEFS = {
   spitter:    { hp: 40, dmg: 10, speed: 55, color: '#94d82d', color2: '#5c940d', w: 28, h: 22, ai: 'walker', lobs: true, gems: [3, 8] },
   brute:      { hp: 120, dmg: 22, speed: 45, color: '#e8590c', color2: '#862e0a', w: 40, h: 36, ai: 'walker', gems: [8, 14] },
   warden:     { hp: 550, dmg: 26, speed: 65, color: '#f1c40f', color2: '#7d6608', w: 52, h: 46, ai: 'walker', lobs: true, miniboss: true, gems: [60, 90] },
+  wraith:     { hp: 20, dmg: 14, speed: 170, color: '#2a2a3d', color2: '#ff4d6d', w: 24, h: 26, ai: 'flyer', gems: [4, 9] },
 };
 
 class Enemy extends Entity {
@@ -104,6 +105,7 @@ class Enemy extends Entity {
     if (this.hp <= 0 && !this.dead) {
       this.dead = true;
       game.progress.stats.kills++;
+      game.addXp(Math.max(3, Math.round(this.maxHp / 8)));
       game.fx.explode(this.x, this.y, this.def.color, this.def.miniboss ? 34 : 14);
       game.sfx.play('kill');
       const [g0, g1] = this.def.gems;
@@ -247,6 +249,10 @@ class Projectile {
     this.pierce = (opts && opts.pierce) || false;
     this.gravity = (opts && opts.gravity) || 0;
     this.burn = opts && opts.burn;
+    this.knock = (opts && opts.knock) || 120;
+    this.boomerang = (opts && opts.boomerang) || false;
+    this.phase = 'out'; this.outT = 0.38;
+    this._hit = new Set();
     this.w = this.r * 2; this.h = this.r * 2;
   }
   update(dt, world, game) {
@@ -261,22 +267,41 @@ class Projectile {
       const sp = Math.hypot(this.vx, this.vy);
       if (sp > 340) { this.vx *= 340 / sp; this.vy *= 340 / sp; }
     }
+    // recall disc returns to its thrower
+    if (this.boomerang) {
+      this.outT -= dt;
+      if (this.phase === 'out' && this.outT <= 0) { this.phase = 'back'; this._hit.clear(); }
+      if (this.phase === 'back') {
+        const p = game.player;
+        const a = Math.atan2(p.y - this.y, p.x - this.x);
+        const sp = Math.hypot(this.vx, this.vy) || 1;
+        this.vx += (Math.cos(a) * 640 - this.vx) * Math.min(1, 6 * dt);
+        this.vy += (Math.sin(a) * 640 - this.vy) * Math.min(1, 6 * dt);
+        if (Math.hypot(p.x - this.x, p.y - this.y) < 30) { this.dead = true; return; }
+      }
+    }
     this.x += this.vx * dt; this.y += this.vy * dt;
     if (world.solidAtPx(this.x, this.y)) {
-      this.dead = true;
-      game.fx.puff(this.x, this.y, this.color);
-      return;
+      if (this.boomerang) {
+        if (this.phase === 'out') { this.phase = 'back'; this._hit.clear(); }
+      } else {
+        this.dead = true;
+        game.fx.puff(this.x, this.y, this.color);
+        return;
+      }
     }
     if (this.friendly) {
       for (const e of game.enemies) {
-        if (e.dead || !e.overlaps(this)) continue;
-        e.hurt(this.dmg, game, Math.sign(this.vx) * 120);
+        if (e.dead || this._hit.has(e) || !e.overlaps(this)) continue;
+        e.hurt(this.dmg, game, Math.sign(this.vx) * this.knock);
         if (this.burn) { e.burn = this.burn.dps; e.burnT = this.burn.dur; }
         if (!this.pierce) { this.dead = true; return; }
+        this._hit.add(e);
       }
-      if (game.boss && !game.boss.dead && game.boss.overlaps(this)) {
+      if (game.boss && !game.boss.dead && !this._hit.has(game.boss) && game.boss.overlaps(this)) {
         game.boss.hurt(this.dmg, game);
         if (!this.pierce) this.dead = true;
+        else this._hit.add(game.boss);
       }
     } else if (game.player.overlaps(this)) {
       game.player.hurt(this.dmg, game, Math.sign(this.vx) * 200);
@@ -368,7 +393,7 @@ class Pet {
       if (best) {
         this.shootT = this.fx.rate;
         const a = Math.atan2(best.y - this.y, best.x - this.x);
-        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 620, Math.sin(a) * 620, this.fx.dmg, true, this.fx.color));
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 620, Math.sin(a) * 620, this.fx.dmg, true, this.fx.color, { burn: this.fx.burn }));
         game.sfx.play('sentry');
       }
     }
@@ -475,6 +500,18 @@ class FXSystem {
 class SFX {
   constructor() { this.ctx = null; }
   init() { if (!this.ctx) try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  note(semitone) { // chime blocks: pentatonic-ish pitches
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const f = 440 * Math.pow(2, (semitone - 5) / 12);
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    o.connect(g).connect(this.ctx.destination);
+    o.start(t); o.stop(t + 0.55);
+  }
   play(name) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

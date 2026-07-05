@@ -85,6 +85,31 @@ defItem('data_fish', { name: 'Data Fish', kind: 'consumable', tier: 0, heal: 30,
 defItem('golden_fish', { name: 'Golden Fish', kind: 'consumable', tier: 2, heal: 100,
   desc: 'FUNCTION: click to eat for a FULL heal — or recycle it for a fat stack of gems.' });
 
+defItem('crystal_cluster', { name: 'Crystal Cluster', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#6ee7ff', color2: '#2a6f8f',
+  gemVal: [6, 12], fx: { glow: 3 }, desc: 'FUNCTION: a farmable gem deposit — bursts into 6–12 gems when broken. Grow forests of these and get rich.' });
+defItem('note_block', { name: 'Chime Block', kind: 'block', tier: 2, hp: 5, solid: true, color: '#f7a8d8', color2: '#c26aa4', animated: true,
+  fx: { note: true }, desc: 'FUNCTION: plays a musical tone when you step on it. Stand on it and press [S] to tune the pitch. Build songs into your floor.' });
+defItem('glider_wings', { name: 'Glider Wings', kind: 'gear', slot: 'back', tier: 2,
+  fx: { glide: { fall: 85, boost: 1.2 } },
+  desc: 'FUNCTION: hold [SPACE] in the air to glide — slow fall, extra drift. The budget jetpack (no fuel needed).' });
+defItem('torrent_lance', { name: 'Torrent Lance', kind: 'weapon', tier: 9, dmg: 28, rate: 3.5, unspliceable: true,
+  projectile: { speed: 820, color: '#38d9f5', pierce: true }, knock: 420, minePower: 1, mineRate: 4,
+  desc: 'BOSS TECH: KRAKEN.SYS\'s pressure cannon. Piercing water lances that blast enemies backwards.' });
+defItem('buoy_chip', { name: 'Buoy Chip', kind: 'gear', slot: 'chip', tier: 9, unspliceable: true,
+  fx: { buoy: true, magnet: 4 },
+  desc: 'BOSS TECH: you float to the surface of liquid data and swim like a torpedo. Includes a loot magnet.' });
+defItem('wraith_chip', { name: 'Wraith Chip', kind: 'gear', slot: 'chip', tier: 9, unspliceable: true,
+  fx: { dodge: 0.15, speed: 1.1 },
+  desc: 'BOSS TECH: ROOTKIT\'s phase trick. 15% of all attacks pass straight through you. +10% speed.' });
+defItem('recall_disc', { name: 'Recall Disc', kind: 'weapon', tier: 3, dmg: 18, rate: 2.5, minePower: 1, mineRate: 4,
+  projectile: { speed: 640, color: '#3ddc84', pierce: true, boomerang: true },
+  desc: 'FUNCTION: a piercing disc that flies out, then RETURNS to you — hitting everything twice.' });
+defItem('overclock_cola', { name: 'Overclock Cola', kind: 'consumable', tier: 1, buff: { dur: 30, speed: 1.4, dmg: 1.4 },
+  desc: 'FUNCTION: click to chug. +40% speed and damage for 30 seconds. Do not shake.' });
+defItem('ember_pet', { name: 'Ember Kit', kind: 'gear', slot: 'pet', tier: 9, unspliceable: true,
+  fx: { pet: { dmg: 11, rate: 1.0, range: 7, color: '#ff5714', burn: { dps: 6, dur: 2 } } },
+  desc: 'BOSS TECH: a baby flame daemon. Its shots IGNITE enemies. Rare drop from repeat Firewall Daemon kills.' });
+
 /* ===================== TOOLS ===================== */
 defItem('fist', { name: 'Fist', kind: 'tool', tier: 0, minePower: 1, mineRate: 4, dmg: 8, rate: 3, range: 1.4, noDrop: true,
   desc: 'Your bare hands. They punch blocks. Slowly.' });
@@ -137,7 +162,7 @@ const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 9: 170 }; // seconds by tier
 for (const id of Object.keys(ITEMS)) {
   const it = ITEMS[id];
   if (it.kind === 'seed' || it.noDrop || it.kind === 'consumable') continue;
-  if (['trophy_core', 'admin_crown', 'core_sprite', 'overclock_chip'].includes(id)) continue; // one-of-a-kind
+  if (['trophy_core', 'admin_crown', 'core_sprite', 'overclock_chip', 'torrent_lance', 'buoy_chip', 'wraith_chip', 'ember_pet'].includes(id)) continue; // one-of-a-kind
   defItem(id + '_seed', {
     name: it.name.replace(/ (Block|Pad|Belt|Trap|Node|Blade|Blaster|Pickaxe|Drill|Jetpack|Boots|Chip)$/, '') + ' Seed',
     kind: 'seed', grows: id, tier: it.tier, growTime: GROW_TIMES[it.tier] || 60,
@@ -178,6 +203,10 @@ defRecipe('dirt', 'glass', 'door');
 defRecipe('wood', 'led_block', 'sign');
 defRecipe('blaster', 'glass', 'laser_rifle');
 defRecipe('sentry', 'blaster', 'drone_pet');
+defRecipe('brick', 'stone', 'crystal_cluster');
+defRecipe('glass', 'spring_pad', 'glider_wings');
+defRecipe('sand', 'glass', 'note_block');
+defRecipe('conveyor', 'glass', 'recall_disc');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
@@ -193,6 +222,7 @@ const SHOP = [
   { id: 'medkit', price: 25, qty: 1 },
   { id: 'bomb', price: 40, qty: 1 },
   { id: 'fishing_rod', price: 60, qty: 1 },
+  { id: 'overclock_cola', price: 55, qty: 1 },
   { id: 'mystery_seed', price: 120, qty: 1 },
 ];
 

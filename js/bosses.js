@@ -7,7 +7,9 @@
 const BOSS_META = {
   firewall_daemon: { name: 'FIREWALL DAEMON', hp: 650, gems: [140, 200], drops: [['flame_blade', 1], ['firewall_block', 6]] },
   null_wurm:       { name: 'NULL WURM', hp: 950, gems: [180, 260], drops: [['wurm_drill', 1]] },
+  kraken:          { name: 'KRAKEN.SYS', hp: 1450, gems: [240, 360], drops: [['torrent_lance', 1], ['buoy_chip', 1]] },
   storm_kernel:    { name: 'STORM KERNEL', hp: 1250, gems: [220, 320], drops: [['storm_boots', 1]] },
+  rootkit:         { name: 'R O O T K I T', hp: 1650, gems: [300, 440], drops: [['wraith_chip', 1]] },
   admin:           { name: 'A D M I N', hp: 1900, gems: [400, 600], drops: [['admin_crown', 1], ['trophy_core', 1]] },
 };
 
@@ -445,11 +447,214 @@ class AdminBoss extends Boss {
   }
 }
 
+/* ============ 5. KRAKEN.SYS — flooded archive leviathan ============ */
+class KrakenBoss extends Boss {
+  constructor(x, y) {
+    super('kraken', x, y, 100, 84);
+    this.homeX = x; this.homeY = y;
+    this.inkT = 2.5; this.tentT = 5;
+    this.contactDmg = 24;
+  }
+  update(dt, world, game) {
+    this.baseUpdate(dt);
+    const p = game.player;
+    const spd = this.phase2 ? 1.5 : 1;
+    this.homeX += Math.sign(p.x - this.homeX) * 34 * spd * dt;
+    this.x = this.homeX + Math.sin(this.t * 0.9 * spd) * 70;
+    this.y = this.homeY + Math.sin(this.t * 1.7) * 18;
+    // arcing ink volley
+    this.inkT -= dt;
+    if (this.inkT <= 0) {
+      this.inkT = this.phase2 ? 1.7 : 2.8;
+      const n = this.phase2 ? 4 : 3;
+      for (let i = 0; i < n; i++) {
+        const dx = p.x - this.x + (i - (n - 1) / 2) * TS * 2.5, tt = 1.0;
+        game.projectiles.push(new Projectile(this.x, this.y, dx / tt, (p.y - this.y) / tt - 0.5 * 1000 * tt, 14, false, '#1d3557', { r: 8, gravity: 1000, life: 2.6 }));
+      }
+      game.sfx.play('eshoot');
+    }
+    // tentacles erupt from below
+    this.tentT -= dt;
+    if (this.tentT <= 0) {
+      this.tentT = this.phase2 ? 3.2 : 5.2;
+      const xs = this.phase2 ? [p.x - TS * 3.5, p.x, p.x + TS * 3.5] : [p.x - TS * 2, p.x + TS * 2];
+      for (const tx of xs) game.hazards.push(new Tentacle(tx, 0.9, world));
+      game.sfx.play('bossroar');
+    }
+    // phase 2: whirlpool drag
+    if (this.phase2) {
+      const d = Math.hypot(p.x - this.x, p.y - this.y);
+      if (d < 12 * TS && d > 2 * TS) p.x += Math.sign(this.x - p.x) * 60 * dt;
+    }
+    this.contact(game, dt);
+  }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    if (this.hitFlash > 0) ctx.filter = 'brightness(2.2)';
+    // dangling tentacles
+    ctx.strokeStyle = this.phase2 ? '#26547c' : '#1d3557'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+    for (let k = 0; k < 5; k++) {
+      const a = (k - 2) * 0.5;
+      ctx.beginPath(); ctx.moveTo(k * 18 - 36, 30);
+      ctx.quadraticCurveTo(k * 18 - 36 + Math.sin(time * 3 + k) * 16, 62, k * 18 - 36 + Math.sin(time * 2 + k * 2) * 26 + a * 10, 88);
+      ctx.stroke();
+    }
+    // head
+    ctx.fillStyle = this.phase2 ? '#2a628f' : '#1d3557';
+    ctx.beginPath(); ctx.ellipse(0, -4, 50, 44, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(56,217,245,0.25)';
+    ctx.beginPath(); ctx.ellipse(-14, -22, 18, 12, -0.4, 0, 7); ctx.fill();
+    // eyes
+    for (const ex of [-20, 20]) {
+      ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(ex, -8, 11, 0, 7); ctx.fill();
+      ctx.fillStyle = '#05070d'; ctx.beginPath(); ctx.ellipse(ex + Math.sign(ex) * 2, -8, 4, this.phase2 ? 9 : 6, 0, 0, 7); ctx.fill();
+    }
+    // beak
+    ctx.fillStyle = '#0a1a2e';
+    ctx.beginPath(); ctx.moveTo(-8, 18); ctx.lineTo(0, 30 + Math.sin(time * 6) * 4); ctx.lineTo(8, 18); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// tentacle column rising from the world floor
+class Tentacle {
+  constructor(x, warn, world) {
+    this.x = x; this.warnT = warn; this.upT = 1.5; this.dead = false;
+    this.w = TS * 1.1; this.floorY = world.h * TS - TS * 2;
+    this.height = 15 * TS; this.rise = 0;
+  }
+  update(dt, world, game) {
+    if (this.warnT > 0) { this.warnT -= dt; return; }
+    this.upT -= dt;
+    this.rise = Math.min(1, this.rise + dt * 4);
+    if (this.upT <= 0) { this.rise -= dt * 3; if (this.rise <= 0) { this.dead = true; return; } }
+    const p = game.player;
+    const topY = this.floorY - this.height * this.rise;
+    if (Math.abs(p.x - this.x) < this.w / 2 + p.w / 2 && p.y + p.h / 2 > topY) p.hurt(18, game, Math.sign(p.x - this.x) * 300);
+  }
+  draw(ctx, cam, time, vh) {
+    const sx = this.x - cam.x;
+    if (this.warnT > 0) {
+      const fy = this.floorY - cam.y;
+      ctx.fillStyle = 'rgba(56,217,245,' + (0.2 + 0.2 * Math.sin(time * 20)) + ')';
+      ctx.fillRect(sx - this.w / 2, fy - 30, this.w, 30);
+      return;
+    }
+    const topY = this.floorY - this.height * Math.max(0, this.rise) - cam.y;
+    const fy = this.floorY - cam.y;
+    ctx.fillStyle = '#1d3557';
+    ctx.beginPath();
+    ctx.moveTo(sx - this.w / 2, fy);
+    ctx.quadraticCurveTo(sx - this.w / 2 + Math.sin(time * 5) * 6, (topY + fy) / 2, sx, topY);
+    ctx.quadraticCurveTo(sx + this.w / 2 + Math.sin(time * 5) * 6, (topY + fy) / 2, sx + this.w / 2, fy);
+    ctx.closePath(); ctx.fill();
+    // suckers
+    ctx.fillStyle = 'rgba(56,217,245,0.5)';
+    for (let k = 1; k < 6; k++) {
+      const yy = topY + (fy - topY) * (k / 6);
+      ctx.beginPath(); ctx.arc(sx + Math.sin(k * 2 + time * 5) * 6, yy, 4, 0, 7); ctx.fill();
+    }
+  }
+}
+
+/* ============ 6. ROOTKIT — the invisible stalker ============ */
+class RootkitBoss extends Boss {
+  constructor(x, y) {
+    super('rootkit', x, y, 60, 90);
+    this.homeY = y;
+    this.state = 'visible'; this.stateT = 3;
+    this.alpha = 1;
+    this.dashLine = null; this.minionT = 8;
+    this.contactDmg = 22;
+  }
+  update(dt, world, game) {
+    this.baseUpdate(dt);
+    const p = game.player;
+    const spd = this.phase2 ? 1.5 : 1;
+    this.stateT -= dt;
+    if (this.state === 'visible') {
+      this.alpha = Math.min(1, this.alpha + dt * 2);
+      this.x += Math.sign(p.x - this.x) * 70 * spd * dt;
+      this.y = this.homeY + Math.sin(this.t * 2) * 20;
+      if (this.stateT <= 0) { this.state = 'cloak'; this.stateT = this.phase2 ? 2.6 : 3.4; game.toast('ROOTKIT vanished from the process list…', 'warn'); game.sfx.play('tp'); }
+      this.minionT -= dt;
+      if (this.minionT <= 0) {
+        this.minionT = this.phase2 ? 6 : 10;
+        for (let i = 0; i < (this.phase2 ? 3 : 2); i++) game.enemies.push(new Enemy('wraith', this.x + (i - 1) * 50, this.y - 30, 3));
+        game.sfx.play('bossroar');
+      }
+    } else if (this.state === 'cloak') {
+      this.alpha = Math.max(0.06, this.alpha - dt * 2.5);
+      // circle the player unseen
+      const a = this.t * 1.6 * spd;
+      this.x += ((p.x + Math.cos(a) * TS * 7) - this.x) * 2 * dt;
+      this.y += ((p.y - TS * 3 + Math.sin(a) * TS * 2) - this.y) * 2 * dt;
+      if (this.stateT <= 0) {
+        this.state = 'aim'; this.stateT = 0.7;
+        const ang = Math.atan2(p.y - this.y, p.x - this.x);
+        this.dashLine = { x: this.x, y: this.y, ang };
+      }
+    } else if (this.state === 'aim') {
+      this.alpha = 0.35 + Math.sin(this.t * 20) * 0.2;
+      if (this.stateT <= 0) {
+        this.state = 'dash'; this.stateT = 0.5;
+        this.vx = Math.cos(this.dashLine.ang) * 950;
+        this.vy = Math.sin(this.dashLine.ang) * 950;
+        game.sfx.play('dash');
+      }
+    } else if (this.state === 'dash') {
+      this.alpha = 1;
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      // clamp to world
+      this.x = Math.max(TS * 2, Math.min(world.w * TS - TS * 2, this.x));
+      this.y = Math.max(TS * 3, Math.min(world.h * TS - TS * 4, this.y));
+      if (this.stateT <= 0) {
+        this.dashLine = null;
+        if (this.phase2 && !this._chained) { this._chained = true; this.state = 'aim'; this.stateT = 0.5; const ang = Math.atan2(p.y - this.y, p.x - this.x); this.dashLine = { x: this.x, y: this.y, ang }; }
+        else { this._chained = false; this.state = 'visible'; this.stateT = this.phase2 ? 2.2 : 3; }
+      }
+    }
+    this.contact(game, dt);
+  }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    // dash telegraph
+    if (this.dashLine && this.state === 'aim') {
+      ctx.strokeStyle = 'rgba(255,77,109,' + (0.3 + 0.3 * Math.sin(time * 24)) + ')';
+      ctx.setLineDash([10, 8]); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + Math.cos(this.dashLine.ang) * 900, sy + Math.sin(this.dashLine.ang) * 900);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.save(); ctx.translate(sx, sy);
+    ctx.globalAlpha = this.alpha;
+    if (this.hitFlash > 0) ctx.filter = 'brightness(2.2)';
+    // ragged shadow cloak
+    ctx.fillStyle = '#12121f';
+    ctx.beginPath();
+    ctx.moveTo(-30, -40);
+    ctx.quadraticCurveTo(0, -56, 30, -40);
+    for (let k = 5; k >= -5; k--) ctx.lineTo(k * 6, 42 + Math.sin(time * 4 + k) * 7);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // eyes stay faintly visible even cloaked
+    ctx.globalAlpha = Math.max(0.5, this.alpha);
+    ctx.fillStyle = '#ff4d6d';
+    const blink = Math.sin(time * 2.4) > -0.92 ? 1 : 0.1;
+    ctx.fillRect(sx - 13, sy - 26, 9, 5 * blink * (this.phase2 ? 1.8 : 1));
+    ctx.fillRect(sx + 4, sy - 26, 9, 5 * blink * (this.phase2 ? 1.8 : 1));
+    ctx.globalAlpha = 1;
+  }
+}
+
 function spawnBoss(id, x, y) {
   switch (id) {
     case 'firewall_daemon': return new FirewallDaemon(x, y);
     case 'null_wurm': return new NullWurm(x, y);
+    case 'kraken': return new KrakenBoss(x, y);
     case 'storm_kernel': return new StormKernel(x, y);
+    case 'rootkit': return new RootkitBoss(x, y);
     case 'admin': return new AdminBoss(x, y);
   }
 }

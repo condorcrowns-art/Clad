@@ -33,7 +33,7 @@ class Player extends Entity {
     return v;
   }
   magnetRange() { const m = this.gearFx('magnet'); return m || 1.2; }
-  dmgMult() { return this.gearFx('dmgMult') || 1; }
+  dmgMult() { return (this.gearFx('dmgMult') || 1) * (game.buffActive() ? game.buff.dmg : 1); }
   heldItem() { const id = this.hotbar[this.sel]; return id ? ITEMS[id] : ITEMS.fist; }
 
   give(id, n) {
@@ -62,6 +62,13 @@ class Player extends Entity {
   /* ---------- damage ---------- */
   hurt(dmg, game, kx) {
     if (this.iframes > 0 || this.hp <= 0) return;
+    const dodge = this.gearFx('dodge') || 0;
+    if (dodge && Math.random() < dodge) {
+      game.fx.hitNum(this.x, this.y - this.h, 'MISS');
+      game.sfx.play('dash');
+      this.iframes = 0.3;
+      return;
+    }
     const armor = this.gearFx('armor') || 0;
     dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - (this.shieldNear || 0))));
     this.hp -= dmg;
@@ -77,7 +84,8 @@ class Player extends Entity {
   /* ---------- update ---------- */
   update(dt, world, game, input) {
     const feet = this.equip.feet ? ITEMS[this.equip.feet].fx : null;
-    const speedMult = (feet && feet.speed) || 1;
+    let speedMult = ((feet && feet.speed) || 1) * ((this.equip.chip && ITEMS[this.equip.chip].fx.speed) || 1);
+    if (game.buffActive()) speedMult *= game.buff.speed;
     const baseSpeed = 250 * speedMult;
     this.iframes = Math.max(0, this.iframes - dt);
     this.actionCd = Math.max(0, this.actionCd - dt);
@@ -117,9 +125,16 @@ class Player extends Entity {
         input.jumpPressed = false;
       }
 
-      // jetpack
-      const jp = this.equip.back ? ITEMS[this.equip.back].fx.jetpack : null;
-      this.jetting = false;
+      // jetpack / glider
+      const backFx = this.equip.back ? ITEMS[this.equip.back].fx : null;
+      const jp = backFx && backFx.jetpack;
+      const glide = backFx && backFx.glide;
+      this.jetting = false; this.gliding = false;
+      if (glide && input.jump && !this.onGround && this.vy > 0 && !this.inWater) {
+        this.vy = Math.min(this.vy, glide.fall);
+        this.vx += this.facing * 40 * dt;
+        this.gliding = true;
+      }
       if (jp && input.jump && !this.onGround && this.vy > -420 && this.fuel > 0) {
         this.vy -= jp.thrust * dt;
         this.fuel = Math.max(0, this.fuel - dt / jp.fuel);
@@ -141,8 +156,13 @@ class Player extends Entity {
       input.dashPressed = false;
 
       if (this.inWater) {
-        this.vy += this.gravity * 0.25 * dt;
-        this.vy = Math.max(-260, Math.min(this.vy, 150));
+        if (this.gearFx('buoy')) {
+          this.vy -= 900 * dt; // buoy chip: float hard to the surface
+          this.vy = Math.max(-190, Math.min(this.vy, 120));
+        } else {
+          this.vy += this.gravity * 0.25 * dt;
+          this.vy = Math.max(-260, Math.min(this.vy, 150));
+        }
         this.jumpsUsed = 0;
       } else {
         this.vy += this.gravity * dt;
@@ -152,6 +172,18 @@ class Player extends Entity {
     if (this.onGround) this.jumpsUsed = 0;
 
     this.moveAndCollide(dt, world);
+
+    // note blocks chime underfoot
+    if (this.onGround && this.groundTile === 'note_block') {
+      const ntx = Math.floor(this.x / TS), nty = Math.floor((this.y + this.h / 2 + 2) / TS);
+      const ni = world.idx(ntx, nty);
+      if (ni !== this._noteIdx) {
+        this._noteIdx = ni;
+        const pitch = (world.meta[ni] || {}).pitch || 0;
+        game.sfx.note(pitch);
+        game.fx.add(this.x, this.y - this.h / 2 - 8, (Math.random() - 0.5) * 40, -70, '#f7a8d8', 0.8, 5, 0);
+      }
+    } else if (this.groundTile !== 'note_block') this._noteIdx = -1;
 
     // tile effects on touch
     let onConveyor = 0, healNear = 0;
@@ -219,6 +251,12 @@ class Player extends Entity {
         if (!inReach) { game.toast('Too far to throw.', 'warn'); return; }
         this.take(held.id, 1);
         game.detonate(wx, wy, held.bomb.radius, held.bomb.dmg);
+      } else if (held.buff) {
+        this.take(held.id, 1);
+        game.buff = { until: game.time + held.buff.dur, speed: held.buff.speed, dmg: held.buff.dmg };
+        game.toast('OVERCLOCKED! +40% speed & damage for ' + held.buff.dur + 's', 'gold');
+        game.fx.explode(this.x, this.y, '#ffd166', 16);
+        game.sfx.play('victory');
       } else if (held.mystery) {
         this.take(held.id, 1);
         const pick = MYSTERY_POOL[Math.floor(Math.random() * MYSTERY_POOL.length)];
@@ -303,7 +341,8 @@ class Player extends Entity {
         const a = Math.atan2(wy - this.y, wx - this.x);
         game.projectiles.push(new Projectile(this.x + Math.cos(a) * 20, this.y - 6 + Math.sin(a) * 20,
           Math.cos(a) * tool.projectile.speed, Math.sin(a) * tool.projectile.speed,
-          Math.round(tool.dmg * this.dmgMult()), true, tool.projectile.color));
+          Math.round(tool.dmg * this.dmgMult()), true, tool.projectile.color,
+          { pierce: tool.projectile.pierce, boomerang: tool.projectile.boomerang, knock: tool.knock, burn: tool.burn }));
         game.sfx.play('shoot');
       } else {
         // melee arc
@@ -348,8 +387,20 @@ class Player extends Entity {
     if (this.iframes > 0 && Math.floor(time * 14) % 2 === 0) ctx.globalAlpha = 0.4;
     const walk = Math.abs(this.vx) > 20 && this.onGround ? Math.sin(time * 12) : 0;
 
-    // jetpack on back
-    if (this.equip.back) {
+    // back gear: jetpack or glider wings
+    if (this.equip.back === 'glider_wings') {
+      const spread = this.gliding ? 1 : 0.35;
+      ctx.fillStyle = '#3ddc84';
+      ctx.beginPath(); ctx.moveTo(-this.facing * 8, -14);
+      ctx.lineTo(-this.facing * (10 + 22 * spread), -14 - 14 * spread);
+      ctx.lineTo(-this.facing * (10 + 16 * spread), -2);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#2aa864';
+      ctx.beginPath(); ctx.moveTo(-this.facing * 8, -10);
+      ctx.lineTo(-this.facing * (8 + 17 * spread), -10 - 8 * spread);
+      ctx.lineTo(-this.facing * (8 + 13 * spread), 2);
+      ctx.closePath(); ctx.fill();
+    } else if (this.equip.back) {
       ctx.fillStyle = '#8899aa';
       ctx.fillRect(-this.facing * 16 - 4, -14, 8, 20);
       if (this.jetting) { ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(-this.facing * 16 - 4, 6); ctx.lineTo(-this.facing * 16, 16 + Math.random() * 8); ctx.lineTo(-this.facing * 16 + 4, 6); ctx.fill(); }

@@ -7,7 +7,8 @@
 let game = null;
 const SAVE_KEY = 'glitchtopia_save_v1';
 
-const STATS_DEFAULT = { broken: 0, planted: 0, splices: 0, harvests: 0, placed: 0, kills: 0, keys: 0, fish: 0, gemsEarned: 0 };
+const STATS_DEFAULT = { broken: 0, planted: 0, splices: 0, harvests: 0, placed: 0, kills: 0, keys: 0, fish: 0, gemsEarned: 0, maxDepth: 0, summits: 0 };
+const RUSH_ORDER = ['firewall_daemon', 'null_wurm', 'kraken', 'storm_kernel', 'rootkit', 'admin'];
 
 /* ---------------- quests ---------------- */
 const QUESTS = [
@@ -21,7 +22,13 @@ const QUESTS = [
   { id: 'fish3', name: 'Data Angler', desc: 'Catch 3 fish', goal: 3, val: (s) => s.fish, reward: { gems: 80 } },
   { id: 'boss1', name: 'Firewall Breaker', desc: 'Purge the FIREWALL DAEMON', goal: 1, val: (s, g) => g.progress.beaten.firewall_daemon ? 1 : 0, reward: { gems: 100 } },
   { id: 'pet1', name: 'Best Friend Protocol', desc: 'Equip a pet familiar', goal: 1, val: (s, g) => g.player.equip.pet ? 1 : 0, reward: { gems: 60 } },
-  { id: 'boss4', name: 'Network Liberator', desc: 'Purge all four corrupted processes', goal: 4, val: (s, g) => Object.keys(g.progress.beaten).length, reward: { gems: 300 } },
+  { id: 'boss4', name: 'Network Liberator', desc: 'Purge four corrupted processes', goal: 4, val: (s, g) => Object.keys(g.progress.beaten).length, reward: { gems: 300 } },
+  { id: 'depth100', name: 'Core Miner', desc: 'Reach depth 100 in THE MINESHAFT', goal: 100, val: (s) => s.maxDepth, reward: { gems: 150 } },
+  { id: 'summit', name: 'Stack Overflow', desc: 'Reach the summit of THE STACK', goal: 1, val: (s) => s.summits, reward: { gems: 200 } },
+  { id: 'kraken', name: 'Depth Charge', desc: 'Purge KRAKEN.SYS', goal: 1, val: (s, g) => g.progress.beaten.kraken ? 1 : 0, reward: { gems: 150 } },
+  { id: 'rootkit', name: 'Process Killer', desc: 'Purge R O O T K I T', goal: 1, val: (s, g) => g.progress.beaten.rootkit ? 1 : 0, reward: { gems: 150 } },
+  { id: 'lvl5', name: 'Power User', desc: 'Reach level 5', goal: 5, val: (s, g) => g.level, reward: { gems: 100 } },
+  { id: 'boss6', name: 'Total Purge', desc: 'Purge all six corrupted processes', goal: 6, val: (s, g) => Object.keys(g.progress.beaten).length, reward: { items: [['overclock_cola', 3]] } },
   { id: 'rush1', name: 'OVERCLOCKED', desc: 'Clear the BOSS RUSH', goal: 1, val: (s, g) => g.progress.rushDone ? 1 : 0, reward: { gems: 500 } },
 ];
 
@@ -38,6 +45,10 @@ class Game {
     this.zaps = []; this.keyPickups = [];
     this.keysGot = 0; this.keysNeed = 0;
     this.pet = null; this.fishing = null; this.rush = null;
+    this.xp = 0; this.level = 1;
+    this.buff = null;
+    this.merchant = null; this._merchantT = 60 + Math.random() * 120;
+    this._rainT = 150 + Math.random() * 150; this.rain = 0;
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
@@ -100,7 +111,26 @@ class Game {
     window.addEventListener('beforeunload', () => this.save());
   }
 
+  rollMerchantStock() {
+    const pool = [
+      { id: 'tesla_coil_seed', price: 95 }, { id: 'drone_pet_seed', price: 160 },
+      { id: 'golden_fish', price: 55 }, { id: 'mystery_seed', price: 85 },
+      { id: 'overclock_cola', price: 40 }, { id: 'glider_wings_seed', price: 130 },
+      { id: 'crystal_cluster_seed', price: 110 }, { id: 'recall_disc_seed', price: 120 },
+      { id: 'shield_gen_seed', price: 100 }, { id: 'medkit', price: 15 },
+      { id: 'jetpack_seed', price: 200 }, { id: 'note_block_seed', price: 45 },
+    ].filter(d => ITEMS[d.id]);
+    const stock = [];
+    while (stock.length < 4 && pool.length) stock.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    return stock;
+  }
+
   tryPortal() {
+    // merchant first
+    if (this.merchant && Math.abs(this.player.x - this.merchant.x) < TS * 2 && Math.abs(this.player.y - this.merchant.y) < TS * 3) {
+      ui.openMerchant();
+      return true;
+    }
     for (const p of this.world.portals) {
       if (p.locked && p.locked()) continue;
       if (Math.abs(this.player.x - p.x) < TS * 1.6 && Math.abs(this.player.y - (p.y - TS)) < TS * 2.2) {
@@ -115,6 +145,14 @@ class Game {
     const w = this.world;
     const p = this.player;
     const tx = Math.floor(p.x / TS), ty = Math.floor((p.y + p.h / 2 + 4) / TS);
+    if (w.get(tx, ty) === 'note_block') { // tune the chime
+      const i = w.idx(tx, ty);
+      const m = w.meta[i] = w.meta[i] || {};
+      m.pitch = ((m.pitch || 0) + 1) % 13;
+      this.sfx.note(m.pitch);
+      if (w.isHome) this.saveSoon();
+      return;
+    }
     if (w.get(tx, ty) === 'weather_core') { // reprogram the sky
       w.applyWeather(w.themeIdx + 1);
       this.toast('☁ Weather program: ' + WEATHERS[w.themeIdx].name, 'gold');
@@ -138,10 +176,29 @@ class Game {
 
   /* ---------------- economy / spawning ---------------- */
   addGems(n) {
+    if (n > 0 && this.progress.overdrive) n = Math.round(n * 2);
     this.gems = Math.max(0, this.gems + n);
     if (n > 0) this.progress.stats.gemsEarned += n;
     ui.updateHUD();
   }
+
+  /* ---------------- XP & levels ---------------- */
+  xpNeed() { return Math.floor(60 * Math.pow(this.level, 1.35)); }
+  addXp(n) {
+    this.xp += n;
+    while (this.xp >= this.xpNeed()) {
+      this.xp -= this.xpNeed();
+      this.level++;
+      this.player.maxHp = 100 + (this.level - 1) * 3;
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 30);
+      this.toast('▲ LEVEL UP! You are now level ' + this.level + ' (+3 max HP)', 'gold');
+      this.fx.explode(this.player.x, this.player.y, '#2de2a3', 24);
+      this.sfx.play('victory');
+      this.save();
+    }
+    ui.updateHUD();
+  }
+  buffActive() { return this.buff && this.time < this.buff.until; }
   spawnDrop(x, y, id, count) { this.drops.push(new Drop(x, y, id, count)); }
   spawnGems(x, y, total) {
     while (total > 0) { const v = Math.min(total, 1 + Math.floor(Math.random() * 3)); total -= v; this.drops.push(new Drop(x, y, '__gem', v)); }
@@ -170,12 +227,19 @@ class Game {
     this.zaps = []; this.keyPickups = []; this.fishing = null; this.rush = null;
     this.keysGot = 0; this.keysNeed = 0;
     this.boss = null; this.bossDefeatedThisVisit = false;
+    this.merchant = null;
     if (id === 'home') {
       this.world = this.homeWorld;
     } else if (id === 'rush') {
       this.world = World.genRush();
       this.rush = { stage: 0, timer: 3 };
-      this.toast('BOSS RUSH: all four corrupted processes, back to back. No gate, no mercy.', 'warn');
+      this.toast('BOSS RUSH: all six corrupted processes, back to back. No gate, no mercy.', 'warn');
+    } else if (id === 'mine') {
+      this.world = World.genMine();
+      this.toast('THE MINESHAFT — the deeper you dig, the richer the veins. And the meaner the residents.', 'warn');
+    } else if (id === 'stack') {
+      this.world = World.genStack();
+      this.toast('THE STACK — climb to the summit. Three Golden Caches await the worthy.', 'warn');
     } else {
       const n = +id.replace('sector', '');
       this.world = World.genSector(n);
@@ -221,6 +285,7 @@ class Game {
     this.fx.harvest(f.x, f.y, '#6ee7ff');
     this.sfx.play('harvest');
     this.progress.stats.fish++;
+    this.addXp(6);
     const r = Math.random();
     if (r < 0.5) { this.spawnGems(f.x, f.y - 20, 4 + Math.floor(Math.random() * 9)); this.toast('Reeled in a gem cluster!', 'gold'); }
     else if (r < 0.75) this.spawnDrop(f.x, f.y - 20, 'data_fish', 1);
@@ -255,6 +320,7 @@ class Game {
     this.progress.quests[id] = true;
     if (q.reward.gems) this.addGems(q.reward.gems);
     if (q.reward.items) for (const [iid, n] of q.reward.items) this.player.give(iid, n);
+    this.addXp(25);
     this.toast('Quest reward claimed: ' + q.name + '!', 'gold');
     this.sfx.play('victory');
     this.save();
@@ -289,22 +355,24 @@ class Game {
       this.spawnGems(boss.x, boss.y, 60 + Math.floor(Math.random() * 40));
       this.spawnDrop(boss.x, boss.y, 'medkit', 1);
       this.rush.stage++;
+      this.addXp(120);
       setTimeout(() => { this.boss = null; ui.bossBar(null); }, 100);
-      if (this.rush.stage >= 4) {
+      if (this.rush.stage >= RUSH_ORDER.length) {
         if (!this.progress.rushDone) {
           this.progress.rushDone = true;
           this.spawnDrop(boss.x, boss.y, 'overclock_chip', 1);
           this.spawnDrop(boss.x, boss.y, 'core_sprite', 1);
           this.toast('★★★ BOSS RUSH CLEARED — Overclock Chip + Core Sprite pet acquired!', 'gold');
+          this.toast('OVERDRIVE MODE unlocked — toggle it in the GEM EXCHANGE [B].', 'gold');
         } else {
-          this.spawnGems(boss.x, boss.y, 300);
+          this.spawnGems(boss.x, boss.y, 400);
           this.toast('★ BOSS RUSH cleared again. The network fears you.', 'gold');
         }
         this.rush = null;
         this.save();
       } else {
         this.rush.timer = 3.5;
-        this.toast('Process ' + this.rush.stage + '/4 purged. Next one incoming…', 'warn');
+        this.toast('Process ' + this.rush.stage + '/' + RUSH_ORDER.length + ' purged. Next one incoming…', 'warn');
       }
       return;
     }
@@ -314,6 +382,7 @@ class Game {
     this.fx.explode(boss.x, boss.y, '#ffd166', 50);
     const [g0, g1] = boss.meta.gems;
     this.spawnGems(boss.x, boss.y, g0 + Math.floor(Math.random() * (g1 - g0)));
+    this.addXp(120);
     const first = !this.progress.beaten[boss.id];
     if (first) {
       this.progress.beaten[boss.id] = true;
@@ -327,7 +396,13 @@ class Game {
     } else {
       this.toast(boss.meta.name + ' purged again. Gems acquired.', 'gold');
       if (Math.random() < 0.5) this.spawnDrop(boss.x, boss.y, 'medkit', 2);
-      if (boss.id === 'firewall_daemon') this.spawnDrop(boss.x, boss.y, 'firewall_block', 3);
+      if (boss.id === 'firewall_daemon') {
+        this.spawnDrop(boss.x, boss.y, 'firewall_block', 3);
+        if (Math.random() < 0.15 && !this.player.count('ember_pet')) {
+          this.spawnDrop(boss.x, boss.y, 'ember_pet', 1);
+          this.toast('★ RARE DROP: an Ember Kit crawled out of the wreckage!', 'gold');
+        }
+      }
     }
     setTimeout(() => { this.boss = null; ui.bossBar(null); }, 100);
     this.save();
@@ -358,8 +433,9 @@ class Game {
     try {
       const p = this.player;
       localStorage.setItem(SAVE_KEY, JSON.stringify({
-        v: 1, gems: this.gems, inv: p.inv, hotbar: p.hotbar, equip: p.equip, sel: p.sel,
-        hp: p.hp, progress: this.progress, home: this.homeWorld.serialize(),
+        v: 2, gems: this.gems, inv: p.inv, hotbar: p.hotbar, equip: p.equip, sel: p.sel,
+        hp: p.hp, xp: this.xp, level: this.level,
+        progress: this.progress, home: this.homeWorld.serialize(),
       }));
     } catch (e) { console.warn('save failed', e); }
     this._savePending = false;
@@ -374,8 +450,11 @@ class Game {
       this.player.hotbar = s.hotbar || this.player.hotbar;
       this.player.equip = s.equip || this.player.equip;
       this.player.sel = s.sel || 0;
-      this.player.hp = s.hp > 0 ? s.hp : this.player.maxHp;
-      this.progress = Object.assign({ beaten: {}, discovered: {}, tutorial: 99, quests: {}, rushDone: false, streak: 0, lastLogin: '' }, s.progress);
+      this.xp = s.xp || 0;
+      this.level = s.level || 1;
+      this.player.maxHp = 100 + (this.level - 1) * 3;
+      this.player.hp = s.hp > 0 ? Math.min(s.hp, this.player.maxHp) : this.player.maxHp;
+      this.progress = Object.assign({ beaten: {}, discovered: {}, tutorial: 99, quests: {}, rushDone: false, streak: 0, lastLogin: '', overdrive: false }, s.progress);
       this.progress.stats = Object.assign({}, STATS_DEFAULT, this.progress.stats || {});
       this.progress.quests = this.progress.quests || {};
       this.player.equip = Object.assign({ back: null, feet: null, chip: null, pet: null }, this.player.equip);
@@ -449,13 +528,16 @@ class Game {
       if (this.spawnT <= 0) {
         this.spawnT = 2.2;
         const cands = w.spawnPoints.filter(s => {
-          const d = Math.abs(s.x * TS - p.x);
+          const d = Math.hypot(s.x * TS - p.x, s.y * TS - p.y);
           return d > 9 * TS && d < 34 * TS;
         });
         if (cands.length) {
           const s = cands[Math.floor(Math.random() * cands.length)];
           const type = w.enemyTypes[Math.floor(Math.random() * w.enemyTypes.length)];
-          this.enemies.push(new Enemy(type, s.x * TS + TS / 2, s.y * TS + TS / 2 - 4, w.sectorN || 1));
+          let lvl = w.sectorN || 1;
+          if (w.isMine) lvl = 1 + Math.floor(Math.max(0, s.y - 10) / 45);
+          if (this.progress.overdrive) lvl += 3;
+          this.enemies.push(new Enemy(type, s.x * TS + TS / 2, s.y * TS + TS / 2 - 4, lvl));
         }
       }
     }
@@ -464,11 +546,58 @@ class Game {
     if (w.isRush && this.rush && !this.boss) {
       this.rush.timer -= dt;
       if (this.rush.timer <= 0) {
-        const order = ['firewall_daemon', 'null_wurm', 'storm_kernel', 'admin'];
-        this.boss = spawnBoss(order[this.rush.stage], w.w * TS / 2, 17 * TS);
+        this.boss = spawnBoss(RUSH_ORDER[this.rush.stage], w.w * TS / 2, 17 * TS);
         this.sfx.play('bossroar');
         this.shake = 0.5;
         this.toast('⚠ ' + this.boss.meta.name + ' enters the arena!', 'warn');
+      }
+    }
+
+    // mineshaft depth + stack summit tracking
+    if (w.isMine) {
+      const depth = Math.max(0, Math.floor(p.y / TS) - 10);
+      if (depth > this.progress.stats.maxDepth) this.progress.stats.maxDepth = depth;
+    }
+    if (w.isStack && p.y < 16 * TS && !this.progress.stats.summits) {
+      this.progress.stats.summits = 1;
+      this.toast('★ SUMMIT REACHED — the Golden Caches are yours!', 'gold');
+      this.sfx.play('victory');
+    }
+
+    // the traveling merchant appears on your home server
+    if (w.isHome) {
+      if (this.merchant) {
+        this.merchant.until -= dt;
+        if (this.merchant.until <= 0) {
+          this.merchant = null;
+          this.toast('The merchant packed up and vanished…', '');
+          if (!ui.el.shopPanel.classList.contains('hidden') && ui.shopMode === 'merchant') ui.closeAll();
+        }
+      } else {
+        this._merchantT -= dt;
+        if (this._merchantT <= 0) {
+          this._merchantT = 240 + Math.random() * 240;
+          this.merchant = { x: 39.5 * TS, y: 22 * TS, until: 90, stock: this.rollMerchantStock() };
+          this.toast('❖ A traveling MERCHANT has docked at your server! (90s — press [W] near him)', 'gold');
+          this.sfx.play('tp');
+        }
+      }
+      // gem rain event
+      this._rainT -= dt;
+      if (this._rainT <= 0 && this.rain <= 0) {
+        this._rainT = 240 + Math.random() * 240;
+        this.rain = 9;
+        this.toast('◆◆◆ GEM RAIN! The network is leaking currency — catch it!', 'gold');
+        this.sfx.play('victory');
+      }
+      if (this.rain > 0) {
+        this.rain -= dt;
+        if (Math.random() < 0.25) {
+          const gx = p.x + (Math.random() - 0.5) * this.cam.view.w * 0.8;
+          const d = new Drop(gx, this.cam.y - 20, '__gem', 1 + Math.floor(Math.random() * 2));
+          d.vy = 100; d.vx = (Math.random() - 0.5) * 60;
+          this.drops.push(d);
+        }
       }
     }
     this.maybeTriggerBoss();
@@ -530,6 +659,7 @@ class Game {
     w.draw(ctx, cam, this.time, this);
     for (const d of this.drops) d.draw(ctx, cam, this.time);
     for (const e of this.enemies) e.draw(ctx, cam, this.time);
+    if (this.merchant) this.drawMerchant(ctx, cam);
     for (const k of this.keyPickups) k.draw(ctx, cam, this.time);
     if (this.boss && !this.boss.dead) this.boss.draw(ctx, cam, this.time);
     if (this.pet) this.pet.draw(ctx, cam, this.time);
@@ -562,6 +692,33 @@ class Game {
     this.fx.draw(ctx, cam);
     this.drawMinimap(ctx);
     this.drawCursor(ctx, cam);
+  }
+
+  drawMerchant(ctx, cam) {
+    const m = this.merchant;
+    const sx = m.x - cam.x, sy = m.y - cam.y;
+    if (sx < -100 || sx > cam.view.w + 100) return;
+    ctx.save(); ctx.translate(sx, sy);
+    const bob = Math.sin(this.time * 2) * 2;
+    // cart
+    ctx.fillStyle = '#5e3c1a'; ctx.fillRect(10, -26 + bob, 34, 22);
+    ctx.fillStyle = '#8a5a2a'; ctx.fillRect(10, -30 + bob, 34, 6);
+    ctx.fillStyle = '#1c2536';
+    ctx.beginPath(); ctx.arc(18, -2, 6, 0, 7); ctx.arc(36, -2, 6, 0, 7); ctx.fill();
+    // wares glinting
+    ctx.fillStyle = '#6ee7ff'; ctx.fillRect(14, -34 + bob, 5, 5);
+    ctx.fillStyle = '#ffd166'; ctx.fillRect(24, -36 + bob, 5, 6);
+    ctx.fillStyle = '#c77dff'; ctx.fillRect(34, -34 + bob, 5, 5);
+    // hooded figure
+    ctx.fillStyle = '#2a1c3a';
+    ctx.beginPath(); ctx.moveTo(-24, 0); ctx.lineTo(-24, -36 + bob); ctx.quadraticCurveTo(-14, -48 + bob, -4, -36 + bob); ctx.lineTo(-4, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffd166'; ctx.fillRect(-19, -32 + bob, 4, 4); ctx.fillRect(-11, -32 + bob, 4, 4);
+    // label
+    ctx.fillStyle = '#ffd166'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('❖ MERCHANT', -4, -54);
+    ctx.fillStyle = '#9fb4d0'; ctx.font = '10px monospace';
+    ctx.fillText('[W] trade · ' + Math.ceil(m.until) + 's', -4, -42);
+    ctx.restore();
   }
 
   drawMinimap(ctx) {
