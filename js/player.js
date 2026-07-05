@@ -65,8 +65,13 @@ class Player extends Entity {
   count(id) { return this.inv[id] || 0; }
 
   /* ---------- damage ---------- */
-  hurt(dmg, game, kx) {
+  hurt(dmg, game, kx, src) {
     if (this.iframes > 0 || this.hp <= 0) return;
+    const thorns = this.gearFx('thorns');
+    if (thorns && src && src.hurt && !src.dead) {
+      src.hurt(Math.max(1, Math.round(dmg * thorns)), game);
+      game.fx.spark(this.x, this.y, '#e07a5f', 4);
+    }
     const dodge = this.gearFx('dodge') || 0;
     if (dodge && Math.random() < dodge) {
       game.fx.hitNum(this.x, this.y - this.h, 'MISS');
@@ -89,7 +94,8 @@ class Player extends Entity {
   /* ---------- update ---------- */
   update(dt, world, game, input) {
     const feet = this.equip.feet ? ITEMS[this.equip.feet].fx : null;
-    let speedMult = ((feet && feet.speed) || 1) * ((this.equip.chip && ITEMS[this.equip.chip].fx.speed) || 1) * (this.speedAuraM || 1);
+    let speedMult = ((feet && feet.speed) || 1) * ((this.equip.chip && ITEMS[this.equip.chip].fx.speed) || 1)
+      * ((this.equip.back && ITEMS[this.equip.back].fx.speed) || 1) * (this.speedAuraM || 1);
     if (game.buffActive()) speedMult *= game.buff.speed;
     const baseSpeed = 250 * speedMult;
     // crystal heart & level scaling
@@ -175,7 +181,7 @@ class Player extends Entity {
       if (hv && input.jump && !this.onGround && this.fuel > 0) {
         this.hovering = true;
         this.vy += (0 - this.vy) * Math.min(1, 12 * dt);
-        this.fuel = Math.max(0, this.fuel - hv.drain * dt);
+        this.fuel = Math.max(0, this.fuel - hv.drain * dt * (this.gearFx('energy') ? 0.6 : 1));
         this.jetting = true;
         if (Math.random() < 0.3) game.fx.add(this.x + (Math.random() - 0.5) * 16, this.y + this.h / 2, 0, 120, 'rgba(110,231,255,0.7)', 0.3, 3, 0);
       }
@@ -185,19 +191,20 @@ class Player extends Entity {
         this.vx += this.facing * 40 * dt;
         this.gliding = true;
       }
+      const energy = this.gearFx('energy');
       if (jp && input.jump && !this.onGround && this.vy > -420 && this.fuel > 0) {
         this.vy -= jp.thrust * dt;
-        this.fuel = Math.max(0, this.fuel - dt / jp.fuel);
+        this.fuel = Math.max(0, this.fuel - dt / jp.fuel * (energy ? 0.6 : 1));
         this.jetting = true;
         if (Math.random() < 0.5) game.fx.add(this.x - this.facing * 8, this.y + this.h / 2 - 6, (Math.random() - 0.5) * 60, 200 + Math.random() * 100, Math.random() < 0.5 ? '#ff9e6d' : '#ffd166', 0.35, 4, 0);
         if (Math.random() < 0.12) game.sfx.play('jet');
       }
-      if (jp && this.onGround) this.fuel = Math.min(1, this.fuel + dt / jp.regen);
+      if (jp && this.onGround) this.fuel = Math.min(1, this.fuel + dt / jp.regen * (energy ? 1.5 : 1));
 
       // dash (storm boots)
       const dash = feet && feet.dash;
       if (dash && input.dashPressed && this.dashCd <= 0) {
-        this.dashT = dash.dur; this.dashCd = dash.cd;
+        this.dashT = dash.dur; this.dashCd = dash.cd * (this.gearFx('energy') ? 0.6 : 1);
         this.vx = this.facing * dash.speed; this.vy = 0;
         this.iframes = Math.max(this.iframes, dash.dur + 0.1);
         game.fx.explode(this.x, this.y, '#6ee7ff', 8);
@@ -307,6 +314,17 @@ class Player extends Entity {
           }
         }
         if (it.fx.sticky && this.onGround) this.vx *= Math.max(0, 1 - 7 * dt);
+        if (it.fx.ring && !this.onGround) {
+          const i = world.idx(tx, ty);
+          const m = world.meta[i] = world.meta[i] || {};
+          if (!m.ringCd || performance.now() - m.ringCd > 600) {
+            m.ringCd = performance.now();
+            this.vy = -it.fx.ring;
+            this.jumpsUsed = 0;
+            game.fx.spark(tx * TS + TS / 2, ty * TS + TS / 2, '#6ee7ff', 8);
+            game.sfx.play('bounce');
+          }
+        }
       }
     });
     if (onConveyor) this.x += onConveyor * dt;
@@ -314,6 +332,7 @@ class Player extends Entity {
     // heal / shield / grav / fuel / speed auras — scan nearby tiles
     const ptx = Math.floor(this.x / TS), pty = Math.floor(this.y / TS);
     this.shieldNear = 0; this.gravAuraM = 1; this.speedAuraM = 1;
+    this.gemAuraOn = false; this.xpAuraM = 1;
     let fuelAura = false;
     for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
       const it = world.item(ptx + dx, pty + dy);
@@ -324,6 +343,8 @@ class Player extends Entity {
       if (it.fx.gravAura && d <= it.fx.auraRange) this.gravAuraM = Math.min(this.gravAuraM, it.fx.gravAura);
       if (it.fx.fuelAura && d <= it.fx.auraRange) fuelAura = true;
       if (it.fx.speedAura && d <= it.fx.auraRange) this.speedAuraM = Math.max(this.speedAuraM, it.fx.speedAura);
+      if (it.fx.gemAura && d <= it.fx.gemAura) this.gemAuraOn = true;
+      if (it.fx.xpAura && d <= it.fx.auraRange) this.xpAuraM = Math.max(this.xpAuraM, it.fx.xpAura);
     }
     if (fuelAura) { this.fuel = Math.min(1, this.fuel + dt * 0.8); this.dashCd = Math.max(0, this.dashCd - dt); }
     if (healNear && this.hp < this.maxHp) {
@@ -390,6 +411,30 @@ class Player extends Entity {
         if (game.defrag) return;
         this.take(held.id, 1);
         ui.startDefrag();
+        return;
+      }
+      if (held.warp) {
+        if (game.world.isHome && game.world.id === 'home') { game.toast('You are already home.', 'warn'); return; }
+        this.take(held.id, 1);
+        game.fx.explode(this.x, this.y, '#2de2a3', 20);
+        game.toast('⌂ Warped home!', 'gold');
+        game.enterWorld('home');
+        return;
+      }
+      if (held.invuln) {
+        this.take(held.id, 1);
+        this.iframes = held.invuln;
+        game.fx.explode(this.x, this.y, '#6ee7ff', 16);
+        game.toast('NANO SHIELD: invulnerable for ' + held.invuln + 's!', 'gold');
+        game.sfx.play('splice');
+        return;
+      }
+      if (held.xpGain) {
+        this.take(held.id, 1);
+        game.addXp(held.xpGain);
+        game.fx.harvest(this.x, this.y - 20, '#b298dc');
+        game.toast('+' + held.xpGain + ' XP. Delicious knowledge.', 'gold');
+        game.sfx.play('victory');
         return;
       }
       if (held.heal) {

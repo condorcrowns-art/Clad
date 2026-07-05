@@ -286,7 +286,7 @@ class Game {
     }
   }
   addXp(n) {
-    n = Math.max(1, Math.round(n * (this.player.gearFx('xpMult') || 1)));
+    n = Math.max(1, Math.round(n * (this.player.gearFx('xpMult') || 1) * (this.player.xpAuraM || 1)));
     this.xp += n;
     while (this.xp >= this.xpNeed()) {
       this.xp -= this.xpNeed();
@@ -432,9 +432,15 @@ class Game {
 
   /* ---------------- fishing ---------------- */
   castRod(tx, ty) {
-    this.fishing = { x: tx * TS + TS / 2, y: ty * TS + 6, t: 0, biteAt: 2 + Math.random() * 4, bite: false, biteT: 0 };
+    // lure buoys nearby: faster bites, luckier catches
+    let lured = false;
+    for (let dy = -5; dy <= 5 && !lured; dy++) for (let dx = -5; dx <= 5; dx++) {
+      const it = this.world.item(tx + dx, ty + dy);
+      if (it && it.fx && it.fx.lure && Math.hypot(dx, dy) <= it.fx.lure) { lured = true; break; }
+    }
+    this.fishing = { x: tx * TS + TS / 2, y: ty * TS + 6, t: 0, biteAt: (2 + Math.random() * 4) * (lured ? 0.45 : 1), bite: false, biteT: 0, lured };
     this.sfx.play('plant');
-    this.fx.puff(this.fishing.x, this.fishing.y, '#9adcf0');
+    this.fx.puff(this.fishing.x, this.fishing.y, lured ? '#ff8fa3' : '#9adcf0');
   }
   reelRod() {
     const f = this.fishing;
@@ -445,7 +451,7 @@ class Game {
     this.sfx.play('harvest');
     this.progress.stats.fish++;
     this.addXp(6);
-    const r = Math.random();
+    const r = Math.random() + (f.lured ? 0.12 : 0);
     if (r < 0.5) { this.spawnGems(f.x, f.y - 20, 4 + Math.floor(Math.random() * 9)); this.toast('Reeled in a gem cluster!', 'gold'); }
     else if (r < 0.75) this.spawnDrop(f.x, f.y - 20, 'data_fish', 1);
     else if (r < 0.92) {

@@ -194,8 +194,9 @@ class World {
       if (Math.random() < 0.33) game.spawnDrop(cx, cy, it.id, 1);
       if (Math.random() < 0.16 && ITEMS[it.id + '_seed']) game.spawnDrop(cx, cy, it.id + '_seed', 1);
     }
-    const gemChance = it.gemRich ? 0.65 : 0.2;
-    if (Math.random() < gemChance) game.spawnGems(cx, cy, 1 + Math.floor(Math.random() * (it.gemRich ? 4 : 3)));
+    const fortune = game.player.gemAuraOn ? 1.5 : 1;
+    const gemChance = (it.gemRich ? 0.65 : 0.2) * fortune;
+    if (Math.random() < gemChance) game.spawnGems(cx, cy, Math.round((1 + Math.floor(Math.random() * (it.gemRich ? 4 : 3))) * fortune));
   }
   harvestTree(tx, ty, game) {
     const i = this.idx(tx, ty);
@@ -210,8 +211,10 @@ class World {
     }
     const n = 1 + Math.floor(Math.random() * 3) + (game.player.gearFx('harvestBonus') || 0);
     game.spawnDrop(cx, cy, tr.result, n);
-    if (Math.random() < 0.45) game.spawnDrop(cx, cy, tr.result + '_seed', 1);
-    if (Math.random() < 0.15) game.spawnDrop(cx, cy, tr.result + '_seed', 1);
+    if (ITEMS[tr.result + '_seed']) {
+      if (Math.random() < 0.45) game.spawnDrop(cx, cy, tr.result + '_seed', 1);
+      if (Math.random() < 0.15) game.spawnDrop(cx, cy, tr.result + '_seed', 1);
+    }
     game.spawnGems(cx, cy, 1 + Math.floor(Math.random() * 2));
     this.trees.delete(i);
     game.progress.stats.harvests++;
@@ -262,7 +265,7 @@ class World {
     this._auraT = (this._auraT || 0) - dt;
     if (this._auraT <= 0) {
       this._auraT = 1;
-      this._coils = []; this._pylons = []; this._beacons = []; this._lamps = [];
+      this._coils = []; this._pylons = []; this._beacons = []; this._lamps = []; this._repels = [];
       for (let i = 0; i < this.tiles.length; i++) {
         const t = this.tiles[i];
         if (!t) continue;
@@ -272,6 +275,16 @@ class World {
         if (fx.chillAura) this._coils.push({ x: cx, y: cy });
         if (fx.pull) this._pylons.push({ x: cx, y: cy });
         if (fx.beacon) this._beacons.push({ x: cx, y: cy });
+        if (fx.repel) this._repels.push({ x: cx, y: cy, r: fx.repel * TS });
+        if (fx.music) { // jukebox: generative pentatonic while the player is near
+          if (Math.hypot(game.player.x - cx, game.player.y - cy) < 9 * TS) {
+            const m = this.meta[i] = this.meta[i] || {};
+            m.beat = (m.beat || 0) + 1;
+            const scale = [0, 2, 4, 7, 9, 12];
+            game.sfx.note(scale[Math.floor(hash2(m.beat, i) * scale.length)]);
+            if (m.beat % 2 === 0) game.fx.add(cx + (Math.random() - 0.5) * 10, cy - TS, (Math.random() - 0.5) * 20, -40, '#f7a8d8', 0.9, 0, 0, '♪');
+          }
+        }
         if (fx.growAura) this._lamps.push({ x: cx, y: cy, r: fx.auraRange * TS, mult: fx.growAura });
         if (fx.alarm) {
           const near = game.enemies.some(e => !e.dead && Math.hypot(e.x - cx, e.y - cy) < fx.alarm * TS);
@@ -543,7 +556,7 @@ class World {
       ctx.fillRect(sx + 6, sy + 6, TS - 14, 2); ctx.fillRect(sx + 6, sy + 10, TS - 18, 2);
       return;
     }
-    if (id === 'platform' || id === 'cloud_block') {
+    if (it.fx && it.fx.platform) {
       ctx.fillStyle = it.color;
       if (id === 'cloud_block') {
         ctx.beginPath(); ctx.arc(sx + 8, sy + 8, 7, 0, 7); ctx.arc(sx + 18, sy + 6, 8, 0, 7); ctx.arc(sx + 26, sy + 9, 6, 0, 7); ctx.fill();
@@ -553,14 +566,35 @@ class World {
         ctx.fillStyle = it.color2;
         ctx.fillRect(sx, sy + 7, TS, 2);
         ctx.fillRect(sx + 4, sy + 2, 2, 4); ctx.fillRect(sx + TS - 6, sy + 2, 2, 4);
+        if (id === 'life_ledge') { ctx.fillStyle = '#fff'; ctx.fillRect(sx + TS / 2 - 1, sy + 1, 3, 7); ctx.fillRect(sx + TS / 2 - 3, sy + 3, 7, 3); }
+        if (id === 'trap_ledge') { ctx.fillStyle = '#e8ecf4'; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(sx + 3 + k * 8, sy + 9); ctx.lineTo(sx + 6 + k * 8, sy + 15); ctx.lineTo(sx + 9 + k * 8, sy + 9); ctx.fill(); } }
       }
       return;
     }
-    if (id === 'ladder') {
+    if (it.fx && it.fx.ladder) {
       ctx.fillStyle = it.color;
-      ctx.fillRect(sx + 5, sy, 4, TS); ctx.fillRect(sx + TS - 9, sy, 4, TS);
-      ctx.fillStyle = it.color2;
-      for (let k = 0; k < 3; k++) ctx.fillRect(sx + 7, sy + 4 + k * 11, TS - 14, 4);
+      if (id === 'glow_vine') {
+        ctx.strokeStyle = it.color; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(sx + TS / 2 + Math.sin(ty) * 5, sy);
+        ctx.quadraticCurveTo(sx + TS / 2 + Math.sin(ty * 3 + 1) * 8, sy + TS / 2, sx + TS / 2 + Math.sin(ty + 1) * 5, sy + TS);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(158,240,26,' + (0.6 + 0.3 * Math.sin(time * 3 + ty)) + ')';
+        ctx.beginPath(); ctx.arc(sx + TS / 2 + Math.sin(ty * 2) * 7, sy + 10 + (ty % 3) * 7, 3.5, 0, 7); ctx.fill();
+      } else {
+        ctx.fillRect(sx + 5, sy, 4, TS); ctx.fillRect(sx + TS - 9, sy, 4, TS);
+        ctx.fillStyle = it.color2;
+        for (let k = 0; k < 3; k++) ctx.fillRect(sx + 7, sy + 4 + k * 11, TS - 14, 4);
+      }
+      return;
+    }
+    if (id === 'boost_ring') {
+      const pulse = 1 + Math.sin(time * 5 + tx) * 0.12;
+      ctx.strokeStyle = it.color; ctx.lineWidth = 3.5;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.ellipse(sx + TS / 2, sy + TS / 2, 12 * pulse, 14 * pulse, 0, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath(); ctx.ellipse(sx + TS / 2, sy + TS / 2, 7 * pulse, 9 * pulse, 0, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
       return;
     }
     // neighbor-aware base render: edges only where exposed, per-material texture
@@ -569,7 +603,7 @@ class World {
     ctx.fillStyle = it.color; ctx.fillRect(sx, sy, TS, TS);
     if (it.transparent) { ctx.clearRect(sx + 3, sy + 3, TS - 6, TS - 6); ctx.fillStyle = it.color + '44'; ctx.fillRect(sx + 3, sy + 3, TS - 6, TS - 6); }
     ctx.fillStyle = it.color2;
-    if (id === 'brick' || id === 'bedrock') {
+    if (id === 'brick' || id === 'bedrock' || id === 'ghost_brick') {
       // mortar courses with offset rows
       for (let r = 0; r < 3; r++) {
         ctx.fillRect(sx, sy + 9 + r * 11, TS, 2);
@@ -624,9 +658,9 @@ class World {
     if (id === 'spring_pad') {
       ctx.strokeStyle = '#0d1526'; ctx.lineWidth = 2;
       ctx.beginPath(); for (let k = 0; k < 3; k++) { ctx.moveTo(sx + 6, sy + 10 + k * 7); ctx.lineTo(sx + TS - 6, sy + 10 + k * 7); } ctx.stroke();
-    } else if (id === 'conveyor') {
+    } else if (it.fx && it.fx.conveyor) {
       const dir = (this.meta[this.idx(tx, ty)] || {}).dir || 1;
-      const off = ((time * 40 * dir) % 12 + 12) % 12;
+      const off = ((time * (it.fx.conveyor > 300 ? 90 : 40) * dir) % 12 + 12) % 12;
       ctx.fillStyle = '#2de2a3';
       for (let k = -1; k < 3; k++) {
         const ax = sx + k * 12 + off;
@@ -822,6 +856,39 @@ class World {
       ctx.fillStyle = '#7f4f24'; ctx.fillRect(sx + TS / 2 - 2, sy + 2, 4, 14);
       ctx.fillStyle = '#c1121f';
       ctx.beginPath(); ctx.moveTo(sx + TS / 2 + 2, sy + 3); ctx.lineTo(sx + TS / 2 + 14, sy + 6 + Math.sin(time * 4) * 2); ctx.lineTo(sx + TS / 2 + 2, sy + 10); ctx.fill();
+    } else if (id === 'lure_buoy') {
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 12, 7, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#ff4d6d'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 12, 7, 0, Math.PI); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(sx + TS / 2, sy + 19); ctx.lineTo(sx + TS / 2 + Math.sin(time * 4) * 4, sy + 28); ctx.stroke();
+    } else if (id === 'fortune_totem') {
+      ctx.fillStyle = '#6ee7ff';
+      ctx.save(); ctx.translate(sx + TS / 2, sy + TS / 2); ctx.rotate(time);
+      ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 0); ctx.lineTo(0, 8); ctx.lineTo(-6, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else if (id === 'xp_shrine') {
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.6 + 0.3 * Math.sin(time * 3)) + ')';
+      ctx.beginPath(); ctx.moveTo(sx + TS / 2, sy + 6); ctx.lineTo(sx + TS / 2 - 8, sy + 22); ctx.lineTo(sx + TS / 2 + 8, sy + 22); ctx.closePath(); ctx.fill();
+      ctx.fillRect(sx + TS / 2 - 2, sy + 22, 4, 6);
+    } else if (id === 'scare_totem') {
+      ctx.fillStyle = '#0d1526';
+      ctx.beginPath(); ctx.ellipse(sx + 11, sy + 13, 4, 6, 0, 0, 7); ctx.ellipse(sx + 21, sy + 13, 4, 6, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 24, 4, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = Math.sin(time * 2 + tx) > 0.7 ? '#ffd166' : '#0d1526';
+      ctx.fillRect(sx + 9, sy + 11, 3, 3); ctx.fillRect(sx + 19, sy + 11, 3, 3);
+    } else if (id === 'jukebox') {
+      ctx.save(); ctx.translate(sx + TS / 2, sy + TS / 2); ctx.rotate(time * 3);
+      ctx.fillStyle = '#0d1526'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, 6, 0, 4); ctx.stroke();
+      ctx.restore();
+    } else if (id === 'mega_spring') {
+      ctx.strokeStyle = '#0d1526'; ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      for (let k = 0; k < 4; k++) { ctx.moveTo(sx + 5, sy + 7 + k * 6); ctx.lineTo(sx + TS - 5, sy + 7 + k * 6); }
+      ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillRect(sx + 4, sy + 2, TS - 8, 4);
     } else if (id === 'note_block') {
       ctx.fillStyle = '#0d1526';
       ctx.beginPath(); ctx.arc(sx + 13, sy + 20, 4, 0, 7); ctx.fill();

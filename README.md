@@ -56,9 +56,11 @@ sectors** wait behind portals, each ending in a boss fight.
   awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic
-**71 splice recipes** form a true network — results splice with other results, four tiers deep,
-and every recipe is reachable starting from the six natural blocks (dirt, stone, wood, sand,
-snow, ice). Highlights of the deeper web:
+**96 splice recipes** form a true network — results splice with other results, four tiers deep,
+and every recipe is validated reachable starting from the six natural blocks (dirt, stone, wood,
+sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Logic Bombs,
+Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s invulnerability),
+Brain Juice (+150 XP) and Overclock Cola. Highlights of the deeper web:
 
 | Chain | What you get |
 |---|---|
@@ -80,7 +82,17 @@ snow, ice). Highlights of the deeper web:
 | Glider + Jetpack → **Hover Pack** | Hold SPACE to hover in place |
 | Glass + Ladder → **Gecko Chip** | Wall-slide + wall-jump |
 | Crystal Cluster + Repair Node → **Crystal Heart** | +30 max HP |
-| …plus Moon/Rocket Boots, Scholar/Leech/Miner/Garden chips, Beacon, Disco Core, Fountain, Tar, Obsidian, Alarm, Fortress Core | |
+| Glass + Note Block → **Lure Buoy** | Fish bite 2× faster + luckier catches nearby |
+| Brick + Sign → **XP Shrine** · Crystal + LED → **Fortune Totem** | +50% XP / +50% gem drops while near |
+| LED + Spike → **Scare Totem** | Enemies refuse to approach |
+| Brick + Teleporter → **Ghost Brick** | Looks solid, walks through — secret doors |
+| Glider + Spring → **Boost Ring** | Mid-air boost + refreshed double-jump; chain sky roads |
+| Conveyor + Note → **Jukebox** | Generative melody while you're near |
+| Platform + Repair → **Life Ledge** · Platform + Spike → **Trap Ledge** | Healing / enemy-shredding platforms |
+| Ladder + LED → **Glow Vine** · Crystal + Spring → **Mega Spring** · Conveyor + Ice → **Frost Rail** | Traversal upgrades |
+| Brick + Spike → **Thorn Chip** · Crystal + Conveyor → **Battery Chip** · Brick + Shield → **Turtle Pack** | Reflect 35% / efficient fuel / tank armor |
+| Drone + Ice → **Chill Wisp** · Drone + Magnet Chip → **Loot Weevil** | Pet variants: slowing shots / 9-tile loot vacuum |
+| …plus Moon/Rocket Boots, Scholar/Leech/Miner/Garden chips, Beacon, Disco Core, Fountain, Sprinkler, Tar, Obsidian, Alarm, Fortress Core | |
 
 The first-tier basics:
 

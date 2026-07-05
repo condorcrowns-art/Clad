@@ -278,6 +278,57 @@ defItem('crystal_heart', { name: 'Crystal Heart', kind: 'gear', slot: 'chip', ti
   fx: { maxHp: 30, regen: 1 },
   desc: 'FUNCTION: +30 maximum HP and a slow trickle of regeneration. Life, crystallized.' });
 
+/* ============ NETWORK WAVE 2 — utility, totems, pets, renewables ============ */
+defItem('lure_buoy', { name: 'Lure Buoy', kind: 'block', tier: 3, hp: 6, solid: true, animated: true, color: '#ff8fa3', color2: '#c95a72',
+  fx: { lure: 5, glow: 2 }, desc: 'FUNCTION: fish bite twice as fast near it — and rare catches get far more likely. Place beside your pond.' });
+defItem('sprinkler', { name: 'Sprinkler', kind: 'block', tier: 3, hp: 6, solid: true, animated: true, color: '#74c0fc', color2: '#3f7fb5',
+  fx: { growAura: 1.5, auraRange: 4, fountain: true }, desc: 'FUNCTION: mists nearby soil — trees within 4 tiles grow 50% faster. Stacks a farm nicely with Grow Lamps.' });
+defItem('fortune_totem', { name: 'Fortune Totem', kind: 'block', tier: 4, hp: 10, solid: true, animated: true, color: '#ffd166', color2: '#b8901f',
+  fx: { gemAura: 6, glow: 3 }, desc: 'FUNCTION: while you mine near it, blocks drop gems 50% more often. Miners\' shrine.' });
+defItem('xp_shrine', { name: 'XP Shrine', kind: 'block', tier: 3, hp: 10, solid: true, animated: true, color: '#b298dc', color2: '#7a5fa0',
+  fx: { xpAura: 1.5, auraRange: 6, glow: 3 }, desc: 'FUNCTION: everything you do near it grants +50% XP. Build your grind spot around one.' });
+defItem('scare_totem', { name: 'Scare Totem', kind: 'block', tier: 3, hp: 10, solid: true, animated: true, color: '#e07a5f', color2: '#9c4a35',
+  fx: { repel: 6 }, desc: 'FUNCTION: enemies refuse to come within 6 tiles of it. Peace, enforced by spooky mask.' });
+defItem('jukebox', { name: 'Jukebox', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#495867', color2: '#2b3441',
+  fx: { music: true, glow: 2 }, desc: 'FUNCTION: plays an endless generative melody while you\'re nearby. Every base needs a soundtrack.' });
+defItem('ghost_brick', { name: 'Ghost Brick', kind: 'block', tier: 2, hp: 12, solid: false, color: '#b5484d', color2: '#8c3439',
+  fx: { fake: true }, desc: 'FUNCTION: looks EXACTLY like brick… but you walk straight through it. Hide your vault entrance in plain sight.' });
+defItem('boost_ring', { name: 'Boost Ring', kind: 'block', tier: 3, hp: 5, solid: false, animated: true, color: '#6ee7ff', color2: '#2a9db8',
+  fx: { ring: 520 }, desc: 'FUNCTION: fly through it mid-air for an upward boost AND a refreshed double-jump. Chain them into sky roads.' });
+defItem('glow_vine', { name: 'Glow Vine', kind: 'block', tier: 3, hp: 5, solid: false, color: '#9ef01a', color2: '#5c8a0f',
+  fx: { ladder: true, glow: 3 }, desc: 'FUNCTION: a climbable vine that lights the way. Ladder + lamp in one tile.' });
+defItem('mega_spring', { name: 'Mega Spring', kind: 'block', tier: 4, hp: 8, solid: true, color: '#06ffa5', color2: '#02a86b',
+  fx: { bounce: 1650 }, desc: 'FUNCTION: launches you HALF A WORLD upward. Handle with respect.' });
+defItem('speed_rail', { name: 'Frost Rail', kind: 'block', tier: 3, hp: 6, solid: true, animated: true, color: '#8ce0f5', color2: '#4aa5c2',
+  fx: { conveyor: 470 }, desc: 'FUNCTION: a hyper-lubricated conveyor moving at double speed. Cross your world in seconds.' });
+defItem('life_ledge', { name: 'Life Ledge', kind: 'block', tier: 3, hp: 6, solid: false, color: '#95d5b2', color2: '#5a9c77',
+  fx: { platform: true, heal: 2, healRange: 2 }, desc: 'FUNCTION: a one-way platform that mends you while you stand on it. Parkour checkpoints, effectively.' });
+defItem('trap_ledge', { name: 'Trap Ledge', kind: 'block', tier: 3, hp: 6, solid: false, color: '#adb5bd', color2: '#6c757d',
+  fx: { platform: true, enemyDamage: 20 }, desc: 'FUNCTION: a one-way platform bristling with enemy-shredding barbs. You stand safely; they don\'t.' });
+/* gear wave */
+defItem('turtle_pack', { name: 'Turtle Pack', kind: 'gear', slot: 'back', tier: 3,
+  fx: { armor: 0.2, speed: 0.9 },
+  desc: 'FUNCTION: a hardened shell — 20% less damage taken, 10% slower walk. The tank build\'s back slot.' });
+defItem('battery_chip', { name: 'Battery Chip', kind: 'gear', slot: 'chip', tier: 3,
+  fx: { energy: true },
+  desc: 'FUNCTION: jetpacks & hover packs burn 40% less fuel and recharge 50% faster; dashes cool down 40% sooner.' });
+defItem('thorn_chip', { name: 'Thorn Chip', kind: 'gear', slot: 'chip', tier: 3,
+  fx: { thorns: 0.35 },
+  desc: 'FUNCTION: anything that touches you takes 35% of the hit right back. Hug the problem away.' });
+defItem('frost_pet', { name: 'Chill Wisp', kind: 'gear', slot: 'pet', tier: 3,
+  fx: { pet: { dmg: 7, rate: 1.1, range: 7, color: '#a8d8f0', chill: 2 } },
+  desc: 'FUNCTION: a frosty familiar whose shots slow enemies to half speed. Crowd control that follows you.' });
+defItem('loot_weevil', { name: 'Loot Weevil', kind: 'gear', slot: 'pet', tier: 3,
+  fx: { pet: { dmg: 4, rate: 1.6, range: 6, color: '#ffd166' }, magnet: 9 },
+  desc: 'FUNCTION: barely fights, but drops and gems fly to you from 9 tiles away while it\'s out. A living vacuum.' });
+/* renewable consumables (farm your supplies!) */
+defItem('warp_whistle', { name: 'Warp Whistle', kind: 'consumable', tier: 2, warp: true,
+  desc: 'FUNCTION: click to teleport HOME instantly from anywhere — deep mines, boss arenas, anywhere. Grow a tree of them.' });
+defItem('nano_shield', { name: 'Nano Shield', kind: 'consumable', tier: 3, invuln: 4,
+  desc: 'FUNCTION: click for 4 seconds of total invulnerability. Save it for the enrage phase.' });
+defItem('brain_juice', { name: 'Brain Juice', kind: 'consumable', tier: 2, xpGain: 150,
+  desc: 'FUNCTION: click to drink +150 XP on the spot. Tastes like homework.' });
+
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
 const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 4: 240, 9: 170 }; // seconds by tier
@@ -382,6 +433,34 @@ defRecipe('glass', 'spike_trap', 'leech_chip');
 defRecipe('led_block', 'pickaxe', 'miner_chip');
 defRecipe('dirt', 'led_block', 'garden_chip');
 defRecipe('crystal_cluster', 'repair_node', 'crystal_heart');
+// ---- network wave 2: totems, utility, secret tech ----
+defRecipe('glass', 'note_block', 'lure_buoy');
+defRecipe('dirt', 'fountain', 'sprinkler');
+defRecipe('crystal_cluster', 'led_block', 'fortune_totem');
+defRecipe('brick', 'sign', 'xp_shrine');
+defRecipe('led_block', 'spike_trap', 'scare_totem');
+defRecipe('conveyor', 'note_block', 'jukebox');
+defRecipe('brick', 'teleporter', 'ghost_brick');
+defRecipe('glider_wings', 'spring_pad', 'boost_ring');
+defRecipe('ladder', 'led_block', 'glow_vine');
+defRecipe('crystal_cluster', 'spring_pad', 'mega_spring');
+defRecipe('conveyor', 'ice', 'speed_rail');
+defRecipe('platform', 'repair_node', 'life_ledge');
+defRecipe('platform', 'spike_trap', 'trap_ledge');
+// ---- gear wave 2 ----
+defRecipe('brick', 'shield_gen', 'turtle_pack');
+defRecipe('conveyor', 'crystal_cluster', 'battery_chip');
+defRecipe('brick', 'spike_trap', 'thorn_chip');
+defRecipe('drone_pet', 'ice', 'frost_pet');
+defRecipe('drone_pet', 'magnet_chip', 'loot_weevil');
+// ---- renewable consumable farms ----
+defRecipe('teleporter', 'wood', 'warp_whistle');
+defRecipe('glass', 'shield_gen', 'nano_shield');
+defRecipe('sign', 'wood', 'brain_juice');
+defRecipe('repair_node', 'wood', 'medkit');
+defRecipe('pickaxe', 'spike_trap', 'bomb');
+defRecipe('blaster', 'led_block', 'firework');
+defRecipe('crystal_cluster', 'glass', 'overclock_cola');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 

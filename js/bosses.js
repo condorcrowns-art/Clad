@@ -38,7 +38,7 @@ class Boss extends Entity {
   onPhase2(game) {}
   contact(game, dt) {
     const p = game.player;
-    if (!this.dead && this.overlaps(p)) p.hurt(this.contactDmg, game, Math.sign(p.x - this.x) * 340);
+    if (!this.dead && this.overlaps(p)) p.hurt(this.contactDmg, game, Math.sign(p.x - this.x) * 340, this);
   }
   baseUpdate(dt) { this.t += dt; this.hitFlash = Math.max(0, this.hitFlash - dt); }
 }

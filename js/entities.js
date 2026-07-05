@@ -146,9 +146,19 @@ class Enemy extends Entity {
     }
     const spdM = this.chillT > 0 ? 0.5 : 1;
     if (this.chillT > 0 && Math.random() < 0.08) game.fx.add(this.x, this.y - this.h / 2, 0, -20, '#a8d8f0', 0.4, 2.5, 0);
+    // scare totems: enemies flee the aura
+    let repelled = 0;
+    if (world._repels) for (const rp of world._repels) {
+      const d = Math.hypot(rp.x - this.x, rp.y - this.y);
+      if (d < rp.r) { repelled = Math.sign(this.x - rp.x) || 1; break; }
+    }
     const ai = this.def.ai;
+    if (repelled) {
+      this.dir = repelled;
+      if (ai === 'flyer') { this.vx += repelled * 700 * dt; }
+    }
     if (ai === 'walker') {
-      if (distP < 9 * TS) this.dir = Math.sign(p.x - this.x) || this.dir;
+      if (distP < 9 * TS && !repelled) this.dir = Math.sign(p.x - this.x) || this.dir;
       this.vx = this.dir * this.def.speed * spdM;
       if (this.def.lobs && distP < 10 * TS) {
         this.shootT -= dt;
@@ -180,7 +190,7 @@ class Enemy extends Entity {
       }
       this.vy += this.gravity * dt;
     } else if (ai === 'flyer') {
-      if (distP < 12 * TS) {
+      if (distP < 12 * TS && !repelled) {
         const a = Math.atan2(p.y - 20 - this.y, p.x - this.x);
         this.vx += Math.cos(a) * 500 * dt;
         this.vy += Math.sin(a) * 500 * dt;
@@ -219,7 +229,7 @@ class Enemy extends Entity {
       if (it.fx && it.fx.sticky) this.vx *= 0.5;
     });
     // contact damage
-    if (!this.dead && this.overlaps(p)) p.hurt(this.dmg, game, Math.sign(p.x - this.x) * 260);
+    if (!this.dead && this.overlaps(p)) p.hurt(this.dmg, game, Math.sign(p.x - this.x) * 260, this);
   }
   draw(ctx, cam, time) {
     const sx = this.x - cam.x, sy = this.y - cam.y;
@@ -454,7 +464,7 @@ class Pet {
       if (best) {
         this.shootT = this.fx.rate;
         const a = Math.atan2(best.y - this.y, best.x - this.x);
-        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 620, Math.sin(a) * 620, this.fx.dmg, true, this.fx.color, { burn: this.fx.burn }));
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 620, Math.sin(a) * 620, this.fx.dmg, true, this.fx.color, { burn: this.fx.burn, chill: this.fx.chill }));
         game.sfx.play('sentry');
       }
     }
