@@ -11,7 +11,8 @@ class Player extends Entity {
     this.inv = {};                    // itemId -> count
     this.hotbar = ['fist', null, null, null, null, null, null, null, null];
     this.sel = 0;
-    this.equip = { back: null, feet: null, chip: null };
+    this.equip = { back: null, feet: null, chip: null, pet: null };
+    this.shieldNear = 0;
     this.iframes = 0;
     this.jumpsUsed = 0;
     this.fuel = 1; // 0..1 of jetpack
@@ -25,7 +26,7 @@ class Player extends Entity {
   /* ---------- gear helpers ---------- */
   gearFx(key) {
     let v = null;
-    for (const slot of ['back', 'feet', 'chip']) {
+    for (const slot of ['back', 'feet', 'chip', 'pet']) {
       const id = this.equip[slot];
       if (id && ITEMS[id].fx && ITEMS[id].fx[key] !== undefined) v = ITEMS[id].fx[key];
     }
@@ -62,7 +63,7 @@ class Player extends Entity {
   hurt(dmg, game, kx) {
     if (this.iframes > 0 || this.hp <= 0) return;
     const armor = this.gearFx('armor') || 0;
-    dmg = Math.max(1, Math.round(dmg * (1 - armor)));
+    dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - (this.shieldNear || 0))));
     this.hp -= dmg;
     this.iframes = 0.7;
     if (kx) { this.vx = kx; this.vy = -220; }
@@ -103,10 +104,15 @@ class Player extends Entity {
       const accel = this.onGround ? 12 : 7;
       this.vx += (mx * baseSpeed - this.vx) * Math.min(1, accel * dt);
 
-      // jump / double jump
+      // swimming in liquid data?
+      const ctile = world.get(Math.floor(this.x / TS), Math.floor(this.y / TS));
+      this.inWater = !!(ctile && ITEMS[ctile] && ITEMS[ctile].swim);
+
+      // jump / double jump / swim stroke
       if (input.jumpPressed) {
         const extraJumps = (feet && feet.doubleJump) || 0;
-        if (this.onGround) { this.vy = -640; this.jumpsUsed = 0; game.fx.puff(this.x, this.y + this.h / 2, '#9fb4d0'); }
+        if (this.inWater) { this.vy = -250; game.fx.puff(this.x, this.y - this.h / 2, '#9adcf0'); }
+        else if (this.onGround) { this.vy = -640; this.jumpsUsed = 0; game.fx.puff(this.x, this.y + this.h / 2, '#9fb4d0'); }
         else if (this.jumpsUsed < extraJumps) { this.jumpsUsed++; this.vy = -580; game.fx.puff(this.x, this.y + this.h / 2, '#2de2a3'); game.sfx.play('bounce'); }
         input.jumpPressed = false;
       }
@@ -134,8 +140,14 @@ class Player extends Entity {
       }
       input.dashPressed = false;
 
-      this.vy += this.gravity * dt;
-      this.vy = Math.min(this.vy, 1100);
+      if (this.inWater) {
+        this.vy += this.gravity * 0.25 * dt;
+        this.vy = Math.max(-260, Math.min(this.vy, 150));
+        this.jumpsUsed = 0;
+      } else {
+        this.vy += this.gravity * dt;
+        this.vy = Math.min(this.vy, 1100);
+      }
     }
     if (this.onGround) this.jumpsUsed = 0;
 
@@ -153,12 +165,15 @@ class Player extends Entity {
     });
     if (onConveyor) this.x += onConveyor * dt;
 
-    // heal auras (repair nodes / trophy) — scan nearby tiles
+    // heal + shield auras — scan nearby tiles
     const ptx = Math.floor(this.x / TS), pty = Math.floor(this.y / TS);
-    outer:
+    this.shieldNear = 0;
     for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
       const it = world.item(ptx + dx, pty + dy);
-      if (it && it.fx && it.fx.heal && Math.hypot(dx, dy) <= it.fx.healRange) { healNear = Math.max(healNear, it.fx.heal); break outer; }
+      if (!it || !it.fx) continue;
+      const d = Math.hypot(dx, dy);
+      if (it.fx.heal && d <= it.fx.healRange) healNear = Math.max(healNear, it.fx.heal);
+      if (it.fx.shield && d <= it.fx.shieldRange) this.shieldNear = Math.max(this.shieldNear, it.fx.shield);
     }
     if (healNear && this.hp < this.maxHp) {
       this._healT = (this._healT || 0) + dt;
@@ -183,6 +198,14 @@ class Player extends Entity {
     const dist = Math.hypot(wx - this.x, wy - this.y) / TS;
     const inReach = dist <= 4.2;
     this.facing = wx >= this.x ? 1 : -1;
+
+    // fishing rod: cast into water / reel in
+    if (held.rod) {
+      if (game.fishing) { game.reelRod(); this.actionCd = 0.35; return; }
+      const it = world.item(tx, ty);
+      if (it && it.swim && inReach) { game.castRod(tx, ty); this.actionCd = 0.45; return; }
+      // otherwise falls through: the rod is a (bad) tool
+    }
 
     // consumables
     if (held.kind === 'consumable') {
@@ -218,6 +241,7 @@ class Player extends Entity {
         else if (res !== 'no') {
           this.take(held.id, 1);
           game.progress.discovered[res] = true;
+          game.progress.stats.splices++;
           game.toast('SPLICE SUCCESS → ' + ITEMS[res].name + ' tree!', 'gold');
           game.fx.harvest(tx * TS + TS / 2, ty * TS + TS / 2, '#2de2a3');
           game.sfx.play('splice');
@@ -225,6 +249,7 @@ class Player extends Entity {
         }
       } else if (world.plantSeed(tx, ty, held.id)) {
         this.take(held.id, 1);
+        game.progress.stats.planted++;
         game.fx.puff(tx * TS + TS / 2, ty * TS + TS / 2, '#3ddc84');
         game.sfx.play('plant');
       } else game.toast('Needs an empty spot with solid ground below.', 'warn');
@@ -237,12 +262,18 @@ class Player extends Entity {
       if (!inReach) return;
       const i = world.idx(tx, ty);
       if (world.tiles[i] || world.trees.has(i)) { this.tryHarvestOrMine(game, tx, ty, wx, wy); return; }
-      // don't place inside self or enemies
+      // don't place solid blocks inside yourself
       const px = tx * TS + TS / 2, py = ty * TS + TS / 2;
-      if (Math.abs(px - this.x) < (TS + this.w) / 2 && Math.abs(py - this.y) < (TS + this.h) / 2) return;
+      if (held.solid && Math.abs(px - this.x) < (TS + this.w) / 2 && Math.abs(py - this.y) < (TS + this.h) / 2) return;
       if (!this.take(held.id, 1)) return;
       world.set(tx, ty, held.id);
+      game.progress.stats.placed++;
       if (held.fx && held.fx.conveyor) world.meta[i] = { dir: this.facing };
+      if (held.fx && held.fx.door && world.isHome) { world.doorIdx = i; game.toast('Respawn point set — you\'ll arrive at this door.', 'gold'); }
+      if (held.fx && held.fx.sign) {
+        const txt = (window.prompt('Sign text:', '') || '').slice(0, 40);
+        if (txt) world.meta[i] = { text: txt };
+      }
       game.sfx.play('place');
       if (!world.isHome) game.toast('Note: sector worlds reset when you leave.', '');
       return;

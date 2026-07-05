@@ -30,10 +30,30 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Gems** are the economy — mine them, loot them from enemies, spend them in the Gem Exchange `[B]`
 
 ### The Pixel Worlds loop, kept
-- Portal into hostile sectors full of monsters (Growtopia-style risk/reward: **dying in a sector
-  costs 20% of your gems**)
-- Reach the far side of each sector to wake its boss
+- Portal into hostile sectors full of monsters (risk/reward: **dying in a sector costs 20% of
+  your gems**)
+- **Cipher keys**: each sector hides 3 keys (marked by beacons + on the minimap) — collect them
+  all to unseal the **Cipher Gate** in front of the boss arena, straight out of the Netherworld
+- **The WARDEN**: a hulking miniboss has a chance to patrol any sector; kill it for treasure
+  (the Nether miniboss homage)
+- **Data Caches**: loot chests scattered through every sector
 - Boss loot is the best gear in the game
+
+### More systems, borrowed from both games
+- **Fishing** — buy a Data Rod, cast into your home ponds, reel on the `[!]` for gems, healing
+  fish, seeds, and the rare Golden Fish
+- **Pets/familiars** — splice a Pocket Drone (Sentry + Blaster) that hovers beside you and fights;
+  clear the Boss Rush for the Core Sprite, which also heals you
+- **Weather machines** — splice a Weather Core, stand on it, press `[S]`: Daylight, Sunset,
+  Midnight, Matrix Rain, Vaporwave skies (saved with your world)
+- **Home Doors** — walk-through doors that set your respawn/arrival point
+- **Data Signs** — writable signs that display text when someone stands near
+- **Quests** — 12-quest log (`[Q]`) with gem/item rewards
+- **Recycler** — sell surplus items back into gems in the shop (`[B]`)
+- **Daily login bonus** with streaks
+- **Minimap** for navigating sectors and finding keys
+- **BOSS RUSH** — beat ADMIN to unlock a fifth portal: all four bosses back-to-back. First clear
+  awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic
 Every splice result is *functional*:
@@ -57,6 +77,14 @@ Every splice result is *functional*:
 | Brick + Spring | Aegis Chip | 30% damage reduction |
 | Pickaxe + Glass | Plasma Drill | 8 hits/sec mining |
 | Blaster + Spring | Ion Jetpack | Hold SPACE to fly |
+| Sentry + Glass | Tesla Coil | Chain lightning hits 3 enemies |
+| Repair Node + Brick | Shield Generator | −25% damage taken near it |
+| Spike Trap + Conveyor | Grinder | Shreds enemies, harmless to you |
+| LED + Spring | Weather Core | Reprograms your sky (5 weathers) |
+| Dirt + Glass | Home Door | Walk-through door, sets respawn |
+| Wood + LED | Data Sign | Writable sign |
+| Blaster + Glass | Lance Beam | Piercing shot, skewers a whole line |
+| Sentry + Blaster | Pocket Drone | Pet familiar that fights for you |
 
 ### The bosses
 
@@ -77,10 +105,11 @@ Beating a boss unlocks the next portal. Bosses are re-fightable for gems.
 | `SPACE` / `W` | Jump (hold SPACE mid-air with jetpack to fly) |
 | Left click | Punch / mine / place / plant / attack / use |
 | `1–9` | Select hotbar slot |
-| `E` | Inventory & equipment |
-| `B` | Gem Exchange (shop) |
+| `E` | Inventory & equipment (back / feet / chip / pet) |
+| `B` | Gem Exchange (shop) + Recycler |
 | `C` | Splice Codex |
-| `S` | Use teleporter under your feet |
+| `Q` | Quest log |
+| `S` | Use teleporter / cycle Weather Core under your feet |
 | `W` | Enter portal |
 | `SHIFT` | Dash (Stormstep Boots) |
 | Right-click hotbar | Clear slot |

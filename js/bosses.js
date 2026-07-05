@@ -249,8 +249,8 @@ class StormKernel extends Boss {
     if (this.tpT <= 0) {
       this.tpT = this.phase2 ? 2.0 : 3.2;
       game.fx.explode(this.x, this.y, '#6ee7ff', 12);
-      const zone = game.world.bossZone;
-      this.x = Math.max(zone.x1 + TS * 2, Math.min(game.world.w * TS - TS * 3, p.x + (Math.random() < 0.5 ? -1 : 1) * (TS * 4 + Math.random() * TS * 4)));
+      const zx = game.world.bossZone ? game.world.bossZone.x1 : TS * 4;
+      this.x = Math.max(zx + TS * 2, Math.min(game.world.w * TS - TS * 3, p.x + (Math.random() < 0.5 ? -1 : 1) * (TS * 4 + Math.random() * TS * 4)));
       this.y = p.y - TS * (3 + Math.random() * 3);
       this.alpha = 0;
       game.sfx.play('tp');

@@ -8,6 +8,18 @@ defItem('bedrock', { name: 'Bedrock', kind: 'block', hp: 9999, solid: true, unbr
 defItem('magma',   { name: 'Magma', kind: 'block', hp: 8, solid: true, noDrop: true, color: '#ff5714', color2: '#992200', animated: true, fx: { damage: 18, glow: 4 }, desc: 'Hurts. Do not stand on.' });
 defItem('corrupt', { name: 'Corrupted Data', kind: 'block', hp: 5, solid: true, noDrop: true, gemRich: true, color: '#7b2cbf', color2: '#4a1578', desc: 'Glitched blocks, dense with loose gems.' });
 defItem('cloudb',  { name: 'Cloud Platform', kind: 'block', hp: 4, solid: true, noDrop: true, color: '#dfe7f5', color2: '#aab8d0', desc: 'Compressed vapor. Somehow solid.' });
+defItem('water',   { name: 'Liquid Data', kind: 'block', hp: 2, solid: false, noDrop: true, swim: true, animated: true, color: '#3a86ff', color2: '#2667cc', desc: 'Swimmable liquid data. Cast a Data Rod into it and see what bites.' });
+defItem('gate',    { name: 'Cipher Gate', kind: 'block', hp: 9999, solid: true, unbreakable: true, noDrop: true, animated: true, color: '#3d2c52', color2: '#241a33', desc: 'Sealed by cipher keys. Find all 3 keys in this sector to open it.' });
+defItem('chest',   { name: 'Data Cache', kind: 'block', hp: 4, solid: true, noDrop: true, chest: true, color: '#8a5a2a', color2: '#5e3c1a', desc: 'A locked cache of loot. Break it open.' });
+
+// weather programs for the home server's sky (Growtopia-style weather machines)
+const WEATHERS = [
+  { name: 'DAYLIGHT', sky: ['#12294d', '#3a6ea5'], dark: 0 },
+  { name: 'SUNSET', sky: ['#3d1635', '#e56b4a'], dark: 0 },
+  { name: 'MIDNIGHT', sky: ['#05070d', '#101d38'], dark: 0.5 },
+  { name: 'MATRIX RAIN', sky: ['#020a04', '#0a2e14'], dark: 0.3 },
+  { name: 'VAPORWAVE', sky: ['#2b1055', '#ff6ec7'], dark: 0 },
+];
 
 function hash2(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967295; }
 
@@ -27,6 +39,28 @@ class World {
     this.enemyCap = 0;
     this.bossZone = null;            // {x1 (px), spawnX, spawnY}
     this.isHome = false;
+    this.keySpots = [];              // px positions of cipher keys (sectors)
+    this.gateCol = -1;               // tile column of the cipher gate
+    this.themeIdx = 0;               // weather program (home)
+    this.doorIdx = -1;               // respawn door tile index (home)
+    this.mini = null;                // minimap canvas
+  }
+  applyWeather(idx) {
+    this.themeIdx = ((idx % WEATHERS.length) + WEATHERS.length) % WEATHERS.length;
+    const w = WEATHERS[this.themeIdx];
+    this.theme.sky = w.sky;
+    this.theme.dark = w.dark;
+  }
+  openGate(game) {
+    if (this.gateCol < 0) return;
+    for (let y = 0; y < this.h; y++) {
+      if (this.get(this.gateCol, y) === 'gate') {
+        this.set(this.gateCol, y, null);
+        game.fx.puff(this.gateCol * TS + TS / 2, y * TS + TS / 2, '#c77dff');
+      }
+    }
+    game.sfx.play('splice');
+    game.toast('🔑 CIPHER GATE OPENED — the boss arena awaits.', 'gold');
   }
   idx(tx, ty) { return ty * this.w + tx; }
   inB(tx, ty) { return tx >= 0 && ty >= 0 && tx < this.w && ty < this.h; }
@@ -83,8 +117,18 @@ class World {
     this.tiles[i] = null;
     this.damage.delete(i);
     delete this.meta[i];
+    if (i === this.doorIdx) this.doorIdx = -1;
     if (!silent) game.fx.tileBreak(tx, ty, it);
+    game.progress.stats.broken++;
     const cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
+    if (it.chest) { // Data Cache loot table
+      game.spawnGems(cx, cy, 5 + Math.floor(Math.random() * 11));
+      if (Math.random() < 0.5) game.spawnDrop(cx, cy, ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'brick_seed', 'glass_seed'][Math.floor(Math.random() * 6)], 1);
+      if (Math.random() < 0.3) game.spawnDrop(cx, cy, Math.random() < 0.5 ? 'medkit' : 'bomb', 1);
+      if (Math.random() < 0.06) game.spawnDrop(cx, cy, 'mystery_seed', 1);
+      game.sfx.play('buy');
+      return;
+    }
     if (!it.noDrop) {
       if (Math.random() < 0.33) game.spawnDrop(cx, cy, it.id, 1);
       if (Math.random() < 0.16 && ITEMS[it.id + '_seed']) game.spawnDrop(cx, cy, it.id + '_seed', 1);
@@ -109,12 +153,13 @@ class World {
     if (Math.random() < 0.15) game.spawnDrop(cx, cy, tr.result + '_seed', 1);
     game.spawnGems(cx, cy, 1 + Math.floor(Math.random() * 2));
     this.trees.delete(i);
+    game.progress.stats.harvests++;
     game.fx.harvest(cx, cy, ITEMS[tr.result].color || '#8f8');
     game.sfx.play('harvest');
     return true;
   }
 
-  // ---- per-frame world logic: sentries, decay ----
+  // ---- per-frame world logic: sentries, tesla coils ----
   update(dt, game) {
     this._sentryT = (this._sentryT || 0) - dt;
     if (this._sentryT <= 0) {
@@ -137,6 +182,40 @@ class World {
         }
       }
     }
+    this._teslaT = (this._teslaT || 0) - dt;
+    if (this._teslaT <= 0) {
+      this._teslaT = 1.4;
+      for (let i = 0; i < this.tiles.length; i++) {
+        if (this.tiles[i] !== 'tesla_coil') continue;
+        const fx = ITEMS.tesla_coil.fx.tesla;
+        const tx = i % this.w, ty = Math.floor(i / this.w);
+        const cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
+        const inRange = game.enemies.filter(e => !e.dead && Math.hypot(e.x - cx, e.y - cy) < fx.range * TS)
+          .sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy))
+          .slice(0, fx.chains);
+        let px = cx, py = cy - TS / 2;
+        for (const e of inRange) {
+          game.zaps.push({ x1: px, y1: py, x2: e.x, y2: e.y, life: 0.18 });
+          e.hurt(fx.dmg, game);
+          px = e.x; py = e.y;
+        }
+        if (inRange.length) game.sfx.play('sentry');
+      }
+    }
+  }
+
+  // 1px-per-tile minimap
+  buildMini(game) {
+    if (!this.mini) { this.mini = document.createElement('canvas'); this.mini.width = this.w; this.mini.height = this.h; }
+    const x = this.mini.getContext('2d');
+    x.clearRect(0, 0, this.w, this.h);
+    for (let i = 0; i < this.tiles.length; i++) {
+      const t = this.tiles[i];
+      if (!t && !this.trees.has(i)) continue;
+      x.fillStyle = this.trees.has(i) ? '#3ddc84' : (ITEMS[t] ? ITEMS[t].color : '#888');
+      x.fillRect(i % this.w, Math.floor(i / this.w), 1, 1);
+    }
+    return this.mini;
   }
 
   teleportTargets() {
@@ -219,6 +298,26 @@ class World {
       if (!locked) glows.push([sx, sy - TS, 3.2 * TS, col]);
     }
 
+    // sign text bubbles (shown when the player stands near)
+    if (game && game.player) {
+      for (const k in this.meta) {
+        const m = this.meta[k];
+        if (!m.text) continue;
+        const i = +k;
+        const stx = (i % this.w) * TS + TS / 2, sty = Math.floor(i / this.w) * TS;
+        if (Math.hypot(game.player.x - stx, game.player.y - sty) > 3.5 * TS) continue;
+        const sx = stx - cam.x, sy = sty - cam.y;
+        ctx.font = '12px monospace';
+        const tw = ctx.measureText(m.text).width + 14;
+        ctx.fillStyle = 'rgba(10,14,24,0.92)';
+        ctx.fillRect(sx - tw / 2, sy - 34, tw, 22);
+        ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 1;
+        ctx.strokeRect(sx - tw / 2, sy - 34, tw, 22);
+        ctx.fillStyle = '#eaf4ef'; ctx.textAlign = 'center';
+        ctx.fillText(m.text, sx, sy - 19);
+      }
+    }
+
     // glow pass
     if (glows.length) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -239,6 +338,32 @@ class World {
 
   drawTile(ctx, id, tx, ty, sx, sy, time, game) {
     const it = ITEMS[id];
+    // fully custom non-cube tiles
+    if (id === 'water') {
+      ctx.fillStyle = 'rgba(58,134,255,0.55)'; ctx.fillRect(sx, sy, TS, TS);
+      const above = this.get(tx, ty - 1);
+      if (above !== 'water') {
+        ctx.fillStyle = 'rgba(160,210,255,0.7)';
+        for (let k = 0; k < 4; k++) ctx.fillRect(sx + ((k * 9 + Math.floor(time * 14)) % TS), sy, 5, 3);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(sx + ((tx * 7 + Math.floor(time * 8)) % TS), sy + 10 + Math.sin(time * 2 + tx) * 4, 6, 2);
+      return;
+    }
+    if (id === 'door') {
+      ctx.fillStyle = it.color; ctx.fillRect(sx + 4, sy - TS + 4, TS - 8, TS * 2 - 8);
+      ctx.fillStyle = it.color2; ctx.fillRect(sx + 8, sy - TS + 8, TS - 16, TS * 2 - 16);
+      ctx.fillStyle = '#ffd166'; ctx.fillRect(sx + TS - 12, sy + 2, 4, 4);
+      if (this.idx(tx, ty) === this.doorIdx) { ctx.fillStyle = '#2de2a3'; ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.fillText('SPAWN', sx + TS / 2, sy - TS); }
+      return;
+    }
+    if (id === 'sign') {
+      ctx.fillStyle = '#7a5a3a'; ctx.fillRect(sx + TS / 2 - 2, sy + 12, 4, TS - 12);
+      ctx.fillStyle = it.color; ctx.fillRect(sx + 3, sy + 2, TS - 6, 14);
+      ctx.fillStyle = it.color2;
+      ctx.fillRect(sx + 6, sy + 6, TS - 14, 2); ctx.fillRect(sx + 6, sy + 10, TS - 18, 2);
+      return;
+    }
     ctx.fillStyle = it.color; ctx.fillRect(sx, sy, TS, TS);
     if (it.transparent) { ctx.clearRect(sx + 3, sy + 3, TS - 6, TS - 6); ctx.fillStyle = it.color + '44'; ctx.fillRect(sx + 3, sy + 3, TS - 6, TS - 6); }
     // deterministic noise
@@ -293,6 +418,38 @@ class World {
       const p = 0.6 + Math.sin(time * 3) * 0.4;
       ctx.globalAlpha = p; ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2, 7, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    } else if (id === 'tesla_coil') {
+      ctx.fillStyle = '#1c2536'; ctx.fillRect(sx + 12, sy + 2, 8, 12);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      const a = time * 6 + tx;
+      ctx.beginPath(); ctx.moveTo(sx + 16, sy + 4);
+      ctx.lineTo(sx + 16 + Math.sin(a) * 8, sy - 4); ctx.lineTo(sx + 16 + Math.sin(a * 1.7) * 12, sy - 10); ctx.stroke();
+    } else if (id === 'shield_gen') {
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 + 0.3 * Math.sin(time * 3)) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2, 10, Math.PI, 0); ctx.stroke();
+      ctx.fillStyle = '#0d1526'; ctx.fillRect(sx + TS / 2 - 3, sy + TS / 2, 6, 10);
+    } else if (id === 'grinder') {
+      ctx.save(); ctx.translate(sx + TS / 2, sy + TS / 2); ctx.rotate(time * 6);
+      ctx.fillStyle = '#e8ecf4';
+      for (let k = 0; k < 4; k++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(13, -5); ctx.lineTo(13, 5); ctx.fill(); }
+      ctx.restore();
+    } else if (id === 'weather_core') {
+      const a = time * 2;
+      ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.arc(sx + TS / 2 + Math.cos(a) * 7, sy + TS / 2 + Math.sin(a) * 7, 4, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + TS / 2 - Math.cos(a) * 7, sy + TS / 2 - Math.sin(a) * 7, 3, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    } else if (id === 'gate') {
+      ctx.fillStyle = '#c77dff';
+      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(time * 4 + ty);
+      ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2, 6, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1;
+      ctx.strokeRect(sx + 4, sy + 4, TS - 8, TS - 8);
+    } else if (id === 'chest') {
+      ctx.fillStyle = '#ffd166'; ctx.fillRect(sx + 4, sy + 14, TS - 8, 4);
+      ctx.fillRect(sx + TS / 2 - 3, sy + 12, 6, 8);
     }
   }
 
@@ -331,7 +488,7 @@ class World {
     });
     const trees = [];
     this.trees.forEach((tr, i) => trees.push([i, tr.result, tr.plantedAt, tr.growTime, tr.spliced ? 1 : 0]));
-    return { pal, data, bg: Array.from(this.bg), meta: this.meta, trees };
+    return { pal, data, bg: Array.from(this.bg), meta: this.meta, trees, themeIdx: this.themeIdx, doorIdx: this.doorIdx };
   }
   static deserializeHome(s) {
     const w = World.genHome(null); // fresh shell (portals, theme, spawn)
@@ -343,6 +500,8 @@ class World {
       for (const [i, result, plantedAt, growTime, spliced] of s.trees) {
         if (ITEMS[result]) w.trees.set(i, { result, plantedAt, growTime, spliced: !!spliced });
       }
+      w.applyWeather(s.themeIdx || 0);
+      w.doorIdx = s.doorIdx === undefined ? -1 : s.doorIdx;
     }
     return w;
   }
@@ -398,6 +557,15 @@ class World {
     World.carveCaves(w, 7, 30);
     World.pocket(w, 'wood', 10, 26, 45, 7);
     World.pocket(w, 'sand', 8, 25, 50, 7);
+    // two fishing ponds carved into the surface
+    for (const px of [18, 78]) {
+      const py2 = hs[px];
+      for (let dx = -4; dx <= 4; dx++) {
+        const depth = 3 - Math.floor(Math.abs(dx) * 0.7);
+        for (let dy = 0; dy < depth; dy++) w.set(px + dx, py2 + dy, 'water');
+        for (let dy = depth; dy < 4; dy++) if (!w.get(px + dx, py2 + dy)) w.set(px + dx, py2 + dy, 'dirt');
+      }
+    }
     // spawn platform: flatten x 44..56
     const py = 22;
     for (let x = 42; x <= 58; x++) {
@@ -414,17 +582,29 @@ class World {
       ['sector4', 'THE CORE', '#ffd166', 3],
     ];
     sectorMeta.forEach(([id, label, color, req], k) => {
-      w.portals.push({ x: (43.5 + k * 3.7) * TS, y: py * TS, target: id, label, color, labelUp: k % 2 === 1, locked: () => game.bossKillCount < req });
+      w.portals.push({ x: (42.8 + k * 3.4) * TS, y: py * TS, target: id, label, color, labelUp: k % 2 === 1, locked: () => game.bossKillCount < req });
     });
+    w.portals.push({ x: (42.8 + 4 * 3.4) * TS, y: py * TS, target: 'rush', label: 'BOSS RUSH', color: '#ff4d6d', labelUp: false, locked: () => !game.progress.beaten.admin });
+    return w;
+  }
+
+  static genRush() {
+    const w = new World('rush', 'BOSS RUSH', 74, 36, { sky: ['#14020a', '#4a1024'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.4 });
+    const fy = 27;
+    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? 'brick' : 'bedrock');
+    World.frame(w);
+    w.spawn = { x: 6 * TS, y: (fy - 2) * TS };
+    w.portals.push({ x: 3 * TS, y: fy * TS, target: 'home', label: 'EXIT', color: '#2de2a3' });
+    w.isRush = true;
     return w;
   }
 
   static genSector(n) {
     const defs = {
-      1: { name: 'FIREWALL SECTOR', sky: ['#1a0505', '#5c1a0a'], bgWall: 'rgba(40,10,5,0.85)', dark: 0.5, ground: 'stone', hazard: 'magma', enemies: ['ember', 'drone'], cap: 6, boss: 'firewall_daemon' },
-      2: { name: 'DATA MINES', sky: ['#0a0514', '#241448'], bgWall: 'rgba(18,8,30,0.9)', dark: 0.8, ground: 'stone', hazard: null, enemies: ['glitchling', 'ember'], cap: 7, boss: 'null_wurm' },
+      1: { name: 'FIREWALL SECTOR', sky: ['#1a0505', '#5c1a0a'], bgWall: 'rgba(40,10,5,0.85)', dark: 0.5, ground: 'stone', hazard: 'magma', enemies: ['ember', 'drone', 'brute'], cap: 6, boss: 'firewall_daemon' },
+      2: { name: 'DATA MINES', sky: ['#0a0514', '#241448'], bgWall: 'rgba(18,8,30,0.9)', dark: 0.8, ground: 'stone', hazard: null, enemies: ['glitchling', 'ember', 'spitter'], cap: 7, boss: 'null_wurm' },
       3: { name: 'THE CLOUD', sky: ['#4a6ea8', '#a8c8e8'], bgWall: 'rgba(120,140,180,0.4)', dark: 0, ground: 'cloudb', hazard: null, enemies: ['drone', 'zapper'], cap: 7, boss: 'storm_kernel' },
-      4: { name: 'THE CORE', sky: ['#14020a', '#3d0a1e'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.6, ground: 'corrupt', hazard: 'magma', enemies: ['glitchling', 'zapper', 'ember'], cap: 9, boss: 'admin' },
+      4: { name: 'THE CORE', sky: ['#14020a', '#3d0a1e'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.6, ground: 'corrupt', hazard: 'magma', enemies: ['glitchling', 'zapper', 'spitter', 'brute'], cap: 9, boss: 'admin' },
     }[n];
     const w = new World('sector' + n, defs.name, 130, 50, { sky: defs.sky, bgWall: defs.bgWall, dark: defs.dark });
     w.enemyTypes = defs.enemies; w.enemyCap = defs.cap; w.bossId = defs.boss; w.sectorN = n;
@@ -481,6 +661,27 @@ class World {
       for (let y = 4; y < w.h - 4; y++) {
         if (w.isSolid(x, y) && !w.get(x, y - 1) && !w.get(x, y - 2)) { w.spawnPoints.push({ x, y: y - 1 }); break; }
       }
+    }
+    // cipher gate: seal the arena entrance column
+    w.gateCol = Math.floor(w.bossZone.x1 / TS) - 1;
+    for (let y = 2; y < w.h - 2; y++) {
+      if (!w.get(w.gateCol, y)) w.set(w.gateCol, y, 'gate');
+    }
+    // 3 cipher keys hidden across the sector (Pixel Worlds Netherworld style)
+    const before = w.spawnPoints.filter(s => s.x < w.gateCol - 3 && s.x > 8);
+    for (const frac of [0.28, 0.55, 0.82]) {
+      const targetX = w.w * frac;
+      if (!before.length) break;
+      const s = before.reduce((a, b) => Math.abs(a.x - targetX) < Math.abs(b.x - targetX) ? a : b);
+      before.splice(before.indexOf(s), 1);
+      w.keySpots.push({ x: s.x * TS + TS / 2, y: (s.y - 1) * TS });
+    }
+    // loot caches
+    let placedChests = 0;
+    for (let tries = 0; tries < 200 && placedChests < 6; tries++) {
+      const s = w.spawnPoints[Math.floor(Math.random() * w.spawnPoints.length)];
+      if (!s || s.x >= w.gateCol - 1) continue;
+      if (!w.get(s.x, s.y) && w.isSolid(s.x, s.y + 1)) { w.set(s.x, s.y, 'chest'); placedChests++; }
     }
     return w;
   }

@@ -74,6 +74,9 @@ const ENEMY_DEFS = {
   ember:      { hp: 26, dmg: 14, speed: 70, color: '#ff5714', color2: '#ffd166', w: 24, h: 24, ai: 'hopper', gems: [2, 5] },
   drone:      { hp: 24, dmg: 10, speed: 110, color: '#8899aa', color2: '#ff4d6d', w: 26, h: 18, ai: 'flyer', gems: [3, 6] },
   zapper:     { hp: 30, dmg: 12, speed: 95, color: '#6ee7ff', color2: '#ffd166', w: 26, h: 20, ai: 'flyer', shoots: true, gems: [3, 8] },
+  spitter:    { hp: 40, dmg: 10, speed: 55, color: '#94d82d', color2: '#5c940d', w: 28, h: 22, ai: 'walker', lobs: true, gems: [3, 8] },
+  brute:      { hp: 120, dmg: 22, speed: 45, color: '#e8590c', color2: '#862e0a', w: 40, h: 36, ai: 'walker', gems: [8, 14] },
+  warden:     { hp: 550, dmg: 26, speed: 65, color: '#f1c40f', color2: '#7d6608', w: 52, h: 46, ai: 'walker', lobs: true, miniboss: true, gems: [60, 90] },
 };
 
 class Enemy extends Entity {
@@ -100,12 +103,19 @@ class Enemy extends Entity {
     game.sfx.play('hit');
     if (this.hp <= 0 && !this.dead) {
       this.dead = true;
-      game.fx.explode(this.x, this.y, this.def.color, 14);
+      game.progress.stats.kills++;
+      game.fx.explode(this.x, this.y, this.def.color, this.def.miniboss ? 34 : 14);
       game.sfx.play('kill');
       const [g0, g1] = this.def.gems;
       game.spawnGems(this.x, this.y, g0 + Math.floor(Math.random() * (g1 - g0 + 1)) * this.lvl);
       if (Math.random() < 0.06) game.spawnDrop(this.x, this.y, 'medkit', 1);
       if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'bomb', 1);
+      if (this.def.miniboss) { // WARDEN treasure (Pixel Worlds nether miniboss homage)
+        game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
+        game.spawnDrop(this.x, this.y, 'medkit', 2);
+        if (Math.random() < 0.35) game.spawnDrop(this.x, this.y, 'golden_fish', 1);
+        game.toast('★ WARDEN destroyed — treasure secured!', 'gold');
+      }
     }
   }
   update(dt, world, game) {
@@ -122,6 +132,16 @@ class Enemy extends Entity {
     if (ai === 'walker') {
       if (distP < 9 * TS) this.dir = Math.sign(p.x - this.x) || this.dir;
       this.vx = this.dir * this.def.speed;
+      if (this.def.lobs && distP < 10 * TS) {
+        this.shootT -= dt;
+        if (this.shootT <= 0) {
+          this.shootT = this.def.miniboss ? 1.6 : 2.8;
+          const dx = p.x - this.x, t = 0.9;
+          const vx = dx / t, vy = (p.y - this.y) / t - 0.5 * 1100 * t;
+          game.projectiles.push(new Projectile(this.x, this.y - this.h / 2, vx, vy, this.dmg, false, '#94d82d', { r: 7, gravity: 1100, life: 2.5 }));
+          game.sfx.play('eshoot');
+        }
+      }
       // hop over walls
       if (this.onGround) {
         const aheadX = Math.floor((this.x + this.dir * (this.w / 2 + 4)) / TS);
@@ -200,12 +220,19 @@ class Enemy extends Entity {
       ctx.fillStyle = '#000';
       ctx.fillRect(this.dir * 4 - 4 + this.dir, -7 + wob * 0.5, 3, 3); ctx.fillRect(this.dir * 4 + 3 + this.dir, -7 + wob * 0.5, 3, 3);
     }
+    if (this.def.miniboss) {
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath(); ctx.moveTo(-14, -this.h / 2 + 4); ctx.lineTo(-14, -this.h / 2 - 8); ctx.lineTo(-7, -this.h / 2 - 1); ctx.lineTo(0, -this.h / 2 - 10); ctx.lineTo(7, -this.h / 2 - 1); ctx.lineTo(14, -this.h / 2 - 8); ctx.lineTo(14, -this.h / 2 + 4); ctx.closePath(); ctx.fill();
+    }
     if (this.burnT > 0) { ctx.fillStyle = 'rgba(255,87,20,0.7)'; ctx.beginPath(); ctx.arc(0, -this.h / 2 - 4, 5 + Math.sin(time * 12) * 2, 0, 7); ctx.fill(); }
     ctx.restore();
     // hp bar
-    if (this.hp < this.maxHp) {
-      ctx.fillStyle = '#1a0a12'; ctx.fillRect(sx - 16, sy - this.h / 2 - 10, 32, 4);
-      ctx.fillStyle = '#ff4d6d'; ctx.fillRect(sx - 16, sy - this.h / 2 - 10, 32 * Math.max(0, this.hp / this.maxHp), 4);
+    if (this.hp < this.maxHp || this.def.miniboss) {
+      const bw = this.def.miniboss ? 52 : 32;
+      ctx.fillStyle = '#1a0a12'; ctx.fillRect(sx - bw / 2, sy - this.h / 2 - 12, bw, 5);
+      ctx.fillStyle = this.def.miniboss ? '#ffd166' : '#ff4d6d';
+      ctx.fillRect(sx - bw / 2, sy - this.h / 2 - 12, bw * Math.max(0, this.hp / this.maxHp), 5);
+      if (this.def.miniboss) { ctx.fillStyle = '#ffd166'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.fillText('WARDEN', sx, sy - this.h / 2 - 16); }
     }
   }
 }
@@ -311,6 +338,96 @@ class Drop extends Entity {
       const ic = iconFor(this.itemId);
       ctx.drawImage(ic, sx - 12, sy - 12, 24, 24);
     }
+  }
+}
+
+/* ===================== PET FAMILIAR ===================== */
+class Pet {
+  constructor(itemId) {
+    this.itemId = itemId;
+    this.fx = ITEMS[itemId].fx.pet;
+    this.x = 0; this.y = 0; this.t = Math.random() * 10;
+    this.shootT = 0; this.healT = 0;
+  }
+  update(dt, game) {
+    this.t += dt;
+    const p = game.player;
+    const tx = p.x - p.facing * 34, ty = p.y - 44 + Math.sin(this.t * 3) * 5;
+    this.x += (tx - this.x) * Math.min(1, 6 * dt);
+    this.y += (ty - this.y) * Math.min(1, 6 * dt);
+    // attack nearest enemy / boss
+    this.shootT -= dt;
+    if (this.shootT <= 0) {
+      let best = null, bd = this.fx.range * TS;
+      const targets = game.boss && !game.boss.dead ? [...game.enemies, game.boss] : game.enemies;
+      for (const e of targets) {
+        if (e.dead) continue;
+        const d = Math.hypot(e.x - this.x, e.y - this.y);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (best) {
+        this.shootT = this.fx.rate;
+        const a = Math.atan2(best.y - this.y, best.x - this.x);
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 620, Math.sin(a) * 620, this.fx.dmg, true, this.fx.color));
+        game.sfx.play('sentry');
+      }
+    }
+    // core sprite heals its owner
+    if (this.fx.heal && p.hp < p.maxHp) {
+      this.healT += dt;
+      if (this.healT > 2.5) {
+        this.healT = 0;
+        p.hp = Math.min(p.maxHp, p.hp + this.fx.heal);
+        game.fx.add(p.x, p.y - 30, 0, -50, '#ffd166', 0.6, 4, 0);
+        ui.updateHUD();
+      }
+    }
+  }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    ctx.fillStyle = this.fx.color;
+    ctx.fillRect(-9, -6, 18, 12);
+    ctx.fillStyle = '#0d1526'; ctx.fillRect(-5, -3, 4, 4); ctx.fillRect(2, -3, 4, 4);
+    ctx.fillStyle = '#6ee7ff'; ctx.fillRect(-4, -2, 2, 2); ctx.fillRect(3, -2, 2, 2);
+    // rotor shimmer
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    const rw = Math.abs(Math.sin(time * 18)) * 18;
+    ctx.fillRect(-rw / 2, -10, rw, 2);
+    if (this.fx.heal) { ctx.strokeStyle = 'rgba(255,209,102,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 13 + Math.sin(time * 4) * 2, 0, 7); ctx.stroke(); }
+    ctx.restore();
+  }
+}
+
+/* ===================== CIPHER KEY PICKUP ===================== */
+class KeyPickup {
+  constructor(x, y) { this.x = x; this.y = y; this.t = Math.random() * 10; this.dead = false; this.w = 20; this.h = 20; }
+  update(dt, world, game) {
+    this.t += dt;
+    const p = game.player;
+    if (Math.hypot(p.x - this.x, p.y - this.y) < 34) {
+      this.dead = true;
+      game.keysGot++;
+      game.progress.stats.keys++;
+      game.fx.explode(this.x, this.y, '#c77dff', 14);
+      game.sfx.play('splice');
+      game.toast('🔑 Cipher key ' + game.keysGot + '/' + game.keysNeed + ' acquired!', 'gold');
+      if (game.keysGot >= game.keysNeed) world.openGate(game);
+      ui.updateHUD();
+    }
+  }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y + Math.sin(this.t * 3) * 5;
+    ctx.save(); ctx.translate(sx, sy);
+    ctx.shadowColor = '#c77dff'; ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, -4, 5, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(0, 10); ctx.moveTo(0, 6); ctx.lineTo(4, 6); ctx.moveTo(0, 10); ctx.lineTo(5, 10); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    // beacon column so it's findable
+    ctx.fillStyle = 'rgba(199,125,255,0.10)';
+    ctx.fillRect(sx - 8, 0, 16, sy);
   }
 }
 

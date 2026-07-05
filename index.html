@@ -16,6 +16,7 @@
       <div id="hpWrap"><div id="hpBar"></div><span id="hpText"></span></div>
       <div id="fuelWrap" class="hidden"><div id="fuelBar"></div></div>
       <div id="gemWrap"><span class="gemIcon">◆</span><span id="gemText">0</span></div>
+      <div id="keyWrap" class="hidden">🔑 <span id="keyText">0/3</span></div>
       <div id="worldName"></div>
     </div>
     <div id="bossWrap" class="hidden">
@@ -34,6 +35,7 @@
       <div class="equipSlot" data-slot="back"><span class="equipLabel">BACK</span><div class="equipIcon"></div></div>
       <div class="equipSlot" data-slot="feet"><span class="equipLabel">FEET</span><div class="equipIcon"></div></div>
       <div class="equipSlot" data-slot="chip"><span class="equipLabel">CHIP</span><div class="equipIcon"></div></div>
+      <div class="equipSlot" data-slot="pet"><span class="equipLabel">PET</span><div class="equipIcon"></div></div>
     </div>
     <div id="invGrid"></div>
   </div>
@@ -42,6 +44,14 @@
   <div id="shopPanel" class="panel hidden">
     <div class="panelTitle">GEM EXCHANGE <span class="panelHint">[B] close</span></div>
     <div id="shopList"></div>
+    <div class="panelTitle" style="margin-top:14px">RECYCLER <span class="panelHint">click an item to sell it for gems</span></div>
+    <div id="sellGrid"></div>
+  </div>
+
+  <!-- Quests -->
+  <div id="questPanel" class="panel hidden">
+    <div class="panelTitle">QUEST LOG <span class="panelHint">[Q] close</span></div>
+    <div id="questList"></div>
   </div>
 
   <!-- Splice codex -->
@@ -64,13 +74,15 @@
       <p class="menuBody">
         Punch blocks to harvest <b>data seeds</b>. Plant them, grow them, and <b>splice</b> two seeds
         together to compile new tech. Every item <i>does something</i> — springs launch you, sentries
-        fight for you, teleporters warp you. When you're geared up, step through a portal and take
-        down the four <b>corrupted processes</b> that hold the network hostage.
+        fight for you, teleporters warp you, tesla coils chain-zap, pets follow and defend. Fish the
+        ponds, hunt loot caches, chase the roaming <b>WARDEN</b>. In each corrupted sector, gather the
+        <b>cipher keys</b> to unseal the boss gate — then purge the four <b>corrupted processes</b>.
+        Survive them all and the <b>BOSS RUSH</b> awaits.
       </p>
       <div class="menuControls">
         <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
         <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
-        <span><b>C</b> splice codex</span><span><b>S</b> use teleporter</span><span><b>W</b> enter portal</span>
+        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>S</b> teleporter / weather</span><span><b>W</b> enter portal</span>
         <span><b>SHIFT</b> dash (with boots)</span>
       </div>
       <button id="playBtn">▶ BOOT UP</button>

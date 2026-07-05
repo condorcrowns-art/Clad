@@ -22,6 +22,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 #fuelWrap { width: 130px; height: 12px; background: #0a1a16; border: 2px solid #14684d; }
 #fuelBar { height: 100%; width: 100%; background: var(--ui-accent); }
 #gemWrap { color: var(--ui-gold); font-size: 18px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
+#keyWrap { color: #c77dff; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
 .gemIcon { color: #6ee7ff; margin-right: 4px; }
 #worldName { margin-left: auto; color: #9fb4d0; font-size: 14px; letter-spacing: 2px; text-shadow: 1px 1px 0 #000; }
 #bossWrap { width: min(560px, 70vw); margin: 6px auto 0; text-align: center; }
@@ -72,6 +73,20 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 .codexFx { color: #7d93b3; margin-left: auto; font-size: 11px; max-width: 46%; text-align: right; }
 .codexRow.locked { opacity: 0.45; }
 .codexRow.locked .codexName::after { content: " ???"; color: var(--ui-warn); }
+
+/* ---------- Quests ---------- */
+.questRow { display: flex; align-items: center; gap: 10px; background: #0d1526; border: 1px solid #23324d; padding: 7px 10px; margin-bottom: 5px; }
+.questRow.done { border-color: var(--ui-gold); }
+.questRow.claimed { opacity: 0.45; }
+.questInfo { flex: 1; }
+.questName { color: #eaf4ef; font-weight: bold; font-size: 13px; }
+.questDesc { color: #7d93b3; font-size: 11px; }
+.questProg { color: var(--ui-accent); font-size: 12px; min-width: 54px; text-align: right; }
+.questClaim { background: #123; border: 1px solid var(--ui-gold); color: var(--ui-gold); font-family: var(--font); padding: 4px 10px; cursor: pointer; font-weight: bold; font-size: 12px; }
+.questClaim:hover { background: var(--ui-gold); color: #123; }
+
+/* ---------- Recycler ---------- */
+#sellGrid { display: grid; grid-template-columns: repeat(8, 52px); gap: 4px; }
 
 /* ---------- Tooltip ---------- */
 #tooltip { position: absolute; z-index: 50; background: var(--ui-bg); border: 1px solid var(--ui-accent); padding: 8px 10px; max-width: 260px; pointer-events: none; font-size: 12px; color: #cfe3d9; }

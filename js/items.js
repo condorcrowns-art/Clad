@@ -55,6 +55,36 @@ defItem('trophy_core', { name: 'Network Core Trophy', kind: 'block', tier: 9, hp
   fx: { glow: 8, heal: 10, healRange: 7 }, unspliceable: true,
   desc: 'BOSS TECH: the liberated heart of the network. Massive heal aura. You earned this.' });
 
+defItem('tesla_coil', { name: 'Tesla Coil', kind: 'block', tier: 3, hp: 12, solid: true, color: '#6ee7ff', color2: '#2a6f8f', animated: true,
+  fx: { tesla: { range: 7, rate: 1.4, dmg: 10, chains: 3 }, glow: 4 }, desc: 'FUNCTION: zaps up to 3 enemies at once with chain lightning. The sentry\'s angrier sibling.' });
+defItem('shield_gen', { name: 'Shield Generator', kind: 'block', tier: 3, hp: 12, solid: true, color: '#90f1c1', color2: '#2f9e6e', animated: true,
+  fx: { shield: 0.25, shieldRange: 6, glow: 4 }, desc: 'FUNCTION: projects a dome — you take 25% less damage while near it. Anchor your boss camps here.' });
+defItem('grinder', { name: 'Grinder Block', kind: 'block', tier: 2, hp: 8, solid: true, color: '#aab4c4', color2: '#5d6673', animated: true,
+  fx: { enemyDamage: 60 }, desc: 'FUNCTION: spinning blades that shred ENEMIES on contact. Harmless to you. Line your moats.' });
+defItem('weather_core', { name: 'Weather Core', kind: 'block', tier: 2, hp: 6, solid: true, color: '#f4a261', color2: '#c76f2e', animated: true,
+  fx: { glow: 4, weather: true }, desc: 'FUNCTION: reprograms your home server\'s sky. Stand on it and press [S] to cycle weather.' });
+defItem('door', { name: 'Home Door', kind: 'block', tier: 1, hp: 6, solid: false, color: '#9c6b3f', color2: '#6e4426',
+  fx: { door: true }, desc: 'FUNCTION: walk-through door. Placing one on your HOME SERVER sets your respawn/arrival point.' });
+defItem('sign', { name: 'Data Sign', kind: 'block', tier: 1, hp: 4, solid: false, color: '#c9a227', color2: '#8a6d1d',
+  fx: { sign: true }, desc: 'FUNCTION: writable sign. You set its text when placing; it displays when anyone stands near.' });
+defItem('laser_rifle', { name: 'Lance Beam', kind: 'weapon', tier: 3, dmg: 20, rate: 4, projectile: { speed: 900, color: '#ff4d6d', pierce: true }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: piercing beam — one shot skewers every enemy in a line.' });
+defItem('drone_pet', { name: 'Pocket Drone', kind: 'gear', slot: 'pet', tier: 3,
+  fx: { pet: { dmg: 9, rate: 1.2, range: 7, color: '#8899aa' } },
+  desc: 'FUNCTION: a loyal familiar that hovers beside you and shoots whatever you\'re fighting.' });
+defItem('core_sprite', { name: 'Core Sprite', kind: 'gear', slot: 'pet', tier: 9, unspliceable: true,
+  fx: { pet: { dmg: 16, rate: 0.9, range: 8, color: '#ffd166', heal: 2 } },
+  desc: 'BOSS TECH: a fragment of the liberated Core. Fights harder than a drone and slowly mends your HP.' });
+defItem('overclock_chip', { name: 'Overclock Chip', kind: 'gear', slot: 'chip', tier: 9, unspliceable: true,
+  fx: { speed: 1.2, dmgMult: 1.35, magnet: 5 },
+  desc: 'BOSS TECH: BOSS RUSH exclusive. Runs your whole rig hot: +20% speed, +35% damage, loot magnet.' });
+defItem('fishing_rod', { name: 'Data Rod', kind: 'tool', tier: 1, minePower: 1, mineRate: 4, dmg: 6, rate: 3, range: 1.4, rod: true,
+  desc: 'FUNCTION: click water to cast. When the bobber shouts [!], click again to reel in gems, fish, and rare seeds.' });
+defItem('data_fish', { name: 'Data Fish', kind: 'consumable', tier: 0, heal: 30,
+  desc: 'FUNCTION: click to eat. Restores 30 HP. Tastes like packets.' });
+defItem('golden_fish', { name: 'Golden Fish', kind: 'consumable', tier: 2, heal: 100,
+  desc: 'FUNCTION: click to eat for a FULL heal — or recycle it for a fat stack of gems.' });
+
 /* ===================== TOOLS ===================== */
 defItem('fist', { name: 'Fist', kind: 'tool', tier: 0, minePower: 1, mineRate: 4, dmg: 8, rate: 3, range: 1.4, noDrop: true,
   desc: 'Your bare hands. They punch blocks. Slowly.' });
@@ -107,7 +137,7 @@ const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 9: 170 }; // seconds by tier
 for (const id of Object.keys(ITEMS)) {
   const it = ITEMS[id];
   if (it.kind === 'seed' || it.noDrop || it.kind === 'consumable') continue;
-  if (id === 'trophy_core' || id === 'admin_crown') continue; // one-of-a-kind
+  if (['trophy_core', 'admin_crown', 'core_sprite', 'overclock_chip'].includes(id)) continue; // one-of-a-kind
   defItem(id + '_seed', {
     name: it.name.replace(/ (Block|Pad|Belt|Trap|Node|Blade|Blaster|Pickaxe|Drill|Jetpack|Boots|Chip)$/, '') + ' Seed',
     kind: 'seed', grows: id, tier: it.tier, growTime: GROW_TIMES[it.tier] || 60,
@@ -140,6 +170,14 @@ defRecipe('brick', 'spring_pad', 'aegis_chip');
 // Tier 3 — advanced
 defRecipe('pickaxe', 'glass', 'drill');
 defRecipe('blaster', 'spring_pad', 'jetpack');
+defRecipe('sentry', 'glass', 'tesla_coil');
+defRecipe('repair_node', 'brick', 'shield_gen');
+defRecipe('spike_trap', 'conveyor', 'grinder');
+defRecipe('led_block', 'spring_pad', 'weather_core');
+defRecipe('dirt', 'glass', 'door');
+defRecipe('wood', 'led_block', 'sign');
+defRecipe('blaster', 'glass', 'laser_rifle');
+defRecipe('sentry', 'blaster', 'drone_pet');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
@@ -154,8 +192,20 @@ const SHOP = [
   { id: 'sand_seed', price: 12, qty: 1 },
   { id: 'medkit', price: 25, qty: 1 },
   { id: 'bomb', price: 40, qty: 1 },
+  { id: 'fishing_rod', price: 60, qty: 1 },
   { id: 'mystery_seed', price: 120, qty: 1 },
 ];
+
+// recycler: gems paid when selling one unit (boss tech is priceless)
+function sellPrice(id) {
+  const it = ITEMS[id];
+  if (!it || it.noDrop) return 0;
+  if (id === 'golden_fish') return 100;
+  if (id === 'data_fish') return 8;
+  if (it.tier === 9) return 0;
+  const base = { 0: 2, 1: 5, 2: 14, 3: 35 }[it.tier] || 2;
+  return it.kind === 'seed' ? Math.max(1, Math.ceil(base * 0.6)) : base;
+}
 
 /* ===================== ICON RENDERER ===================== */
 const _iconCache = {};
@@ -183,6 +233,12 @@ function iconFor(id) {
     x.fillRect(10, 14, 20, 16); x.fillRect(6, 18, 6, 8);
     x.fillStyle = '#e0b48c';
     for (let k = 0; k < 4; k++) x.fillRect(12 + k * 5, 12, 3, 6);
+  } else if (it.rod) {
+    x.strokeStyle = '#7a5a3a'; x.lineWidth = 3;
+    x.beginPath(); x.moveTo(8, 36); x.quadraticCurveTo(22, 10, 32, 6); x.stroke();
+    x.strokeStyle = '#9adcf0'; x.lineWidth = 1.5;
+    x.beginPath(); x.moveTo(32, 6); x.lineTo(32, 24); x.stroke();
+    x.fillStyle = '#ff4d6d'; x.beginPath(); x.arc(32, 26, 4, 0, 7); x.fill();
   } else if (it.kind === 'tool') {
     x.strokeStyle = '#7a5a3a'; x.lineWidth = 4;
     x.beginPath(); x.moveTo(12, 34); x.lineTo(26, 10); x.stroke();
@@ -201,12 +257,22 @@ function iconFor(id) {
       x.beginPath(); x.moveTo(8, 28); x.lineTo(16, 36); x.stroke();
     }
   } else if (it.kind === 'gear') {
-    if (it.slot === 'back') { x.fillStyle = '#8899aa'; x.fillRect(10, 8, 9, 24); x.fillRect(22, 8, 9, 24); x.fillStyle = '#ff9e6d'; x.fillRect(11, 32, 7, 6); x.fillRect(23, 32, 7, 6); }
+    if (it.slot === 'pet') {
+      x.fillStyle = it.fx.pet.color; x.fillRect(10, 14, 20, 14);
+      x.fillStyle = '#0d1526'; x.fillRect(14, 18, 5, 5); x.fillRect(22, 18, 5, 5);
+      x.fillStyle = '#6ee7ff'; x.fillRect(15, 19, 3, 3); x.fillRect(23, 19, 3, 3);
+      x.fillStyle = 'rgba(255,255,255,0.6)'; x.fillRect(12, 10, 16, 3);
+    } else if (it.slot === 'back') { x.fillStyle = '#8899aa'; x.fillRect(10, 8, 9, 24); x.fillRect(22, 8, 9, 24); x.fillStyle = '#ff9e6d'; x.fillRect(11, 32, 7, 6); x.fillRect(23, 32, 7, 6); }
     else if (it.slot === 'feet') { x.fillStyle = id === 'storm_boots' ? '#ffd166' : '#3ddc84'; x.fillRect(8, 12, 10, 18); x.fillRect(8, 26, 18, 8); x.fillStyle = '#1c2536'; x.fillRect(8, 30, 18, 4); }
     else { x.fillStyle = id === 'admin_crown' ? '#ffd166' : '#2de2a3'; x.fillRect(8, 12, 24, 18); x.fillStyle = '#0d1526'; x.fillRect(12, 16, 4, 4); x.fillRect(20, 16, 4, 4); x.fillRect(12, 24, 12, 2);
       if (id === 'admin_crown') { x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(8, 12); x.lineTo(12, 4); x.lineTo(16, 12); x.lineTo(20, 4); x.lineTo(24, 12); x.lineTo(28, 4); x.lineTo(32, 12); x.fill(); } }
   } else if (it.kind === 'consumable') {
-    if (it.heal) { x.fillStyle = '#e8ecf4'; x.fillRect(6, 10, 28, 22); x.fillStyle = '#ff4d6d'; x.fillRect(16, 14, 8, 14); x.fillRect(13, 17, 14, 8); }
+    if (id === 'data_fish' || id === 'golden_fish') {
+      x.fillStyle = id === 'golden_fish' ? '#ffd166' : '#6ee7ff';
+      x.beginPath(); x.ellipse(18, 20, 12, 7, 0, 0, 7); x.fill();
+      x.beginPath(); x.moveTo(28, 20); x.lineTo(36, 13); x.lineTo(36, 27); x.closePath(); x.fill();
+      x.fillStyle = '#0d1526'; x.fillRect(11, 17, 3, 3);
+    } else if (it.heal) { x.fillStyle = '#e8ecf4'; x.fillRect(6, 10, 28, 22); x.fillStyle = '#ff4d6d'; x.fillRect(16, 14, 8, 14); x.fillRect(13, 17, 14, 8); }
     else if (it.bomb) { x.fillStyle = '#1c2536'; x.beginPath(); x.arc(20, 24, 12, 0, 7); x.fill(); x.strokeStyle = '#ffd166'; x.lineWidth = 2; x.beginPath(); x.moveTo(24, 14); x.quadraticCurveTo(30, 6, 34, 8); x.stroke(); x.fillStyle = '#ff5714'; x.fillRect(32, 5, 4, 4); }
     else { x.fillStyle = '#2a1c3a'; x.fillRect(8, 14, 24, 22); x.fillStyle = '#c77dff'; x.font = 'bold 20px monospace'; x.fillText('?', 14, 32); }
   }

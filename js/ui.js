@@ -13,7 +13,9 @@ const ui = {
       fuelWrap: $('fuelWrap'), fuelBar: $('fuelBar'),
       bossWrap: $('bossWrap'), bossName: $('bossName'), bossBar: $('bossBar'),
       hotbar: $('hotbar'), invPanel: $('invPanel'), invGrid: $('invGrid'),
-      shopPanel: $('shopPanel'), shopList: $('shopList'),
+      shopPanel: $('shopPanel'), shopList: $('shopList'), sellGrid: $('sellGrid'),
+      questPanel: $('questPanel'), questList: $('questList'),
+      keyWrap: $('keyWrap'), keyText: $('keyText'),
       codexPanel: $('codexPanel'), codexList: $('codexList'),
       tooltip: $('tooltip'), toasts: $('toasts'),
       menu: $('menu'), deathOverlay: $('deathOverlay'), deathText: $('deathText'),
@@ -57,6 +59,10 @@ const ui = {
       this.el.fuelWrap.classList.remove('hidden');
       this.el.fuelBar.style.width = (p.fuel * 100) + '%';
     } else this.el.fuelWrap.classList.add('hidden');
+    if (game.keysNeed > 0 && game.keysGot < game.keysNeed) {
+      this.el.keyWrap.classList.remove('hidden');
+      this.el.keyText.textContent = game.keysGot + '/' + game.keysNeed;
+    } else this.el.keyWrap.classList.add('hidden');
   },
 
   bossBar(boss) {
@@ -174,6 +180,62 @@ const ui = {
       d.appendChild(btn);
       list.appendChild(d);
     }
+    this.renderSell();
+  },
+
+  renderSell() {
+    const g = this.el.sellGrid;
+    g.innerHTML = '';
+    const p = game.player;
+    const ids = Object.keys(p.inv).filter(id => sellPrice(id) > 0).sort((a, b) => sellPrice(b) - sellPrice(a));
+    for (const id of ids) {
+      const d = document.createElement('div');
+      d.className = 'invSlot';
+      const cv = document.createElement('canvas'); cv.width = 40; cv.height = 40;
+      cv.getContext('2d').drawImage(iconFor(id), 0, 0);
+      d.appendChild(cv);
+      const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.textContent = p.inv[id];
+      d.appendChild(cnt);
+      d.addEventListener('mousemove', (e) => {
+        this.showTip(e, id);
+        this.el.tooltip.innerHTML += '<div class="ttDesc" style="color:#ffd166">SELL: ◆ ' + sellPrice(id) + ' each — click to sell 1</div>';
+      });
+      d.addEventListener('mouseleave', () => this.hideTip());
+      d.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        if (p.take(id, 1)) {
+          game.addGems(sellPrice(id));
+          game.sfx.play('buy');
+          this.renderShop();
+        }
+      });
+      g.appendChild(d);
+    }
+    if (!ids.length) g.innerHTML = '<div style="grid-column:1/-1;color:#5b7395;font-size:12px">Nothing sellable. Boss tech can never be sold.</div>';
+  },
+
+  renderQuests() {
+    const list = this.el.questList;
+    list.innerHTML = '';
+    for (const q of QUESTS) {
+      const claimed = game.progress.quests[q.id];
+      const prog = game.questProgress(q);
+      const done = prog >= q.goal;
+      const d = document.createElement('div');
+      d.className = 'questRow' + (claimed ? ' claimed' : done ? ' done' : '');
+      const rewardTxt = q.reward.gems ? '◆ ' + q.reward.gems : q.reward.items.map(([id, n]) => n + '× ' + ITEMS[id].name).join(', ');
+      d.innerHTML = '<div class="questInfo"><div class="questName">' + q.name + '</div><div class="questDesc">' + q.desc + ' · reward: ' + rewardTxt + '</div></div>' +
+        '<div class="questProg">' + prog + '/' + q.goal + '</div>';
+      if (done && !claimed) {
+        const btn = document.createElement('button');
+        btn.className = 'questClaim'; btn.textContent = 'CLAIM';
+        btn.addEventListener('click', () => { game.claimQuest(q.id); this.renderQuests(); });
+        d.appendChild(btn);
+      } else if (claimed) {
+        const s = document.createElement('span'); s.className = 'questProg'; s.textContent = '✔'; d.appendChild(s);
+      }
+      list.appendChild(d);
+    }
   },
 
   renderCodex() {
@@ -207,19 +269,20 @@ const ui = {
   togglePanel(name) {
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel'].forEach(p => this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel'].forEach(p => this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
       if (name === 'shop') this.renderShop();
       if (name === 'codex') this.renderCodex();
+      if (name === 'quest') this.renderQuests();
     }
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel'].some(p => !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel'].some(p => !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { ['invPanel', 'shopPanel', 'codexPanel'].forEach(p => this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel'].forEach(p => this.el[p].classList.add('hidden')); this.hideTip(); },
 
   showTip(e, id) {
     if (!id) { this.hideTip(); return; }

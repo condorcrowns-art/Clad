@@ -7,6 +7,24 @@
 let game = null;
 const SAVE_KEY = 'glitchtopia_save_v1';
 
+const STATS_DEFAULT = { broken: 0, planted: 0, splices: 0, harvests: 0, placed: 0, kills: 0, keys: 0, fish: 0, gemsEarned: 0 };
+
+/* ---------------- quests ---------------- */
+const QUESTS = [
+  { id: 'break20', name: 'Demolition Novice', desc: 'Break 20 blocks', goal: 20, val: (s) => s.broken, reward: { gems: 25 } },
+  { id: 'plant3', name: 'Green Thumb.exe', desc: 'Plant 3 seeds', goal: 3, val: (s) => s.planted, reward: { gems: 25 } },
+  { id: 'splice1', name: 'Gene Hacker', desc: 'Splice your first item', goal: 1, val: (s) => s.splices, reward: { gems: 40 } },
+  { id: 'harvest5', name: 'Tree Farmer', desc: 'Harvest 5 trees', goal: 5, val: (s) => s.harvests, reward: { gems: 50 } },
+  { id: 'place25', name: 'Architect', desc: 'Place 25 blocks', goal: 25, val: (s) => s.placed, reward: { gems: 40 } },
+  { id: 'kill10', name: 'Debugger', desc: 'Destroy 10 enemies', goal: 10, val: (s) => s.kills, reward: { items: [['medkit', 2]] } },
+  { id: 'keys3', name: 'Cipher Runner', desc: 'Collect 3 cipher keys', goal: 3, val: (s) => s.keys, reward: { items: [['bomb', 2]] } },
+  { id: 'fish3', name: 'Data Angler', desc: 'Catch 3 fish', goal: 3, val: (s) => s.fish, reward: { gems: 80 } },
+  { id: 'boss1', name: 'Firewall Breaker', desc: 'Purge the FIREWALL DAEMON', goal: 1, val: (s, g) => g.progress.beaten.firewall_daemon ? 1 : 0, reward: { gems: 100 } },
+  { id: 'pet1', name: 'Best Friend Protocol', desc: 'Equip a pet familiar', goal: 1, val: (s, g) => g.player.equip.pet ? 1 : 0, reward: { gems: 60 } },
+  { id: 'boss4', name: 'Network Liberator', desc: 'Purge all four corrupted processes', goal: 4, val: (s, g) => Object.keys(g.progress.beaten).length, reward: { gems: 300 } },
+  { id: 'rush1', name: 'OVERCLOCKED', desc: 'Clear the BOSS RUSH', goal: 1, val: (s, g) => g.progress.rushDone ? 1 : 0, reward: { gems: 500 } },
+];
+
 class Game {
   constructor() {
     this.canvas = document.getElementById('canvas');
@@ -17,10 +35,15 @@ class Game {
     this.world = null;
     this.homeWorld = null;
     this.enemies = []; this.projectiles = []; this.drops = []; this.hazards = [];
+    this.zaps = []; this.keyPickups = [];
+    this.keysGot = 0; this.keysNeed = 0;
+    this.pet = null; this.fishing = null; this.rush = null;
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0 };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '' };
+    this._questNotified = {};
+    this._questT = 0; this._miniT = 0;
     this.time = 0; this.shake = 0;
     this.spawnT = 0;
     this._saveT = 0; this._savePending = false;
@@ -56,6 +79,7 @@ class Game {
       if (k === 'e') ui.togglePanel('inv');
       if (k === 'b') ui.togglePanel('shop');
       if (k === 'c') ui.togglePanel('codex');
+      if (k === 'q') ui.togglePanel('quest');
       if (k === 'escape') ui.closeAll();
     });
     window.addEventListener('keyup', (e) => {
@@ -91,6 +115,13 @@ class Game {
     const w = this.world;
     const p = this.player;
     const tx = Math.floor(p.x / TS), ty = Math.floor((p.y + p.h / 2 + 4) / TS);
+    if (w.get(tx, ty) === 'weather_core') { // reprogram the sky
+      w.applyWeather(w.themeIdx + 1);
+      this.toast('☁ Weather program: ' + WEATHERS[w.themeIdx].name, 'gold');
+      this.sfx.play('tp');
+      if (w.isHome) this.saveSoon();
+      return;
+    }
     if (w.get(tx, ty) !== 'teleporter') return;
     const tps = w.teleportTargets();
     if (tps.length < 2) { this.toast('You need at least two teleporters.', 'warn'); return; }
@@ -106,7 +137,11 @@ class Game {
   }
 
   /* ---------------- economy / spawning ---------------- */
-  addGems(n) { this.gems = Math.max(0, this.gems + n); ui.updateHUD(); }
+  addGems(n) {
+    this.gems = Math.max(0, this.gems + n);
+    if (n > 0) this.progress.stats.gemsEarned += n;
+    ui.updateHUD();
+  }
   spawnDrop(x, y, id, count) { this.drops.push(new Drop(x, y, id, count)); }
   spawnGems(x, y, total) {
     while (total > 0) { const v = Math.min(total, 1 + Math.floor(Math.random() * 3)); total -= v; this.drops.push(new Drop(x, y, '__gem', v)); }
@@ -132,21 +167,107 @@ class Game {
   enterWorld(id) {
     if (this.world && this.world.isHome) this.save();
     this.enemies = []; this.projectiles = []; this.drops = []; this.hazards = [];
+    this.zaps = []; this.keyPickups = []; this.fishing = null; this.rush = null;
+    this.keysGot = 0; this.keysNeed = 0;
     this.boss = null; this.bossDefeatedThisVisit = false;
     if (id === 'home') {
       this.world = this.homeWorld;
+    } else if (id === 'rush') {
+      this.world = World.genRush();
+      this.rush = { stage: 0, timer: 3 };
+      this.toast('BOSS RUSH: all four corrupted processes, back to back. No gate, no mercy.', 'warn');
     } else {
       const n = +id.replace('sector', '');
       this.world = World.genSector(n);
-      this.toast('Entering ' + this.world.name + ' — reach the far side to face the corrupted process.', 'warn');
+      this.keysNeed = this.world.keySpots.length;
+      for (const s of this.world.keySpots) this.keyPickups.push(new KeyPickup(s.x, s.y));
+      this.toast('Entering ' + this.world.name + ' — find ' + this.keysNeed + ' cipher keys to unseal the boss gate.', 'warn');
       this.toast('Careful: dying in a sector costs 20% of your gems.', 'warn');
+      // the WARDEN sometimes stalks a sector (nether miniboss)
+      if (Math.random() < 0.28) {
+        const far = this.world.spawnPoints.filter(s => s.x > this.world.w * 0.35 && s.x < this.world.gateCol - 2);
+        if (far.length) {
+          const s = far[Math.floor(Math.random() * far.length)];
+          this.enemies.push(new Enemy('warden', s.x * TS + TS / 2, s.y * TS - 8, n));
+          this.toast('⚠ Something heavy is patrolling this sector…', 'warn');
+        }
+      }
     }
     const p = this.player;
     p.x = this.world.spawn.x; p.y = this.world.spawn.y;
+    // arrive at your Home Door if you've placed one
+    if (this.world.isHome && this.world.doorIdx >= 0 && this.world.tiles[this.world.doorIdx] === 'door') {
+      const dtx = this.world.doorIdx % this.world.w, dty = Math.floor(this.world.doorIdx / this.world.w);
+      p.x = dtx * TS + TS / 2; p.y = (dty + 1) * TS - p.h / 2 - 1;
+    }
     p.vx = 0; p.vy = 0;
     this.cam.x = p.x - this.cam.view.w / 2; this.cam.y = p.y - this.cam.view.h / 2;
+    this.world.buildMini(this);
     ui.updateHUD();
     this.sfx.play('tp');
+  }
+
+  /* ---------------- fishing ---------------- */
+  castRod(tx, ty) {
+    this.fishing = { x: tx * TS + TS / 2, y: ty * TS + 6, t: 0, biteAt: 2 + Math.random() * 4, bite: false, biteT: 0 };
+    this.sfx.play('plant');
+    this.fx.puff(this.fishing.x, this.fishing.y, '#9adcf0');
+  }
+  reelRod() {
+    const f = this.fishing;
+    if (!f) return;
+    this.fishing = null;
+    if (!f.bite) { this.toast('Nothing yet — wait for the [!] before reeling.', 'warn'); return; }
+    this.fx.harvest(f.x, f.y, '#6ee7ff');
+    this.sfx.play('harvest');
+    this.progress.stats.fish++;
+    const r = Math.random();
+    if (r < 0.5) { this.spawnGems(f.x, f.y - 20, 4 + Math.floor(Math.random() * 9)); this.toast('Reeled in a gem cluster!', 'gold'); }
+    else if (r < 0.75) this.spawnDrop(f.x, f.y - 20, 'data_fish', 1);
+    else if (r < 0.92) {
+      const pool = ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'brick_seed', 'glass_seed', 'spring_pad_seed', 'led_block_seed'];
+      this.spawnDrop(f.x, f.y - 20, pool[Math.floor(Math.random() * pool.length)], 1);
+      this.toast('A seed washed up on your line!', 'gold');
+    } else { this.spawnDrop(f.x, f.y - 20, 'golden_fish', 1); this.toast('★ GOLDEN FISH! Eat it or sell it — it\'s worth a fortune.', 'gold'); }
+  }
+  updateFishing(dt) {
+    const f = this.fishing;
+    if (!f) return;
+    const held = this.player.heldItem();
+    if (!held.rod || Math.hypot(this.player.x - f.x, this.player.y - f.y) > 6.5 * TS) { this.fishing = null; return; }
+    f.t += dt;
+    if (!f.bite && f.t >= f.biteAt) {
+      f.bite = true; f.biteT = 1.3;
+      this.sfx.play('bounce');
+      this.fx.puff(f.x, f.y, '#fff');
+    }
+    if (f.bite) {
+      f.biteT -= dt;
+      if (f.biteT <= 0) { this.fishing = null; this.toast('It got away…', 'warn'); this.sfx.play('error'); }
+    }
+  }
+
+  /* ---------------- quests ---------------- */
+  questProgress(q) { return Math.min(q.goal, q.val(this.progress.stats, this)); }
+  claimQuest(id) {
+    const q = QUESTS.find(x => x.id === id);
+    if (!q || this.progress.quests[id] || this.questProgress(q) < q.goal) return;
+    this.progress.quests[id] = true;
+    if (q.reward.gems) this.addGems(q.reward.gems);
+    if (q.reward.items) for (const [iid, n] of q.reward.items) this.player.give(iid, n);
+    this.toast('Quest reward claimed: ' + q.name + '!', 'gold');
+    this.sfx.play('victory');
+    this.save();
+  }
+  checkQuests() {
+    for (const q of QUESTS) {
+      if (this.progress.quests[q.id] || this._questNotified[q.id]) continue;
+      if (this.questProgress(q) >= q.goal) {
+        this._questNotified[q.id] = true;
+        this.toast('✔ Quest complete: ' + q.name + ' — press [Q] to claim!', 'gold');
+        this.sfx.play('buy');
+      }
+    }
   }
 
   /* ---------------- boss flow ---------------- */
@@ -161,6 +282,32 @@ class Game {
     }
   }
   onBossDefeated(boss) {
+    if (this.world.isRush && this.rush) { // boss rush chain
+      this.shake = 0.8;
+      this.sfx.play('victory');
+      this.fx.explode(boss.x, boss.y, '#ffd166', 50);
+      this.spawnGems(boss.x, boss.y, 60 + Math.floor(Math.random() * 40));
+      this.spawnDrop(boss.x, boss.y, 'medkit', 1);
+      this.rush.stage++;
+      setTimeout(() => { this.boss = null; ui.bossBar(null); }, 100);
+      if (this.rush.stage >= 4) {
+        if (!this.progress.rushDone) {
+          this.progress.rushDone = true;
+          this.spawnDrop(boss.x, boss.y, 'overclock_chip', 1);
+          this.spawnDrop(boss.x, boss.y, 'core_sprite', 1);
+          this.toast('★★★ BOSS RUSH CLEARED — Overclock Chip + Core Sprite pet acquired!', 'gold');
+        } else {
+          this.spawnGems(boss.x, boss.y, 300);
+          this.toast('★ BOSS RUSH cleared again. The network fears you.', 'gold');
+        }
+        this.rush = null;
+        this.save();
+      } else {
+        this.rush.timer = 3.5;
+        this.toast('Process ' + this.rush.stage + '/4 purged. Next one incoming…', 'warn');
+      }
+      return;
+    }
     this.bossDefeatedThisVisit = true;
     this.shake = 0.8;
     this.sfx.play('victory');
@@ -228,7 +375,10 @@ class Game {
       this.player.equip = s.equip || this.player.equip;
       this.player.sel = s.sel || 0;
       this.player.hp = s.hp > 0 ? s.hp : this.player.maxHp;
-      this.progress = Object.assign({ beaten: {}, discovered: {}, tutorial: 99 }, s.progress);
+      this.progress = Object.assign({ beaten: {}, discovered: {}, tutorial: 99, quests: {}, rushDone: false, streak: 0, lastLogin: '' }, s.progress);
+      this.progress.stats = Object.assign({}, STATS_DEFAULT, this.progress.stats || {});
+      this.progress.quests = this.progress.quests || {};
+      this.player.equip = Object.assign({ back: null, feet: null, chip: null, pet: null }, this.player.equip);
       this.homeWorld = World.deserializeHome(s.home);
       return true;
     } catch (e) { console.warn('load failed', e); return false; }
@@ -251,6 +401,17 @@ class Game {
     this.enterWorld('home');
     ui.dirty = true;
     ui.updateHUD();
+    // daily login bonus (streaks, like a proper live-service sandbox)
+    const today = new Date().toDateString();
+    if (this.progress.lastLogin !== today) {
+      const yesterday = new Date(Date.now() - 864e5).toDateString();
+      this.progress.streak = this.progress.lastLogin === yesterday ? (this.progress.streak || 0) + 1 : 1;
+      this.progress.lastLogin = today;
+      const bonus = Math.min(50 + (this.progress.streak - 1) * 25, 150);
+      this.addGems(bonus);
+      setTimeout(() => this.toast('☀ Daily login bonus: +' + bonus + ' ◆ (day ' + this.progress.streak + ' streak)', 'gold'), 1200);
+      this.save();
+    }
     if (this.progress.tutorial === 0) {
       const tips = [
         ['Welcome to your HOME SERVER. Punch blocks (click) to harvest materials and find seeds.', 0],
@@ -299,8 +460,39 @@ class Game {
       }
     }
 
+    // boss rush sequencer
+    if (w.isRush && this.rush && !this.boss) {
+      this.rush.timer -= dt;
+      if (this.rush.timer <= 0) {
+        const order = ['firewall_daemon', 'null_wurm', 'storm_kernel', 'admin'];
+        this.boss = spawnBoss(order[this.rush.stage], w.w * TS / 2, 17 * TS);
+        this.sfx.play('bossroar');
+        this.shake = 0.5;
+        this.toast('⚠ ' + this.boss.meta.name + ' enters the arena!', 'warn');
+      }
+    }
     this.maybeTriggerBoss();
     if (this.boss && !this.boss.dead) this.boss.update(dt, w, this);
+
+    // pet familiar
+    const wantPet = p.equip.pet;
+    if ((this.pet && this.pet.itemId !== wantPet) || (!this.pet && wantPet)) {
+      this.pet = wantPet ? new Pet(wantPet) : null;
+      if (this.pet) { this.pet.x = p.x; this.pet.y = p.y - 40; }
+    }
+    if (this.pet && !wantPet) this.pet = null;
+    if (this.pet) this.pet.update(dt, this);
+
+    this.updateFishing(dt);
+    for (const k of this.keyPickups) if (!k.dead) k.update(dt, w, this);
+    this.keyPickups = this.keyPickups.filter(k => !k.dead);
+    for (const z of this.zaps) z.life -= dt;
+    this.zaps = this.zaps.filter(z => z.life > 0);
+
+    this._questT += dt;
+    if (this._questT > 1.5) { this._questT = 0; this.checkQuests(); }
+    this._miniT += dt;
+    if (this._miniT > 2.5) { this._miniT = 0; w.buildMini(this); }
 
     for (const e of this.enemies) if (!e.dead) e.update(dt, w, this);
     this.enemies = this.enemies.filter(e => !e.dead);
@@ -338,12 +530,58 @@ class Game {
     w.draw(ctx, cam, this.time, this);
     for (const d of this.drops) d.draw(ctx, cam, this.time);
     for (const e of this.enemies) e.draw(ctx, cam, this.time);
+    for (const k of this.keyPickups) k.draw(ctx, cam, this.time);
     if (this.boss && !this.boss.dead) this.boss.draw(ctx, cam, this.time);
+    if (this.pet) this.pet.draw(ctx, cam, this.time);
     this.player.draw(ctx, cam, this.time);
     for (const pr of this.projectiles) pr.draw(ctx, cam);
+    // tesla arcs
+    for (const z of this.zaps) {
+      ctx.strokeStyle = 'rgba(110,231,255,' + Math.min(1, z.life * 8) + ')';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(z.x1 - cam.x, z.y1 - cam.y);
+      const mx = (z.x1 + z.x2) / 2 + (Math.random() - 0.5) * 16, my = (z.y1 + z.y2) / 2 + (Math.random() - 0.5) * 16;
+      ctx.quadraticCurveTo(mx - cam.x, my - cam.y, z.x2 - cam.x, z.y2 - cam.y);
+      ctx.stroke();
+    }
+    // fishing bobber + line
+    if (this.fishing) {
+      const f = this.fishing;
+      const bx = f.x - cam.x, by = f.y - cam.y + Math.sin(this.time * 3) * 2 + (f.bite ? Math.sin(this.time * 25) * 4 : 0);
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(this.player.x - cam.x + this.player.facing * 20, this.player.y - cam.y - 14);
+      ctx.quadraticCurveTo(bx, by - 40, bx, by); ctx.stroke();
+      ctx.fillStyle = '#ff4d6d'; ctx.beginPath(); ctx.arc(bx, by, 5, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx, by - 2, 2.5, 0, 7); ctx.fill();
+      if (f.bite) {
+        ctx.fillStyle = '#ffd166'; ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('!', bx, by - 16);
+      }
+    }
     for (const h of this.hazards) h.draw(ctx, cam, this.time, cam.view.h);
     this.fx.draw(ctx, cam);
+    this.drawMinimap(ctx);
     this.drawCursor(ctx, cam);
+  }
+
+  drawMinimap(ctx) {
+    const w = this.world;
+    if (!w.mini) return;
+    const sc = Math.min(170 / w.w, 110 / w.h);
+    const mw = w.w * sc, mh = w.h * sc;
+    const mx = this.cam.view.w - mw - 12, my = 34;
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = 'rgba(5,7,13,0.8)'; ctx.fillRect(mx - 3, my - 3, mw + 6, mh + 6);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(w.mini, mx, my, mw, mh);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#2de2a3'; ctx.lineWidth = 1; ctx.strokeRect(mx - 3, my - 3, mw + 6, mh + 6);
+    // markers
+    const dot = (px, py, col, r) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx + px / TS * sc, my + py / TS * sc, r || 2, 0, 7); ctx.fill(); };
+    for (const k of this.keyPickups) dot(k.x, k.y, '#c77dff', 2.5);
+    if (w.bossZone) dot(w.bossZone.spawnX, w.bossZone.spawnY, '#ff4d6d', 3);
+    for (const p2 of w.portals) dot(p2.x, p2.y - TS, p2.locked && p2.locked() ? '#44506b' : '#2de2a3', 2);
+    if (Math.floor(this.time * 4) % 2 === 0) dot(this.player.x, this.player.y, '#ffffff', 2.5);
   }
 
   drawCursor(ctx, cam) {
