@@ -21,6 +21,11 @@ class Player extends Entity {
     this.actionCd = 0; // attack/mine rate limiter
     this.regenT = 0;
     this.jetting = false;
+    this.squash = 0;       // landing squash-and-stretch
+    this.runPhase = 0;     // walk cycle phase
+    this.ghosts = [];      // dash afterimages
+    this._dustT = 0; this._bubT = 0; this._auraT = 0;
+    this._wasGround = false; this._lastVy = 0;
   }
 
   /* ---------- gear helpers ---------- */
@@ -171,7 +176,46 @@ class Player extends Entity {
     }
     if (this.onGround) this.jumpsUsed = 0;
 
+    const prevVy = this.vy;
     this.moveAndCollide(dt, world);
+
+    /* ---- animation bookkeeping & motion particles ---- */
+    this.squash = Math.max(0, this.squash - dt * 3);
+    if (!this._wasGround && this.onGround && prevVy > 450) {
+      this.squash = Math.min(0.3, prevVy / 3200);
+      for (let k = 0; k < 5; k++) game.fx.dust(this.x + (Math.random() - 0.5) * this.w, this.y + this.h / 2, Math.random() < 0.5 ? -1 : 1);
+    }
+    this._wasGround = this.onGround;
+    if (this.onGround && Math.abs(this.vx) > 40) this.runPhase += dt * Math.abs(this.vx) * 0.055;
+    // footstep dust
+    this._dustT -= dt;
+    if (this.onGround && Math.abs(this.vx) > 150 && this._dustT <= 0) {
+      this._dustT = 0.14;
+      game.fx.dust(this.x - this.facing * 8, this.y + this.h / 2 - 2, this.facing);
+    }
+    // swim bubbles
+    this._bubT -= dt;
+    if (this.inWater && this._bubT <= 0 && (Math.abs(this.vx) > 40 || Math.abs(this.vy) > 40)) {
+      this._bubT = 0.22;
+      game.fx.bubble(this.x + this.facing * 8, this.y - 10);
+    }
+    // dash afterimages
+    if (this.dashT > 0) {
+      this.ghosts.push({ x: this.x, y: this.y, facing: this.facing, life: 0.25 });
+    }
+    for (const g of this.ghosts) g.life -= dt;
+    this.ghosts = this.ghosts.filter(g => g.life > 0);
+    // chip aura particles
+    this._auraT -= dt;
+    if (this._auraT <= 0) {
+      this._auraT = 0.28;
+      const chip = this.equip.chip;
+      if (chip === 'wraith_chip' && Math.abs(this.vx) > 60) game.fx.add(this.x - this.facing * 10, this.y + (Math.random() - 0.5) * 30, -this.facing * 30, -10, 'rgba(141,128,201,0.8)', 0.5, 4, 0);
+      else if (chip === 'overclock_chip') game.fx.add(this.x + (Math.random() - 0.5) * 20, this.y + 16, 0, -60, '#ff9e6d', 0.4, 3, 0);
+      else if (chip === 'buoy_chip' && this.inWater) game.fx.bubble(this.x, this.y);
+      else if (chip === 'admin_crown') game.fx.add(this.x + (Math.random() - 0.5) * 16, this.y - 34, 0, -30, '#ffd166', 0.6, 2.5, 0);
+    }
+    if (this.gliding && Math.random() < 0.25) game.fx.add(this.x - this.facing * 16, this.y - 8, -this.facing * 60, 10, 'rgba(255,255,255,0.5)', 0.3, 2.5, 0);
 
     // note blocks chime underfoot
     if (this.onGround && this.groundTile === 'note_block') {
@@ -321,6 +365,34 @@ class Player extends Entity {
     this.tryHarvestOrMine(game, tx, ty, wx, wy);
   }
 
+  /* ---------- secondary action: background wall place / break ---------- */
+  actBg(game, wx, wy) {
+    if (this.actionCd > 0) return;
+    const world = game.world;
+    const held = this.heldItem();
+    const tx = Math.floor(wx / TS), ty = Math.floor(wy / TS);
+    if (Math.hypot(wx - this.x, wy - this.y) / TS > 4.2 || !world.inB(tx, ty)) return;
+    this.facing = wx >= this.x ? 1 : -1;
+    const i = world.idx(tx, ty);
+    if (held.kind === 'block' && !world.tiles[i] && !world.bgT[i] && !world.trees.has(i)) {
+      if (!this.take(held.id, 1)) return;
+      world.placeBg(tx, ty, held.id);
+      this.actionCd = 0.18;
+      this.swingT = 0.15;
+      game.progress.stats.placed++;
+      game.fx.spark(tx * TS + TS / 2, ty * TS + TS / 2, ITEMS[held.id].color, 4);
+      game.sfx.play('place');
+      if (world.isHome) game.saveSoon();
+    } else if (world.bgT[i] && !world.tiles[i]) {
+      const tool = (held.kind === 'tool' || held.kind === 'weapon') ? held : ITEMS.fist;
+      this.actionCd = 1 / (tool.mineRate || 4);
+      this.swingT = 0.15;
+      game.sfx.play('punch');
+      if (world.hitBg(tx, ty, tool.minePower || 1, game)) game.sfx.play('break');
+      if (world.isHome) game.saveSoon();
+    }
+  }
+
   tryHarvestOrMine(game, tx, ty, wx, wy) {
     const world = game.world;
     const held = this.heldItem();
@@ -382,10 +454,32 @@ class Player extends Entity {
 
   /* ---------- draw ---------- */
   draw(ctx, cam, time) {
+    // dash afterimages
+    for (const g of this.ghosts) {
+      ctx.save();
+      ctx.translate(g.x - cam.x, g.y - cam.y);
+      ctx.globalAlpha = g.life * 2.2;
+      ctx.fillStyle = '#6ee7ff';
+      ctx.fillRect(-10, -30, 20, 52);
+      ctx.restore();
+    }
     const sx = this.x - cam.x, sy = this.y - cam.y;
     ctx.save(); ctx.translate(sx, sy);
+    // squash & stretch anchored at the feet
+    if (this.squash > 0) {
+      ctx.translate(0, this.h / 2);
+      ctx.scale(1 + this.squash * 0.9, 1 - this.squash);
+      ctx.translate(0, -this.h / 2);
+    }
     if (this.iframes > 0 && Math.floor(time * 14) % 2 === 0) ctx.globalAlpha = 0.4;
-    const walk = Math.abs(this.vx) > 20 && this.onGround ? Math.sin(time * 12) : 0;
+    // pose
+    const running = Math.abs(this.vx) > 40 && this.onGround;
+    let walk = 0, legSpread = 0, bob = 0;
+    if (running) { walk = Math.sin(this.runPhase); bob = Math.abs(Math.cos(this.runPhase)) * -1.6; }
+    else if (this.inWater) { walk = Math.sin(time * 9) * 0.8; }
+    else if (!this.onGround) { legSpread = Math.max(-1, Math.min(1, this.vy / 500)); }
+    else { bob = Math.sin(time * 2.2) * 1.1; } // idle breathing
+    ctx.translate(0, bob);
 
     // back gear: jetpack or glider wings
     if (this.equip.back === 'glider_wings') {
@@ -405,10 +499,15 @@ class Player extends Entity {
       ctx.fillRect(-this.facing * 16 - 4, -14, 8, 20);
       if (this.jetting) { ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(-this.facing * 16 - 4, 6); ctx.lineTo(-this.facing * 16, 16 + Math.random() * 8); ctx.lineTo(-this.facing * 16 + 4, 6); ctx.fill(); }
     }
-    // legs
+    // legs: walk cycle swing / air split / swim kick
     ctx.fillStyle = this.equip.feet ? (this.equip.feet === 'storm_boots' ? '#ffd166' : '#2de2a3') : '#33415e';
-    ctx.fillRect(-9, 8 + walk * 3, 7, 15 - walk * 3);
-    ctx.fillRect(2, 8 - walk * 3, 7, 15 + walk * 3);
+    if (!this.onGround && !this.inWater) {
+      ctx.save(); ctx.translate(-5, 10); ctx.rotate(-0.35 - legSpread * 0.3); ctx.fillRect(-3, 0, 7, 14); ctx.restore();
+      ctx.save(); ctx.translate(6, 10); ctx.rotate(0.35 + legSpread * 0.2); ctx.fillRect(-3, 0, 7, 14); ctx.restore();
+    } else {
+      ctx.save(); ctx.translate(-5, 9); ctx.rotate(walk * 0.55 * this.facing); ctx.fillRect(-3.5, 0, 7, 14); ctx.restore();
+      ctx.save(); ctx.translate(6, 9); ctx.rotate(-walk * 0.55 * this.facing); ctx.fillRect(-3.5, 0, 7, 14); ctx.restore();
+    }
     // body
     ctx.fillStyle = '#4361ee';
     ctx.fillRect(-10, -12, 20, 22);
@@ -426,9 +525,17 @@ class Player extends Entity {
       ctx.fillStyle = '#ffd166';
       ctx.beginPath(); ctx.moveTo(-8, -30); ctx.lineTo(-8, -38); ctx.lineTo(-3, -33); ctx.lineTo(0, -39); ctx.lineTo(3, -33); ctx.lineTo(8, -38); ctx.lineTo(8, -30); ctx.closePath(); ctx.fill();
     }
-    // held item / arm
+    // back arm (behind body counter-swing)
+    ctx.fillStyle = '#e8c49e';
+    ctx.save();
+    ctx.translate(-this.facing * 8, -8);
+    ctx.rotate(-walk * 0.5 * this.facing + (this.gliding ? -1.9 * this.facing : 0));
+    ctx.fillRect(0, -3, -this.facing * 10, 6);
+    ctx.restore();
+    // held item / front arm
     const held = this.heldItem();
-    const swing = this.swingT > 0 ? -0.9 : 0;
+    const swingP = this.swingT > 0 ? (this.swingT / 0.18) : 0; // 1 → 0
+    const swing = swingP > 0 ? (-1.4 + (1 - swingP) * 1.8) : walk * 0.4;
     ctx.save();
     ctx.translate(this.facing * 10, -6);
     ctx.rotate(this.facing * (0.3 + swing));
@@ -442,6 +549,21 @@ class Player extends Entity {
       ctx.restore();
     }
     ctx.restore();
+    // melee slash arc
+    if (swingP > 0 && !held.projectile && (held.kind === 'weapon' || held.kind === 'tool')) {
+      const range = ((held.range || 1.4) * TS) * 0.9;
+      ctx.save();
+      ctx.globalAlpha = swingP * 0.65;
+      ctx.strokeStyle = held.id === 'flame_blade' ? '#ff5714' : '#e8f6ff';
+      ctx.lineWidth = 5 * swingP + 1;
+      ctx.lineCap = 'round';
+      const a0 = this.facing > 0 ? -1.5 + (1 - swingP) * 1.6 : 4.6 - (1 - swingP) * 1.6;
+      ctx.beginPath(); ctx.arc(0, -6, range, a0, a0 + 1.1 * this.facing, this.facing < 0); ctx.stroke();
+      ctx.globalAlpha = swingP * 0.25;
+      ctx.lineWidth = 12 * swingP;
+      ctx.beginPath(); ctx.arc(0, -6, range * 0.85, a0, a0 + 1.0 * this.facing, this.facing < 0); ctx.stroke();
+      ctx.restore();
+    }
     // aegis shield shimmer
     if (this.equip.chip === 'aegis_chip' || this.equip.chip === 'admin_crown') {
       ctx.strokeStyle = 'rgba(45,226,163,' + (0.2 + 0.15 * Math.sin(time * 3)) + ')';

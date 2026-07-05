@@ -101,6 +101,7 @@ class Enemy extends Entity {
     this.hitFlash = 0.12;
     this.vx += (kx || 0);
     game.fx.hitNum(this.x, this.y - this.h, dmg);
+    game.fx.spark(this.x, this.y, '#fff', 4);
     game.sfx.play('hit');
     if (this.hp <= 0 && !this.dead) {
       this.dead = true;
@@ -253,6 +254,7 @@ class Projectile {
     this.boomerang = (opts && opts.boomerang) || false;
     this.phase = 'out'; this.outT = 0.38;
     this._hit = new Set();
+    this.trail = [];
     this.w = this.r * 2; this.h = this.r * 2;
   }
   update(dt, world, game) {
@@ -310,10 +312,26 @@ class Projectile {
   }
   overlaps(o) { return Math.abs(this.x - o.x) < (this.w + o.w) / 2 && Math.abs(this.y - o.y) < (this.h + o.h) / 2; }
   draw(ctx, cam) {
-    const sx = this.x - cam.x, sy = this.y - cam.y;
+    // fading motion trail
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 6) this.trail.shift();
     ctx.fillStyle = this.color;
+    for (let i = 0; i < this.trail.length; i++) {
+      ctx.globalAlpha = (i / this.trail.length) * 0.35;
+      const t = this.trail[i];
+      ctx.beginPath(); ctx.arc(t.x - cam.x, t.y - cam.y, this.r * (0.4 + 0.6 * i / this.trail.length), 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    const sx = this.x - cam.x, sy = this.y - cam.y;
     ctx.shadowColor = this.color; ctx.shadowBlur = 8;
-    ctx.beginPath(); ctx.arc(sx, sy, this.r, 0, 7); ctx.fill();
+    if (this.boomerang) {
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(performance.now() / 60);
+      ctx.fillRect(-this.r, -2.5, this.r * 2, 5);
+      ctx.fillRect(-2.5, -this.r, 5, this.r * 2);
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(sx, sy, this.r, 0, 7); ctx.fill();
+    }
     ctx.shadowBlur = 0;
   }
 }
@@ -459,8 +477,21 @@ class KeyPickup {
 /* ===================== PARTICLES & FX ===================== */
 class FXSystem {
   constructor() { this.parts = []; this.nums = []; }
-  add(x, y, vx, vy, color, life, size, grav) {
-    this.parts.push({ x, y, vx, vy, color, life, maxLife: life, size: size || 4, grav: grav === undefined ? 800 : grav });
+  add(x, y, vx, vy, color, life, size, grav, ch) {
+    if (this.parts.length > 750) this.parts.splice(0, 50);
+    this.parts.push({ x, y, vx, vy, color, life, maxLife: life, size: size || 4, grav: grav === undefined ? 800 : grav, ch });
+  }
+  spark(x, y, color, n) {
+    for (let i = 0; i < (n || 5); i++) {
+      const a = Math.random() * 6.28, s = 60 + Math.random() * 180;
+      this.add(x, y, Math.cos(a) * s, Math.sin(a) * s, color, 0.25 + Math.random() * 0.15, 2.5, 0);
+    }
+  }
+  dust(x, y, dir) {
+    this.add(x, y, -dir * (30 + Math.random() * 50), -20 - Math.random() * 40, 'rgba(180,180,190,0.7)', 0.35, 3, -60);
+  }
+  bubble(x, y) {
+    this.add(x, y, (Math.random() - 0.5) * 20, -40 - Math.random() * 40, 'rgba(190,230,255,0.8)', 0.9, 3, -30);
   }
   tileHit(tx, ty, it) {
     for (let i = 0; i < 3; i++) this.add(tx * TS + TS / 2, ty * TS + TS / 2, (Math.random() - 0.5) * 200, -Math.random() * 200, it.color, 0.4, 3);
@@ -482,7 +513,8 @@ class FXSystem {
     for (const p of this.parts) {
       ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
       ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - cam.x - p.size / 2, p.y - cam.y - p.size / 2, p.size, p.size);
+      if (p.ch) { ctx.font = 'bold 13px monospace'; ctx.fillText(p.ch, p.x - cam.x, p.y - cam.y); }
+      else ctx.fillRect(p.x - cam.x - p.size / 2, p.y - cam.y - p.size / 2, p.size, p.size);
     }
     ctx.globalAlpha = 1;
     ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';

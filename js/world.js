@@ -33,7 +33,8 @@ class World {
     this.id = id; this.name = name; this.w = w; this.h = h;
     this.theme = theme; // {sky:[c1,c2], bgWall, dark:0..1}
     this.tiles = new Array(w * h).fill(null);
-    this.bg = new Uint8Array(w * h); // 1 = background wall behind
+    this.bg = new Uint8Array(w * h); // 1 = natural background wall behind
+    this.bgT = new Array(w * h).fill(null); // player-placed background wall blocks
     this.meta = {};                  // idx -> {dir} for conveyors
     this.trees = new Map();          // idx -> {result, plantedAt, growTime, spliced}
     this.damage = new Map();         // idx -> {dmg, t}
@@ -98,6 +99,34 @@ class World {
   }
   treeReady(tr) { return Date.now() - tr.plantedAt >= tr.growTime * 1000; }
   treeProgress(tr) { return Math.min(1, (Date.now() - tr.plantedAt) / (tr.growTime * 1000)); }
+
+  // ---- background walls (right-click building layer) ----
+  placeBg(tx, ty, id) {
+    const i = this.idx(tx, ty);
+    if (this.tiles[i] || this.bgT[i] || this.trees.has(i)) return false;
+    this.bgT[i] = id;
+    return true;
+  }
+  hitBg(tx, ty, power, game) {
+    const i = this.idx(tx, ty);
+    const id = this.bgT[i];
+    if (!id || this.tiles[i]) return false;
+    const it = ITEMS[id];
+    const key = -(i + 1);
+    let d = this.damage.get(key);
+    if (!d || performance.now() - d.t > 3500) d = { dmg: 0, t: 0 };
+    d.dmg += power; d.t = performance.now();
+    this.damage.set(key, d);
+    game.fx.tileHit(tx, ty, it);
+    if (d.dmg >= Math.ceil(it.hp / 2)) {
+      this.bgT[i] = null;
+      this.damage.delete(key);
+      game.fx.tileBreak(tx, ty, it);
+      if (!it.noDrop && Math.random() < 0.4) game.spawnDrop(tx * TS + TS / 2, ty * TS + TS / 2, id, 1);
+      return true;
+    }
+    return false;
+  }
 
   // ---- block damage (regenerates like Growtopia) ----
   hitTile(tx, ty, power, game) {
@@ -264,10 +293,25 @@ class World {
     const x0 = Math.max(0, Math.floor(cam.x / TS)), x1 = Math.min(this.w - 1, Math.ceil((cam.x + vw) / TS));
     const y0 = Math.max(0, Math.floor(cam.y / TS)), y1 = Math.min(this.h - 1, Math.ceil((cam.y + vh) / TS));
 
-    // background walls
+    // natural background walls
     ctx.fillStyle = this.theme.bgWall;
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
       if (this.bg[this.idx(tx, ty)]) ctx.fillRect(tx * TS - cam.x, ty * TS - cam.y, TS, TS);
+    }
+    // player-built background walls (dimmed blocks, inset frame)
+    const bgGlows = [];
+    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
+      const bid = this.bgT[this.idx(tx, ty)];
+      if (!bid) continue;
+      const it = ITEMS[bid];
+      const sx = tx * TS - cam.x, sy = ty * TS - cam.y;
+      ctx.fillStyle = it.color; ctx.fillRect(sx, sy, TS, TS);
+      ctx.fillStyle = it.color2;
+      ctx.fillRect(sx + Math.floor(hash2(tx, ty) * 20) + 3, sy + Math.floor(hash2(ty, tx) * 20) + 3, 5, 5);
+      ctx.fillStyle = 'rgba(5,8,18,0.5)'; ctx.fillRect(sx, sy, TS, TS);
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+      ctx.strokeRect(sx + 1.5, sy + 1.5, TS - 3, TS - 3);
+      if (it.fx && it.fx.glow && bgGlows.length < 12) bgGlows.push([sx + TS / 2, sy + TS / 2, it.fx.glow * TS * 0.3, it.color]);
     }
 
     // tiles
@@ -345,6 +389,8 @@ class World {
       glows.push([game.player.x - cam.x, game.player.y - cam.y - 10, 6.5 * TS, '#ffe9c9']);
     }
 
+    for (const g2 of bgGlows) glows.push(g2);
+
     // glow pass
     if (glows.length) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -391,17 +437,55 @@ class World {
       ctx.fillRect(sx + 6, sy + 6, TS - 14, 2); ctx.fillRect(sx + 6, sy + 10, TS - 18, 2);
       return;
     }
+    // neighbor-aware base render: edges only where exposed, per-material texture
+    const openU = !this.isSolid(tx, ty - 1), openD = !this.isSolid(tx, ty + 1);
+    const openL = !this.isSolid(tx - 1, ty), openR = !this.isSolid(tx + 1, ty);
     ctx.fillStyle = it.color; ctx.fillRect(sx, sy, TS, TS);
     if (it.transparent) { ctx.clearRect(sx + 3, sy + 3, TS - 6, TS - 6); ctx.fillStyle = it.color + '44'; ctx.fillRect(sx + 3, sy + 3, TS - 6, TS - 6); }
-    // deterministic noise
     ctx.fillStyle = it.color2;
-    for (let k = 0; k < 4; k++) {
-      const nx = Math.floor(hash2(tx * 3 + k, ty * 5 + k) * (TS - 8)), ny = Math.floor(hash2(tx * 5 + k, ty * 3 - k) * (TS - 8));
-      ctx.fillRect(sx + nx + 2, sy + ny + 2, 5, 5);
+    if (id === 'brick' || id === 'bedrock') {
+      // mortar courses with offset rows
+      for (let r = 0; r < 3; r++) {
+        ctx.fillRect(sx, sy + 9 + r * 11, TS, 2);
+        const off = ((ty * 3 + r) % 2) * 12;
+        ctx.fillRect(sx + ((10 + off) % TS), sy + r * 11, 2, 9);
+      }
+    } else if (id === 'wood') {
+      ctx.fillRect(sx, sy + 9, TS, 2); ctx.fillRect(sx, sy + 21, TS, 2);
+      if (hash2(tx, ty) < 0.3) { ctx.beginPath(); ctx.arc(sx + 8 + hash2(ty, tx) * 16, sy + 15, 3, 0, 7); ctx.fill(); }
+    } else if (id === 'sand') {
+      for (let k = 0; k < 9; k++) ctx.fillRect(sx + Math.floor(hash2(tx * 3 + k, ty * 7 + k) * (TS - 4)) + 2, sy + Math.floor(hash2(tx * 7 - k, ty * 3 + k) * (TS - 4)) + 2, 2, 2);
+    } else if (it.transparent) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx + 6, sy + TS - 6); ctx.lineTo(sx + TS - 6, sy + 6);
+      ctx.moveTo(sx + 14, sy + TS - 6); ctx.lineTo(sx + TS - 6, sy + 14); ctx.stroke();
+    } else if (id === 'corrupt') {
+      for (let k = 0; k < 3; k++) {
+        const fl = hash2(tx + k, ty + Math.floor(time * (2 + k))) ;
+        ctx.fillStyle = fl < 0.5 ? it.color2 : '#b16be8';
+        ctx.fillRect(sx + Math.floor(hash2(tx * 5 + k, ty) * (TS - 8)) + 2, sy + Math.floor(hash2(tx, ty * 5 + k) * (TS - 8)) + 2, 6, 6);
+      }
+      ctx.fillStyle = it.color2;
+    } else {
+      for (let k = 0; k < 4; k++) {
+        const nx = Math.floor(hash2(tx * 3 + k, ty * 5 + k) * (TS - 8)), ny = Math.floor(hash2(tx * 5 + k, ty * 3 - k) * (TS - 8));
+        ctx.fillRect(sx + nx + 2, sy + ny + 2, 4, 4);
+      }
     }
-    // bevel
-    ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(sx, sy, TS, 3);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(sx, sy + TS - 3, TS, 3);
+    // grass cap on exposed dirt (home-world greenery)
+    if (id === 'dirt' && openU) {
+      ctx.fillStyle = '#4f9d3f'; ctx.fillRect(sx, sy, TS, 5);
+      ctx.fillStyle = '#63c24f';
+      for (let k = 0; k < 4; k++) {
+        const bx = sx + 3 + Math.floor(hash2(tx * 9 + k, ty) * (TS - 8));
+        ctx.fillRect(bx, sy - 3 - Math.floor(hash2(tx + k, ty * 9) * 3), 2, 5);
+      }
+    }
+    // exposed-edge shading (sun above, shadow below, side AO)
+    if (openU && id !== 'dirt') { ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(sx, sy, TS, 3); }
+    if (openD) { ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(sx, sy + TS - 3, TS, 3); }
+    if (openL) { ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(sx, sy, 2, TS); }
+    if (openR) { ctx.fillStyle = 'rgba(0,0,0,0.14)'; ctx.fillRect(sx + TS - 2, sy, 2, TS); }
     // special decorations
     const fx = it.fx;
     if (!fx && !it.animated) return;
@@ -502,21 +586,43 @@ class World {
     const col = ITEMS[tr.result] ? ITEMS[tr.result].color : '#8f8';
     ctx.save();
     ctx.translate(sx + TS / 2, sy + TS);
+    const sway = Math.sin(time * 1.4 + sx * 0.05) * 0.06 + Math.sin(time * 3.1 + sy) * 0.02;
     const h = 8 + prog * 20;
-    ctx.strokeStyle = '#6a8f3f'; ctx.lineWidth = 3 + prog * 2;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -h); ctx.stroke();
+    // trunk bends with the wind
+    ctx.strokeStyle = '#6a8f3f'; ctx.lineWidth = 3 + prog * 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(sway * 10, -h * 0.6, sway * h * 0.8, -h); ctx.stroke();
+    ctx.translate(sway * h * 0.8, -h);
+    ctx.rotate(sway);
     const r = 5 + prog * 9;
-    ctx.fillStyle = ready ? col : '#4a6b32';
+    ctx.fillStyle = ready ? '#57904a' : '#4a6b32';
     if (ready) { ctx.shadowColor = col; ctx.shadowBlur = 8 + Math.sin(time * 5) * 4; }
-    ctx.beginPath(); ctx.arc(0, -h - r * 0.5, r, 0, 7); ctx.fill();
-    if (prog > 0.5) { ctx.beginPath(); ctx.arc(-r * 0.7, -h + 2 - r * 0.3, r * 0.7, 0, 7); ctx.arc(r * 0.7, -h + 2 - r * 0.3, r * 0.7, 0, 7); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(0, -r * 0.5, r, 0, 7); ctx.fill();
+    if (prog > 0.5) {
+      ctx.beginPath(); ctx.arc(-r * 0.7, 2 - r * 0.3, r * 0.7, 0, 7); ctx.arc(r * 0.7, 2 - r * 0.3, r * 0.7, 0, 7); ctx.fill();
+    }
     ctx.shadowBlur = 0;
+    // fruit: the item itself, ripening from buds
+    if (prog > 0.55) {
+      const fr = ready ? 4 : 2.5;
+      ctx.fillStyle = ready ? col : '#7a9a5a';
+      for (const [fx2, fy2] of [[-r * 0.55, -r * 0.2], [r * 0.5, -r * 0.55], [0, r * 0.25]]) {
+        ctx.beginPath(); ctx.arc(fx2, fy2, fr + (ready ? Math.sin(time * 4 + fx2) * 0.7 : 0), 0, 7); ctx.fill();
+      }
+      if (ready) {
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        for (const [fx2, fy2] of [[-r * 0.55, -r * 0.2], [r * 0.5, -r * 0.55], [0, r * 0.25]]) {
+          ctx.beginPath(); ctx.arc(fx2 - 1.3, fy2 - 1.3, 1.3, 0, 7); ctx.fill();
+        }
+      }
+    }
+    ctx.rotate(-sway);
     if (ready) {
       ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('✦', 0, -h - r - 6);
+      ctx.fillText('✦', 0, -r - 8 + Math.sin(time * 3) * 2);
     } else if (tr.spliced) {
       ctx.fillStyle = '#2de2a3'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('SPLICED', 0, -h - r - 6);
+      ctx.fillText('SPLICED', 0, -r - 8);
     }
     ctx.restore();
   }
@@ -529,14 +635,20 @@ class World {
       if (pi[t] === undefined) { pi[t] = pal.length + 1; pal.push(t); }
       return pi[t];
     });
+    const bdata = this.bgT.map(t => {
+      if (!t) return 0;
+      if (pi[t] === undefined) { pi[t] = pal.length + 1; pal.push(t); }
+      return pi[t];
+    });
     const trees = [];
     this.trees.forEach((tr, i) => trees.push([i, tr.result, tr.plantedAt, tr.growTime, tr.spliced ? 1 : 0]));
-    return { pal, data, bg: Array.from(this.bg), meta: this.meta, trees, themeIdx: this.themeIdx, doorIdx: this.doorIdx };
+    return { pal, data, bdata, bg: Array.from(this.bg), meta: this.meta, trees, themeIdx: this.themeIdx, doorIdx: this.doorIdx };
   }
   static deserializeHome(s) {
     const w = World.genHome(null); // fresh shell (portals, theme, spawn)
     if (s && s.pal) {
       w.tiles = s.data.map(v => v === 0 ? null : s.pal[v - 1] || null);
+      if (s.bdata) w.bgT = s.bdata.map(v => v === 0 ? null : s.pal[v - 1] || null);
       w.bg = Uint8Array.from(s.bg);
       w.meta = s.meta || {};
       w.trees = new Map();

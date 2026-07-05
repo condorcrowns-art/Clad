@@ -116,6 +116,21 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **OVERDRIVE MODE** — post-Boss-Rush toggle: enemies +3 levels everywhere, all gems doubled.
 - **BOSS RUSH** now chains all **six** bosses back-to-back.
 
+### Presentation & building feel
+- **Auto-tiled terrain**: neighbor-aware edges, grass-capped dirt with waving blades, real brick
+  courses, wood planks with knots, glass shine, flickering corrupted blocks
+- **Background wall layer**: right-click places any block as wallpaper behind the world
+  (LED walls glow!), right-click with a tool breaks walls — full Growtopia-style two-layer building
+- **Ghost placement preview** (green = valid, red = blocked) and a **middle-click pipette**
+  that picks the hovered block into your hotbar
+- **Player animation**: real walk cycle, squash-and-stretch landings, jump/fall poses, idle
+  breathing, melee slash arcs, dash afterimages, swim kick
+- **Particles everywhere**: footstep dust, landing puffs, swim bubbles, projectile trails,
+  hit sparks, chip auras (wraith wisps, overclock sparks, admin gold) — plus per-world ambience:
+  rising embers, drifting data motes, mine dust, wind streaks, deep-sea bubbles, shadow wisps,
+  and actual falling glyphs in Matrix Rain weather
+- **Living trees** that sway in the wind and visibly ripen their fruit
+
 ## Controls
 
 | Key | Action |
@@ -123,6 +138,8 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 | `A/D` or arrows | Move |
 | `SPACE` / `W` | Jump (hold SPACE mid-air with jetpack to fly) |
 | Left click | Punch / mine / place / plant / attack / use |
+| Right click | Place / break **background walls** |
+| Middle click | Pipette: pick hovered block into hotbar |
 | `1–9` | Select hotbar slot |
 | `E` | Inventory & equipment (back / feet / chip / pet) |
 | `B` | Gem Exchange (shop) + Recycler |

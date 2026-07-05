@@ -104,11 +104,29 @@ class Game {
       if (!this.running || ui.anyPanelOpen()) return;
       if (e.target !== this.canvas) return;
       if (e.button === 0) this.input.mouse.held = true;
+      if (e.button === 2) this.input.mouse.heldR = true;
+      if (e.button === 1) { e.preventDefault(); this.pipette(e.clientX + this.cam.x, e.clientY + this.cam.y); }
       this.input.mouse.x = e.clientX; this.input.mouse.y = e.clientY;
     });
-    document.addEventListener('mouseup', () => { this.input.mouse.held = false; });
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.input.mouse.held = false;
+      if (e.button === 2) this.input.mouse.heldR = false;
+    });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('beforeunload', () => this.save());
+  }
+
+  // middle-click: pick the hovered block into your hotbar if you own it
+  pipette(wx, wy) {
+    const tx = Math.floor(wx / TS), ty = Math.floor(wy / TS);
+    const id = this.world.get(tx, ty) || this.world.bgT[this.world.idx(tx, ty)];
+    if (!id || !this.player.count(id)) return;
+    const p = this.player;
+    let slot = p.hotbar.indexOf(id);
+    if (slot < 0) { slot = p.hotbar.indexOf(null); if (slot < 1) slot = 1; p.hotbar[slot] = id; }
+    p.sel = slot;
+    ui.dirty = true;
+    this.sfx.play('place');
   }
 
   rollMerchantStock() {
@@ -497,6 +515,7 @@ class Game {
         ['Plant seeds on solid ground. Trees grow in real time — even while you\'re away.', 6],
         ['SPLICE: plant a DIFFERENT seed onto a sapling. Try Dirt + Wood = Spring Pad. Codex: [C]', 12],
         ['Every item DOES something. Springs bounce, sentries shoot, teleporters warp.', 20],
+        ['RIGHT-CLICK places blocks as BACKGROUND WALLS — wallpaper your base. Middle-click picks a block.', 24],
         ['When ready, take the leftmost portal [W] and purge the FIREWALL DAEMON.', 28],
       ];
       for (const [msg, delay] of tips) setTimeout(() => this.toast(msg, 'gold'), delay * 1000 + 500);
@@ -515,12 +534,18 @@ class Game {
     p.update(dt, w, this, this.input);
     w.update(dt, this);
 
-    // held mouse = act toward cursor
+    // held mouse = act toward cursor (left: main, right: background layer)
     if (this.input.mouse.held && !ui.anyPanelOpen()) {
       const wx = this.input.mouse.x + this.cam.x;
       const wy = this.input.mouse.y + this.cam.y;
       p.act(this, wx, wy);
+    } else if (this.input.mouse.heldR && !ui.anyPanelOpen()) {
+      const wx = this.input.mouse.x + this.cam.x;
+      const wy = this.input.mouse.y + this.cam.y;
+      p.actBg(this, wx, wy);
     }
+
+    this.updateAmbient(dt);
 
     // ambient enemy spawns in sectors
     if (w.enemyCap && this.enemies.filter(e => !e.dead).length < w.enemyCap) {
@@ -694,6 +719,38 @@ class Game {
     this.drawCursor(ctx, cam);
   }
 
+  /* ---------------- ambient world particles ---------------- */
+  updateAmbient(dt) {
+    this._ambT = (this._ambT || 0) - dt;
+    if (this._ambT > 0) return;
+    this._ambT = 0.12;
+    const w = this.world, cam = this.cam;
+    const rx = () => cam.x + Math.random() * cam.view.w;
+    const ry = () => cam.y + Math.random() * cam.view.h;
+    const id = w.id;
+    if (w.isHome) {
+      const wt = w.themeIdx;
+      if (wt === 3) { // MATRIX RAIN: falling glyphs
+        for (let k = 0; k < 2; k++) this.fx.add(rx(), cam.y - 10, 0, 160 + Math.random() * 120, 'rgba(70,220,110,0.8)', 2.2, 0, 0, String.fromCharCode(0x30A0 + Math.floor(Math.random() * 60)));
+      } else if (wt === 4) { // VAPORWAVE: pink motes
+        this.fx.add(rx(), ry(), (Math.random() - 0.5) * 20, -14, 'rgba(255,110,199,0.5)', 2.5, 3, 0);
+      } else if (Math.random() < 0.5) { // data motes drifting
+        this.fx.add(rx(), ry(), (Math.random() - 0.5) * 16, -8 - Math.random() * 10, 'rgba(110,231,255,0.35)', 3, 2.5, 0);
+      }
+      if (this.rain > 0) this.fx.add(rx(), cam.y - 6, 20, 320, 'rgba(255,209,102,0.7)', 1.4, 0, 0, '◆');
+    } else if (id === 'sector1' || id === 'sector4') { // embers rise
+      this.fx.add(rx(), cam.y + cam.view.h + 6, (Math.random() - 0.5) * 30, -60 - Math.random() * 70, Math.random() < 0.5 ? 'rgba(255,87,20,0.7)' : 'rgba(255,209,102,0.6)', 2.2, 3, 0);
+    } else if (id === 'sector2' || id === 'mine') { // dust & glitch flecks
+      this.fx.add(rx(), ry(), (Math.random() - 0.5) * 12, 8, id === 'mine' ? 'rgba(160,140,110,0.35)' : 'rgba(199,125,255,0.4)', 2.4, 2.5, 0);
+    } else if (id === 'sector3' || id === 'stack') { // wind streaks
+      this.fx.add(cam.x - 10, ry(), 380 + Math.random() * 160, 0, 'rgba(255,255,255,0.25)', 0.8, 0, 0, '—');
+    } else if (id === 'sector5') { // bubbles from the depths
+      if (Math.random() < 0.6) this.fx.bubble(rx(), cam.y + cam.view.h - Math.random() * 100);
+    } else if (id === 'sector6') { // shadow wisps
+      this.fx.add(rx(), ry(), (Math.random() - 0.5) * 26, -6, 'rgba(141,128,201,0.28)', 3, 4, 0);
+    }
+  }
+
   drawMerchant(ctx, cam) {
     const m = this.merchant;
     const sx = m.x - cam.x, sy = m.y - cam.y;
@@ -745,11 +802,47 @@ class Game {
     if (ui.anyPanelOpen()) return;
     const wx = this.input.mouse.x + cam.x, wy = this.input.mouse.y + cam.y;
     const tx = Math.floor(wx / TS), ty = Math.floor(wy / TS);
+    const sx = tx * TS - cam.x, sy = ty * TS - cam.y;
     const dist = Math.hypot(wx - this.player.x, wy - this.player.y) / TS;
     const inReach = dist <= 4.2;
+    const w = this.world;
+    const i = w.inB(tx, ty) ? w.idx(tx, ty) : -1;
+    const held = this.player.heldItem();
+    const empty = i >= 0 && !w.tiles[i] && !w.trees.has(i);
+
+    // ghost placement preview for blocks & seeds
+    if (inReach && empty && (held.kind === 'block' || held.kind === 'seed')) {
+      const ok = held.kind === 'block' || w.isSolid(tx, ty + 1);
+      ctx.save();
+      ctx.globalAlpha = 0.42;
+      if (held.kind === 'block') w.drawTile(ctx, held.id, tx, ty, sx, sy, this.time, this);
+      else {
+        ctx.strokeStyle = '#3ddc84'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(sx + TS / 2, sy + TS); ctx.quadraticCurveTo(sx + TS / 2 + 5, sy + 14, sx + TS / 2, sy + 8); ctx.stroke();
+        ctx.fillStyle = ITEMS[held.grows] ? ITEMS[held.grows].color : '#8f8';
+        ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 8, 5, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = ok ? 'rgba(45,226,163,0.9)' : 'rgba(255,77,109,0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx + 1, sy + 1, TS - 2, TS - 2);
+      ctx.restore();
+      return;
+    }
     ctx.strokeStyle = inReach ? 'rgba(45,226,163,0.8)' : 'rgba(255,77,109,0.4)';
     ctx.lineWidth = 2;
-    ctx.strokeRect(tx * TS - cam.x + 1, ty * TS - cam.y + 1, TS - 2, TS - 2);
+    ctx.strokeRect(sx + 1, sy + 1, TS - 2, TS - 2);
+    // hovered tile label
+    const hovId = i >= 0 && (w.tiles[i] || (w.trees.has(i) ? '__tree' : w.bgT[i]));
+    if (hovId) {
+      const name = hovId === '__tree' ? ITEMS[w.trees.get(i).result].name + ' Tree' : ITEMS[hovId].name + (w.tiles[i] ? '' : ' (wall)');
+      ctx.font = '10px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(5,7,13,0.7)';
+      const tw = ctx.measureText(name).width + 8;
+      ctx.fillRect(sx + TS / 2 - tw / 2, sy - 16, tw, 13);
+      ctx.fillStyle = '#9fb4d0';
+      ctx.fillText(name, sx + TS / 2, sy - 6);
+    }
   }
 }
 
