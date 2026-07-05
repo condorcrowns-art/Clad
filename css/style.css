@@ -1,0 +1,109 @@
+/* GLITCHTOPIA UI */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --ui-bg: rgba(10, 14, 24, 0.92);
+  --ui-border: #2de2a3;
+  --ui-accent: #2de2a3;
+  --ui-warn: #ff4d6d;
+  --ui-gold: #ffd166;
+  --font: 'Courier New', ui-monospace, monospace;
+}
+html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; font-family: var(--font); }
+#game { position: relative; width: 100vw; height: 100vh; }
+#canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.hidden { display: none !important; }
+
+/* ---------- HUD ---------- */
+#hud { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
+#hudTop { display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
+#hpWrap { position: relative; width: 220px; height: 22px; background: #1a0a12; border: 2px solid #601b2e; }
+#hpBar { height: 100%; width: 100%; background: linear-gradient(#ff6b81, #d90429); transition: width 0.15s; }
+#hpText { position: absolute; inset: 0; text-align: center; font-size: 13px; line-height: 20px; color: #fff; text-shadow: 1px 1px 0 #000; font-weight: bold; }
+#fuelWrap { width: 130px; height: 12px; background: #0a1a16; border: 2px solid #14684d; }
+#fuelBar { height: 100%; width: 100%; background: var(--ui-accent); }
+#gemWrap { color: var(--ui-gold); font-size: 18px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
+.gemIcon { color: #6ee7ff; margin-right: 4px; }
+#worldName { margin-left: auto; color: #9fb4d0; font-size: 14px; letter-spacing: 2px; text-shadow: 1px 1px 0 #000; }
+#bossWrap { width: min(560px, 70vw); margin: 6px auto 0; text-align: center; }
+#bossName { color: var(--ui-warn); font-weight: bold; letter-spacing: 3px; font-size: 14px; text-shadow: 1px 1px 0 #000; margin-bottom: 3px; }
+#bossBarBg { height: 16px; background: #1a0a12; border: 2px solid #7a1f38; }
+#bossBar { height: 100%; width: 100%; background: linear-gradient(#ff758f, #c9184a); transition: width 0.1s; }
+
+/* ---------- Hotbar ---------- */
+#hotbar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; }
+.hbSlot { width: 52px; height: 52px; background: var(--ui-bg); border: 2px solid #23324d; position: relative; cursor: pointer; }
+.hbSlot.sel { border-color: var(--ui-accent); box-shadow: 0 0 10px rgba(45, 226, 163, 0.6); }
+.hbSlot canvas { position: absolute; inset: 4px; width: 40px; height: 40px; }
+.hbSlot .cnt { position: absolute; right: 2px; bottom: 0; font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000; font-weight: bold; }
+.hbSlot .key { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #5b7395; }
+
+/* ---------- Panels ---------- */
+.panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--ui-bg); border: 2px solid var(--ui-border); padding: 14px; min-width: 460px; max-width: 640px; max-height: 78vh; overflow-y: auto; color: #cfe3d9; z-index: 20; box-shadow: 0 0 30px rgba(45, 226, 163, 0.25); }
+.panelTitle { font-size: 16px; letter-spacing: 3px; color: var(--ui-accent); margin-bottom: 12px; font-weight: bold; }
+.panelHint { font-size: 11px; color: #5b7395; letter-spacing: 0; font-weight: normal; float: right; }
+#invGrid { display: grid; grid-template-columns: repeat(8, 52px); gap: 4px; }
+.invSlot { width: 52px; height: 52px; background: #0d1526; border: 2px solid #23324d; position: relative; cursor: pointer; }
+.invSlot:hover { border-color: var(--ui-accent); }
+.invSlot canvas { position: absolute; inset: 4px; width: 40px; height: 40px; }
+.invSlot .cnt { position: absolute; right: 2px; bottom: 0; font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000; font-weight: bold; }
+#equipRow { display: flex; gap: 10px; margin-bottom: 12px; }
+.equipSlot { width: 64px; height: 74px; background: #0d1526; border: 2px dashed #2c4a6e; position: relative; cursor: pointer; text-align: center; }
+.equipSlot.filled { border-style: solid; border-color: var(--ui-accent); }
+.equipLabel { font-size: 9px; color: #5b7395; display: block; padding-top: 2px; letter-spacing: 1px; }
+.equipIcon { position: absolute; left: 12px; top: 20px; width: 40px; height: 40px; }
+.equipIcon canvas { width: 40px; height: 40px; }
+
+/* ---------- Shop ---------- */
+#shopList { display: flex; flex-direction: column; gap: 6px; }
+.shopRow { display: flex; align-items: center; gap: 10px; background: #0d1526; border: 1px solid #23324d; padding: 6px 10px; }
+.shopRow canvas { width: 36px; height: 36px; }
+.shopInfo { flex: 1; }
+.shopName { color: #eaf4ef; font-weight: bold; font-size: 14px; }
+.shopDesc { color: #7d93b3; font-size: 11px; }
+.shopBuy { background: #123; border: 1px solid var(--ui-gold); color: var(--ui-gold); font-family: var(--font); padding: 5px 12px; cursor: pointer; font-weight: bold; }
+.shopBuy:hover { background: var(--ui-gold); color: #123; }
+.shopBuy:disabled { opacity: 0.35; cursor: default; }
+
+/* ---------- Codex ---------- */
+.codexRow { display: flex; align-items: center; gap: 6px; background: #0d1526; border: 1px solid #23324d; padding: 4px 8px; margin-bottom: 4px; font-size: 12px; }
+.codexRow canvas { width: 28px; height: 28px; }
+.codexOp { color: var(--ui-accent); font-weight: bold; }
+.codexName { color: #eaf4ef; }
+.codexFx { color: #7d93b3; margin-left: auto; font-size: 11px; max-width: 46%; text-align: right; }
+.codexRow.locked { opacity: 0.45; }
+.codexRow.locked .codexName::after { content: " ???"; color: var(--ui-warn); }
+
+/* ---------- Tooltip ---------- */
+#tooltip { position: absolute; z-index: 50; background: var(--ui-bg); border: 1px solid var(--ui-accent); padding: 8px 10px; max-width: 260px; pointer-events: none; font-size: 12px; color: #cfe3d9; }
+#tooltip .ttName { color: #fff; font-weight: bold; font-size: 13px; }
+#tooltip .ttKind { color: var(--ui-accent); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+#tooltip .ttDesc { margin-top: 4px; color: #9fb4d0; }
+
+/* ---------- Toasts ---------- */
+#toasts { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; pointer-events: none; z-index: 40; }
+.toast { background: var(--ui-bg); border: 1px solid var(--ui-accent); color: #eaf4ef; padding: 6px 14px; font-size: 13px; animation: toastIn 0.2s ease-out, toastOut 0.4s ease-in 2.6s forwards; }
+.toast.warn { border-color: var(--ui-warn); color: #ffb3c1; }
+.toast.gold { border-color: var(--ui-gold); color: var(--ui-gold); }
+@keyframes toastIn { from { transform: translateY(12px); opacity: 0; } }
+@keyframes toastOut { to { transform: translateY(-10px); opacity: 0; } }
+
+/* ---------- Menu ---------- */
+#menu { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 30%, #0c1a2e 0%, #05070d 70%); display: flex; align-items: center; justify-content: center; z-index: 100; }
+#menuInner { max-width: 640px; text-align: center; padding: 24px; }
+.glitchTitle { font-size: 56px; letter-spacing: 8px; color: var(--ui-accent); position: relative; text-shadow: 3px 0 #ff4d6d, -3px 0 #6ee7ff; animation: glitchShake 3s infinite; }
+@keyframes glitchShake { 0%, 94%, 100% { transform: none; } 95% { transform: translateX(-3px) skewX(-4deg); } 97% { transform: translateX(3px) skewX(3deg); } }
+.tagline { color: #9fb4d0; margin: 12px 0 16px; font-size: 15px; }
+.menuBody { color: #7d93b3; font-size: 13px; line-height: 1.7; text-align: left; }
+.menuBody b { color: var(--ui-accent); } .menuBody i { color: var(--ui-gold); }
+.menuControls { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center; margin: 18px 0; color: #5b7395; font-size: 12px; }
+.menuControls b { color: #cfe3d9; }
+#playBtn { display: block; margin: 10px auto 6px; background: var(--ui-accent); color: #05070d; border: none; font-family: var(--font); font-size: 20px; font-weight: bold; padding: 12px 40px; cursor: pointer; letter-spacing: 3px; }
+#playBtn:hover { box-shadow: 0 0 24px rgba(45, 226, 163, 0.8); }
+#wipeBtn { background: none; border: none; color: #44506b; font-family: var(--font); font-size: 11px; cursor: pointer; text-decoration: underline; }
+
+/* ---------- Death ---------- */
+#deathOverlay { position: absolute; inset: 0; background: rgba(20, 0, 8, 0.85); display: flex; align-items: center; justify-content: center; z-index: 90; }
+#deathInner { text-align: center; }
+#deathInner h2 { color: var(--ui-warn); font-size: 38px; letter-spacing: 6px; text-shadow: 2px 2px 0 #000; }
+#deathText { color: #ffb3c1; margin: 14px 0; font-size: 14px; }
+#respawnBtn { background: var(--ui-warn); color: #1a0a12; border: none; font-family: var(--font); font-size: 16px; font-weight: bold; padding: 10px 30px; cursor: pointer; letter-spacing: 2px; }

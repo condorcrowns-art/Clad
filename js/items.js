@@ -1,0 +1,228 @@
+'use strict';
+/* ============================================================
+   GLITCHTOPIA — item registry, splice recipes, shop, icons
+   Every item DOES something. No cosmetic junk.
+   ============================================================ */
+
+const TS = 32; // tile size in px (world units = px)
+
+const ITEMS = {};
+function defItem(id, o) { ITEMS[id] = Object.assign({ id }, o); return ITEMS[id]; }
+
+/* ---------- kinds ----------
+   block   : placeable tile (fx object = what it does)
+   seed    : plantable, grows a tree that yields `grows`
+   tool    : mining implement (minePower, mineRate, dmg)
+   weapon  : melee or ranged (dmg, rate, range | projectile)
+   gear    : equip slot back/feet/chip (passive/active powers)
+   consumable : use from hotbar
+------------------------------------------------------------- */
+
+/* ===================== BLOCKS ===================== */
+// tier: how deep in the splice tree (0 = natural)
+defItem('dirt',  { name: 'Dirt Block', kind: 'block', tier: 0, hp: 3, solid: true, color: '#8a5a34', color2: '#6e4426',
+  desc: 'Basic soil. Soft — even a fist chews through it fast.' });
+defItem('stone', { name: 'Stone Block', kind: 'block', tier: 0, hp: 6, solid: true, color: '#7d8597', color2: '#5c636e',
+  desc: 'Sturdy rock. Slow to punch — a pickaxe helps.' });
+defItem('wood',  { name: 'Wood Block', kind: 'block', tier: 0, hp: 4, solid: true, color: '#a4763f', color2: '#7f5a2e',
+  desc: 'Compiled timber. Burns hot in a splice.' });
+defItem('sand',  { name: 'Sand Block', kind: 'block', tier: 0, hp: 2, solid: true, color: '#e0c068', color2: '#bfa050',
+  desc: 'Loose grains of silicon. The seed of all glass and light.' });
+
+defItem('brick', { name: 'Brick Block', kind: 'block', tier: 1, hp: 12, solid: true, color: '#b5484d', color2: '#8c3439',
+  desc: 'Hardened composite. Takes a beating — build your vault with it.' });
+defItem('glass', { name: 'Glass Block', kind: 'block', tier: 1, hp: 3, solid: true, transparent: true, color: '#9adcf0', color2: '#6fb8d4',
+  desc: 'Solid but see-through. Enemies path into it. You see them coming.' });
+defItem('spring_pad', { name: 'Spring Pad', kind: 'block', tier: 1, hp: 5, solid: true, color: '#3ddc84', color2: '#22a35c',
+  fx: { bounce: 1050 }, desc: 'FUNCTION: launches anything that lands on it high into the air.' });
+defItem('conveyor', { name: 'Conveyor Belt', kind: 'block', tier: 1, hp: 5, solid: true, color: '#5b6577', color2: '#3d4453',
+  fx: { conveyor: 240 }, desc: 'FUNCTION: drags whoever stands on it sideways. Faces the way you face when placing.' });
+defItem('led_block', { name: 'LED Block', kind: 'block', tier: 1, hp: 3, solid: true, color: '#fff3b0', color2: '#e0c95e',
+  fx: { glow: 5 }, desc: 'FUNCTION: radiates light. Marks your tunnels and bases.' });
+defItem('spike_trap', { name: 'Spike Trap', kind: 'block', tier: 1, hp: 5, solid: true, color: '#c0c6d4', color2: '#7e8697',
+  fx: { damage: 22 }, desc: 'FUNCTION: hurts anything that touches it — including YOU. Place with care.' });
+
+defItem('teleporter', { name: 'Teleporter', kind: 'block', tier: 2, hp: 8, solid: true, color: '#b388ff', color2: '#7c4dff',
+  fx: { teleport: true, glow: 4 }, desc: 'FUNCTION: stand on it and press [S] to warp to your next teleporter. Place two or more!' });
+defItem('repair_node', { name: 'Repair Node', kind: 'block', tier: 2, hp: 8, solid: true, color: '#7bf1a8', color2: '#38b26b',
+  fx: { heal: 6, healRange: 4.5, glow: 4 }, desc: 'FUNCTION: regenerates your HP while you stand near it. A campfire for the digital age.' });
+defItem('sentry', { name: 'Sentry Node', kind: 'block', tier: 2, hp: 10, solid: true, color: '#ff9e6d', color2: '#d96b36',
+  fx: { sentry: { range: 8, rate: 0.8, dmg: 12 } }, desc: 'FUNCTION: auto-targets enemies in range and opens fire. Your first ally.' });
+defItem('firewall_block', { name: 'Firewall Block', kind: 'block', tier: 9, hp: 10, solid: true, color: '#ff5714', color2: '#c41e00', animated: true,
+  fx: { enemyDamage: 35, glow: 5 }, unspliceable: true,
+  desc: 'BOSS TECH: living fire that burns only ENEMIES. You walk through it unharmed. Build burning corridors.' });
+defItem('trophy_core', { name: 'Network Core Trophy', kind: 'block', tier: 9, hp: 40, solid: true, color: '#ffd166', color2: '#c79a2a', animated: true,
+  fx: { glow: 8, heal: 10, healRange: 7 }, unspliceable: true,
+  desc: 'BOSS TECH: the liberated heart of the network. Massive heal aura. You earned this.' });
+
+/* ===================== TOOLS ===================== */
+defItem('fist', { name: 'Fist', kind: 'tool', tier: 0, minePower: 1, mineRate: 4, dmg: 8, rate: 3, range: 1.4, noDrop: true,
+  desc: 'Your bare hands. They punch blocks. Slowly.' });
+defItem('pickaxe', { name: 'Data Pickaxe', kind: 'tool', tier: 2, minePower: 2, mineRate: 5, dmg: 12, rate: 3, range: 1.6,
+  desc: 'FUNCTION: mines 2x harder per hit, swings faster. Doubles as a clumsy weapon.' });
+defItem('drill', { name: 'Plasma Drill', kind: 'tool', tier: 3, minePower: 3, mineRate: 8, dmg: 10, rate: 4, range: 1.6,
+  desc: 'FUNCTION: chews through terrain at 8 hits/sec. Stone melts like butter.' });
+defItem('wurm_drill', { name: 'Wurmbore Drill', kind: 'tool', tier: 9, minePower: 4, mineRate: 8, dmg: 18, rate: 4, range: 1.8, area: 1, unspliceable: true,
+  desc: 'BOSS TECH: the Null Wurm’s jaw, weaponized. Devours a 3x3 area of blocks per bite.' });
+
+/* ===================== WEAPONS ===================== */
+defItem('sword', { name: 'Shard Blade', kind: 'weapon', tier: 2, dmg: 24, rate: 3, range: 2.0, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: a blade of compressed glass. Wide melee arc, real damage.' });
+defItem('blaster', { name: 'Photon Blaster', kind: 'weapon', tier: 2, dmg: 14, rate: 5, projectile: { speed: 720, color: '#6ee7ff' }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: rapid-fire light bolts. Point at problem, hold click.' });
+defItem('flame_blade', { name: 'Daemonfire Blade', kind: 'weapon', tier: 9, dmg: 34, rate: 3, range: 2.2, burn: { dps: 8, dur: 2.5 }, minePower: 1, mineRate: 4, unspliceable: true,
+  desc: 'BOSS TECH: forged from the Firewall Daemon’s core. Hits ignite enemies, burning them over time.' });
+
+/* ===================== GEAR ===================== */
+defItem('jetpack', { name: 'Ion Jetpack', kind: 'gear', slot: 'back', tier: 3,
+  fx: { jetpack: { thrust: 1500, fuel: 2.6, regen: 1.0 } },
+  desc: 'FUNCTION: hold [SPACE] in the air to fly. Fuel recharges on the ground. The sandbox is now 3D-ish.' });
+defItem('speed_boots', { name: 'Velocity Boots', kind: 'gear', slot: 'feet', tier: 2,
+  fx: { speed: 1.35, doubleJump: 1 },
+  desc: 'FUNCTION: +35% run speed and a mid-air double jump.' });
+defItem('storm_boots', { name: 'Stormstep Boots', kind: 'gear', slot: 'feet', tier: 9, unspliceable: true,
+  fx: { speed: 1.5, doubleJump: 2, dash: { speed: 900, dur: 0.18, cd: 1.2 } },
+  desc: 'BOSS TECH: the Storm Kernel’s charge, bottled. +50% speed, TRIPLE jump, and press [SHIFT] to lightning-dash.' });
+defItem('magnet_chip', { name: 'Magnet Chip', kind: 'gear', slot: 'chip', tier: 2,
+  fx: { magnet: 6.5 },
+  desc: 'FUNCTION: drops and gems fly to you from 6 tiles away. Never chase loot again.' });
+defItem('aegis_chip', { name: 'Aegis Chip', kind: 'gear', slot: 'chip', tier: 2,
+  fx: { armor: 0.3 },
+  desc: 'FUNCTION: projects a shield lattice. All damage you take is reduced by 30%.' });
+defItem('admin_crown', { name: 'ADMIN Crown', kind: 'gear', slot: 'chip', tier: 9, unspliceable: true,
+  fx: { armor: 0.25, magnet: 7, dmgMult: 1.5, regen: 2 },
+  desc: 'BOSS TECH: root access. +50% damage, 25% armor, loot magnet, passive regen. You ARE the admin now.' });
+
+/* ===================== CONSUMABLES ===================== */
+defItem('medkit', { name: 'Medkit', kind: 'consumable', tier: 0, heal: 50,
+  desc: 'FUNCTION: click to restore 50 HP instantly.' });
+defItem('bomb', { name: 'Logic Bomb', kind: 'consumable', tier: 0, bomb: { radius: 2.5, dmg: 60 },
+  desc: 'FUNCTION: click a spot to detonate — shreds blocks and enemies in a big radius.' });
+defItem('mystery_seed', { name: 'Mystery Seed', kind: 'consumable', tier: 1, mystery: true,
+  desc: 'FUNCTION: click to decode into a random spliced seed. Gambling, but botanical.' });
+
+/* ===================== SEEDS (auto-generated) ===================== */
+// Everything spliceable/growable gets a seed. Trees yield the item.
+const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 9: 170 }; // seconds by tier
+for (const id of Object.keys(ITEMS)) {
+  const it = ITEMS[id];
+  if (it.kind === 'seed' || it.noDrop || it.kind === 'consumable') continue;
+  if (id === 'trophy_core' || id === 'admin_crown') continue; // one-of-a-kind
+  defItem(id + '_seed', {
+    name: it.name.replace(/ (Block|Pad|Belt|Trap|Node|Blade|Blaster|Pickaxe|Drill|Jetpack|Boots|Chip)$/, '') + ' Seed',
+    kind: 'seed', grows: id, tier: it.tier, growTime: GROW_TIMES[it.tier] || 60,
+    color: it.color || '#8f8',
+    desc: 'Plant on solid ground. Grows ' + it.name + ' in ' + (GROW_TIMES[it.tier] || 60) + 's. Splice by planting a DIFFERENT seed on the sapling.',
+  });
+}
+
+/* ===================== SPLICE RECIPES ===================== */
+// key: two GROWN item ids sorted + joined with '+', value: result item id
+const RECIPES = {};
+function defRecipe(a, b, result) { RECIPES[[a, b].sort().join('+')] = result; }
+// Tier 1 — natural + natural
+defRecipe('dirt', 'stone', 'brick');
+defRecipe('sand', 'stone', 'glass');
+defRecipe('dirt', 'wood', 'spring_pad');
+defRecipe('stone', 'wood', 'conveyor');
+defRecipe('sand', 'wood', 'led_block');
+defRecipe('dirt', 'sand', 'spike_trap');
+// Tier 2 — compiled tech
+defRecipe('glass', 'stone', 'teleporter');
+defRecipe('glass', 'led_block', 'repair_node');
+defRecipe('brick', 'led_block', 'sentry');
+defRecipe('brick', 'wood', 'pickaxe');
+defRecipe('brick', 'glass', 'sword');
+defRecipe('glass', 'wood', 'blaster');
+defRecipe('spring_pad', 'conveyor', 'speed_boots');
+defRecipe('led_block', 'conveyor', 'magnet_chip');
+defRecipe('brick', 'spring_pad', 'aegis_chip');
+// Tier 3 — advanced
+defRecipe('pickaxe', 'glass', 'drill');
+defRecipe('blaster', 'spring_pad', 'jetpack');
+
+function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
+
+// list of tier-1/2/3 results for mystery seed
+const MYSTERY_POOL = Object.values(RECIPES).filter((r, i, a) => a.indexOf(r) === i);
+
+/* ===================== SHOP ===================== */
+const SHOP = [
+  { id: 'dirt_seed', price: 12, qty: 1 },
+  { id: 'stone_seed', price: 15, qty: 1 },
+  { id: 'wood_seed', price: 15, qty: 1 },
+  { id: 'sand_seed', price: 12, qty: 1 },
+  { id: 'medkit', price: 25, qty: 1 },
+  { id: 'bomb', price: 40, qty: 1 },
+  { id: 'mystery_seed', price: 120, qty: 1 },
+];
+
+/* ===================== ICON RENDERER ===================== */
+const _iconCache = {};
+function iconFor(id) {
+  if (_iconCache[id]) return _iconCache[id];
+  const it = ITEMS[id];
+  const c = document.createElement('canvas');
+  c.width = 40; c.height = 40;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  if (!it) { _iconCache[id] = c; return c; }
+  if (it.kind === 'block') {
+    drawBlockIcon(x, it, 4, 4, 32);
+  } else if (it.kind === 'seed') {
+    const base = ITEMS[it.grows];
+    // seed packet: little pouch + sprout in item color
+    x.fillStyle = '#3a2c1e'; x.fillRect(8, 14, 24, 22);
+    x.fillStyle = '#241a10'; x.fillRect(8, 14, 24, 5);
+    x.fillStyle = base ? base.color : '#8f8';
+    x.beginPath(); x.arc(20, 26, 6, 0, 7); x.fill();
+    x.strokeStyle = '#3ddc84'; x.lineWidth = 2;
+    x.beginPath(); x.moveTo(20, 14); x.quadraticCurveTo(24, 6, 30, 6); x.stroke();
+  } else if (id === 'fist') {
+    x.fillStyle = '#ffd8b1';
+    x.fillRect(10, 14, 20, 16); x.fillRect(6, 18, 6, 8);
+    x.fillStyle = '#e0b48c';
+    for (let k = 0; k < 4; k++) x.fillRect(12 + k * 5, 12, 3, 6);
+  } else if (it.kind === 'tool') {
+    x.strokeStyle = '#7a5a3a'; x.lineWidth = 4;
+    x.beginPath(); x.moveTo(12, 34); x.lineTo(26, 10); x.stroke();
+    x.fillStyle = id === 'wurm_drill' ? '#c77dff' : id === 'drill' ? '#6ee7ff' : '#aab4c4';
+    if (id.includes('drill')) { x.beginPath(); x.moveTo(20, 4); x.lineTo(34, 14); x.lineTo(22, 20); x.closePath(); x.fill(); }
+    else { x.beginPath(); x.moveTo(14, 8); x.quadraticCurveTo(26, 2, 36, 12); x.quadraticCurveTo(28, 10, 20, 14); x.closePath(); x.fill(); }
+  } else if (it.kind === 'weapon') {
+    if (it.projectile) {
+      x.fillStyle = '#44506b'; x.fillRect(8, 18, 22, 8);
+      x.fillStyle = '#2a3347'; x.fillRect(6, 24, 8, 10);
+      x.fillStyle = it.projectile.color; x.fillRect(28, 20, 8, 4);
+    } else {
+      x.strokeStyle = id === 'flame_blade' ? '#ff5714' : '#9adcf0'; x.lineWidth = 5;
+      x.beginPath(); x.moveTo(10, 34); x.lineTo(30, 8); x.stroke();
+      x.strokeStyle = '#7a5a3a'; x.lineWidth = 4;
+      x.beginPath(); x.moveTo(8, 28); x.lineTo(16, 36); x.stroke();
+    }
+  } else if (it.kind === 'gear') {
+    if (it.slot === 'back') { x.fillStyle = '#8899aa'; x.fillRect(10, 8, 9, 24); x.fillRect(22, 8, 9, 24); x.fillStyle = '#ff9e6d'; x.fillRect(11, 32, 7, 6); x.fillRect(23, 32, 7, 6); }
+    else if (it.slot === 'feet') { x.fillStyle = id === 'storm_boots' ? '#ffd166' : '#3ddc84'; x.fillRect(8, 12, 10, 18); x.fillRect(8, 26, 18, 8); x.fillStyle = '#1c2536'; x.fillRect(8, 30, 18, 4); }
+    else { x.fillStyle = id === 'admin_crown' ? '#ffd166' : '#2de2a3'; x.fillRect(8, 12, 24, 18); x.fillStyle = '#0d1526'; x.fillRect(12, 16, 4, 4); x.fillRect(20, 16, 4, 4); x.fillRect(12, 24, 12, 2);
+      if (id === 'admin_crown') { x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(8, 12); x.lineTo(12, 4); x.lineTo(16, 12); x.lineTo(20, 4); x.lineTo(24, 12); x.lineTo(28, 4); x.lineTo(32, 12); x.fill(); } }
+  } else if (it.kind === 'consumable') {
+    if (it.heal) { x.fillStyle = '#e8ecf4'; x.fillRect(6, 10, 28, 22); x.fillStyle = '#ff4d6d'; x.fillRect(16, 14, 8, 14); x.fillRect(13, 17, 14, 8); }
+    else if (it.bomb) { x.fillStyle = '#1c2536'; x.beginPath(); x.arc(20, 24, 12, 0, 7); x.fill(); x.strokeStyle = '#ffd166'; x.lineWidth = 2; x.beginPath(); x.moveTo(24, 14); x.quadraticCurveTo(30, 6, 34, 8); x.stroke(); x.fillStyle = '#ff5714'; x.fillRect(32, 5, 4, 4); }
+    else { x.fillStyle = '#2a1c3a'; x.fillRect(8, 14, 24, 22); x.fillStyle = '#c77dff'; x.font = 'bold 20px monospace'; x.fillText('?', 14, 32); }
+  }
+  _iconCache[id] = c;
+  return c;
+}
+
+function drawBlockIcon(x, it, px, py, s) {
+  x.fillStyle = it.color; x.fillRect(px, py, s, s);
+  x.fillStyle = it.color2 || '#000';
+  // noise pattern
+  for (let i = 0; i < 6; i++) x.fillRect(px + ((i * 13) % (s - 6)) + 2, py + ((i * 23) % (s - 6)) + 2, 4, 4);
+  x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 2;
+  x.strokeRect(px + 1, py + 1, s - 2, s - 2);
+  if (it.fx && it.fx.damage) { x.fillStyle = '#fff'; x.beginPath(); x.moveTo(px + s / 2, py + 2); x.lineTo(px + s / 2 - 5, py + 12); x.lineTo(px + s / 2 + 5, py + 12); x.fill(); }
+  if (it.fx && it.fx.bounce) { x.strokeStyle = '#fff'; x.beginPath(); x.moveTo(px + 6, py + s - 8); x.lineTo(px + s / 2, py + 6); x.lineTo(px + s - 6, py + s - 8); x.stroke(); }
+  if (it.fx && it.fx.teleport) { x.strokeStyle = '#fff'; x.beginPath(); x.arc(px + s / 2, py + s / 2, 8, 0, 5); x.stroke(); }
+  if (it.fx && it.fx.sentry) { x.fillStyle = '#1c2536'; x.fillRect(px + s / 2 - 2, py + 4, 14, 5); }
+}

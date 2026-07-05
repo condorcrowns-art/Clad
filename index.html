@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLITCHTOPIA — a world-building boss-battling sandbox</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="game">
+  <canvas id="canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hudTop">
+      <div id="hpWrap"><div id="hpBar"></div><span id="hpText"></span></div>
+      <div id="fuelWrap" class="hidden"><div id="fuelBar"></div></div>
+      <div id="gemWrap"><span class="gemIcon">◆</span><span id="gemText">0</span></div>
+      <div id="worldName"></div>
+    </div>
+    <div id="bossWrap" class="hidden">
+      <div id="bossName"></div>
+      <div id="bossBarBg"><div id="bossBar"></div></div>
+    </div>
+  </div>
+
+  <!-- Hotbar -->
+  <div id="hotbar"></div>
+
+  <!-- Inventory -->
+  <div id="invPanel" class="panel hidden">
+    <div class="panelTitle">INVENTORY <span class="panelHint">[E] close · click to select / equip · right-click hotbar to assign</span></div>
+    <div id="equipRow">
+      <div class="equipSlot" data-slot="back"><span class="equipLabel">BACK</span><div class="equipIcon"></div></div>
+      <div class="equipSlot" data-slot="feet"><span class="equipLabel">FEET</span><div class="equipIcon"></div></div>
+      <div class="equipSlot" data-slot="chip"><span class="equipLabel">CHIP</span><div class="equipIcon"></div></div>
+    </div>
+    <div id="invGrid"></div>
+  </div>
+
+  <!-- Shop -->
+  <div id="shopPanel" class="panel hidden">
+    <div class="panelTitle">GEM EXCHANGE <span class="panelHint">[B] close</span></div>
+    <div id="shopList"></div>
+  </div>
+
+  <!-- Splice codex -->
+  <div id="codexPanel" class="panel hidden">
+    <div class="panelTitle">SPLICE CODEX <span class="panelHint">[C] close · plant a seed, then plant a different seed on the sapling</span></div>
+    <div id="codexList"></div>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- Toasts -->
+  <div id="toasts"></div>
+
+  <!-- Menu / intro -->
+  <div id="menu">
+    <div id="menuInner">
+      <h1 class="glitchTitle" data-text="GLITCHTOPIA">GLITCHTOPIA</h1>
+      <p class="tagline">Your home server is yours to build. The corrupted sectors are yours to purge.</p>
+      <p class="menuBody">
+        Punch blocks to harvest <b>data seeds</b>. Plant them, grow them, and <b>splice</b> two seeds
+        together to compile new tech. Every item <i>does something</i> — springs launch you, sentries
+        fight for you, teleporters warp you. When you're geared up, step through a portal and take
+        down the four <b>corrupted processes</b> that hold the network hostage.
+      </p>
+      <div class="menuControls">
+        <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
+        <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
+        <span><b>C</b> splice codex</span><span><b>S</b> use teleporter</span><span><b>W</b> enter portal</span>
+        <span><b>SHIFT</b> dash (with boots)</span>
+      </div>
+      <button id="playBtn">▶ BOOT UP</button>
+      <button id="wipeBtn">wipe save</button>
+    </div>
+  </div>
+
+  <!-- Death overlay -->
+  <div id="deathOverlay" class="hidden">
+    <div id="deathInner">
+      <h2>CONNECTION LOST</h2>
+      <p id="deathText"></p>
+      <button id="respawnBtn">RECONNECT</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/items.js"></script>
+<script src="js/world.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/bosses.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
