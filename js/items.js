@@ -804,16 +804,55 @@ const _iconStub = {
 
 function iconFor(id) {
   if (_iconCache[id]) return _iconCache[id];
-  const c = document.createElement('canvas');
-  c.width = 40; c.height = 40;
-  const x = c.getContext('2d');
+  const art = document.createElement('canvas');
+  art.width = 40; art.height = 40;
+  const x = art.getContext('2d');
   x.imageSmoothingEnabled = false;
   const it = ITEMS[id];
   if (it) {
     try { drawItemIcon(x, it, id); }
     catch (e) { x.fillStyle = it.color || '#888'; x.fillRect(6, 6, 28, 28); }
   }
+  const c = gtFinish(art);
   _iconCache[id] = c;
+  return c;
+}
+
+// Growtopia-style sticker finish: pixelate → dark outline → gloss bevel
+function gtFinish(art) {
+  // 1) pixelate through a low-res pass (chunky, cohesive pixel art)
+  const small = document.createElement('canvas');
+  small.width = 24; small.height = 24;
+  const sx2 = small.getContext('2d');
+  sx2.imageSmoothingEnabled = true;
+  sx2.drawImage(art, 0, 0, 24, 24);
+  const c = document.createElement('canvas');
+  c.width = 40; c.height = 40;
+  const ox = c.getContext('2d');
+  ox.imageSmoothingEnabled = false;
+  ox.drawImage(small, 2, 2, 36, 36);
+  // 2) dark sticker outline traced from alpha
+  const img = ox.getImageData(0, 0, 40, 40);
+  const d = img.data;
+  const a = new Uint8Array(1600);
+  for (let i = 0; i < 1600; i++) a[i] = d[i * 4 + 3];
+  for (let y = 0; y < 40; y++) for (let xx = 0; xx < 40; xx++) {
+    const i = y * 40 + xx;
+    if (a[i] > 50) continue;
+    const n = (xx > 0 && a[i - 1] > 90) || (xx < 39 && a[i + 1] > 90) || (y > 0 && a[i - 40] > 90) || (y < 39 && a[i + 40] > 90);
+    if (n) { const p = i * 4; d[p] = 10; d[p + 1] = 14; d[p + 2] = 26; d[p + 3] = 255; }
+  }
+  ox.putImageData(img, 0, 0);
+  // 3) gloss bevel masked to the sprite
+  ox.globalCompositeOperation = 'source-atop';
+  const g = ox.createLinearGradient(0, 0, 0, 40);
+  g.addColorStop(0, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0)');
+  g.addColorStop(0.75, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.22)');
+  ox.fillStyle = g;
+  ox.fillRect(0, 0, 40, 40);
+  ox.globalCompositeOperation = 'source-over';
   return c;
 }
 

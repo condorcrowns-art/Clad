@@ -248,6 +248,7 @@ const ui = {
       const box = el.querySelector('.equipIcon');
       box.innerHTML = '';
       el.classList.toggle('filled', !!id);
+      el.style.borderColor = id ? tierColor(id) : '';
       if (id) {
         const cv = document.createElement('canvas');
         cv.width = 40; cv.height = 40;
