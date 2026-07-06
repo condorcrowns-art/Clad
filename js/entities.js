@@ -57,7 +57,11 @@ class Entity {
           if (bounceStr && this.vy > 200) {
             this.vy = -bounceStr;
             this.onGround = false;
-            if (game) { game.fx.puff(this.x, ny + this.h / 2, it.fx.softBounce ? '#eef3fb' : '#3ddc84'); game.sfx.play('bounce'); }
+            if (game) {
+              game.fx.puff(this.x, ny + this.h / 2, it.fx.softBounce ? '#eef3fb' : '#3ddc84');
+              if (it.fx.note) game.sfx.note([0, 2, 4, 7, 9, 12][Math.floor(Math.random() * 6)]);
+              else game.sfx.play('bounce');
+            }
           } else this.vy = 0;
         } else this.vy = 0;
       } else this.groundTile = null;
@@ -226,7 +230,7 @@ class Enemy extends Entity {
           if (!e.dead && Math.hypot(e.x - ttx * TS, e.y - tty * TS) < it.fx.mine.r * TS + 24) e.hurt(it.fx.mine.dmg, game);
         }
       }
-      if (it.fx && it.fx.sticky) this.vx *= 0.5;
+      if (it.fx && (it.fx.sticky || it.fx.enemySticky)) this.vx *= 0.5;
     });
     // contact damage
     if (!this.dead && this.overlaps(p)) p.hurt(this.dmg, game, Math.sign(p.x - this.x) * 260, this);

@@ -272,7 +272,10 @@ class Game {
   addGems(n) {
     if (n > 0 && this.progress.overdrive) n = Math.round(n * 2);
     this.gems = Math.max(0, this.gems + n);
-    if (n > 0) this.progress.stats.gemsEarned += n;
+    if (n > 0) {
+      this.progress.stats.gemsEarned += n;
+      if (this.player.gearFx('greed')) this.addXp(Math.max(1, Math.ceil(n / 4)));
+    }
     ui.updateHUD();
   }
 

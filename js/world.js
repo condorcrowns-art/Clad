@@ -194,7 +194,7 @@ class World {
       if (Math.random() < 0.33) game.spawnDrop(cx, cy, it.id, 1);
       if (Math.random() < 0.16 && ITEMS[it.id + '_seed']) game.spawnDrop(cx, cy, it.id + '_seed', 1);
     }
-    const fortune = game.player.gemAuraOn ? 1.5 : 1;
+    const fortune = (game.player.gemAuraOn || (game.buffActive() && game.buff.gem)) ? 1.5 : 1;
     const gemChance = (it.gemRich ? 0.65 : 0.2) * fortune;
     if (Math.random() < gemChance) game.spawnGems(cx, cy, Math.round((1 + Math.floor(Math.random() * (it.gemRich ? 4 : 3))) * fortune));
   }
@@ -249,12 +249,14 @@ class World {
         }
         if (best) {
           m.cd = S.rate;
+          const opts = { burn: S.burn, chill: S.chill, knock: S.knock };
           if (S.arc) {
             const tt = 0.8;
-            game.projectiles.push(new Projectile(cx, cy - 10, (best.x - cx) / tt, (best.y - cy) / tt - 0.5 * 1100 * tt, S.dmg, true, '#ffb703', { r: 7, gravity: 1100, life: 2.2 }));
+            game.projectiles.push(new Projectile(cx, cy - TS * 0.85, (best.x - cx) / tt, (best.y - cy) / tt - 0.5 * 1100 * tt, S.dmg, true, '#ffb703', Object.assign({ r: 7, gravity: 1100, life: 2.2 }, opts)));
           } else {
             const a = Math.atan2(best.y - cy, best.x - cx);
-            game.projectiles.push(new Projectile(cx, cy, Math.cos(a) * 560, Math.sin(a) * 560, S.dmg, true, '#ff9e6d'));
+            // spawn the bolt just OUTSIDE the turret's own solid tile
+            game.projectiles.push(new Projectile(cx + Math.cos(a) * TS * 0.8, cy + Math.sin(a) * TS * 0.8, Math.cos(a) * 560, Math.sin(a) * 560, S.dmg, true, def.color || '#ff9e6d', opts));
           }
           game.sfx.play('sentry');
         }
@@ -889,6 +891,18 @@ class World {
       for (let k = 0; k < 4; k++) { ctx.moveTo(sx + 5, sy + 7 + k * 6); ctx.lineTo(sx + TS - 5, sy + 7 + k * 6); }
       ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillRect(sx + 4, sy + 2, TS - 8, 4);
+    } else if (id === 'torch' || id === 'hearth' || id === 'eruption_pad') {
+      // flame flicker
+      ctx.fillStyle = 'rgba(255,209,102,' + (0.5 + 0.3 * Math.sin(time * 9 + tx * 3)) + ')';
+      const fh = 9 + Math.sin(time * 7 + tx) * 3;
+      ctx.beginPath(); ctx.moveTo(sx + 10, sy + 16); ctx.lineTo(sx + TS / 2, sy + 16 - fh); ctx.lineTo(sx + TS - 10, sy + 16); ctx.fill();
+      ctx.fillStyle = 'rgba(255,87,20,0.7)';
+      ctx.beginPath(); ctx.moveTo(sx + 13, sy + 17); ctx.lineTo(sx + TS / 2, sy + 17 - fh * 0.6); ctx.lineTo(sx + TS - 13, sy + 17); ctx.fill();
+    } else if (it.fx && it.fx.sentry && !['sentry', 'mega_sentry', 'flak_turret'].includes(id)) {
+      // generic turret barrel for the elemental turret family
+      ctx.fillStyle = '#1c2536'; ctx.fillRect(sx + 7, sy + 5, 16, 10);
+      ctx.fillRect(sx + 18, sy + 8, 12, 4);
+      ctx.fillStyle = it.color2; ctx.fillRect(sx + 10, sy + 8, 4, 4);
     } else if (id === 'note_block') {
       ctx.fillStyle = '#0d1526';
       ctx.beginPath(); ctx.arc(sx + 13, sy + 20, 4, 0, 7); ctx.fill();

@@ -56,11 +56,24 @@ sectors** wait behind portals, each ending in a boss fight.
   awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic
-**96 splice recipes** form a true network — results splice with other results, four tiers deep,
+**141 splice recipes** form a true network — results splice with other results, four tiers deep,
 and every recipe is validated reachable starting from the six natural blocks (dirt, stone, wood,
-sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Logic Bombs,
-Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s invulnerability),
-Brain Juice (+150 XP) and Overclock Cola. Highlights of the deeper web:
+sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Elixirs (full heal),
+Logic/Cluster Bombs, Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s
+invulnerability), Stasis Grenades (slow every enemy on screen), Lucky Soda (+50% gem drops),
+Brain Juice (+150 XP) and Overclock Cola.
+
+**The fire branch:** Tar + Wood compiles the **Torch**, and torchfire spreads through the whole
+tree — Ember Saber, Blaze Katana, Magma Maul, Ember Blaster, Dragon Breath (burning shotgun),
+Flame Sentry, Hearth (healing fireplace), Eruption Pad, Lantern Ledge. The **frost branch**
+mirrors it from ice/snow: Frost Saber/Fang, Glacier Maul, Cryo Blaster, Frost Lamp, Icicle Trap,
+Glacier Ledge, Snowball Turret (knockback), Powder Drift (enemy-slowing snow), Skate Blades.
+Plus Void/Aurora lamps, Snare Traps, Spiked Walls, Cluster Mines, Bunker Turrets, Guard Posts,
+Venom/Pitch turrets, Escalator Vines (auto-climb), Sky Geysers (16-tile wind), Launch Rails,
+Feather Ledges, Jingle Springs (musical bounce), Aquariums, Prism Clusters, Groove Boots,
+Bramble Shells, Freerun/Greed chips, and Mortar Mite / Spark Sprite pets.
+
+Highlights of the deeper web:
 
 | Chain | What you get |
 |---|---|

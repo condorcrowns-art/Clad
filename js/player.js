@@ -113,9 +113,11 @@ class Player extends Entity {
       if (this.regenT > 1) { this.regenT = 0; this.hp = Math.min(this.maxHp, this.hp + regen); ui.updateHUD(); }
     }
 
-    // ladder climbing (Rung Rails)
-    const ladTile = (dy2) => { const t = world.item(Math.floor(this.x / TS), Math.floor((this.y + dy2) / TS)); return t && t.fx && t.fx.ladder; };
-    this.onLadder = ladTile(0) || ladTile(this.h / 2 - 4);
+    // ladder climbing (Rung Rails / Escalator Vines)
+    const ladTile = (dy2) => { const t = world.item(Math.floor(this.x / TS), Math.floor((this.y + dy2) / TS)); return (t && t.fx && t.fx.ladder) ? t.fx : null; };
+    const ladFx = ladTile(0) || ladTile(this.h / 2 - 4);
+    this.onLadder = !!ladFx;
+    this.onEscalator = !!(ladFx && ladFx.escalator);
 
     // dash
     if (this.dashT > 0) {
@@ -128,7 +130,7 @@ class Player extends Entity {
       if (input.right) mx += 1;
       if (mx !== 0) this.facing = mx;
       this.vx += (mx * baseSpeed * 0.5 - this.vx) * Math.min(1, 10 * dt);
-      this.vy = input.jump ? -170 : (input.down ? 190 : this.vy * 0.5);
+      this.vy = this.onEscalator && !input.down ? -175 : (input.jump ? -170 : (input.down ? 190 : this.vy * 0.5));
       this.jumpsUsed = 0;
       input.jumpPressed = false;
     } else {
@@ -138,7 +140,8 @@ class Player extends Entity {
       if (input.right) mx += 1;
       if (mx !== 0) this.facing = mx;
       const onIce = this.onGround && this.groundTile && ITEMS[this.groundTile] && ITEMS[this.groundTile].slippery;
-      const accel = this.onGround ? (onIce ? 1.6 : 12) : 7;
+      const skating = feet && feet.skate;
+      const accel = this.onGround ? ((onIce || skating) ? 1.6 : 12) : 7;
       this.vx += (mx * baseSpeed - this.vx) * Math.min(1, accel * dt);
 
       // swimming in liquid data?
@@ -164,7 +167,7 @@ class Player extends Entity {
 
       // jump / double jump / swim stroke
       if (input.jumpPressed) {
-        const extraJumps = (feet && feet.doubleJump) || 0;
+        const extraJumps = ((feet && feet.doubleJump) || 0) + ((this.equip.chip && ITEMS[this.equip.chip].fx.doubleJump) || 0);
         const jumpV = (feet && feet.jump) || 640;
         if (this.inWater) { this.vy = -250; game.fx.puff(this.x, this.y - this.h / 2, '#9adcf0'); }
         else if (this.onGround) { this.vy = -jumpV; this.jumpsUsed = 0; game.fx.puff(this.x, this.y + this.h / 2, '#9fb4d0'); }
@@ -212,13 +215,13 @@ class Player extends Entity {
       }
       input.dashPressed = false;
 
-      // updraft turbines: ride the wind column
+      // updraft turbines & sky geysers: ride the wind column
       const ptx2 = Math.floor(this.x / TS);
-      for (let dy2 = 0; dy2 <= 8; dy2++) {
+      for (let dy2 = 0; dy2 <= 16; dy2++) {
         const ty2 = Math.floor((this.y + this.h / 2) / TS) + dy2;
         const t2 = world.get(ptx2, ty2);
         if (!t2) continue;
-        if (ITEMS[t2].fx && ITEMS[t2].fx.updraft) {
+        if (ITEMS[t2].fx && ITEMS[t2].fx.updraft && ITEMS[t2].fx.updraft >= dy2) {
           this.vy -= 3600 * dt; // beats gravity with lift to spare
           this.vy = Math.max(this.vy, -430);
           if (Math.random() < 0.25) game.fx.add(this.x + (Math.random() - 0.5) * 20, this.y + 20, 0, -180, 'rgba(200,235,255,0.5)', 0.4, 3, 0);
@@ -448,10 +451,23 @@ class Player extends Entity {
         game.detonate(wx, wy, held.bomb.radius, held.bomb.dmg);
       } else if (held.buff) {
         this.take(held.id, 1);
-        game.buff = { until: game.time + held.buff.dur, speed: held.buff.speed, dmg: held.buff.dmg };
-        game.toast('OVERCLOCKED! +40% speed & damage for ' + held.buff.dur + 's', 'gold');
+        game.buff = { until: game.time + held.buff.dur, speed: held.buff.speed, dmg: held.buff.dmg, gem: held.buff.gem };
+        game.toast(held.buff.gem ? '☘ LUCKY! +50% gem drops for ' + held.buff.dur + 's' : 'OVERCLOCKED! +40% speed & damage for ' + held.buff.dur + 's', 'gold');
         game.fx.explode(this.x, this.y, '#ffd166', 16);
         game.sfx.play('victory');
+      } else if (held.cluster) {
+        if (!inReach) { game.toast('Too far to throw.', 'warn'); return; }
+        this.take(held.id, 1);
+        for (let k = 0; k < held.cluster.count; k++) {
+          setTimeout(() => game.detonate(wx + (k - 1) * TS * 1.5, wy + (Math.random() - 0.5) * TS, held.cluster.radius, held.cluster.dmg), k * 220);
+        }
+      } else if (held.stasis) {
+        this.take(held.id, 1);
+        let n = 0;
+        for (const e of game.enemies) if (!e.dead) { e.chillT = held.stasis; n++; }
+        game.fx.explode(this.x, this.y, '#a8d8f0', 24);
+        game.toast('⏸ STASIS — ' + n + ' enemies slowed for ' + held.stasis + 's!', 'gold');
+        game.sfx.play('tp');
       } else if (held.mystery) {
         this.take(held.id, 1);
         const pick = MYSTERY_POOL[Math.floor(Math.random() * MYSTERY_POOL.length)];

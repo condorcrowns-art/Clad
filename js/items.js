@@ -329,6 +329,112 @@ defItem('nano_shield', { name: 'Nano Shield', kind: 'consumable', tier: 3, invul
 defItem('brain_juice', { name: 'Brain Juice', kind: 'consumable', tier: 2, xpGain: 150,
   desc: 'FUNCTION: click to drink +150 XP on the spot. Tastes like homework.' });
 
+/* ============ NETWORK WAVE 3 — the fire branch & the elemental matrix ============ */
+/* the torch unlocks fire tech */
+defItem('torch', { name: 'Torch Block', kind: 'block', tier: 2, hp: 4, solid: true, animated: true, color: '#c46a1f', color2: '#8a4712',
+  fx: { glow: 4, enemyDamage: 8 }, desc: 'FUNCTION: burning pitch — lights your tunnels and singes any enemy that touches it. The root of all fire tech.' });
+defItem('hearth', { name: 'Hearth', kind: 'block', tier: 3, hp: 10, solid: true, animated: true, color: '#9c4a2a', color2: '#6b2f19',
+  fx: { glow: 5, heal: 2, healRange: 3.5 }, desc: 'FUNCTION: a cozy fireplace that slowly mends anyone gathered around it. Home is where the hearth is.' });
+defItem('eruption_pad', { name: 'Eruption Pad', kind: 'block', tier: 3, hp: 7, solid: true, animated: true, color: '#e25822', color2: '#a03612',
+  fx: { bounce: 1080, enemyDamage: 14, glow: 3 }, desc: 'FUNCTION: launches you skyward on a plume of flame — and roasts enemies that step on it.' });
+defItem('lantern_ledge', { name: 'Lantern Ledge', kind: 'block', tier: 3, hp: 5, solid: false, color: '#d9a05b', color2: '#a1723a',
+  fx: { platform: true, glow: 4 }, desc: 'FUNCTION: a one-way platform with a built-in lantern. Light your climb.' });
+defItem('frost_lamp', { name: 'Frost Lamp', kind: 'block', tier: 2, hp: 4, solid: true, animated: true, color: '#bde0fe', color2: '#7fb3d9',
+  fx: { glow: 4, chillAura: 3 }, desc: 'FUNCTION: cold light — chills enemies that wander within 3 tiles. Mood lighting with teeth.' });
+defItem('void_lamp', { name: 'Void Lamp', kind: 'block', tier: 2, hp: 4, solid: true, animated: true, color: '#5a189a', color2: '#38106b',
+  fx: { glow: 3, repel: 2.5 }, desc: 'FUNCTION: an unsettling glow enemies refuse to stand near. Subtle area denial.' });
+defItem('aurora_lamp', { name: 'Aurora Lamp', kind: 'block', tier: 2, hp: 4, solid: true, animated: true, color: '#80ffdb', color2: '#48bfa0',
+  fx: { glow: 4, gravAura: 0.8, auraRange: 3 }, desc: 'FUNCTION: shimmering polar light that gently lowers gravity around it. Floaty porch vibes.' });
+/* elemental weapon matrix */
+defItem('ember_saber', { name: 'Ember Saber', kind: 'weapon', tier: 3, dmg: 20, rate: 3.2, range: 2.0, burn: { dps: 7, dur: 2.5 }, minePower: 1, mineRate: 4, color: '#ff7b00',
+  desc: 'FUNCTION: a blade dipped in torchfire. Every hit keeps burning.' });
+defItem('frost_saber', { name: 'Frost Saber', kind: 'weapon', tier: 3, dmg: 19, rate: 3.2, range: 2.0, chill: 2.2, minePower: 1, mineRate: 4, color: '#a8d8f0',
+  desc: 'FUNCTION: a blade of living ice — every hit slows the target to half speed.' });
+defItem('blaze_katana', { name: 'Blaze Katana', kind: 'weapon', tier: 4, dmg: 16, rate: 6, range: 2.0, burn: { dps: 6, dur: 2 }, minePower: 1, mineRate: 4, color: '#ff5714',
+  desc: 'FUNCTION: six burning slashes a second. The DoT stacks up terrifyingly fast.' });
+defItem('frost_fang', { name: 'Frost Fang', kind: 'weapon', tier: 4, dmg: 15, rate: 6, range: 2.0, chill: 1.8, minePower: 1, mineRate: 4, color: '#caf0f8',
+  desc: 'FUNCTION: blinding-fast ice slashes that keep the whole crowd permanently slowed.' });
+defItem('magma_maul', { name: 'Magma Maul', kind: 'weapon', tier: 4, dmg: 44, rate: 1.4, range: 1.9, knock: 480, burn: { dps: 9, dur: 3 }, minePower: 2, mineRate: 3, color: '#e25822',
+  desc: 'FUNCTION: colossal burning swings — enemies fly away ON FIRE.' });
+defItem('glacier_maul', { name: 'Glacier Maul', kind: 'weapon', tier: 4, dmg: 42, rate: 1.4, range: 1.9, knock: 480, chill: 3, minePower: 2, mineRate: 3, color: '#90e0ef',
+  desc: 'FUNCTION: a hammer of packed glacier. What it doesn\'t kill, it leaves crawling.' });
+defItem('ember_blaster', { name: 'Ember Blaster', kind: 'weapon', tier: 3, dmg: 12, rate: 5, burn: { dps: 6, dur: 2 }, projectile: { speed: 700, color: '#ff7b00' }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: rapid-fire cinders that set everything alight.' });
+defItem('dragon_breath', { name: 'Dragon Breath', kind: 'weapon', tier: 4, dmg: 8, rate: 2.2, pellets: 5, spread: 0.4, burn: { dps: 7, dur: 2 }, projectile: { speed: 600, color: '#ff5714' }, minePower: 1, mineRate: 4,
+  desc: 'FUNCTION: a shotgun cone of fire. Five burning pellets per roar.' });
+/* elemental & heavy turrets */
+defItem('flame_sentry', { name: 'Flame Sentry', kind: 'block', tier: 3, hp: 12, solid: true, color: '#e25822', color2: '#a03612',
+  fx: { sentry: { range: 7, rate: 0.9, dmg: 10, burn: { dps: 6, dur: 2 } }, glow: 2 }, desc: 'FUNCTION: a turret that shoots fire — its targets keep burning after the hit.' });
+defItem('venom_sentry', { name: 'Venom Sentry', kind: 'block', tier: 4, hp: 12, solid: true, color: '#80b918', color2: '#527513',
+  fx: { sentry: { range: 8, rate: 1.0, dmg: 9, burn: { dps: 9, dur: 3 } } }, desc: 'FUNCTION: fires corrosive script that eats targets for 3 full seconds per hit.' });
+defItem('snowball_turret', { name: 'Snowball Turret', kind: 'block', tier: 2, hp: 8, solid: true, color: '#dbe9f4', color2: '#9db4c9',
+  fx: { sentry: { range: 8, rate: 0.8, dmg: 6, chill: 2, knock: 420 } }, desc: 'FUNCTION: pelts enemies with heavy snowballs — barely hurts, but slows them AND knocks them flying.' });
+defItem('pitch_thrower', { name: 'Pitch Thrower', kind: 'block', tier: 3, hp: 10, solid: true, color: '#3d3535', color2: '#211c1c',
+  fx: { sentry: { range: 7, rate: 1.2, dmg: 8, chill: 2.5 } }, desc: 'FUNCTION: hurls globs of sticky tar that bog enemies down to half speed.' });
+defItem('bunker_turret', { name: 'Bunker Turret', kind: 'block', tier: 4, hp: 26, solid: true, color: '#4a4e69', color2: '#2b2d3f',
+  fx: { sentry: { range: 9, rate: 0.7, dmg: 15 }, glow: 1 }, desc: 'FUNCTION: a sentry in obsidian armor — 26 hits to crack, and it shoots back the whole time.' });
+defItem('guard_post', { name: 'Guard Post', kind: 'block', tier: 3, hp: 14, solid: true, animated: true, color: '#bc4749', color2: '#823033',
+  fx: { sentry: { range: 9, rate: 0.8, dmg: 12 }, alarm: 10 }, desc: 'FUNCTION: turret + alarm in one block. It warns you AND opens fire.' });
+/* defense blocks */
+defItem('spiked_wall', { name: 'Spiked Wall', kind: 'block', tier: 3, hp: 16, solid: true, color: '#9a6a4a', color2: '#6b4a33',
+  fx: { enemyDamage: 18 }, desc: 'FUNCTION: a fortified wall studded with enemy-shredding spikes. The proper moat lining.' });
+defItem('snare_trap', { name: 'Snare Trap', kind: 'block', tier: 2, hp: 6, solid: true, animated: true, color: '#2e2828', color2: '#181414',
+  fx: { enemyDamage: 8, enemySticky: true }, desc: 'FUNCTION: tar studded with barbs — enemies crossing it slow to a crawl while being shredded.' });
+defItem('powder_drift', { name: 'Powder Drift', kind: 'block', tier: 2, hp: 4, solid: true, color: '#e8eff7', color2: '#b9c9db',
+  fx: { enemySticky: true }, desc: 'FUNCTION: deep snow — ENEMIES wade through at half speed, you walk on top just fine.' });
+defItem('mega_mine', { name: 'Cluster Mine', kind: 'block', tier: 3, hp: 8, solid: true, animated: true, color: '#2d6a4f', color2: '#1b4332',
+  fx: { mine: { dmg: 110, r: 3 } }, desc: 'FUNCTION: a proximity mine with triple the payload and a wider blast. Sleep even more soundly.' });
+defItem('icicle_trap', { name: 'Icicle Trap', kind: 'block', tier: 2, hp: 5, solid: true, color: '#bde0fe', color2: '#7fb3d9',
+  fx: { enemyDamage: 14, chillAura: 2 }, desc: 'FUNCTION: jagged ice that cuts AND chills enemies on contact.' });
+/* traversal wave 3 */
+defItem('escalator', { name: 'Escalator Vine', kind: 'block', tier: 3, hp: 5, solid: false, color: '#52b788', color2: '#2d6a4f',
+  fx: { ladder: true, escalator: true }, desc: 'FUNCTION: a climbing vine that carries you UP automatically. Stand in it and rise.' });
+defItem('sky_geyser', { name: 'Sky Geyser', kind: 'block', tier: 4, hp: 8, solid: true, animated: true, color: '#56cfe1', color2: '#2e8fa3',
+  fx: { updraft: 16 }, desc: 'FUNCTION: an industrial updraft twice as tall — 16 tiles of rideable wind. Skyscraper elevator shafts.' });
+defItem('launch_rail', { name: 'Launch Rail', kind: 'block', tier: 4, hp: 7, solid: true, animated: true, color: '#f9c74f', color2: '#bd932f',
+  fx: { conveyor: 470, bounce: 900 }, desc: 'FUNCTION: a hyper-conveyor that also flings you upward at the end. Rollercoaster engineering.' });
+defItem('glacier_ledge', { name: 'Glacier Ledge', kind: 'block', tier: 3, hp: 5, solid: false, transparent: true, slippery: true, color: '#a8d8f0', color2: '#6fb8d4',
+  fx: { platform: true }, desc: 'FUNCTION: a one-way platform of pure ice — you slide the moment you land. Parkour spice.' });
+defItem('feather_ledge', { name: 'Feather Ledge', kind: 'block', tier: 4, hp: 5, solid: false, color: '#cdb4db', color2: '#9a7fb0',
+  fx: { platform: true, gravAura: 0.5, auraRange: 3 }, desc: 'FUNCTION: a platform wrapped in low gravity — jumps near it float like the moon.' });
+defItem('jingle_spring', { name: 'Jingle Spring', kind: 'block', tier: 3, hp: 6, solid: true, animated: true, color: '#f7a8d8', color2: '#c26aa4',
+  fx: { bounce: 950, note: true }, desc: 'FUNCTION: a bounce pad that plays a chime on every launch. Build a playable bounce-organ.' });
+defItem('aquarium', { name: 'Aquarium', kind: 'block', tier: 3, hp: 6, solid: true, transparent: true, animated: true, color: '#48cae4', color2: '#2e8fa3',
+  fx: { lure: 3, glow: 2 }, desc: 'FUNCTION: a glass tank of live data-fish. Decorative AND doubles as a weak fishing lure.' });
+defItem('prism_cluster', { name: 'Prism Cluster', kind: 'block', tier: 4, hp: 12, solid: true, animated: true, color: '#ff9de2', color2: '#b25fa3',
+  gemVal: [14, 24], fx: { glow: 4 }, desc: 'FUNCTION: the premium gem farm — bursts into 14–24 gems. Obsidian-pressed crystal.' });
+/* gear wave 3 */
+defItem('skate_blades', { name: 'Skate Blades', kind: 'gear', slot: 'feet', tier: 3,
+  fx: { speed: 1.6, skate: true },
+  desc: 'FUNCTION: +60% top speed, but you handle like you\'re ALWAYS on ice. High skill, high speed.' });
+defItem('groove_boots', { name: 'Groove Boots', kind: 'gear', slot: 'feet', tier: 4,
+  fx: { speed: 1.3, dodge: 0.08, doubleJump: 1 },
+  desc: 'FUNCTION: disco-powered footwork — +30% speed, a double jump, and 8% of attacks simply miss you.' });
+defItem('bramble_shell', { name: 'Bramble Shell', kind: 'gear', slot: 'back', tier: 4,
+  fx: { armor: 0.25, thorns: 0.25 },
+  desc: 'FUNCTION: armored AND spiteful — 25% less damage taken, 25% reflected back.' });
+defItem('freerun_chip', { name: 'Freerun Chip', kind: 'gear', slot: 'chip', tier: 4,
+  fx: { wallCling: true, doubleJump: 1 },
+  desc: 'FUNCTION: wall-slides, wall-jumps AND an extra mid-air jump. The complete parkour kit on one chip.' });
+defItem('greed_chip', { name: 'Greed Chip', kind: 'gear', slot: 'chip', tier: 4,
+  fx: { greed: true, magnet: 5 },
+  desc: 'FUNCTION: every gem you collect also grants XP. Wealth IS knowledge.' });
+defItem('mortar_mite', { name: 'Mortar Mite', kind: 'gear', slot: 'pet', tier: 4,
+  fx: { pet: { dmg: 16, rate: 1.9, range: 8, color: '#bc6c25' } },
+  desc: 'FUNCTION: a slow, heavy-hitting artillery familiar. Boom, reload, boom.' });
+defItem('spark_sprite', { name: 'Spark Sprite', kind: 'gear', slot: 'pet', tier: 4,
+  fx: { pet: { dmg: 5, rate: 0.45, range: 7, color: '#6ee7ff' } },
+  desc: 'FUNCTION: a hyperactive zap-bug firing more than twice a second. Death by static.' });
+/* consumable arsenal */
+defItem('elixir', { name: 'Elixir', kind: 'consumable', tier: 3, heal: 999,
+  desc: 'FUNCTION: a FULL heal in a bottle. Grow a tree of second chances.' });
+defItem('cluster_bomb', { name: 'Cluster Bomb', kind: 'consumable', tier: 3, cluster: { count: 3, radius: 2, dmg: 45 },
+  desc: 'FUNCTION: click a spot to carpet it with three staggered detonations. Excavation OR extermination.' });
+defItem('stasis_grenade', { name: 'Stasis Grenade', kind: 'consumable', tier: 3, stasis: 4,
+  desc: 'FUNCTION: click to freeze-frame the fight — EVERY enemy on screen crawls at half speed for 4 seconds.' });
+defItem('lucky_soda', { name: 'Lucky Soda', kind: 'consumable', tier: 3, buff: { dur: 60, speed: 1, dmg: 1, gem: true },
+  desc: 'FUNCTION: 60 seconds of +50% gem drops from everything you break. Chug before a mining run.' });
+
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
 const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 4: 240, 9: 170 }; // seconds by tier
@@ -461,6 +567,57 @@ defRecipe('repair_node', 'wood', 'medkit');
 defRecipe('pickaxe', 'spike_trap', 'bomb');
 defRecipe('blaster', 'led_block', 'firework');
 defRecipe('crystal_cluster', 'glass', 'overclock_cola');
+// ---- wave 3: the fire branch ----
+defRecipe('tar', 'wood', 'torch');
+defRecipe('torch', 'brick', 'hearth');
+defRecipe('torch', 'spring_pad', 'eruption_pad');
+defRecipe('torch', 'platform', 'lantern_ledge');
+defRecipe('torch', 'sword', 'ember_saber');
+defRecipe('torch', 'katana', 'blaze_katana');
+defRecipe('torch', 'war_hammer', 'magma_maul');
+defRecipe('torch', 'blaster', 'ember_blaster');
+defRecipe('torch', 'scattergun', 'dragon_breath');
+defRecipe('torch', 'sentry', 'flame_sentry');
+// ---- wave 3: the frost branch ----
+defRecipe('ice', 'sword', 'frost_saber');
+defRecipe('ice', 'katana', 'frost_fang');
+defRecipe('ice', 'war_hammer', 'glacier_maul');
+defRecipe('ice', 'led_block', 'frost_lamp');
+defRecipe('ice', 'spike_trap', 'icicle_trap');
+defRecipe('ice', 'platform', 'glacier_ledge');
+defRecipe('ice', 'speed_boots', 'skate_blades');
+defRecipe('snow', 'led_block', 'aurora_lamp');
+defRecipe('snow', 'sentry', 'snowball_turret');
+defRecipe('snow', 'conveyor', 'powder_drift');
+// ---- wave 3: shadow & heavy branch ----
+defRecipe('tar', 'led_block', 'void_lamp');
+defRecipe('tar', 'sentry', 'pitch_thrower');
+defRecipe('tar', 'spike_trap', 'snare_trap');
+defRecipe('venom_edge', 'sentry', 'venom_sentry');
+defRecipe('obsidian', 'sentry', 'bunker_turret');
+defRecipe('obsidian', 'crystal_cluster', 'prism_cluster');
+defRecipe('alarm', 'sentry', 'guard_post');
+defRecipe('barbed', 'brick', 'spiked_wall');
+defRecipe('mine_trap', 'brick', 'mega_mine');
+// ---- wave 3: traversal ----
+defRecipe('ladder', 'conveyor', 'escalator');
+defRecipe('turbine', 'antigrav', 'sky_geyser');
+defRecipe('speed_rail', 'spring_pad', 'launch_rail');
+defRecipe('platform', 'antigrav', 'feather_ledge');
+defRecipe('note_block', 'spring_pad', 'jingle_spring');
+defRecipe('glass', 'lure_buoy', 'aquarium');
+// ---- wave 3: gear ----
+defRecipe('disco', 'speed_boots', 'groove_boots');
+defRecipe('turtle_pack', 'thorn_chip', 'bramble_shell');
+defRecipe('climb_chip', 'spring_pad', 'freerun_chip');
+defRecipe('magnet_chip', 'crystal_cluster', 'greed_chip');
+defRecipe('flak_turret', 'drone_pet', 'mortar_mite');
+defRecipe('tesla_coil', 'drone_pet', 'spark_sprite');
+// ---- wave 3: consumable arsenal ----
+defRecipe('fountain', 'repair_node', 'elixir');
+defRecipe('mine_trap', 'blaster', 'cluster_bomb');
+defRecipe('frost_coil', 'glass', 'stasis_grenade');
+defRecipe('fortune_totem', 'glass', 'lucky_soda');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
