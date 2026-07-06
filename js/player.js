@@ -37,8 +37,16 @@ class Player extends Entity {
     }
     return v;
   }
-  magnetRange() { const m = this.gearFx('magnet'); return m || 1.2; }
-  dmgMult() { return (this.gearFx('dmgMult') || 1) * (game.buffActive() ? game.buff.dmg : 1); }
+  magnetRange() {
+    const held = this.heldItem();
+    return Math.max(this.gearFx('magnet') || 1.2, held.magnet || 0);
+  }
+  dmgMult() {
+    let m = (this.gearFx('dmgMult') || 1) * (game.buffActive() ? game.buff.dmg : 1);
+    const berserk = this.gearFx('berserk');
+    if (berserk && this.hp < this.maxHp * 0.4) m *= berserk;
+    return m;
+  }
   heldItem() { const id = this.hotbar[this.sel]; return id ? ITEMS[id] : ITEMS.fist; }
 
   give(id, n) {
@@ -71,6 +79,12 @@ class Player extends Entity {
     if (thorns && src && src.hurt && !src.dead) {
       src.hurt(Math.max(1, Math.round(dmg * thorns)), game);
       game.fx.spark(this.x, this.y, '#e07a5f', 4);
+    }
+    if (src && !src.dead) { // elemental shells retaliate on contact
+      const ct = this.gearFx('chillTouch');
+      if (ct && src.chillT !== undefined) src.chillT = ct;
+      const bt = this.gearFx('burnTouch');
+      if (bt && src.burnT !== undefined) { src.burn = bt.dps; src.burnT = bt.dur; }
     }
     const dodge = this.gearFx('dodge') || 0;
     if (dodge && Math.random() < dodge) {
@@ -204,8 +218,8 @@ class Player extends Entity {
       }
       if (jp && this.onGround) this.fuel = Math.min(1, this.fuel + dt / jp.regen * (energy ? 1.5 : 1));
 
-      // dash (storm boots)
-      const dash = feet && feet.dash;
+      // dash (storm boots / blink chip)
+      const dash = (feet && feet.dash) || (this.equip.chip && ITEMS[this.equip.chip].fx.dash);
       if (dash && input.dashPressed && this.dashCd <= 0) {
         this.dashT = dash.dur; this.dashCd = dash.cd * (this.gearFx('energy') ? 0.6 : 1);
         this.vx = this.facing * dash.speed; this.vy = 0;
@@ -287,15 +301,41 @@ class Player extends Entity {
       else if (chip === 'admin_crown') game.fx.add(this.x + (Math.random() - 0.5) * 16, this.y - 34, 0, -30, '#ffd166', 0.6, 2.5, 0);
     }
     if (this.gliding && Math.random() < 0.25) game.fx.add(this.x - this.facing * 16, this.y - 8, -this.facing * 60, 10, 'rgba(255,255,255,0.5)', 0.3, 2.5, 0);
+    // blaze runners: sprinting ignites enemies you brush past
+    const trail = feet && feet.fireTrail;
+    if (trail && Math.abs(this.vx) > 220) {
+      this._trailT = (this._trailT || 0) - dt;
+      if (this._trailT <= 0) {
+        this._trailT = 0.15;
+        game.fx.add(this.x - this.facing * 12, this.y + this.h / 2 - 4, -this.facing * 40, -30, Math.random() < 0.5 ? '#ff5714' : '#ffd166', 0.4, 4, 0);
+        for (const e of game.enemies) {
+          if (!e.dead && Math.abs(e.x - this.x) < 44 && Math.abs(e.y - this.y) < 44) { e.burn = trail.dps; e.burnT = trail.dur; }
+        }
+      }
+    }
+    // aqua striders: liquid data becomes a road
+    if (feet && feet.waterWalk && !this.inWater && this.vy >= 0) {
+      const wtx = Math.floor(this.x / TS), wty = Math.floor((this.y + this.h / 2 + 3) / TS);
+      const below = world.item(wtx, wty);
+      if (below && below.swim) {
+        this.y = wty * TS - this.h / 2 - 0.01;
+        this.vy = 0;
+        this.onGround = true;
+        this.groundTile = 'water';
+        if (Math.abs(this.vx) > 60 && Math.random() < 0.3) game.fx.bubble(this.x, this.y + this.h / 2);
+      }
+    }
 
     // note blocks chime underfoot
-    if (this.onGround && this.groundTile === 'note_block') {
+    if (this.onGround && this.groundTile && ITEMS[this.groundTile] && ITEMS[this.groundTile].fx && ITEMS[this.groundTile].fx.note) {
       const ntx = Math.floor(this.x / TS), nty = Math.floor((this.y + this.h / 2 + 2) / TS);
       const ni = world.idx(ntx, nty);
       if (ni !== this._noteIdx) {
         this._noteIdx = ni;
+        const nfx = ITEMS[this.groundTile].fx;
         const pitch = (world.meta[ni] || {}).pitch || 0;
-        game.sfx.note(pitch);
+        if (nfx.drum) game.sfx.play('punch');
+        else game.sfx.note(pitch - (nfx.noteLow ? 12 : 0));
         game.fx.add(this.x, this.y - this.h / 2 - 8, (Math.random() - 0.5) * 40, -70, '#f7a8d8', 0.8, 5, 0);
       }
     } else if (this.groundTile !== 'note_block') this._noteIdx = -1;
@@ -579,11 +619,12 @@ class Player extends Entity {
       if (tool.projectile) {
         const baseA = Math.atan2(wy - this.y, wx - this.x);
         const n = tool.pellets || 1;
+        const gp = this.gearFx('gunPower') || 1;
         for (let pi2 = 0; pi2 < n; pi2++) {
           const a = baseA + (n > 1 ? (pi2 - (n - 1) / 2) * (tool.spread / (n - 1)) * 2 : 0);
           game.projectiles.push(new Projectile(this.x + Math.cos(a) * 20, this.y - 6 + Math.sin(a) * 20,
-            Math.cos(a) * tool.projectile.speed, Math.sin(a) * tool.projectile.speed,
-            Math.round(tool.dmg * this.dmgMult()), true, tool.projectile.color,
+            Math.cos(a) * tool.projectile.speed * gp, Math.sin(a) * tool.projectile.speed * gp,
+            Math.round(tool.dmg * this.dmgMult() * gp), true, tool.projectile.color,
             { pierce: tool.projectile.pierce, boomerang: tool.projectile.boomerang, knock: tool.knock, burn: tool.burn, chill: tool.chill }));
         }
         game.sfx.play('shoot');
@@ -600,6 +641,7 @@ class Player extends Entity {
           if (Math.hypot(dx, dy) < range + e.w / 2) {
             e.hurt(dmg, game, this.facing * (tool.knock || 200));
             if (tool.burn) { e.burn = tool.burn.dps; e.burnT = tool.burn.dur; }
+            if (tool.chill && e.chillT !== undefined) e.chillT = tool.chill;
             game.onPlayerDealt(dmg);
             hitSomething = true;
           }

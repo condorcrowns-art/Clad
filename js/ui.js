@@ -188,6 +188,7 @@ const ui = {
       const d = slots[i];
       const id = p.hotbar[i];
       d.classList.toggle('sel', p.sel === i);
+      d.style.borderColor = (p.sel === i) ? '' : (id ? tierColor(id) + '66' : '');
       let cv = d.querySelector('canvas');
       if (cv) cv.remove();
       if (id) {
@@ -210,6 +211,7 @@ const ui = {
     for (const id of ids) {
       const d = document.createElement('div');
       d.className = 'invSlot';
+      d.style.borderColor = tierColor(id) + '99';
       const cv = document.createElement('canvas');
       cv.width = 40; cv.height = 40;
       cv.getContext('2d').drawImage(iconFor(id), 0, 0);
@@ -327,6 +329,7 @@ const ui = {
     for (const id of ids) {
       const d = document.createElement('div');
       d.className = 'invSlot';
+      d.style.borderColor = tierColor(id) + '99';
       const cv = document.createElement('canvas'); cv.width = 40; cv.height = 40;
       cv.getContext('2d').drawImage(iconFor(id), 0, 0);
       d.appendChild(cv);
@@ -426,7 +429,11 @@ const ui = {
     const it = ITEMS[id];
     const t = this.el.tooltip;
     t.classList.remove('hidden');
-    t.innerHTML = '<div class="ttName">' + it.name + '</div><div class="ttKind">' + it.kind + (it.tier === 9 ? ' · boss tech' : '') + '</div><div class="ttDesc">' + it.desc + '</div>';
+    const tc = tierColor(id);
+    t.innerHTML = '<div class="ttName" style="color:' + tc + '">' + it.name + '</div>' +
+      '<div class="ttKind">' + it.kind + ' · <span style="color:' + tc + '">' + (TIER_NAMES[it.tier || 0] || 'COMMON') + '</span></div>' +
+      '<div class="ttDesc">' + it.desc + '</div>';
+    t.style.borderColor = tc;
     const x = Math.min(e.clientX + 14, window.innerWidth - 280);
     const y = Math.min(e.clientY + 14, window.innerHeight - 120);
     t.style.left = x + 'px'; t.style.top = y + 'px';

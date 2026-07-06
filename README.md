@@ -56,7 +56,7 @@ sectors** wait behind portals, each ending in a boss fight.
   awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic
-**141 splice recipes** form a true network — results splice with other results, four tiers deep,
+**175 splice recipes** form a true network — results splice with other results, four tiers deep,
 and every recipe is validated reachable starting from the six natural blocks (dirt, stone, wood,
 sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Elixirs (full heal),
 Logic/Cluster Bombs, Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s

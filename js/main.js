@@ -239,11 +239,12 @@ class Game {
       if (w.isHome) this.saveSoon();
       return;
     }
-    if (w.get(tx, ty) === 'note_block') { // tune the chime
+    const underIt = w.item(tx, ty);
+    if (underIt && underIt.fx && underIt.fx.note && !underIt.fx.drum) { // tune the chime
       const i = w.idx(tx, ty);
       const m = w.meta[i] = w.meta[i] || {};
       m.pitch = ((m.pitch || 0) + 1) % 13;
-      this.sfx.note(m.pitch);
+      this.sfx.note(m.pitch - (underIt.fx.noteLow ? 12 : 0));
       if (w.isHome) this.saveSoon();
       return;
     }

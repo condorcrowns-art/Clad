@@ -183,7 +183,7 @@ class World {
     }
     if (it.gemVal) { // ore veins & crystal clusters burst into gems
       const [g0, g1] = it.gemVal;
-      const boost = game.player.gearFx('oreBoost') || 1;
+      const boost = (game.player.gearFx('oreBoost') || 1) * (game.player.heldItem().oreBoost || 1);
       game.spawnGems(cx, cy, Math.round((g0 + Math.floor(Math.random() * (g1 - g0 + 1))) * boost));
       if (it.id === 'core_crystal' && Math.random() < 0.25) game.spawnDrop(cx, cy, 'mystery_seed', 1);
       if (it.id === 'crystal_cluster' && Math.random() < 0.14 && ITEMS.crystal_cluster_seed) game.spawnDrop(cx, cy, 'crystal_cluster_seed', 1);
@@ -249,7 +249,7 @@ class World {
         }
         if (best) {
           m.cd = S.rate;
-          const opts = { burn: S.burn, chill: S.chill, knock: S.knock };
+          const opts = { burn: S.burn, chill: S.chill, knock: S.knock, pierce: S.pierce };
           if (S.arc) {
             const tt = 0.8;
             game.projectiles.push(new Projectile(cx, cy - TS * 0.85, (best.x - cx) / tt, (best.y - cy) / tt - 0.5 * 1100 * tt, S.dmg, true, '#ffb703', Object.assign({ r: 7, gravity: 1100, life: 2.2 }, opts)));
@@ -267,7 +267,7 @@ class World {
     this._auraT = (this._auraT || 0) - dt;
     if (this._auraT <= 0) {
       this._auraT = 1;
-      this._coils = []; this._pylons = []; this._beacons = []; this._lamps = []; this._repels = [];
+      this._coils = []; this._pylons = []; this._beacons = []; this._lamps = []; this._repels = []; this._baits = [];
       for (let i = 0; i < this.tiles.length; i++) {
         const t = this.tiles[i];
         if (!t) continue;
@@ -278,6 +278,17 @@ class World {
         if (fx.pull) this._pylons.push({ x: cx, y: cy });
         if (fx.beacon) this._beacons.push({ x: cx, y: cy });
         if (fx.repel) this._repels.push({ x: cx, y: cy, r: fx.repel * TS });
+        if (fx.bait) this._baits.push({ x: cx, y: cy, r: fx.bait * TS });
+        if (fx.harvester) { // harvest bots reap ready trees nearby
+          const R = fx.harvester * TS;
+          const ready = [];
+          this.trees.forEach((tr, ti) => {
+            if (!this.treeReady(tr)) return;
+            const tx2 = (ti % this.w) * TS + TS / 2, ty2 = Math.floor(ti / this.w) * TS + TS / 2;
+            if (Math.hypot(tx2 - cx, ty2 - cy) <= R) ready.push(ti);
+          });
+          for (const ti of ready.slice(0, 2)) this.harvestTree(ti % this.w, Math.floor(ti / this.w), game);
+        }
         if (fx.music) { // jukebox: generative pentatonic while the player is near
           if (Math.hypot(game.player.x - cx, game.player.y - cy) < 9 * TS) {
             const m = this.meta[i] = this.meta[i] || {};
@@ -345,8 +356,9 @@ class World {
     if (this._teslaT <= 0) {
       this._teslaT = 1.4;
       for (let i = 0; i < this.tiles.length; i++) {
-        if (this.tiles[i] !== 'tesla_coil') continue;
-        const fx = ITEMS.tesla_coil.fx.tesla;
+        const tid = this.tiles[i];
+        if (!tid || !ITEMS[tid].fx || !ITEMS[tid].fx.tesla) continue;
+        const fx = ITEMS[tid].fx.tesla;
         const tx = i % this.w, ty = Math.floor(i / this.w);
         const cx = tx * TS + TS / 2, cy = ty * TS + TS / 2;
         const inRange = game.enemies.filter(e => !e.dead && Math.hypot(e.x - cx, e.y - cy) < fx.range * TS)
@@ -356,6 +368,7 @@ class World {
         for (const e of inRange) {
           game.zaps.push({ x1: px, y1: py, x2: e.x, y2: e.y, life: 0.18 });
           e.hurt(fx.dmg, game);
+          if (fx.burn) { e.burn = fx.burn.dps; e.burnT = fx.burn.dur; }
           px = e.x; py = e.y;
         }
         if (inRange.length) game.sfx.play('sentry');

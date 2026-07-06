@@ -150,11 +150,19 @@ class Enemy extends Entity {
     }
     const spdM = this.chillT > 0 ? 0.5 : 1;
     if (this.chillT > 0 && Math.random() < 0.08) game.fx.add(this.x, this.y - this.h / 2, 0, -20, '#a8d8f0', 0.4, 2.5, 0);
-    // scare totems: enemies flee the aura
+    // scare totems: enemies flee the aura; bait totems: they can't resist
     let repelled = 0;
     if (world._repels) for (const rp of world._repels) {
       const d = Math.hypot(rp.x - this.x, rp.y - this.y);
       if (d < rp.r) { repelled = Math.sign(this.x - rp.x) || 1; break; }
+    }
+    if (!repelled && world._baits) for (const bt of world._baits) {
+      const d = Math.hypot(bt.x - this.x, bt.y - this.y);
+      if (d < bt.r && d > TS) {
+        repelled = Math.sign(bt.x - this.x) || 1; // reuse the steering override, toward the bait
+        if (this.def.ai === 'flyer') this.vy += Math.sign(bt.y - this.y) * 300 * dt;
+        break;
+      }
     }
     const ai = this.def.ai;
     if (repelled) {
@@ -219,7 +227,11 @@ class Enemy extends Entity {
     this.tilesTouching(world, (it, ttx, tty) => {
       if (it.fx && it.fx.enemyDamage) {
         this._fwTick = (this._fwTick || 0) - dt;
-        if (this._fwTick <= 0) { this._fwTick = 0.4; this.hurt(Math.round(it.fx.enemyDamage * 0.4), game); }
+        if (this._fwTick <= 0) {
+          this._fwTick = 0.4;
+          this.hurt(Math.round(it.fx.enemyDamage * 0.4), game);
+          if (it.fx.enemyBurn) { this.burn = it.fx.enemyBurn.dps; this.burnT = it.fx.enemyBurn.dur; }
+        }
       }
       if (it.fx && it.fx.mine && !this.dead) {
         world.breakTile(ttx, tty, game, true);
