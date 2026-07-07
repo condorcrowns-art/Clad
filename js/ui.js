@@ -19,6 +19,9 @@ const ui = {
       lvlText: $('lvlText'), xpBar: $('xpBar'),
       worldsPanel: $('worldsPanel'), worldsList: $('worldsList'), worldNameInput: $('worldNameInput'), lockCount: $('lockCount'),
       achPanel: $('achPanel'), achList: $('achList'),
+      guildPanel: $('guildPanel'), guildBody: $('guildBody'),
+      storePanel: $('storePanel'), storeList: $('storeList'),
+      shardText: $('shardText'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
       codexPanel: $('codexPanel'), codexList: $('codexList'),
       tooltip: $('tooltip'), toasts: $('toasts'),
@@ -182,6 +185,7 @@ const ui = {
     this.el.hpBar.style.width = Math.max(0, p.hp / p.maxHp * 100) + '%';
     this.el.hpText.textContent = Math.max(0, Math.ceil(p.hp)) + ' / ' + p.maxHp;
     this.el.gemText.textContent = game.gems;
+    if (this.el.shardText) this.el.shardText.textContent = game.shards || 0;
     this.el.worldName.textContent = game.world ? (game.world.name + (game.spire && game.spire.wave ? ' — WAVE ' + game.spire.wave : '')) : '';
     this.el.lvlText.textContent = 'LV ' + game.level;
     this.el.xpBar.style.width = Math.min(100, game.xp / game.xpNeed() * 100) + '%';
@@ -434,7 +438,7 @@ const ui = {
   togglePanel(name) {
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel'].forEach(p => this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel'].forEach(p => this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -443,13 +447,54 @@ const ui = {
       if (name === 'quest') this.renderQuests();
       if (name === 'worlds') this.renderWorlds();
       if (name === 'ach') this.renderAch();
+      if (name === 'guild') this.renderGuild();
+      if (name === 'store') this.renderStore();
     }
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'defragPanel'].some(p => !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'defragPanel'].some(p => !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel'].forEach(p => this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel'].forEach(p => this.el[p].classList.add('hidden')); this.hideTip(); },
+
+  renderGuild() {
+    const b = this.el.guildBody; b.innerHTML = '';
+    const g = game.progress.guild;
+    if (!g) {
+      b.innerHTML = '<div class="storeNote" style="margin-bottom:12px">Found a guild for ◆500. Contribute gems to level it up — every level grants stacking account-wide perks (bonus gems, XP, and max HP).</div>' +
+        '<div id="guildContribute"><input id="guildNameInput" maxlength="20" placeholder="guild name…"><button class="gBtn" id="guildFoundBtn">⚑ FOUND (◆500)</button></div>';
+      document.getElementById('guildFoundBtn').addEventListener('click', () => { if (game.foundGuild(document.getElementById('guildNameInput').value)) this.renderGuild(); });
+      document.getElementById('guildNameInput').addEventListener('keydown', e => e.stopPropagation());
+      return;
+    }
+    const perks = guildPerks(g.level), need = guildXpNeed(g.level);
+    b.innerHTML =
+      '<div class="guildStat"><span>⚑ <b>' + g.name + '</b></span><span>Level ' + g.level + '</span></div>' +
+      '<div id="guildXpBg"><div id="guildXpFill" style="width:' + Math.min(100, g.xp / need * 100) + '%"></div></div>' +
+      '<div style="color:#8ba0c0;font-size:11px;margin-bottom:10px">' + g.xp + ' / ' + need + ' guild XP to next level</div>' +
+      '<div class="guildStat"><span>Perk: bonus gems</span><span class="guildPerk">+' + Math.round(perks.gemBonus * 100) + '%</span></div>' +
+      '<div class="guildStat"><span>Perk: bonus XP</span><span class="guildPerk">+' + Math.round(perks.xpBonus * 100) + '%</span></div>' +
+      '<div class="guildStat"><span>Perk: max HP</span><span class="guildPerk">+' + perks.hpBonus + '</span></div>' +
+      '<div id="guildContribute"><button class="gBtn" data-amt="100">Contribute ◆100</button><button class="gBtn" data-amt="500">◆500</button><button class="gBtn" data-amt="2000">◆2000</button></div>';
+    b.querySelectorAll('.gBtn').forEach(btn => btn.addEventListener('click', () => { game.contributeGuild(+btn.dataset.amt); this.renderGuild(); }));
+  },
+
+  renderStore() {
+    const list = this.el.storeList; list.innerHTML = '';
+    for (const item of STORE) {
+      const owned = item.once && (game.progress.storeBought || {})[item.id];
+      const d = document.createElement('div');
+      d.className = 'storeRow' + (owned ? ' owned' : '');
+      d.innerHTML = '<div class="storeInfo"><div class="storeName">' + item.name + '</div><div class="storeDesc">' + item.desc + '</div></div>';
+      const btn = document.createElement('button');
+      btn.className = 'storeBuy';
+      btn.textContent = owned ? 'OWNED' : '◈ ' + item.cost;
+      btn.disabled = owned || game.shards < item.cost;
+      btn.addEventListener('click', () => { game.buyStore(item.id); this.renderStore(); this.updateHUD(); });
+      d.appendChild(btn);
+      list.appendChild(d);
+    }
+  },
 
   renderAch() {
     const list = this.el.achList; if (!list) return;

@@ -667,6 +667,8 @@ class World {
       ctx.fillStyle = paintM.tint;
       ctx.globalAlpha = 0.4; ctx.fillRect(sx, sy, TS, TS); ctx.globalAlpha = 1;
     }
+    // cosmetic decorative blocks
+    if (it.deco) { World.drawDeco(ctx, id, sx, sy, time); return; }
     // special decorations
     const fx = it.fx;
     if (!fx && !it.animated) return;
@@ -1154,6 +1156,64 @@ class World {
      from its name, so the same name is ALWAYS the same world — a shared
      namespace. Visited worlds don't persist; claim one with a World Lock to
      own it (then it saves like home). ---- */
+  // bespoke art for cosmetic decorative blocks (base fill already drawn)
+  static drawDeco(x, id, sx, sy, t) {
+    const cx = sx + TS / 2;
+    switch (id) {
+      case 'marble':
+        x.strokeStyle = 'rgba(150,140,120,0.4)'; x.lineWidth = 1;
+        x.beginPath(); x.moveTo(sx + 4, sy + 8); x.lineTo(sx + 14, sy + 20); x.moveTo(sx + 20, sy + 5); x.lineTo(sx + 28, sy + 16); x.stroke(); break;
+      case 'fabric':
+        x.fillStyle = 'rgba(0,0,0,0.12)'; for (let i = 0; i < 4; i++) x.fillRect(sx, sy + 3 + i * 8, TS, 3); break;
+      case 'pillar':
+        x.fillStyle = 'rgba(0,0,0,0.18)'; for (let i = 0; i < 4; i++) x.fillRect(sx + 5 + i * 6, sy, 2, TS);
+        x.fillStyle = '#d8d0c0'; x.fillRect(sx + 2, sy, TS - 4, 4); x.fillRect(sx + 2, sy + TS - 4, TS - 4, 4); break;
+      case 'statue':
+        x.fillStyle = '#b8b0a0'; x.fillRect(sx + 6, sy + TS - 5, TS - 12, 5);
+        x.fillStyle = '#e0dace'; x.beginPath(); x.arc(cx, sy + 10, 5, 0, 7); x.fill();
+        x.fillRect(cx - 5, sy + 14, 10, 12); x.fillRect(cx - 8, sy + 15, 3, 9); x.fillRect(cx + 5, sy + 15, 3, 9); break;
+      case 'painting':
+        x.fillStyle = '#3a6ea5'; x.fillRect(sx + 6, sy + 6, TS - 12, TS - 12);
+        x.fillStyle = '#57904a'; x.fillRect(sx + 6, sy + TS - 14, TS - 12, 8);
+        x.fillStyle = '#ffd166'; x.beginPath(); x.arc(sx + TS - 12, sy + 12, 3, 0, 7); x.fill();
+        x.strokeStyle = '#c9a227'; x.lineWidth = 2; x.strokeRect(sx + 5, sy + 5, TS - 10, TS - 10); break;
+      case 'banner':
+        x.fillStyle = '#c9556e'; x.beginPath(); x.moveTo(sx + 7, sy + 2); x.lineTo(sx + TS - 7, sy + 2); x.lineTo(sx + TS - 7, sy + TS - 4); x.lineTo(cx, sy + TS - 10); x.lineTo(sx + 7, sy + TS - 4); x.closePath(); x.fill();
+        x.fillStyle = '#ffd166'; x.beginPath(); x.arc(cx, sy + 13, 4, 0, 7); x.fill(); break;
+      case 'rug':
+        x.fillStyle = '#9c2b3e'; x.fillRect(sx + 2, sy + TS - 12, TS - 4, 10);
+        x.strokeStyle = '#ffd166'; x.lineWidth = 1.5; x.strokeRect(sx + 5, sy + TS - 10, TS - 10, 6); break;
+      case 'chandelier':
+        x.strokeStyle = '#c9a227'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx, sy); x.lineTo(cx, sy + 8); x.stroke();
+        x.fillStyle = '#ffd166'; x.beginPath(); x.ellipse(cx, sy + 12, 12, 4, 0, 0, 7); x.fill();
+        for (const dx of [-9, 0, 9]) { x.fillStyle = 'rgba(255,241,150,' + (0.6 + 0.4 * Math.sin(t * 4 + dx)) + ')'; x.beginPath(); x.arc(cx + dx, sy + 18, 3, 0, 7); x.fill(); } break;
+      case 'potted_plant':
+        x.fillStyle = '#8a5a2a'; x.fillRect(sx + 9, sy + TS - 12, TS - 18, 10);
+        x.fillStyle = '#57904a'; for (const a of [-0.8, -0.3, 0.3, 0.8]) { x.beginPath(); x.moveTo(cx, sy + TS - 12); x.lineTo(cx + Math.sin(a) * 12, sy + 4); x.lineTo(cx + Math.sin(a) * 4, sy + 10); x.fill(); } break;
+      case 'neon_sign': {
+        x.save(); x.shadowColor = '#ff6ec7'; x.shadowBlur = 8; x.strokeStyle = '#ff6ec7'; x.lineWidth = 3;
+        x.globalAlpha = 0.7 + 0.3 * Math.sin(t * 8);
+        const my = sy + TS / 2;
+        x.beginPath(); x.moveTo(sx + 6, my); x.lineTo(sx + TS - 8, my); x.lineTo(sx + TS - 14, my - 6); x.moveTo(sx + TS - 8, my); x.lineTo(sx + TS - 14, my + 6); x.stroke(); x.restore(); break;
+      }
+      case 'bookshelf':
+        x.fillStyle = '#3a2410'; x.fillRect(sx + 2, sy + 2, TS - 4, TS - 4);
+        for (let r = 0; r < 2; r++) for (let i = 0; i < 5; i++) { x.fillStyle = ['#c9556e', '#3a6ea5', '#57904a', '#ffd166', '#c77dff'][(i + r) % 5]; x.fillRect(sx + 4 + i * 5, sy + 4 + r * 12, 4, 10); }
+        break;
+      case 'stained_glass':
+        for (const [gx, gy, c] of [[8, 8, '#ff4d6d'], [20, 8, '#6ee7ff'], [8, 20, '#ffd166'], [20, 20, '#57904a']]) { x.fillStyle = c; x.globalAlpha = 0.7; x.fillRect(sx + gx - 4, sy + gy - 4, 12, 12); }
+        x.globalAlpha = 1; x.strokeStyle = '#1c2536'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx, sy + 2); x.lineTo(cx, sy + TS - 2); x.moveTo(sx + 2, sy + TS / 2); x.lineTo(sx + TS - 2, sy + TS / 2); x.stroke(); break;
+      case 'grand_clock':
+        x.fillStyle = '#3a2410'; x.fillRect(sx + 6, sy + 2, TS - 12, TS - 2);
+        x.fillStyle = '#eae6dd'; x.beginPath(); x.arc(cx, sy + 12, 7, 0, 7); x.fill();
+        x.strokeStyle = '#1c2536'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(cx, sy + 12); x.lineTo(cx + Math.cos(t) * 5, sy + 12 + Math.sin(t) * 5); x.moveTo(cx, sy + 12); x.lineTo(cx + Math.cos(t * 0.5) * 3, sy + 12 + Math.sin(t * 0.5) * 3); x.stroke(); break;
+      case 'trophy_deco':
+        x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(sx + 10, sy + 6); x.lineTo(sx + TS - 10, sy + 6); x.lineTo(sx + TS - 13, sy + 16); x.lineTo(sx + 13, sy + 16); x.closePath(); x.fill();
+        x.fillRect(cx - 2, sy + 16, 4, 6); x.fillRect(cx - 7, sy + 22, 14, 3);
+        x.strokeStyle = '#c9a227'; x.lineWidth = 2; x.beginPath(); x.arc(sx + 9, sy + 9, 4, 0.5, 3.7); x.arc(sx + TS - 9, sy + 9, 4, -0.5, 2.6, true); x.stroke(); break;
+    }
+  }
+
   static nameHash(str) {
     let h = 2166136261 >>> 0;
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -1194,6 +1254,34 @@ class World {
     });
   }
 
+  /* ---- DUNGEON: procedural multi-room crawl (bring an ally!) ---- */
+  static genDungeon(depth) {
+    const nRooms = 4 + Math.floor(Math.random() * 3); // 4–6 rooms
+    const roomW = 22;
+    const w = new World('dungeon', 'THE DUNGEON', nRooms * roomW + roomW, 28, { sky: ['#0a0410', '#241033'], bgWall: 'rgba(20,8,32,0.92)', dark: 0.7 });
+    w.isDungeon = true;
+    const fy = 22;
+    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? 'brick' : 'bedrock');
+    // ceiling
+    for (let x = 0; x < w.w; x++) w.set(x, 2, 'brick');
+    World.frame(w);
+    const rooms = [];
+    for (let r = 0; r < nRooms; r++) {
+      const x0 = 1 + r * roomW;
+      const doorCol = x0 + roomW - 1;
+      // seal each room with a gate wall (opens when the room is cleared)
+      if (r < nRooms - 1) for (let y = 3; y < fy; y++) w.set(doorCol, y, 'gate');
+      // scatter a chest + a trap or two
+      w.set(x0 + 4 + Math.floor(Math.random() * (roomW - 8)), fy - 1, 'chest');
+      if (Math.random() < 0.6) w.set(x0 + 2 + Math.floor(Math.random() * (roomW - 4)), fy - 1, 'spike_trap');
+      rooms.push({ x0, w: roomW, doorCol, openAt: (x0 + 2) * TS, count: 2 + r + Math.floor(Math.random() * 2) });
+    }
+    w.spawn = { x: 4 * TS, y: (fy - 2) * TS };
+    w.portals.push({ x: 2 * TS, y: fy * TS, target: 'home', label: 'FLEE', color: '#2de2a3' });
+    w.dungeonRooms = rooms; w.dungeonFloorY = fy;
+    return w;
+  }
+
   /* ---- BLACK SPIRE: wave-defense arena ---- */
   static genSpire() {
     const w = new World('spire', 'BLACK SPIRE', 56, 32, { sky: ['#0a0a14', '#1c1c30'], bgWall: 'rgba(16,16,30,0.9)', dark: 0.55 });
@@ -1220,6 +1308,7 @@ class World {
       ['sector6', 'SHADOW PARTITION', '#8d80c9', () => game.bossKillCount < 3],
       ['sector4', 'THE CORE', '#ffd166', () => game.bossKillCount < 4],
       ['sector7', 'THE HIVE', '#ffb703', () => game.bossKillCount < 3],
+      ['dungeon', 'THE DUNGEON', '#9d4edd', () => game.bossKillCount < 2],
       ['spire', 'BLACK SPIRE', '#8d99ae', () => game.bossKillCount < 1],
       ['rush', 'BOSS RUSH', '#ff4d6d', () => !game.progress.beaten.admin],
     ];

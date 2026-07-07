@@ -275,8 +275,11 @@ class Enemy extends Entity {
       }
       if (it.fx && (it.fx.sticky || it.fx.enemySticky)) this.vx *= 0.5;
     });
-    // contact damage
+    // contact damage — to the player, and to the ally if it's in the way
     if (!this.dead && this.overlaps(p)) p.hurt(this.dmg, game, Math.sign(p.x - this.x) * 260, this);
+    if (!this.dead && game.companion && game.companion.downT <= 0 && this.overlaps(game.companion)) {
+      game.companion.hurt(this.dmg * 0.5, game);
+    }
   }
   draw(ctx, cam, time) {
     const sx = this.x - cam.x, sy = this.y - cam.y;
@@ -586,6 +589,81 @@ class Pet {
     ctx.fillRect(-rw / 2, -10, rw, 2);
     if (this.fx.heal) { ctx.strokeStyle = 'rgba(255,209,102,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 13 + Math.sin(time * 4) * 2, 0, 7); ctx.stroke(); }
     ctx.restore();
+  }
+}
+
+/* ===================== AI COMPANION (hired ally — the co-op stand-in) ===================== */
+class Companion extends Entity {
+  constructor(x, y) {
+    super(x, y, 22, 44);
+    this.maxHp = 120; this.hp = 120;
+    this.facing = 1; this.shootT = 0; this.downT = 0; this.t = Math.random() * 10;
+  }
+  update(dt, world, game) {
+    this.t += dt;
+    if (this.downT > 0) { // knocked out — revives after a bit
+      this.downT -= dt; this.vx = 0; this.vy += this.gravity * dt; this.moveAndCollide(dt, world);
+      if (this.downT <= 0) { this.hp = this.maxHp * 0.6; game.fx.explode(this.x, this.y, '#2de2a3', 12); }
+      return;
+    }
+    const p = game.player;
+    // find nearest enemy/boss to engage
+    let best = null, bd = 11 * TS;
+    for (const e of game.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - this.x, e.y - this.y); if (d < bd) { bd = d; best = e; } }
+    if (game.boss && !game.boss.dead) { const d = Math.hypot(game.boss.x - this.x, game.boss.y - this.y); if (d < bd + 4 * TS) best = game.boss; }
+    const followX = p.x - p.facing * 40;
+    let targetX = followX;
+    if (best && Math.hypot(p.x - best.x, p.y - best.y) < 12 * TS) {
+      // stay near the enemy but not on top of the player's target range
+      targetX = best.x - Math.sign(best.x - this.x) * 60;
+      this.facing = Math.sign(best.x - this.x) || this.facing;
+      this.shootT -= dt;
+      if (this.shootT <= 0 && Math.abs(best.y - this.y) < 5 * TS) {
+        this.shootT = 0.55;
+        const a = Math.atan2(best.y - this.y, best.x - this.x);
+        game.projectiles.push(new Projectile(this.x + this.facing * 12, this.y - 6, Math.cos(a) * 640, Math.sin(a) * 640, 14, true, '#8be9fd'));
+        game.sfx.play('shoot');
+      }
+    } else this.facing = Math.sign(p.x - this.x) || this.facing;
+    // move toward target, teleport if the player gets far
+    if (Math.hypot(p.x - this.x, p.y - this.y) > 20 * TS) { this.x = p.x; this.y = p.y; this.vy = 0; }
+    const dx = targetX - this.x;
+    this.vx = Math.abs(dx) > 12 ? Math.sign(dx) * 220 : this.vx * 0.6;
+    if (this.onGround) { // hop over walls / gaps
+      const ah = Math.floor((this.x + Math.sign(this.vx || 1) * 16) / TS), fy = Math.floor((this.y + this.h / 2 - 4) / TS);
+      if (world.isSolid(ah, fy)) this.vy = -560;
+    }
+    this.vy += this.gravity * dt;
+    this.moveAndCollide(dt, world);
+    if (this.y > world.h * TS + 200) { this.x = p.x; this.y = p.y - 60; this.vy = 0; }
+  }
+  hurt(dmg, game) {
+    if (this.downT > 0) return;
+    this.hp -= dmg;
+    game.fx.spark(this.x, this.y, '#ff4d6d', 4);
+    if (this.hp <= 0) { this.hp = 0; this.downT = 6; game.fx.explode(this.x, this.y, '#ff4d6d', 14); game.toast('Your comrade went down — reviving in 6s.', 'warn'); }
+  }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    const down = this.downT > 0;
+    if (down) { ctx.globalAlpha = 0.4 + 0.2 * Math.sin(time * 10); ctx.rotate(1.4); }
+    const walk = Math.abs(this.vx) > 20 && this.onGround ? Math.sin(time * 12) : 0;
+    // green-clad ally
+    ctx.fillStyle = '#2a6b4a'; ctx.fillRect(-9, 8 + walk * 3, 7, 15 - walk * 3); ctx.fillRect(2, 8 - walk * 3, 7, 15 + walk * 3);
+    ctx.fillStyle = '#2de2a3'; ctx.fillRect(-10, -12, 20, 22);
+    ctx.fillStyle = '#1c7a58'; ctx.fillRect(-10, 4, 20, 6);
+    ctx.fillStyle = '#ffd8b1'; ctx.fillRect(-8, -30, 16, 17);
+    ctx.fillStyle = '#0d1526'; ctx.fillRect(this.facing > 0 ? -2 : -10, -27, 12, 7);
+    ctx.fillStyle = '#8be9fd'; ctx.fillRect(this.facing > 0 ? 0 : -8, -26, 8, 4);
+    // little blaster
+    ctx.fillStyle = '#44506b'; ctx.fillRect(this.facing * 8, -8, this.facing * 12, 5);
+    ctx.restore();
+    // hp bar
+    ctx.fillStyle = '#1a2a1a'; ctx.fillRect(sx - 15, sy - 40, 30, 4);
+    ctx.fillStyle = down ? '#ff4d6d' : '#2de2a3'; ctx.fillRect(sx - 15, sy - 40, 30 * Math.max(0, this.hp / this.maxHp), 4);
+    ctx.fillStyle = '#9fe8cf'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(down ? 'DOWN' : 'ALLY', sx, sy - 44);
   }
 }
 

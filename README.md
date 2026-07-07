@@ -55,8 +55,8 @@ sectors** wait behind portals, each ending in a boss fight.
 - **BOSS RUSH** — beat ADMIN to unlock a fifth portal: all four bosses back-to-back. First clear
   awards the Overclock Chip and the Core Sprite pet.
 
-### The twist: nothing is cosmetic
-**180 splice recipes** form a true network — results splice with other results, four tiers deep,
+### The twist: nothing is cosmetic (unless you want it to be)
+**~195 splice recipes** form a true network — results splice with other results, four tiers deep,
 and every recipe is validated reachable starting from the six natural blocks (dirt, stone, wood,
 sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Elixirs (full heal),
 Logic/Cluster Bombs, Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s
@@ -115,6 +115,37 @@ for the **Hive Staff** (homing stingers) and **Queen's Wings** (fuel-free glide 
 
 **Achievements** — a 20-milestone trophy panel (`[G]`) that auto-rewards gems the instant you
 hit each goal, from First Blood to Compiler of All (discover 120 recipes).
+
+### Building for looks, not just function
+Not everything has to *do* something. A **decorative branch** of the splice network compiles
+14 purely-cosmetic blocks — Marble, Fabric, Pillars, Statues, Paintings, Banners, Rugs,
+Chandeliers, Potted Plants, Neon Signs, Bookshelves, Stained Glass, a Grand Clock, and a
+Trophy — each with bespoke tile art and zero gameplay effect, straight out of the Growtopia
+"just make it pretty" school of world-building. Splice them, place them, decorate your server.
+
+### Guilds `[H]`
+Found a guild for ◆500, name it, and **contribute gems** to level it up. Every guild level
+grants stacking, account-wide perks that follow you into every world: **+3% gem drops, +3% XP,
+and +4 max HP per level** (capped at +50% / +50% / +60). It's a long-term gem sink that makes
+your whole account permanently stronger.
+
+### Dungeons + a co-op ally
+Portal into **THE DUNGEON** from your home server — a procedurally generated multi-room crawl.
+Each room is sealed by a gate that only opens when you **clear every enemy inside**; push
+through 4–6 escalating rooms to reach the **final chamber and its guardian**, then loot the
+reward (gems, ◈ Shards, a Corrupted Drive, and a chance at a World Lock). Bring a friend: buy
+**Hire a Comrade** from the Shard Store to summon an **AI companion** — a humanoid ally that
+follows you, shoots your enemies, takes hits, and **revives after being downed**. Dungeons are
+built to be run together.
+
+### ◈ Shard Store `[K]` — an honest monetization model
+Games like this sell premium currency for real money. Glitchtopia keeps the *shape* of that
+system but not the wallet-draining: **◈ Shards are a premium currency you earn by playing** —
++2 per new boss kill, +1 per achievement, +3 from the daily login. Spend them in the Shard
+Store on gem pouches, a World Lock bundle, an XP surge, a Starter Pack, the AI comrade, and
+three purely-cosmetic avatar skins (**Golden**, **Shadow**, and color-cycling **Prism**, each
+with its own glowing aura). The store carries a permanent disclaimer: *no real money, nothing
+to buy.*
 
 The first-tier basics:
 
@@ -226,7 +257,10 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 | `B` | Gem Exchange (shop) + Recycler |
 | `C` | Splice Codex |
 | `Q` | Quest log |
-| `V` | My Worlds (found new worlds with World Locks) |
+| `V` | My Worlds — found or claim worlds, travel to any name |
+| `G` | Achievements |
+| `H` | Guild — found, contribute, view perks |
+| `K` | ◈ Shard Store |
 | `S` | Use teleporter / cycle Weather Core under your feet |
 | `W` | Enter portal |
 | `SHIFT` | Dash (Stormstep Boots) |

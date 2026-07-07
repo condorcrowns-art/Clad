@@ -18,6 +18,7 @@
       <div id="fuelWrap" class="hidden"><div id="fuelBar"></div></div>
       <div id="gemWrap"><span class="gemIcon">◆</span><span id="gemText">0</span></div>
       <div id="keyWrap" class="hidden">🔑 <span id="keyText">0/3</span></div>
+      <div id="shardWrap"><span class="shardIcon">◈</span><span id="shardText">0</span></div>
       <div id="worldName"></div>
     </div>
     <div id="bossWrap" class="hidden">
@@ -69,6 +70,19 @@
       <button id="worldCreateBtn">⚿ FOUND WORLD</button>
       <span id="lockCount"></span>
     </div>
+  </div>
+
+  <!-- Guild -->
+  <div id="guildPanel" class="panel hidden">
+    <div class="panelTitle">GUILD <span class="panelHint">[H] close · contribute gems to level up account-wide perks</span></div>
+    <div id="guildBody"></div>
+  </div>
+
+  <!-- Shard Store -->
+  <div id="storePanel" class="panel hidden">
+    <div class="panelTitle">◈ SHARD STORE <span class="panelHint">[K] close · Shards earned from bosses, achievements & daily login</span></div>
+    <div id="storeNote">This is an in-game store. Purchases use ◈ Shards you earn by playing — no real money, nothing to buy.</div>
+    <div id="storeList"></div>
   </div>
 
   <!-- Achievements -->
@@ -125,7 +139,7 @@
         <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
         <span><b>R-CLICK</b> build background walls</span><span><b>M-CLICK</b> pick block</span>
         <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
-        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
+        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>H</b> guild</span><span><b>K</b> shard store</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
         <span><b>SHIFT</b> dash (with boots)</span>
       </div>
       <button id="playBtn">▶ BOOT UP</button>

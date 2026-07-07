@@ -547,6 +547,24 @@ defItem('royal_jelly', { name: 'Royal Jelly', kind: 'consumable', tier: 3, heal:
 defItem('nectar', { name: 'Nectar', kind: 'consumable', tier: 2, heal: 45,
   desc: 'FUNCTION: sweet restorative — heals 45 HP. Grows on a fast, cheap tree.' });
 
+/* ============ DECORATIVE BLOCKS — pure cosmetics (Growtopia-style) ============
+   No fx, no function — just for building beautiful bases. `deco:true` marks
+   them so the renderer draws bespoke art. They still paint, wall-place, and sell. */
+defItem('marble',      { name: 'Marble Block', kind: 'block', tier: 2, hp: 10, solid: true, deco: true, color: '#eae6dd', color2: '#c9c2b4', desc: 'DECOR: polished white marble. The foundation of any grand build.' });
+defItem('fabric',      { name: 'Fabric Bolt', kind: 'block', tier: 2, hp: 4, solid: true, deco: true, color: '#c9556e', color2: '#8a3049', desc: 'DECOR: rich woven cloth. Base material for banners and rugs.' });
+defItem('pillar',      { name: 'Grand Pillar', kind: 'block', tier: 3, hp: 12, solid: true, deco: true, color: '#eae6dd', color2: '#b8b0a0', desc: 'DECOR: a fluted marble column. Frame your throne room.' });
+defItem('statue',      { name: 'Hero Statue', kind: 'block', tier: 3, hp: 12, solid: true, deco: true, color: '#d8d2c6', color2: '#a49c8c', desc: 'DECOR: a heroic figure carved in stone. Immortalize yourself.' });
+defItem('painting',    { name: 'Framed Painting', kind: 'block', tier: 2, hp: 5, solid: false, deco: true, color: '#8a5a2a', color2: '#3a6ea5', desc: 'DECOR: a gilded landscape painting. Hang it on any wall.' });
+defItem('banner',      { name: 'Wall Banner', kind: 'block', tier: 2, hp: 4, solid: false, deco: true, color: '#c9556e', color2: '#ffd166', desc: 'DECOR: a heraldic banner. Declare your house colors.' });
+defItem('rug',         { name: 'Ornate Rug', kind: 'block', tier: 2, hp: 4, solid: false, deco: true, color: '#9c2b3e', color2: '#ffd166', desc: 'DECOR: a plush patterned rug. Tie the room together.' });
+defItem('chandelier',  { name: 'Chandelier', kind: 'block', tier: 3, hp: 5, solid: false, deco: true, animated: true, color: '#ffd166', color2: '#c9a227', desc: 'DECOR: a crystal chandelier that shimmers. Purely for the ambiance.' });
+defItem('potted_plant',{ name: 'Potted Fern', kind: 'block', tier: 1, hp: 4, solid: false, deco: true, color: '#57904a', color2: '#8a5a2a', desc: 'DECOR: a leafy houseplant. Brings the room to life.' });
+defItem('neon_sign',   { name: 'Neon Sign', kind: 'block', tier: 3, hp: 5, solid: true, deco: true, animated: true, color: '#ff6ec7', color2: '#6ee7ff', desc: 'DECOR: a buzzing neon arrow. Vaporwave storefront energy.' });
+defItem('bookshelf',   { name: 'Bookshelf', kind: 'block', tier: 2, hp: 6, solid: true, deco: true, color: '#7a4a1e', color2: '#c9556e', desc: 'DECOR: a shelf packed with tomes. Look scholarly.' });
+defItem('stained_glass',{ name: 'Stained Glass', kind: 'block', tier: 3, hp: 5, solid: true, deco: true, transparent: true, color: '#c77dff', color2: '#6ee7ff', desc: 'DECOR: a jewel-toned cathedral window. Light pours through it.' });
+defItem('grand_clock', { name: 'Grand Clock', kind: 'block', tier: 3, hp: 6, solid: true, deco: true, animated: true, color: '#7a4a1e', color2: '#ffd166', desc: 'DECOR: a stately grandfather clock, hands sweeping. Tells no time, all vibe.' });
+defItem('trophy_deco', { name: 'Trophy', kind: 'block', tier: 2, hp: 5, solid: false, deco: true, color: '#ffd166', color2: '#c9a227', desc: 'DECOR: a gleaming golden trophy. You earned this. (Or crafted it.)' });
+
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
 const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 4: 240, 9: 170 }; // seconds by tier
@@ -773,6 +791,21 @@ defRecipe('honeycomb', 'sentry', 'hive_turret');
 defRecipe('honeycomb', 'spring_pad', 'honey_pot');
 defRecipe('honeycomb', 'repair_node', 'royal_jelly');
 defRecipe('honeycomb', 'glass', 'nectar');
+// ---- decorative branch (cosmetic-only, Growtopia decor) ----
+defRecipe('stone', 'snow', 'marble');
+defRecipe('wood', 'snow', 'fabric');
+defRecipe('marble', 'brick', 'pillar');
+defRecipe('marble', 'stone', 'statue');
+defRecipe('fabric', 'wood', 'painting');
+defRecipe('fabric', 'brick', 'banner');
+defRecipe('fabric', 'sand', 'rug');
+defRecipe('marble', 'led_block', 'chandelier');
+defRecipe('dirt', 'marble', 'potted_plant');
+defRecipe('sand', 'marble', 'neon_sign');
+defRecipe('wood', 'marble', 'bookshelf');
+defRecipe('glass', 'marble', 'stained_glass');
+defRecipe('fabric', 'marble', 'grand_clock');
+defRecipe('fabric', 'led_block', 'trophy_deco');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 

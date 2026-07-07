@@ -115,7 +115,7 @@ class Player extends Entity {
     if (game.buffActive()) speedMult *= game.buff.speed;
     const baseSpeed = 250 * speedMult;
     // crystal heart & level scaling
-    const wantMax = 100 + (game.level - 1) * 3 + (this.gearFx('maxHp') || 0);
+    const wantMax = 100 + (game.level - 1) * 3 + (this.gearFx('maxHp') || 0) + (game.guildPerks ? game.guildPerks().hpBonus : 0);
     if (this.maxHp !== wantMax) { this.maxHp = wantMax; this.hp = Math.min(this.hp, this.maxHp); ui.updateHUD(); }
     this.iframes = Math.max(0, this.iframes - dt);
     this.actionCd = Math.max(0, this.actionCd - dt);
@@ -693,6 +693,33 @@ class Player extends Entity {
       ctx.restore();
     }
     const sx = this.x - cam.x, sy = this.y - cam.y;
+    // cosmetic skin from the shard store (purely visual)
+    const cos = (typeof game !== 'undefined' && game.progress && game.progress.cosmetic) || null;
+    let bodyCol = '#4361ee', bodyTrim = '#3a0ca3';
+    if (cos === 'gold')      { bodyCol = '#ffcf3f'; bodyTrim = '#b8860b'; }
+    else if (cos === 'shadow') { bodyCol = '#2a2140'; bodyTrim = '#120a24'; }
+    else if (cos === 'rainbow') {
+      const hue = (time * 90) % 360;
+      bodyCol = 'hsl(' + hue + ',85%,60%)';
+      bodyTrim = 'hsl(' + ((hue + 40) % 360) + ',85%,42%)';
+    }
+    // cosmetic aura glow behind the avatar
+    if (cos) {
+      ctx.save();
+      ctx.translate(sx, sy - 4);
+      const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 30);
+      const glow = cos === 'gold' ? '255,207,63' : cos === 'shadow' ? '120,90,200' : null;
+      if (cos === 'rainbow') {
+        g.addColorStop(0, 'hsla(' + ((time * 90) % 360) + ',90%,60%,0.5)');
+        g.addColorStop(1, 'hsla(' + ((time * 90) % 360) + ',90%,60%,0)');
+      } else {
+        g.addColorStop(0, 'rgba(' + glow + ',0.45)');
+        g.addColorStop(1, 'rgba(' + glow + ',0)');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     ctx.save(); ctx.translate(sx, sy);
     // squash & stretch anchored at the feet
     if (this.squash > 0) {

@@ -62,6 +62,31 @@ const ACHIEVEMENTS = [
   { id: 'veteran', name: 'Veteran', desc: 'Reach level 20', icon: '⭐', val: (s, g) => g.level >= 20, gems: 400 },
 ];
 
+/* ---------------- guild perks (level up your clan for account-wide bonuses) ---------------- */
+// guild XP comes from contributing gems; each level grants a stacking perk
+function guildXpNeed(lvl) { return Math.floor(500 * Math.pow(lvl, 1.5)); }
+function guildPerks(lvl) {
+  return {
+    gemBonus: Math.min(0.5, lvl * 0.03),      // +3% gem drops per level (cap +50%)
+    xpBonus: Math.min(0.5, lvl * 0.03),       // +3% XP per level
+    hpBonus: Math.min(60, lvl * 4),           // +4 max HP per level
+  };
+}
+
+/* ---------------- SHARD STORE (in-game premium store — simulated, no real payments) ---------------- */
+const STORE = [
+  { id: 'gems_small', name: 'Pouch of Gems', desc: '+500 gems', cost: 5, give: (g) => g.addGems(500) },
+  { id: 'gems_big', name: 'Chest of Gems', desc: '+2,500 gems', cost: 20, give: (g) => g.addGems(2500) },
+  { id: 'lock_bundle', name: 'World Lock ×3', desc: 'found 3 worlds', cost: 30, give: (g) => g.player.give('world_lock', 3) },
+  { id: 'xp_boost', name: 'XP Surge', desc: '+2000 XP instantly', cost: 8, give: (g) => g.addXp(2000) },
+  { id: 'ally_pass', name: 'Hire a Comrade', desc: 'summon an AI ally that fights beside you', cost: 25, give: (g) => g.summonCompanion() },
+  { id: 'starter', name: 'Starter Pack', desc: 'jetpack + sword + 3 medkits + 300 gems', cost: 15, once: true, give: (g) => { g.player.give('jetpack', 1); g.player.give('sword', 1); g.player.give('medkit', 3); g.addGems(300); } },
+  // pure cosmetics (avatar flair, no gameplay effect)
+  { id: 'skin_gold', name: 'Golden Avatar', desc: 'COSMETIC: shine like a legend', cost: 40, once: true, cosmetic: 'gold', give: (g) => { g.progress.cosmetic = 'gold'; } },
+  { id: 'skin_shadow', name: 'Shadow Avatar', desc: 'COSMETIC: a sleek dark look', cost: 40, once: true, cosmetic: 'shadow', give: (g) => { g.progress.cosmetic = 'shadow'; } },
+  { id: 'skin_rainbow', name: 'Prism Avatar', desc: 'COSMETIC: cycle every color', cost: 60, once: true, cosmetic: 'rainbow', give: (g) => { g.progress.cosmetic = 'rainbow'; } },
+];
+
 class Game {
   constructor() {
     this.canvas = document.getElementById('canvas');
@@ -76,6 +101,7 @@ class Game {
     this.keysGot = 0; this.keysNeed = 0;
     this.pet = null; this.fishing = null; this.rush = null;
     this.xp = 0; this.level = 1;
+    this.shards = 0; this.companion = null; this.dungeon = null;
     this.buff = null;
     this.ownedWorlds = {};   // name -> World instance
     this.spire = null;       // wave-defense state
@@ -126,6 +152,8 @@ class Game {
       if (k === 'q') ui.togglePanel('quest');
       if (k === 'v') ui.togglePanel('worlds');
       if (k === 'g') ui.togglePanel('ach');
+      if (k === 'h') ui.togglePanel('guild');
+      if (k === 'k') ui.togglePanel('store');
       if (k === 'escape') ui.closeAll();
     });
     window.addEventListener('keyup', (e) => {
@@ -296,14 +324,117 @@ class Game {
   }
 
   /* ---------------- economy / spawning ---------------- */
+  guildPerks() { return this.progress.guild ? guildPerks(this.progress.guild.level) : { gemBonus: 0, xpBonus: 0, hpBonus: 0 }; }
+  addShards(n) { this.shards = Math.max(0, this.shards + n); ui.updateHUD(); }
   addGems(n) {
     if (n > 0 && this.progress.overdrive) n = Math.round(n * 2);
+    if (n > 0) n = Math.round(n * (1 + this.guildPerks().gemBonus)); // guild perk
     this.gems = Math.max(0, this.gems + n);
     if (n > 0) {
       this.progress.stats.gemsEarned += n;
       if (this.player.gearFx('greed')) this.addXp(Math.max(1, Math.ceil(n / 4)));
     }
     ui.updateHUD();
+  }
+
+  /* ---------------- guilds ---------------- */
+  foundGuild(rawName) {
+    const name = (rawName || '').trim().slice(0, 20);
+    if (!name) { this.toast('Name your guild first.', 'warn'); return false; }
+    if (this.progress.guild) { this.toast('You already lead a guild.', 'warn'); return false; }
+    if (this.gems < 500) { this.toast('Founding a guild costs ◆500.', 'warn'); return false; }
+    this.addGems(-500);
+    this.progress.guild = { name, level: 1, xp: 0 };
+    this.toast('⚑ GUILD FOUNDED: ' + name + '! Contribute gems to level it up.', 'gold');
+    this.sfx.play('victory');
+    this.save();
+    return true;
+  }
+  contributeGuild(amount) {
+    const g = this.progress.guild;
+    if (!g) return;
+    amount = Math.min(amount, this.gems);
+    if (amount <= 0) { this.toast('Not enough gems to contribute.', 'warn'); return; }
+    this.addGems(-amount);
+    g.xp += amount;
+    let leveled = false;
+    while (g.xp >= guildXpNeed(g.level)) { g.xp -= guildXpNeed(g.level); g.level++; leveled = true; }
+    if (leveled) {
+      this.toast('⚑ ' + g.name + ' reached guild level ' + g.level + '! Perks improved.', 'gold');
+      this.sfx.play('victory');
+      this.fx.explode(this.player.x, this.player.y, '#c77dff', 24);
+    } else this.toast('Contributed ◆' + amount + ' to ' + g.name + '.', '');
+    this.save();
+  }
+
+  /* ---------------- AI companion (the co-op ally) ---------------- */
+  summonCompanion() {
+    const p = this.player;
+    this.companion = new Companion(p.x - p.facing * 40, p.y);
+    this.toast('⚔ A comrade joined you! They fight at your side and revive when downed.', 'gold');
+    this.fx.explode(p.x - p.facing * 40, p.y, '#2de2a3', 20);
+    this.sfx.play('victory');
+  }
+
+  /* ---------------- DUNGEONS (procedural multi-room crawls) ---------------- */
+  updateDungeon(dt) {
+    const d = this.dungeon, w = this.world;
+    if (!d || !w.isDungeon) return;
+    // advance when the current room is cleared of enemies
+    if (d.room < d.rooms.length && !this.enemies.some(e => !e.dead) && this.player.x > d.rooms[d.room].openAt) {
+      const r = d.rooms[d.room];
+      // open the door to the next room
+      for (let y = 2; y < w.h - 2; y++) if (w.get(r.doorCol, y) === 'gate') w.set(r.doorCol, y, null);
+      this.fx.puff(r.doorCol * TS, this.player.y, '#c77dff');
+      this.sfx.play('splice');
+      d.room++;
+      if (d.room < d.rooms.length) {
+        this.toast('Room cleared! Room ' + (d.room + 1) + ' of ' + d.rooms.length + ' unlocked.', 'gold');
+        this.spawnRoom(d.rooms[d.room]);
+      } else {
+        // final room: mini-boss
+        this.toast('⚠ FINAL CHAMBER — the guardian awakens!', 'warn');
+        this.enemies.push(new Enemy('warden', (w.w - 8) * TS, (d.floorY - 3) * TS, 2 + Math.floor(this.bossKillCount / 2)));
+        this.sfx.play('bossroar');
+        d.bossSpawned = true;
+      }
+    }
+    // reward on the guardian's death
+    if (d.bossSpawned && !d.done && !this.enemies.some(e => !e.dead)) {
+      d.done = true;
+      const reward = 200 + d.rooms.length * 60;
+      this.spawnGems(this.player.x, this.player.y - 30, reward);
+      this.addShards(3);
+      this.addXp(150);
+      this.spawnDrop(this.player.x, this.player.y, 'corrupted_drive', 1);
+      if (Math.random() < 0.4) this.spawnDrop(this.player.x, this.player.y, 'world_lock', 1);
+      this.progress.stats.dungeons = (this.progress.stats.dungeons || 0) + 1;
+      this.toast('★ DUNGEON CLEARED! +' + reward + ' ◆, +3 ◈ Shards, loot dropped!', 'gold');
+      this.sfx.play('victory');
+      this.save();
+    }
+  }
+  spawnRoom(r) {
+    const w = this.world, pool = ['glitchling', 'ember', 'drone', 'zapper', 'spitter', 'brute', 'shielder'];
+    for (let k = 0; k < r.count; k++) {
+      const type = pool[Math.floor(Math.random() * pool.length)];
+      this.enemies.push(new Enemy(type, (r.x0 + 3 + Math.random() * (r.w - 6)) * TS, (this.dungeon.floorY - 2) * TS, 1 + Math.floor(this.bossKillCount / 2)));
+    }
+  }
+
+  /* ---------------- shard store (simulated purchases) ---------------- */
+  buyStore(id) {
+    const item = STORE.find(s => s.id === id);
+    if (!item) return;
+    if (item.once && (this.progress.storeBought || {})[id]) { this.toast('Already owned.', 'warn'); return; }
+    if (this.shards < item.cost) { this.toast('Not enough Shards (◈' + item.cost + '). Earn them from bosses/achievements or the daily grant.', 'warn'); return; }
+    this.addShards(-item.cost);
+    item.give(this);
+    this.progress.storeBought = this.progress.storeBought || {};
+    if (item.once) this.progress.storeBought[id] = true;
+    this.toast('◈ Purchased: ' + item.name + '!', 'gold');
+    this.sfx.play('buy');
+    this.save();
   }
 
   /* ---------------- XP & levels ---------------- */
@@ -316,7 +447,7 @@ class Game {
     }
   }
   addXp(n) {
-    n = Math.max(1, Math.round(n * (this.player.gearFx('xpMult') || 1) * (this.player.xpAuraM || 1)));
+    n = Math.max(1, Math.round(n * (this.player.gearFx('xpMult') || 1) * (this.player.xpAuraM || 1) * (1 + this.guildPerks().xpBonus)));
     this.xp += n;
     while (this.xp >= this.xpNeed()) {
       this.xp -= this.xpNeed();
@@ -359,7 +490,7 @@ class Game {
     this.zaps = []; this.keyPickups = []; this.fishing = null; this.rush = null;
     this.keysGot = 0; this.keysNeed = 0;
     this.boss = null; this.bossDefeatedThisVisit = false;
-    this.merchant = null; this.spire = null;
+    this.merchant = null; this.spire = null; this.dungeon = null;
     if (id === 'home') {
       this.world = this.homeWorld;
     } else if (id.startsWith('world:')) {
@@ -375,6 +506,11 @@ class Game {
         this.world = World.genPublic(name);
         this.toast('Now visiting ' + name.toUpperCase() + ' — a public ' + this.world.biome + ' world. Changes here reset; press [V] to CLAIM it.', 'gold');
       }
+    } else if (id === 'dungeon') {
+      this.world = World.genDungeon(this.bossKillCount);
+      this.dungeon = { rooms: this.world.dungeonRooms, floorY: this.world.dungeonFloorY, room: 0, bossSpawned: false, done: false };
+      this.toast('THE DUNGEON — clear each room to open the next. Bring an ally (Shard Store) for co-op!', 'warn');
+      setTimeout(() => { if (this.dungeon) this.spawnRoom(this.dungeon.rooms[0]); }, 300);
     } else if (id === 'spire') {
       this.world = World.genSpire();
       this.spire = { wave: 0, betweenT: 4, active: false };
@@ -581,6 +717,7 @@ class Game {
       if (a.val(this.progress.stats, this)) {
         this.progress.achievements[a.id] = true;
         this.addGems(a.gems);
+        this.addShards(1);
         this.toast('🏆 ACHIEVEMENT: ' + a.name + ' (+' + a.gems + ' ◆)', 'gold');
         this.fx.explode(this.player.x, this.player.y, '#ffd166', 24);
         this.sfx.play('victory');
@@ -639,8 +776,9 @@ class Game {
     const first = !this.progress.beaten[boss.id];
     if (first) {
       this.progress.beaten[boss.id] = true;
+      this.addShards(2);
       for (const [id, n] of boss.meta.drops) this.spawnDrop(boss.x, boss.y, id, n);
-      this.toast('★ ' + boss.meta.name + ' PURGED! Unique boss tech dropped!', 'gold');
+      this.toast('★ ' + boss.meta.name + ' PURGED! Unique boss tech dropped! (+2 ◈)', 'gold');
       if (boss.id === 'admin') {
         this.toast('THE NETWORK IS LIBERATED. You have root now. Build freely.', 'gold');
       } else {
@@ -689,7 +827,7 @@ class Game {
       const worlds = {};
       for (const name in this.ownedWorlds) worlds[name] = this.ownedWorlds[name].serialize();
       localStorage.setItem(SAVE_KEY, JSON.stringify({
-        v: 3, gems: this.gems, inv: p.inv, hotbar: p.hotbar, equip: p.equip, sel: p.sel,
+        v: 3, gems: this.gems, shards: this.shards, inv: p.inv, hotbar: p.hotbar, equip: p.equip, sel: p.sel,
         hp: p.hp, xp: this.xp, level: this.level,
         progress: this.progress, home: this.homeWorld.serialize(), worlds,
       }));
@@ -707,6 +845,7 @@ class Game {
       this.player.equip = s.equip || this.player.equip;
       this.player.sel = s.sel || 0;
       this.xp = s.xp || 0;
+      this.shards = s.shards || 0;
       this.level = s.level || 1;
       this.player.maxHp = 100 + (this.level - 1) * 3;
       this.player.hp = s.hp > 0 ? Math.min(s.hp, this.player.maxHp) : this.player.maxHp;
@@ -747,7 +886,8 @@ class Game {
       this.progress.lastLogin = today;
       const bonus = Math.min(50 + (this.progress.streak - 1) * 25, 150);
       this.addGems(bonus);
-      setTimeout(() => this.toast('☀ Daily login bonus: +' + bonus + ' ◆ (day ' + this.progress.streak + ' streak)', 'gold'), 1200);
+      this.addShards(3);
+      setTimeout(() => this.toast('☀ Daily login: +' + bonus + ' ◆ and +3 ◈ Shards (day ' + this.progress.streak + ' streak)', 'gold'), 1200);
       this.save();
     }
     if (this.progress.tutorial === 0) {
@@ -911,6 +1051,8 @@ class Game {
     }
     if (this.pet && !wantPet) this.pet = null;
     if (this.pet) this.pet.update(dt, this);
+    if (this.companion) this.companion.update(dt, w, this);
+    this.updateDungeon(dt);
 
     this.updateFishing(dt);
     for (const k of this.keyPickups) if (!k.dead) k.update(dt, w, this);
@@ -966,6 +1108,7 @@ class Game {
     for (const k of this.keyPickups) k.draw(ctx, cam, this.time);
     if (this.boss && !this.boss.dead) this.boss.draw(ctx, cam, this.time);
     if (this.pet) this.pet.draw(ctx, cam, this.time);
+    if (this.companion) this.companion.draw(ctx, cam, this.time);
     this.player.draw(ctx, cam, this.time);
     for (const pr of this.projectiles) pr.draw(ctx, cam);
     // tesla arcs
