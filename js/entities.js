@@ -511,7 +511,7 @@ class Drop extends Entity {
     if (this.onGround) this.vx *= 0.85;
     if (this.pickupDelay <= 0 && d < 26) {
       this.dead = true;
-      if (this.gem) { game.addGems(this.gemVal); game.sfx.play('gem'); }
+      if (this.gem) { game.addGems(this.gemVal); game.fx.hitNum(this.x, this.y - 6, '+' + this.gemVal, '#6ee7ff'); game.sfx.play('gem'); }
       else { game.player.give(this.itemId, this.count); game.sfx.play('pickup'); game.toast('+' + this.count + ' ' + ITEMS[this.itemId].name, ''); }
     }
   }
@@ -649,7 +649,7 @@ class FXSystem {
   puff(x, y, color) { for (let i = 0; i < 6; i++) this.add(x, y, (Math.random() - 0.5) * 160, (Math.random() - 0.5) * 160, color, 0.4, 3, 0); }
   explode(x, y, color, n) { for (let i = 0; i < (n || 20); i++) { const a = Math.random() * 6.28, s = 100 + Math.random() * 340; this.add(x, y, Math.cos(a) * s, Math.sin(a) * s, Math.random() < 0.3 ? '#fff' : color, 0.7, 5, 300); } }
   harvest(x, y, color) { for (let i = 0; i < 12; i++) this.add(x, y - 20, (Math.random() - 0.5) * 220, -Math.random() * 260, color, 0.7, 4); }
-  hitNum(x, y, n) { this.nums.push({ x: x + (Math.random() - 0.5) * 14, y, n, life: 0.8 }); }
+  hitNum(x, y, n, color) { this.nums.push({ x: x + (Math.random() - 0.5) * 14, y, n, life: 0.8, color }); }
   update(dt) {
     for (const p of this.parts) { p.life -= dt; p.vy += p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     this.parts = this.parts.filter(p => p.life > 0);
@@ -667,7 +667,7 @@ class FXSystem {
     ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
     for (const n of this.nums) {
       ctx.globalAlpha = Math.min(1, n.life * 2);
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+      ctx.fillStyle = n.color || '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
       ctx.strokeText(n.n, n.x - cam.x, n.y - cam.y);
       ctx.fillText(n.n, n.x - cam.x, n.y - cam.y);
     }

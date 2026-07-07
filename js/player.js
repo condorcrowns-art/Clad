@@ -26,6 +26,7 @@ class Player extends Entity {
     this.ghosts = [];      // dash afterimages
     this._dustT = 0; this._bubT = 0; this._auraT = 0;
     this._wasGround = false; this._lastVy = 0;
+    this.coyoteT = 0; this.jumpBufT = 0;
   }
 
   /* ---------- gear helpers ---------- */
@@ -101,6 +102,7 @@ class Player extends Entity {
     game.fx.explode(this.x, this.y, '#ff4d6d', 8);
     game.sfx.play('hurt');
     game.shake = Math.max(game.shake, 0.25);
+    game.hurtFlash = Math.min(1, (game.hurtFlash || 0) + Math.min(0.7, dmg / 40));
     ui.updateHUD();
     if (this.hp <= 0) game.onPlayerDeath();
   }
@@ -161,6 +163,11 @@ class Player extends Entity {
       // swimming in liquid data?
       const ctile = world.get(Math.floor(this.x / TS), Math.floor(this.y / TS));
       this.inWater = !!(ctile && ITEMS[ctile] && ITEMS[ctile].swim);
+      if (this.inWater && !this._wasWater && this.vy > 200) { // entry splash
+        for (let k = 0; k < 8; k++) game.fx.add(this.x + (Math.random() - 0.5) * this.w, this.y - this.h / 2, (Math.random() - 0.5) * 180, -120 - Math.random() * 120, 'rgba(160,216,240,0.9)', 0.5, 3, 500);
+        game.sfx.play('bounce');
+      }
+      this._wasWater = this.inWater;
 
       // gecko chip: wall slide + wall jump
       this.wallSliding = false;
@@ -179,13 +186,17 @@ class Player extends Entity {
         }
       }
 
+      // coyote time (jump shortly after leaving a ledge) + jump buffering
+      // (press slightly before landing and it still fires) — makes platforming forgiving
+      this.coyoteT = this.onGround ? 0.09 : Math.max(0, this.coyoteT - dt);
+      this.jumpBufT = input.jumpPressed ? 0.11 : Math.max(0, this.jumpBufT - dt);
       // jump / double jump / swim stroke
-      if (input.jumpPressed) {
+      if (this.jumpBufT > 0) {
         const extraJumps = ((feet && feet.doubleJump) || 0) + ((this.equip.chip && ITEMS[this.equip.chip].fx.doubleJump) || 0);
         const jumpV = (feet && feet.jump) || 640;
-        if (this.inWater) { this.vy = -250; game.fx.puff(this.x, this.y - this.h / 2, '#9adcf0'); }
-        else if (this.onGround) { this.vy = -jumpV; this.jumpsUsed = 0; game.fx.puff(this.x, this.y + this.h / 2, '#9fb4d0'); }
-        else if (this.jumpsUsed < extraJumps) { this.jumpsUsed++; this.vy = -jumpV * 0.9; game.fx.puff(this.x, this.y + this.h / 2, '#2de2a3'); game.sfx.play('bounce'); }
+        if (this.inWater) { this.vy = -250; game.fx.puff(this.x, this.y - this.h / 2, '#9adcf0'); this.jumpBufT = 0; }
+        else if (this.onGround || this.coyoteT > 0) { this.vy = -jumpV; this.jumpsUsed = 0; this.coyoteT = 0; this.jumpBufT = 0; game.fx.puff(this.x, this.y + this.h / 2, '#9fb4d0'); }
+        else if (this.jumpsUsed < extraJumps) { this.jumpsUsed++; this.vy = -jumpV * 0.9; this.jumpBufT = 0; game.fx.puff(this.x, this.y + this.h / 2, '#2de2a3'); game.sfx.play('bounce'); }
         input.jumpPressed = false;
       }
 

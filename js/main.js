@@ -887,9 +887,12 @@ class Game {
     this.hazards = this.hazards.filter(h => !h.dead);
     this.fx.update(dt);
 
-    // camera
+    // camera — with velocity look-ahead so you see more of where you're going
     const cam = this.cam;
-    const tx2 = p.x - cam.view.w / 2, ty2 = p.y - cam.view.h / 2 - 40;
+    const lead = this.camLead || 0;
+    const targetLead = Math.max(-1, Math.min(1, (p.vx || 0) / 260)) * 90;
+    this.camLead = lead + (targetLead - lead) * Math.min(1, 3 * dt);
+    const tx2 = p.x + this.camLead - cam.view.w / 2, ty2 = p.y - cam.view.h / 2 - 40;
     cam.x += (tx2 - cam.x) * Math.min(1, 8 * dt);
     cam.y += (ty2 - cam.y) * Math.min(1, 8 * dt);
     cam.x = Math.max(0, Math.min(w.w * TS - cam.view.w, cam.x));
@@ -946,6 +949,32 @@ class Game {
     this.fx.draw(ctx, cam);
     this.drawMinimap(ctx);
     this.drawCursor(ctx, cam);
+    this.drawScreenFx(ctx, cam);
+  }
+
+  // full-screen juice: scanlines, low-HP danger vignette, damage flash
+  drawScreenFx(ctx, cam) {
+    const vw = cam.view.w, vh = cam.view.h;
+    if (!vw || !vh) return;
+    // subtle CRT scanlines for the digital theme
+    ctx.globalAlpha = 0.05; ctx.fillStyle = '#000';
+    for (let y = 0; y < vh; y += 3) ctx.fillRect(0, y, vw, 1);
+    ctx.globalAlpha = 1;
+    // low-HP danger vignette (pulsing red edge)
+    const p = this.player, frac = p.maxHp > 0 ? p.hp / p.maxHp : 1;
+    if (frac < 0.3 && p.hp > 0) {
+      const intensity = (0.3 - frac) / 0.3 * (0.35 + 0.25 * Math.sin(this.time * 6));
+      const g = ctx.createRadialGradient(vw / 2, vh / 2, vh * 0.35, vw / 2, vh / 2, vh * 0.75);
+      g.addColorStop(0, 'rgba(217,4,41,0)');
+      g.addColorStop(1, 'rgba(217,4,41,' + intensity + ')');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
+    }
+    // damage-taken red flash
+    this.hurtFlash = Math.max(0, (this.hurtFlash || 0) - 0.05);
+    if (this.hurtFlash > 0) {
+      ctx.fillStyle = 'rgba(255,40,70,' + this.hurtFlash * 0.32 + ')';
+      ctx.fillRect(0, 0, vw, vh);
+    }
   }
 
   /* ---------------- ambient world particles ---------------- */
@@ -1110,7 +1139,8 @@ window.addEventListener('DOMContentLoaded', () => {
   function frame(now) {
     const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
-    if (game.running) game.loop(dt);
+    try { if (game.running) game.loop(dt); }
+    catch (e) { console.error('loop error', e); }  // never let one bad frame kill the game
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
