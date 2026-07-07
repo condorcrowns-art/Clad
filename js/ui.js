@@ -55,6 +55,11 @@ const ui = {
       if (game.foundWorld(this.el.worldNameInput.value)) { this.el.worldNameInput.value = ''; this.closeAll(); }
     });
     this.el.worldNameInput.addEventListener('keydown', e => e.stopPropagation());
+    // world-name travel
+    const travel = () => { const v = document.getElementById('worldTravelInput').value; if (game.visitWorld(v)) { document.getElementById('worldTravelInput').value = ''; this.closeAll(); } };
+    document.getElementById('worldTravelBtn').addEventListener('click', travel);
+    document.getElementById('worldTravelInput').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') travel(); });
+    document.getElementById('worldRandomBtn').addEventListener('click', () => { game.randomWorld(); this.closeAll(); });
     document.querySelectorAll('.dfBtn').forEach(b => {
       b.addEventListener('click', () => this.defragPress(b.dataset.op));
     });
@@ -148,8 +153,27 @@ const ui = {
       }
       list.appendChild(d);
     };
+    // if you're visiting an unclaimed public world, offer to claim it
+    if (game.world && game.world.visited) {
+      const d = document.createElement('div');
+      d.className = 'worldRow'; d.style.borderColor = '#ffd166';
+      d.innerHTML = '<span class="worldName2">' + game.world.publicName.toUpperCase() + ' <span style="color:#8ba0c0;font-size:10px">(visiting)</span></span><span class="worldBiome ' + game.world.biome + '">' + game.world.biome.toUpperCase() + '</span>';
+      const btn = document.createElement('button');
+      btn.className = 'worldClaim'; btn.textContent = '⚿ CLAIM (' + game.player.count('world_lock') + ')';
+      btn.addEventListener('click', () => { if (game.claimCurrentWorld()) this.renderWorlds(); });
+      d.appendChild(btn);
+      list.appendChild(d);
+    }
     mk('HOME SERVER', 'verdant', 'home', game.world.id === 'home');
     for (const name in game.ownedWorlds) mk(name.toUpperCase(), game.ownedWorlds[name].biome, 'world:' + name, game.world.id === 'world:' + name);
+    // recently visited public worlds (quick re-travel)
+    const vis = game.progress.visited || {};
+    const recents = Object.keys(vis).filter(n => !game.ownedWorlds[n]).sort((a, b) => vis[b] - vis[a]).slice(0, 5);
+    for (const name of recents) {
+      if (game.world.visited && game.world.publicName === name) continue;
+      const biome = World.specialBiome(name) || ['verdant', 'desert', 'tundra', 'volcanic'][World.nameHash(name) % 4];
+      mk(name.toUpperCase() + ' ·', biome, 'visit:' + name, false);
+    }
     this.el.lockCount.textContent = '⚿ World Locks: ' + game.player.count('world_lock');
   },
 

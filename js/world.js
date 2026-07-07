@@ -1149,6 +1149,51 @@ class World {
     return w;
   }
 
+  /* ---- WORLD-NAME TRAVEL (Growtopia / Pixel Worlds) ----
+     Type any name and travel there. The world is generated deterministically
+     from its name, so the same name is ALWAYS the same world — a shared
+     namespace. Visited worlds don't persist; claim one with a World Lock to
+     own it (then it saves like home). ---- */
+  static nameHash(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  // run fn with Math.random replaced by a seeded PRNG, then restore — makes
+  // the whole generation pipeline deterministic without refactoring it
+  static withSeed(seed, fn) {
+    const orig = Math.random;
+    let s = (seed >>> 0) || 1;
+    Math.random = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+    try { return fn(); } finally { Math.random = orig; }
+  }
+  // "magic" names that always map to a themed biome (easter eggs)
+  static specialBiome(name) {
+    const map = {
+      hell: 'volcanic', inferno: 'volcanic', lava: 'volcanic', doom: 'volcanic',
+      heaven: 'verdant', eden: 'verdant', paradise: 'verdant', spring: 'verdant',
+      frost: 'tundra', winter: 'tundra', ice: 'tundra', tundra: 'tundra', snow: 'tundra',
+      desert: 'desert', sahara: 'desert', dune: 'desert', sand: 'desert', egypt: 'desert',
+    };
+    return map[name] || null;
+  }
+  static genPublic(name) {
+    const biome = World.specialBiome(name) || ['verdant', 'desert', 'tundra', 'volcanic'][World.nameHash(name) % 4];
+    const seed = World.nameHash(name);
+    return World.withSeed(seed, () => {
+      const w = new World('visit:' + name, name.toUpperCase(), 100, 60, World.biomeTheme(biome));
+      w.isHome = true; w.visited = true; w.publicName = name; w.biome = biome;
+      const py = World.genHomeLike(w, biome, seed % 997);
+      // scatter a little buried treasure so exploring a fresh name feels rewarding
+      for (let c = 0; c < 4; c++) {
+        const cx = 6 + Math.floor(Math.random() * (w.w - 12)), cy = 28 + Math.floor(Math.random() * (w.h - 36));
+        if (w.get(cx, cy) && w.get(cx, cy) !== 'bedrock') w.set(cx, cy, 'chest');
+      }
+      w.portals.push({ x: 39 * TS, y: py * TS, target: 'home', label: 'HOME', color: '#2de2a3' });
+      return w;
+    });
+  }
+
   /* ---- BLACK SPIRE: wave-defense arena ---- */
   static genSpire() {
     const w = new World('spire', 'BLACK SPIRE', 56, 32, { sky: ['#0a0a14', '#1c1c30'], bgWall: 'rgba(16,16,30,0.9)', dark: 0.55 });

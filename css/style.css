@@ -118,6 +118,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 .worldBiome.volcanic { color: #ff5714; border-color: #ff5714; }
 .worldGo { background: #123; border: 1px solid var(--ui-accent); color: var(--ui-accent); font-family: var(--font); padding: 4px 12px; cursor: pointer; font-weight: bold; }
 .worldGo:hover { background: var(--ui-accent); color: #123; }
+#worldTravel { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+#worldTravelInput { background: #0d1526; border: 1px solid #2c4a6e; color: #eaf4ef; font-family: var(--font); padding: 6px 10px; flex: 1; border-radius: 8px; }
+#worldTravelBtn, #worldRandomBtn { background: linear-gradient(#123a2e, #0a2018); border: 1px solid var(--ui-accent); color: var(--ui-accent); font-family: var(--font); padding: 6px 14px; cursor: pointer; font-weight: bold; border-radius: 8px; }
+#worldTravelBtn:hover, #worldRandomBtn:hover { background: var(--ui-accent); color: #123; }
+.worldClaim { background: linear-gradient(#3a3213, #241f0c); border: 1px solid var(--ui-gold); color: var(--ui-gold); font-family: var(--font); padding: 4px 12px; cursor: pointer; font-weight: bold; border-radius: 8px; }
+.worldClaim:hover { background: var(--ui-gold); color: #123; }
 #worldCreate { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
 #worldNameInput { background: #0d1526; border: 1px solid #2c4a6e; color: #eaf4ef; font-family: var(--font); padding: 6px 10px; flex: 1; }
 #worldCreateBtn { background: #123; border: 1px solid var(--ui-gold); color: var(--ui-gold); font-family: var(--font); padding: 6px 12px; cursor: pointer; font-weight: bold; }

@@ -57,7 +57,12 @@
 
   <!-- My Worlds -->
   <div id="worldsPanel" class="panel hidden">
-    <div class="panelTitle">MY WORLDS <span class="panelHint">[V] close · each World Lock founds a new world with a random biome</span></div>
+    <div class="panelTitle">WORLDS <span class="panelHint">[V] close · type ANY name to travel — every name is a world</span></div>
+    <div id="worldTravel">
+      <input id="worldTravelInput" maxlength="16" placeholder="go to world…">
+      <button id="worldTravelBtn">▶ GO</button>
+      <button id="worldRandomBtn" title="visit a random world">🎲</button>
+    </div>
     <div id="worldsList"></div>
     <div id="worldCreate">
       <input id="worldNameInput" maxlength="16" placeholder="new world name…">
@@ -119,7 +124,7 @@
         <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
         <span><b>R-CLICK</b> build background walls</span><span><b>M-CLICK</b> pick block</span>
         <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
-        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> my worlds</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
+        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
         <span><b>SHIFT</b> dash (with boots)</span>
       </div>
       <button id="playBtn">▶ BOOT UP</button>

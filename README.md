@@ -177,10 +177,15 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **BOSS RUSH** now chains all **six** bosses back-to-back.
 
 ### Even more Growtopia / Pixel Worlds DNA
-- **World Locks & MY WORLDS** (`[V]`) — buy a World Lock (◆1500, or find one in a Golden Cache /
-  Spire wave 10) and **found your own named world**. Each rolls a random biome — verdant, desert
-  (harvestable cacti!), tundra (snow + slippery ice + frozen ponds), or volcanic — and persists
-  exactly like home.
+- **Type a name, travel anywhere** (`[V]`) — the signature Growtopia/Pixel Worlds move. Every
+  name is a world: the terrain is generated *deterministically from the name*, so the same name is
+  always the same world (a shared single-player namespace). Public worlds reset when you leave —
+  unless you **claim** one with a World Lock, after which it saves like home. A 🎲 button warps you
+  to a random world, and "magic" names map to themed biomes (`hell`→volcanic, `heaven`→verdant,
+  `winter`→tundra, `sahara`→desert…).
+- **World Locks & founding** — buy a World Lock (◆1500, Golden Cache, or Spire wave 10) to found
+  or claim a persistent world. Biomes: verdant, desert (harvestable cacti!), tundra (snow +
+  slippery ice + frozen ponds), volcanic.
 - **BLACK SPIRE** — wave-defense arena (the Black Tower homage): escalating waves, elite WARDEN
   waves every 5th, gems + drives every clear, a World Lock at wave 10. Leave between waves.
 - **DEFRAG minigame** — the Surg-E homage: Corrupted Drives drop from enemies/chests; jack in and

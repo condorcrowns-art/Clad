@@ -367,6 +367,14 @@ class Game {
       if (!this.ownedWorlds[name]) return;
       this.world = this.ownedWorlds[name];
       this.toast('Welcome to ' + name.toUpperCase() + ' — a ' + this.world.biome + ' world. It saves like home.', 'gold');
+    } else if (id.startsWith('visit:')) {
+      const name = id.slice(6);
+      // owned worlds always win over a public visit of the same name
+      if (this.ownedWorlds[name]) { this.world = this.ownedWorlds[name]; }
+      else {
+        this.world = World.genPublic(name);
+        this.toast('Now visiting ' + name.toUpperCase() + ' — a public ' + this.world.biome + ' world. Changes here reset; press [V] to CLAIM it.', 'gold');
+      }
     } else if (id === 'spire') {
       this.world = World.genSpire();
       this.spire = { wave: 0, betweenT: 4, active: false };
@@ -425,6 +433,44 @@ class Game {
     this.sfx.play('victory');
     this.save();
     this.enterWorld('world:' + name);
+    return true;
+  }
+
+  // travel to ANY world by name (Growtopia/Pixel Worlds shared namespace)
+  normalizeWorldName(raw) { return (raw || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 16); }
+  visitWorld(rawName) {
+    const name = this.normalizeWorldName(rawName);
+    if (!name) { this.toast('Type a world name to travel there.', 'warn'); return false; }
+    if (name === 'home') { this.enterWorld('home'); return true; }
+    this.progress.visited = this.progress.visited || {};
+    this.progress.visited[name] = Date.now();
+    this.enterWorld(this.ownedWorlds[name] ? 'world:' + name : 'visit:' + name);
+    return true;
+  }
+  randomWorld() {
+    const syl = ['ka', 'zor', 'lux', 'mi', 'the', 'gla', 'nova', 'rex', 'vy', 'pixel', 'qua', 'zen', 'orb', 'fro', 'ember'];
+    let n = ''; const c = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < c; i++) n += syl[Math.floor(Math.random() * syl.length)];
+    this.visitWorld(n);
+  }
+  // claim the public world you're standing in with a World Lock → it becomes owned & persists
+  claimCurrentWorld() {
+    const w = this.world;
+    if (!w || !w.visited) { this.toast('You can only claim public worlds you are visiting.', 'warn'); return false; }
+    const name = w.publicName;
+    if (this.ownedWorlds[name]) { this.toast('You already own this world.', 'warn'); return false; }
+    if (!this.player.count('world_lock')) { this.toast('You need a WORLD LOCK to claim this world (shop ◆1500, Golden Cache, or Spire wave 10).', 'warn'); return false; }
+    this.player.take('world_lock', 1);
+    // promote the current in-memory world to an owned, saveable world
+    w.id = 'world:' + name; w.visited = false; w.ownedName = name;
+    w.portals = w.portals.filter(p => p.target === 'home');
+    this.ownedWorlds[name] = w;
+    this.progress.stats.claimed = (this.progress.stats.claimed || 0) + 1;
+    this.toast('★ WORLD CLAIMED: ' + name.toUpperCase() + ' is now yours and will save!', 'gold');
+    this.sfx.play('victory');
+    this.fx.explode(this.player.x, this.player.y, '#ffd166', 28);
+    this.save();
+    ui.renderWorlds();
     return true;
   }
 
