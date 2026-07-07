@@ -56,7 +56,7 @@ sectors** wait behind portals, each ending in a boss fight.
   awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic
-**175 splice recipes** form a true network — results splice with other results, four tiers deep,
+**180 splice recipes** form a true network — results splice with other results, four tiers deep,
 and every recipe is validated reachable starting from the six natural blocks (dirt, stone, wood,
 sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Elixirs (full heal),
 Logic/Cluster Bombs, Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s
@@ -106,6 +106,15 @@ Highlights of the deeper web:
 | Brick + Spike → **Thorn Chip** · Crystal + Conveyor → **Battery Chip** · Brick + Shield → **Turtle Pack** | Reflect 35% / efficient fuel / tank armor |
 | Drone + Ice → **Chill Wisp** · Drone + Magnet Chip → **Loot Weevil** | Pet variants: slowing shots / 9-tile loot vacuum |
 | …plus Moon/Rocket Boots, Scholar/Leech/Miner/Garden chips, Beacon, Disco Core, Fountain, Sprinkler, Tar, Obsidian, Alarm, Fortress Core | |
+
+**THE HIVE & the SWARM QUEEN** — a golden 7th sector guarded by four new enemy types: **hornets**
+(fast swarming flyers), **sappers** (tunnel straight through your walls), **shielders** (deflect
+projectiles from their front), and **menders** (heal the rest of the swarm). At the far end, the
+crowned **SWARM QUEEN** dive-bombs, spits stinger volleys, and births endless hornets — drop her
+for the **Hive Staff** (homing stingers) and **Queen's Wings** (fuel-free glide + air jump).
+
+**Achievements** — a 20-milestone trophy panel (`[G]`) that auto-rewards gems the instant you
+hit each goal, from First Blood to Compiler of All (discover 120 recipes).
 
 The first-tier basics:
 

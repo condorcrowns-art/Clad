@@ -871,6 +871,16 @@ class World {
       ctx.fillStyle = '#7f4f24'; ctx.fillRect(sx + TS / 2 - 2, sy + 2, 4, 14);
       ctx.fillStyle = '#c1121f';
       ctx.beginPath(); ctx.moveTo(sx + TS / 2 + 2, sy + 3); ctx.lineTo(sx + TS / 2 + 14, sy + 6 + Math.sin(time * 4) * 2); ctx.lineTo(sx + TS / 2 + 2, sy + 10); ctx.fill();
+    } else if (id === 'honeycomb') {
+      ctx.strokeStyle = 'rgba(120,80,0,0.6)'; ctx.lineWidth = 1.5;
+      for (let cy2 = 0; cy2 < 3; cy2++) for (let cx2 = 0; cx2 < 2; cx2++) {
+        const hx = sx + 8 + cx2 * 16 + (cy2 % 2) * 8, hy = sy + 8 + cy2 * 9;
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ctx.lineTo(hx + Math.cos(a) * 6, hy + Math.sin(a) * 6); }
+        ctx.closePath(); ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,230,120,' + (0.3 + 0.2 * Math.sin(time * 3 + tx)) + ')';
+      ctx.fillRect(sx + 4, sy + 4, 4, 4);
     } else if (id === 'lure_buoy') {
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 12, 7, Math.PI, 0); ctx.fill();
       ctx.fillStyle = '#ff4d6d'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + 12, 7, 0, Math.PI); ctx.fill();
@@ -1164,6 +1174,7 @@ class World {
       ['sector3', 'THE CLOUD', '#6ee7ff', () => game.bossKillCount < 2],
       ['sector6', 'SHADOW PARTITION', '#8d80c9', () => game.bossKillCount < 3],
       ['sector4', 'THE CORE', '#ffd166', () => game.bossKillCount < 4],
+      ['sector7', 'THE HIVE', '#ffb703', () => game.bossKillCount < 3],
       ['spire', 'BLACK SPIRE', '#8d99ae', () => game.bossKillCount < 1],
       ['rush', 'BOSS RUSH', '#ff4d6d', () => !game.progress.beaten.admin],
     ];
@@ -1260,6 +1271,7 @@ class World {
       4: { name: 'THE CORE', sky: ['#14020a', '#3d0a1e'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.6, ground: 'corrupt', hazard: 'magma', enemies: ['glitchling', 'zapper', 'spitter', 'brute'], cap: 9, boss: 'admin' },
       5: { name: 'FLOODED ARCHIVE', sky: ['#02131f', '#0a3d52'], bgWall: 'rgba(6,30,42,0.9)', dark: 0.3, ground: 'stone', hazard: null, enemies: ['drone', 'spitter', 'glitchling'], cap: 7, boss: 'kraken', flood: 24 },
       6: { name: 'SHADOW PARTITION', sky: ['#030308', '#0d0d1a'], bgWall: 'rgba(10,10,20,0.92)', dark: 0.95, ground: 'corrupt', hazard: null, enemies: ['wraith', 'glitchling', 'zapper'], cap: 8, boss: 'rootkit' },
+      7: { name: 'THE HIVE', sky: ['#2a1e02', '#a87f12'], bgWall: 'rgba(50,36,4,0.9)', dark: 0.2, ground: 'stone', hazard: null, enemies: ['hornet', 'sapper', 'shielder', 'mender'], cap: 9, boss: 'swarm_queen' },
     }[n];
     const w = new World('sector' + n, defs.name, 130, 50, { sky: defs.sky, bgWall: defs.bgWall, dark: defs.dark });
     w.enemyTypes = defs.enemies; w.enemyCap = defs.cap; w.bossId = defs.boss; w.sectorN = n;

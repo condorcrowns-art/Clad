@@ -529,13 +529,31 @@ defItem('prospector_beetle', { name: 'Prospector Beetle', kind: 'gear', slot: 'p
 defItem('adrenaline_shot', { name: 'Adrenaline Shot', kind: 'consumable', tier: 3, buff: { dur: 15, speed: 2, dmg: 1 },
   desc: 'FUNCTION: DOUBLE movement speed for 15 seconds. Outrun everything.' });
 
+/* --- THE HIVE tech --- */
+defItem('honeycomb', { name: 'Honeycomb Block', kind: 'block', tier: 2, hp: 6, solid: true, animated: true, color: '#f4a800', color2: '#b87f00',
+  fx: { enemySticky: true }, desc: 'FUNCTION: sweet, gluey wax — ENEMIES bog down to half speed crossing it. You walk on top just fine.' });
+defItem('hive_staff', { name: 'Hive Staff', kind: 'weapon', tier: 9, dmg: 16, rate: 4, unspliceable: true,
+  projectile: { speed: 480, color: '#ffd166', homing: 520, life: 3.5 }, minePower: 1, mineRate: 4,
+  desc: 'BOSS TECH: fires HOMING stingers that chase enemies down. Point in their general direction and let the swarm sort it out.' });
+defItem('queen_wing', { name: 'Queen\'s Wings', kind: 'gear', slot: 'back', tier: 9, unspliceable: true,
+  fx: { glide: { fall: 60, boost: 1.4 }, doubleJump: 1 },
+  desc: 'BOSS TECH: iridescent wings — glide at will AND a bonus mid-air jump. No fuel, ever.' });
+defItem('hive_turret', { name: 'Hive Turret', kind: 'block', tier: 3, hp: 12, solid: true, animated: true, color: '#f4a800', color2: '#8a5e00',
+  fx: { sentry: { range: 8, rate: 0.8, dmg: 11 }, glow: 2 }, desc: 'FUNCTION: a turret that spits swarms of homing stingers. Wax-built, endlessly angry.' });
+defItem('honey_pot', { name: 'Honey Pot', kind: 'block', tier: 3, hp: 6, solid: true, animated: true, color: '#f4a800', color2: '#b87f00',
+  fx: { bounce: 900, enemySticky: true }, desc: 'FUNCTION: a springy pot of honey — launches YOU high while gluing enemies that step on it.' });
+defItem('royal_jelly', { name: 'Royal Jelly', kind: 'consumable', tier: 3, heal: 80, buff: { dur: 20, speed: 1.2, dmg: 1.3 },
+  desc: 'FUNCTION: heals 80 AND grants +20% speed / +30% damage for 20s. Fit for a queen.' });
+defItem('nectar', { name: 'Nectar', kind: 'consumable', tier: 2, heal: 45,
+  desc: 'FUNCTION: sweet restorative — heals 45 HP. Grows on a fast, cheap tree.' });
+
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
 const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 4: 240, 9: 170 }; // seconds by tier
 for (const id of Object.keys(ITEMS)) {
   const it = ITEMS[id];
   if (it.kind === 'seed' || it.noDrop || it.kind === 'consumable' || it.kind === 'special') continue;
-  if (['trophy_core', 'admin_crown', 'core_sprite', 'overclock_chip', 'torrent_lance', 'buoy_chip', 'wraith_chip', 'ember_pet'].includes(id)) continue; // one-of-a-kind
+  if (it.tier === 9 || it.unspliceable) continue; // boss tech: no seeds, obtained only from bosses
   defItem(id + '_seed', {
     name: it.name.replace(/ (Block|Pad|Belt|Trap|Node|Blade|Blaster|Pickaxe|Drill|Jetpack|Boots|Chip)$/, '') + ' Seed',
     kind: 'seed', grows: id, tier: it.tier, growTime: GROW_TIMES[it.tier] || 60,
@@ -749,6 +767,12 @@ defRecipe('drone_pet', 'repair_node', 'nurse_gnat');
 defRecipe('drone_pet', 'tar', 'soot_imp');
 defRecipe('drone_pet', 'crystal_cluster', 'prospector_beetle');
 defRecipe('speed_boots', 'glass', 'adrenaline_shot');
+// ---- wave 5: hive + misc utility ----
+defRecipe('sand', 'led_block', 'honeycomb');   // golden wax
+defRecipe('honeycomb', 'sentry', 'hive_turret');
+defRecipe('honeycomb', 'spring_pad', 'honey_pot');
+defRecipe('honeycomb', 'repair_node', 'royal_jelly');
+defRecipe('honeycomb', 'glass', 'nectar');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
@@ -828,7 +852,7 @@ function gtFinish(art) {
   sx2.drawImage(art, 0, 0, 24, 24);
   const c = document.createElement('canvas');
   c.width = 40; c.height = 40;
-  const ox = c.getContext('2d');
+  const ox = c.getContext('2d', { willReadFrequently: true });
   ox.imageSmoothingEnabled = false;
   ox.drawImage(small, 2, 2, 36, 36);
   // 2) dark sticker outline traced from alpha

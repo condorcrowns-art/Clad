@@ -96,6 +96,18 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 
 /* ---------- Recycler ---------- (grid shares .invSlot styling above) */
 
+/* ---------- Achievements ---------- */
+#achList { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.achRow { display: flex; align-items: center; gap: 10px; background: linear-gradient(#141d30, #0c1322); border: 1px solid #2c3a55; border-radius: 10px; padding: 8px 10px; }
+.achRow.got { border-color: var(--ui-gold); background: linear-gradient(#2a2410, #171205); }
+.achRow.locked { opacity: 0.5; filter: grayscale(0.6); }
+.achIcon { font-size: 24px; width: 30px; text-align: center; }
+.achInfo { flex: 1; }
+.achName { color: #eaf4ef; font-weight: bold; font-size: 13px; }
+.achRow.got .achName { color: var(--ui-gold); }
+.achDesc { color: #8ba0c0; font-size: 10px; }
+.achReward { color: var(--ui-gold); font-size: 11px; font-weight: bold; }
+
 /* ---------- My Worlds ---------- */
 .worldRow { display: flex; align-items: center; gap: 10px; background: linear-gradient(#141d30, #0c1322); border: 1px solid #2c3a55; border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
 .worldName2 { color: #eaf4ef; font-weight: bold; font-size: 14px; flex: 1; }

@@ -481,9 +481,13 @@ class Player extends Entity {
         return;
       }
       if (held.heal) {
-        if (this.hp >= this.maxHp) { game.toast('HP already full.', 'warn'); return; }
+        if (this.hp >= this.maxHp && !held.buff) { game.toast('HP already full.', 'warn'); return; }
         this.take(held.id, 1);
         this.hp = Math.min(this.maxHp, this.hp + held.heal);
+        if (held.buff) { // royal jelly & friends: heal + buff
+          game.buff = { until: game.time + held.buff.dur, speed: held.buff.speed, dmg: held.buff.dmg, gem: held.buff.gem };
+          game.toast('Restored & empowered!', 'gold');
+        }
         game.fx.harvest(this.x, this.y, '#ff4d6d'); game.sfx.play('harvest'); ui.updateHUD();
       } else if (held.bomb) {
         if (!inReach) { game.toast('Too far to throw.', 'warn'); return; }
@@ -625,7 +629,7 @@ class Player extends Entity {
           game.projectiles.push(new Projectile(this.x + Math.cos(a) * 20, this.y - 6 + Math.sin(a) * 20,
             Math.cos(a) * tool.projectile.speed * gp, Math.sin(a) * tool.projectile.speed * gp,
             Math.round(tool.dmg * this.dmgMult() * gp), true, tool.projectile.color,
-            { pierce: tool.projectile.pierce, boomerang: tool.projectile.boomerang, knock: tool.knock, burn: tool.burn, chill: tool.chill }));
+            { pierce: tool.projectile.pierce, boomerang: tool.projectile.boomerang, knock: tool.knock, burn: tool.burn, chill: tool.chill, homing: tool.projectile.homing, life: tool.projectile.life }));
         }
         game.sfx.play('shoot');
       } else {

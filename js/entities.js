@@ -89,6 +89,10 @@ const ENEMY_DEFS = {
   brute:      { hp: 120, dmg: 22, speed: 45, color: '#e8590c', color2: '#862e0a', w: 40, h: 36, ai: 'walker', gems: [8, 14] },
   warden:     { hp: 550, dmg: 26, speed: 65, color: '#f1c40f', color2: '#7d6608', w: 52, h: 46, ai: 'walker', lobs: true, miniboss: true, gems: [60, 90] },
   wraith:     { hp: 20, dmg: 14, speed: 170, color: '#2a2a3d', color2: '#ff4d6d', w: 24, h: 26, ai: 'flyer', gems: [4, 9] },
+  hornet:     { hp: 14, dmg: 9, speed: 200, color: '#ffb703', color2: '#3d2e00', w: 20, h: 16, ai: 'flyer', gems: [2, 5] },
+  sapper:     { hp: 46, dmg: 16, speed: 60, color: '#8d6a3f', color2: '#4d3620', w: 28, h: 26, ai: 'walker', digger: true, gems: [4, 9] },
+  shielder:   { hp: 60, dmg: 12, speed: 70, color: '#4a5568', color2: '#8ecae6', w: 30, h: 30, ai: 'walker', frontShield: true, gems: [5, 11] },
+  mender:     { hp: 34, dmg: 6, speed: 90, color: '#95d5b2', color2: '#2d6a4f', w: 24, h: 22, ai: 'flyer', mender: true, gems: [5, 12] },
 };
 
 class Enemy extends Entity {
@@ -182,8 +186,21 @@ class Enemy extends Entity {
           game.sfx.play('eshoot');
         }
       }
-      // hop over walls
-      if (this.onGround) {
+      // sappers tunnel straight through terrain toward you
+      if (this.def.digger && distP < 16 * TS) {
+        this._digT = (this._digT || 0) - dt;
+        if (this._digT <= 0) {
+          this._digT = 0.25;
+          const ax = Math.floor((this.x + this.dir * (this.w / 2 + 3)) / TS);
+          for (let dyi = -1; dyi <= 1; dyi++) {
+            const ay = Math.floor(this.y / TS) + dyi;
+            const t = world.item(ax, ay);
+            if (t && !t.unbreakable && t.solid) { world.breakTile(ax, ay, game, true); game.fx.add(ax * TS + TS / 2, ay * TS + TS / 2, (Math.random() - 0.5) * 100, -60, t.color, 0.4, 3, 400); }
+          }
+        }
+      }
+      // hop over walls (non-diggers)
+      if (this.onGround && !this.def.digger) {
         const aheadX = Math.floor((this.x + this.dir * (this.w / 2 + 4)) / TS);
         const footY = Math.floor((this.y + this.h / 2 - 4) / TS);
         if (world.isSolid(aheadX, footY)) this.vy = -560;
@@ -218,6 +235,20 @@ class Enemy extends Entity {
           const a = Math.atan2(p.y - this.y, p.x - this.x);
           game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 380, Math.sin(a) * 380, this.dmg, false, '#ffd166'));
           game.sfx.play('eshoot');
+        }
+      }
+      // menders keep their swarm alive
+      if (this.def.mender) {
+        this._healT = (this._healT || 0) - dt;
+        if (this._healT <= 0) {
+          this._healT = 1.2;
+          for (const e of game.enemies) {
+            if (e === this || e.dead || e.hp >= e.maxHp) continue;
+            if (Math.hypot(e.x - this.x, e.y - this.y) < 6 * TS) {
+              e.hp = Math.min(e.maxHp, e.hp + Math.round(e.maxHp * 0.12));
+              game.fx.add(e.x, e.y - e.h / 2, 0, -40, '#95d5b2', 0.6, 3, 0);
+            }
+          }
         }
       }
     }
@@ -274,6 +305,30 @@ class Enemy extends Entity {
       ctx.fillStyle = '#000';
       ctx.fillRect(this.dir * 4 - 4 + this.dir, -7 + wob * 0.5, 3, 3); ctx.fillRect(this.dir * 4 + 3 + this.dir, -7 + wob * 0.5, 3, 3);
     }
+    // distinctive markers for the new enemy types
+    if (d.frontShield) { // shielder plate on facing side
+      ctx.fillStyle = d.color2;
+      ctx.fillRect(this.dir * (this.w / 2 - 1), -this.h / 2 + 2, this.dir * 5, this.h - 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(this.dir * (this.w / 2 + 1), -this.h / 2 + 4, this.dir * 2, this.h - 10);
+    }
+    if (d.digger) { // sapper drill snout
+      ctx.fillStyle = '#c0c6d4';
+      ctx.save(); ctx.rotate(this.t * 12);
+      ctx.beginPath(); ctx.moveTo(this.dir * 6, 0); ctx.lineTo(this.dir * (this.w / 2 + 8), -4); ctx.lineTo(this.dir * (this.w / 2 + 8), 4); ctx.fill();
+      ctx.restore();
+    }
+    if (d.mender) { // green cross
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-2, -this.h / 2 - 6, 4, 8); ctx.fillRect(-4, -this.h / 2 - 4, 8, 4);
+    }
+    if (this.type === 'hornet') { // stinger + buzz wings
+      ctx.fillStyle = '#3d2e00';
+      ctx.fillRect(this.dir * (this.w / 2 - 1), -1, this.dir * 5, 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      const bw2 = Math.abs(Math.sin(this.t * 30)) * 10 + 4;
+      ctx.fillRect(-2, -this.h / 2 - bw2, 4, bw2);
+    }
     if (this.def.miniboss) {
       ctx.fillStyle = '#ffd166';
       ctx.beginPath(); ctx.moveTo(-14, -this.h / 2 + 4); ctx.lineTo(-14, -this.h / 2 - 8); ctx.lineTo(-7, -this.h / 2 - 1); ctx.lineTo(0, -this.h / 2 - 10); ctx.lineTo(7, -this.h / 2 - 1); ctx.lineTo(14, -this.h / 2 - 8); ctx.lineTo(14, -this.h / 2 + 4); ctx.closePath(); ctx.fill();
@@ -304,6 +359,7 @@ class Projectile {
     this.chill = (opts && opts.chill) || 0;
     this.knock = (opts && opts.knock) || 120;
     this.boomerang = (opts && opts.boomerang) || false;
+    this.homing = (opts && opts.homing) || 0;
     this.phase = 'out'; this.outT = 0.38;
     this._hit = new Set();
     this.trail = [];
@@ -320,6 +376,21 @@ class Projectile {
       this.vy += Math.sin(a) * this.homing * dt;
       const sp = Math.hypot(this.vx, this.vy);
       if (sp > 340) { this.vx *= 340 / sp; this.vy *= 340 / sp; }
+    } else if (this.homing && this.friendly) {
+      // seek the nearest live target (enemy or boss) by STEERING the velocity
+      // vector at a fixed turn rate — this guarantees convergence (no orbiting)
+      let best = null, bd = 12 * TS;
+      for (const e of game.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - this.x, e.y - this.y); if (d < bd) { bd = d; best = e; } }
+      if (game.boss && !game.boss.dead) { const d = Math.hypot(game.boss.x - this.x, game.boss.y - this.y); if (d < bd) { bd = d; best = game.boss; } }
+      if (best) {
+        const desired = Math.atan2(best.y - this.y, best.x - this.x);
+        let cur = Math.atan2(this.vy, this.vx);
+        let da = desired - cur; while (da > Math.PI) da -= 6.2832; while (da < -Math.PI) da += 6.2832;
+        cur += Math.max(-8 * dt, Math.min(8 * dt, da)); // ~8 rad/s turn = ~55px radius at speed 440
+        const sp = 440;
+        this.vx = Math.cos(cur) * sp; this.vy = Math.sin(cur) * sp;
+      }
+      if (Math.random() < 0.4) game.fx.add(this.x, this.y, 0, 0, this.color, 0.3, 3, 0);
     }
     // recall disc returns to its thrower
     if (this.boomerang) {
@@ -347,6 +418,13 @@ class Projectile {
     if (this.friendly) {
       for (const e of game.enemies) {
         if (e.dead || this._hit.has(e) || !e.overlaps(this)) continue;
+        // shielders deflect shots coming at their front
+        if (e.def && e.def.frontShield && Math.sign(this.vx) === -e.dir) {
+          this.dead = true;
+          game.fx.spark(this.x, this.y, '#8ecae6', 6);
+          game.sfx.play('hit');
+          return;
+        }
         e.hurt(this.dmg, game, Math.sign(this.vx) * this.knock);
         if (this.burn) { e.burn = this.burn.dps; e.burnT = this.burn.dur; }
         if (this.chill) e.chillT = this.chill;

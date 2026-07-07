@@ -11,6 +11,7 @@ const BOSS_META = {
   storm_kernel:    { name: 'STORM KERNEL', hp: 1250, gems: [220, 320], drops: [['storm_boots', 1]] },
   rootkit:         { name: 'R O O T K I T', hp: 1650, gems: [300, 440], drops: [['wraith_chip', 1]] },
   admin:           { name: 'A D M I N', hp: 1900, gems: [400, 600], drops: [['admin_crown', 1], ['trophy_core', 1]] },
+  swarm_queen:     { name: 'SWARM QUEEN', hp: 1550, gems: [280, 400], drops: [['hive_staff', 1], ['queen_wing', 1]] },
 };
 
 class Boss extends Entity {
@@ -648,6 +649,94 @@ class RootkitBoss extends Boss {
   }
 }
 
+/* ============ 7. SWARM QUEEN — hive matriarch ============ */
+class SwarmQueen extends Boss {
+  constructor(x, y) {
+    super('swarm_queen', x, y, 84, 72);
+    this.homeX = x; this.homeY = y;
+    this.gravity = 0; this.contactDmg = 22;
+    this.state = 'hover'; this.stateT = 3;
+    this.spawnT = 1.5; this.stingT = 2;
+  }
+  liveSwarm(game) { return game.enemies.filter(e => !e.dead && e.type === 'hornet').length; }
+  update(dt, world, game) {
+    this.baseUpdate(dt);
+    const p = game.player;
+    const spd = this.phase2 ? 1.6 : 1;
+    this.stateT -= dt;
+    if (this.state === 'hover') {
+      this.x = this.homeX + Math.sin(this.t * 1.1 * spd) * 130;
+      this.y = this.homeY + Math.sin(this.t * 2.3) * 22;
+      if (this.stateT <= 0) {
+        this.state = Math.random() < 0.5 ? 'dive' : 'sting';
+        this.stateT = this.state === 'dive' ? 1.3 : (this.phase2 ? 1.4 : 2);
+        if (this.state === 'dive') { this.diveX = p.x; this.diveY = p.y; }
+      }
+      // spawn hornets from her body
+      this.spawnT -= dt;
+      const cap = this.phase2 ? 8 : 5;
+      if (this.spawnT <= 0 && this.liveSwarm(game) < cap) {
+        this.spawnT = this.phase2 ? 1.8 : 3;
+        const n = this.phase2 ? 3 : 2;
+        for (let k = 0; k < n; k++) game.enemies.push(new Enemy('hornet', this.x + (k - 1) * 20, this.y + 20, Math.max(1, Math.floor(game.bossKillCount / 2))));
+        game.fx.explode(this.x, this.y + 20, '#ffb703', 10);
+        game.sfx.play('eshoot');
+      }
+    } else if (this.state === 'dive') {
+      // swoop toward the marked spot then back up
+      const k = 1 - Math.max(0, this.stateT) / 1.3;
+      const tx = this.diveX, ty = this.diveY;
+      if (k < 0.5) { this.x += (tx - this.x) * 5 * dt; this.y += (ty - this.y) * 6 * dt; }
+      else { this.y += (this.homeY - this.y) * 4 * dt; }
+      if (this.stateT <= 0) { this.state = 'hover'; this.stateT = this.phase2 ? 1.8 : 2.8; }
+    } else if (this.state === 'sting') {
+      this.x += Math.sign(p.x - this.x) * 40 * dt;
+      this.y = this.homeY + Math.sin(this.t * 3) * 18;
+      this.stingT -= dt;
+      if (this.stingT <= 0) {
+        this.stingT = this.phase2 ? 0.35 : 0.6;
+        const a = Math.atan2(p.y - this.y, p.x - this.x) + (Math.random() - 0.5) * 0.5;
+        game.projectiles.push(new Projectile(this.x, this.y + 10, Math.cos(a) * 460, Math.sin(a) * 460, 11, false, '#ffd166', { r: 5, life: 2.5 }));
+        game.sfx.play('eshoot');
+      }
+      if (this.stateT <= 0) { this.state = 'hover'; this.stateT = this.phase2 ? 1.6 : 2.6; }
+    }
+    this.contact(game, dt);
+  }
+  onPhase2(game) { game.toast('The SWARM QUEEN\'s brood grows frenzied!', 'warn'); }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    if (this.hitFlash > 0) ctx.filter = 'brightness(2.2)';
+    // beating wings
+    const wf = Math.sin(time * 22) * 0.5 + 0.6;
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(s * 40, -6, 34 * wf, 20, s * 0.5, 0, 7); ctx.fill();
+    }
+    // striped abdomen
+    for (let k = 0; k < 4; k++) {
+      ctx.fillStyle = k % 2 ? '#1c1400' : '#ffb703';
+      ctx.beginPath(); ctx.ellipse(0, 6 + k * 9, 30 - k * 5, 8, 0, 0, 7); ctx.fill();
+    }
+    // thorax + head
+    ctx.fillStyle = this.phase2 ? '#e09000' : '#c98a02';
+    ctx.beginPath(); ctx.ellipse(0, -14, 26, 20, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1c1400';
+    ctx.beginPath(); ctx.ellipse(-9, -18, 6, 8, 0, 0, 7); ctx.ellipse(9, -18, 6, 8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ff4d6d';
+    ctx.beginPath(); ctx.arc(-9, -18, 2.5, 0, 7); ctx.arc(9, -18, 2.5, 0, 7); ctx.fill();
+    // crown
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath(); ctx.moveTo(-14, -30); ctx.lineTo(-14, -40); ctx.lineTo(-7, -33); ctx.lineTo(0, -42); ctx.lineTo(7, -33); ctx.lineTo(14, -40); ctx.lineTo(14, -30); ctx.closePath(); ctx.fill();
+    // stinger
+    ctx.fillStyle = '#1c1400';
+    ctx.beginPath(); ctx.moveTo(-4, 40); ctx.lineTo(4, 40); ctx.lineTo(0, 52); ctx.fill();
+    ctx.restore();
+  }
+}
+
 function spawnBoss(id, x, y) {
   switch (id) {
     case 'firewall_daemon': return new FirewallDaemon(x, y);
@@ -656,5 +745,6 @@ function spawnBoss(id, x, y) {
     case 'storm_kernel': return new StormKernel(x, y);
     case 'rootkit': return new RootkitBoss(x, y);
     case 'admin': return new AdminBoss(x, y);
+    case 'swarm_queen': return new SwarmQueen(x, y);
   }
 }

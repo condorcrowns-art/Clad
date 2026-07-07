@@ -34,7 +34,32 @@ const QUESTS = [
   { id: 'paint5', name: 'Decorator', desc: 'Paint 5 blocks', goal: 5, val: (s) => s.painted || 0, reward: { items: [['paint_purple', 3]] } },
   { id: 'world2', name: 'Land Baron', desc: 'Found a world with a World Lock', goal: 1, val: (s, g) => Object.keys(g.ownedWorlds).length, reward: { gems: 250 } },
   { id: 'boss6', name: 'Total Purge', desc: 'Purge all six corrupted processes', goal: 6, val: (s, g) => Object.keys(g.progress.beaten).length, reward: { items: [['overclock_cola', 3]] } },
+  { id: 'boss7', name: 'Exterminator', desc: 'Purge the SWARM QUEEN', goal: 1, val: (s, g) => g.progress.beaten.swarm_queen ? 1 : 0, reward: { gems: 200 } },
   { id: 'rush1', name: 'OVERCLOCKED', desc: 'Clear the BOSS RUSH', goal: 1, val: (s, g) => g.progress.rushDone ? 1 : 0, reward: { gems: 500 } },
+];
+
+/* ---------------- achievements (permanent milestones, gem rewards) ---------------- */
+const ACHIEVEMENTS = [
+  { id: 'first_blood', name: 'First Blood', desc: 'Destroy your first enemy', icon: '⚔', val: (s) => s.kills >= 1, gems: 20 },
+  { id: 'slayer', name: 'Slayer', desc: 'Destroy 100 enemies', icon: '💀', val: (s) => s.kills >= 100, gems: 100 },
+  { id: 'genocide', name: 'Debugger Supreme', desc: 'Destroy 500 enemies', icon: '☠', val: (s) => s.kills >= 500, gems: 300 },
+  { id: 'demolisher', name: 'Demolisher', desc: 'Break 500 blocks', icon: '⛏', val: (s) => s.broken >= 500, gems: 80 },
+  { id: 'strip_miner', name: 'Strip Miner', desc: 'Break 2500 blocks', icon: '🏗', val: (s) => s.broken >= 2500, gems: 250 },
+  { id: 'architect', name: 'Architect', desc: 'Place 500 blocks', icon: '🧱', val: (s) => s.placed >= 500, gems: 120 },
+  { id: 'green_thumb', name: 'Green Thumb', desc: 'Harvest 100 trees', icon: '🌳', val: (s) => s.harvests >= 100, gems: 120 },
+  { id: 'geneticist', name: 'Geneticist', desc: 'Splice 25 times', icon: '🧬', val: (s) => s.splices >= 25, gems: 100 },
+  { id: 'mad_scientist', name: 'Mad Scientist', desc: 'Discover 60 recipes', icon: '⚗', val: (s, g) => Object.keys(g.progress.discovered).length >= 60, gems: 400 },
+  { id: 'completionist', name: 'Compiler of All', desc: 'Discover 120 recipes', icon: '📖', val: (s, g) => Object.keys(g.progress.discovered).length >= 120, gems: 1000 },
+  { id: 'angler', name: 'Master Angler', desc: 'Catch 25 fish', icon: '🎣', val: (s) => s.fish >= 25, gems: 120 },
+  { id: 'tycoon', name: 'Gem Tycoon', desc: 'Earn 10,000 gems total', icon: '💎', val: (s) => s.gemsEarned >= 10000, gems: 300 },
+  { id: 'spelunker', name: 'Spelunker', desc: 'Reach depth 120 in the Mineshaft', icon: '🕳', val: (s) => s.maxDepth >= 120, gems: 150 },
+  { id: 'tower_king', name: 'Tower King', desc: 'Survive to Spire wave 10', icon: '🗼', val: (s) => s.spireBest >= 10, gems: 300 },
+  { id: 'liberator', name: 'Network Liberator', desc: 'Purge all 7 corrupted processes', icon: '👑', val: (s, g) => Object.keys(g.progress.beaten).length >= 7, gems: 500 },
+  { id: 'overlord', name: 'Overlord', desc: 'Clear the Boss Rush', icon: '🔥', val: (s, g) => g.progress.rushDone, gems: 400 },
+  { id: 'landlord', name: 'Landlord', desc: 'Found 3 worlds', icon: '🌍', val: (s, g) => Object.keys(g.ownedWorlds).length >= 3, gems: 300 },
+  { id: 'decorator', name: 'Interior Decorator', desc: 'Paint 50 blocks', icon: '🎨', val: (s) => (s.painted || 0) >= 50, gems: 100 },
+  { id: 'surgeon', name: 'Disk Surgeon', desc: 'Successfully DEFRAG 10 drives', icon: '💾', val: (s) => (s.defrags || 0) >= 10, gems: 200 },
+  { id: 'veteran', name: 'Veteran', desc: 'Reach level 20', icon: '⭐', val: (s, g) => g.level >= 20, gems: 400 },
 ];
 
 class Game {
@@ -60,7 +85,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '' };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '' };
     this._questNotified = {};
     this._questT = 0; this._miniT = 0;
     this.time = 0; this.shake = 0;
@@ -100,6 +125,7 @@ class Game {
       if (k === 'c') ui.togglePanel('codex');
       if (k === 'q') ui.togglePanel('quest');
       if (k === 'v') ui.togglePanel('worlds');
+      if (k === 'g') ui.togglePanel('ach');
       if (k === 'escape') ui.closeAll();
     });
     window.addEventListener('keyup', (e) => {
@@ -503,6 +529,18 @@ class Game {
         this.sfx.play('buy');
       }
     }
+    // achievements unlock & auto-reward the moment their condition is met
+    for (const a of ACHIEVEMENTS) {
+      if (this.progress.achievements[a.id]) continue;
+      if (a.val(this.progress.stats, this)) {
+        this.progress.achievements[a.id] = true;
+        this.addGems(a.gems);
+        this.toast('🏆 ACHIEVEMENT: ' + a.name + ' (+' + a.gems + ' ◆)', 'gold');
+        this.fx.explode(this.player.x, this.player.y, '#ffd166', 24);
+        this.sfx.play('victory');
+        this.save();
+      }
+    }
   }
 
   /* ---------------- boss flow ---------------- */
@@ -626,7 +664,8 @@ class Game {
       this.level = s.level || 1;
       this.player.maxHp = 100 + (this.level - 1) * 3;
       this.player.hp = s.hp > 0 ? Math.min(s.hp, this.player.maxHp) : this.player.maxHp;
-      this.progress = Object.assign({ beaten: {}, discovered: {}, tutorial: 99, quests: {}, rushDone: false, streak: 0, lastLogin: '', overdrive: false }, s.progress);
+      this.progress = Object.assign({ beaten: {}, discovered: {}, tutorial: 99, quests: {}, achievements: {}, rushDone: false, streak: 0, lastLogin: '', overdrive: false }, s.progress);
+      this.progress.achievements = this.progress.achievements || {};
       this.progress.stats = Object.assign({}, STATS_DEFAULT, this.progress.stats || {});
       this.progress.quests = this.progress.quests || {};
       this.player.equip = Object.assign({ back: null, feet: null, chip: null, pet: null }, this.player.equip);

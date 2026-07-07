@@ -18,6 +18,7 @@ const ui = {
       keyWrap: $('keyWrap'), keyText: $('keyText'),
       lvlText: $('lvlText'), xpBar: $('xpBar'),
       worldsPanel: $('worldsPanel'), worldsList: $('worldsList'), worldNameInput: $('worldNameInput'), lockCount: $('lockCount'),
+      achPanel: $('achPanel'), achList: $('achList'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
       codexPanel: $('codexPanel'), codexList: $('codexList'),
       tooltip: $('tooltip'), toasts: $('toasts'),
@@ -409,7 +410,7 @@ const ui = {
   togglePanel(name) {
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel'].forEach(p => this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel'].forEach(p => this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -417,13 +418,32 @@ const ui = {
       if (name === 'codex') this.renderCodex();
       if (name === 'quest') this.renderQuests();
       if (name === 'worlds') this.renderWorlds();
+      if (name === 'ach') this.renderAch();
     }
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'defragPanel'].some(p => !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'defragPanel'].some(p => !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel'].forEach(p => this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel'].forEach(p => this.el[p].classList.add('hidden')); this.hideTip(); },
+
+  renderAch() {
+    const list = this.el.achList; if (!list) return;
+    list.innerHTML = '';
+    let got = 0;
+    for (const a of ACHIEVEMENTS) {
+      const unlocked = !!game.progress.achievements[a.id];
+      if (unlocked) got++;
+      const d = document.createElement('div');
+      d.className = 'achRow ' + (unlocked ? 'got' : 'locked');
+      d.innerHTML = '<div class="achIcon">' + (unlocked ? a.icon : '🔒') + '</div>' +
+        '<div class="achInfo"><div class="achName">' + a.name + '</div><div class="achDesc">' + a.desc + '</div></div>' +
+        '<div class="achReward">◆ ' + a.gems + '</div>';
+      list.appendChild(d);
+    }
+    const cnt = document.getElementById('achCount');
+    if (cnt) cnt.textContent = got + ' / ' + ACHIEVEMENTS.length + ' unlocked';
+  },
 
   showTip(e, id) {
     if (!id) { this.hideTip(); return; }
