@@ -82,9 +82,13 @@ const STORE = [
   { id: 'ally_pass', name: 'Hire a Comrade', desc: 'summon an AI ally that fights beside you', cost: 25, give: (g) => g.summonCompanion() },
   { id: 'starter', name: 'Starter Pack', desc: 'jetpack + sword + 3 medkits + 300 gems', cost: 15, once: true, give: (g) => { g.player.give('jetpack', 1); g.player.give('sword', 1); g.player.give('medkit', 3); g.addGems(300); } },
   // pure cosmetics (avatar flair, no gameplay effect)
-  { id: 'skin_gold', name: 'Golden Avatar', desc: 'COSMETIC: shine like a legend', cost: 40, once: true, cosmetic: 'gold', give: (g) => { g.progress.cosmetic = 'gold'; } },
-  { id: 'skin_shadow', name: 'Shadow Avatar', desc: 'COSMETIC: a sleek dark look', cost: 40, once: true, cosmetic: 'shadow', give: (g) => { g.progress.cosmetic = 'shadow'; } },
-  { id: 'skin_rainbow', name: 'Prism Avatar', desc: 'COSMETIC: cycle every color', cost: 60, once: true, cosmetic: 'rainbow', give: (g) => { g.progress.cosmetic = 'rainbow'; } },
+  { id: 'skin_gold', name: 'Golden Avatar', desc: 'COSMETIC: shine like a legend', cost: 40, once: true, cosmetic: 'gold', give: (g) => { g.setCosmetic('gold'); } },
+  { id: 'skin_shadow', name: 'Shadow Avatar', desc: 'COSMETIC: a sleek dark look', cost: 40, once: true, cosmetic: 'shadow', give: (g) => { g.setCosmetic('shadow'); } },
+  { id: 'skin_rainbow', name: 'Prism Avatar', desc: 'COSMETIC: cycle every color', cost: 60, once: true, cosmetic: 'rainbow', give: (g) => { g.setCosmetic('rainbow'); } },
+  { id: 'skin_crimson', name: 'Crimson Avatar', desc: 'COSMETIC: molten red with an ember aura', cost: 40, once: true, cosmetic: 'crimson', give: (g) => { g.setCosmetic('crimson'); } },
+  { id: 'skin_ocean', name: 'Tidal Avatar', desc: 'COSMETIC: deep-sea blue, cool glow', cost: 40, once: true, cosmetic: 'ocean', give: (g) => { g.setCosmetic('ocean'); } },
+  { id: 'skin_toxic', name: 'Toxic Avatar', desc: 'COSMETIC: radioactive green shimmer', cost: 45, once: true, cosmetic: 'toxic', give: (g) => { g.setCosmetic('toxic'); } },
+  { id: 'skin_void', name: 'Void Avatar', desc: 'COSMETIC: a walking starfield', cost: 75, once: true, cosmetic: 'void', give: (g) => { g.setCosmetic('void'); } },
 ];
 
 class Game {
@@ -101,7 +105,7 @@ class Game {
     this.keysGot = 0; this.keysNeed = 0;
     this.pet = null; this.fishing = null; this.rush = null;
     this.xp = 0; this.level = 1;
-    this.shards = 0; this.companion = null; this.dungeon = null;
+    this.shards = 0; this.companions = []; this.dungeon = null;
     this.buff = null;
     this.ownedWorlds = {};   // name -> World instance
     this.spire = null;       // wave-defense state
@@ -361,19 +365,37 @@ class Game {
     while (g.xp >= guildXpNeed(g.level)) { g.xp -= guildXpNeed(g.level); g.level++; leveled = true; }
     if (leveled) {
       this.toast('⚑ ' + g.name + ' reached guild level ' + g.level + '! Perks improved.', 'gold');
+      if (g.level % 5 === 0) this.toast('⚔ Guild milestone: a free ally slot unlocked!', 'gold');
       this.sfx.play('victory');
       this.fx.explode(this.player.x, this.player.y, '#c77dff', 24);
+      this.respawnCompanions(); // new free ally slots take effect
     } else this.toast('Contributed ◆' + amount + ' to ' + g.name + '.', '');
     this.save();
   }
 
-  /* ---------------- AI companion (the co-op ally) ---------------- */
-  summonCompanion() {
+  /* ---------------- AI companions (the co-op roster) ---------------- */
+  // total ally slots = hired allies (from the store) + free guild slots (1 per 5 levels)
+  allyCap() {
+    const hired = (this.progress.allySlots || 0);
+    const guildFree = this.progress.guild ? Math.floor(this.progress.guild.level / 5) : 0;
+    return Math.min(4, hired + guildFree);
+  }
+  // (re)build the live roster to match the cap, positioning members behind the player
+  respawnCompanions() {
+    const cap = this.allyCap();
     const p = this.player;
-    this.companion = new Companion(p.x - p.facing * 40, p.y);
-    this.toast('⚔ A comrade joined you! They fight at your side and revive when downed.', 'gold');
-    this.fx.explode(p.x - p.facing * 40, p.y, '#2de2a3', 20);
+    this.companions = [];
+    for (let i = 0; i < cap; i++) this.companions.push(new Companion(p.x - p.facing * (40 + i * 34), p.y, i));
+  }
+  // buying "Hire a Comrade" permanently adds a roster slot
+  summonCompanion() {
+    this.progress.allySlots = (this.progress.allySlots || 0) + 1;
+    this.respawnCompanions();
+    const n = this.companions.length;
+    this.toast('⚔ Comrade hired! Your roster is now ' + n + ' all' + (n === 1 ? 'y' : 'ies') + '. They fight beside you and revive when downed.', 'gold');
+    this.fx.explode(this.player.x, this.player.y, '#2de2a3', 20);
     this.sfx.play('victory');
+    this.save();
   }
 
   /* ---------------- DUNGEONS (procedural multi-room crawls) ---------------- */
@@ -389,12 +411,15 @@ class Game {
       this.sfx.play('splice');
       d.room++;
       if (d.room < d.rooms.length) {
-        this.toast('Room cleared! Room ' + (d.room + 1) + ' of ' + d.rooms.length + ' unlocked.', 'gold');
-        this.spawnRoom(d.rooms[d.room]);
+        const nr = d.rooms[d.room];
+        const label = { treasure: '💰 TREASURE VAULT', gauntlet: '⚠ TRAP GAUNTLET', elite: '★ ELITE CHAMBER', combat: 'Room' }[nr.type] || 'Room';
+        this.toast('Room cleared! ' + label + ' — ' + (d.room + 1) + ' of ' + d.rooms.length + ' unlocked.', 'gold');
+        this.spawnRoom(nr);
       } else {
-        // final room: mini-boss
+        // final room: themed guardian
         this.toast('⚠ FINAL CHAMBER — the guardian awakens!', 'warn');
-        this.enemies.push(new Enemy('warden', (w.w - 8) * TS, (d.floorY - 3) * TS, 2 + Math.floor(this.bossKillCount / 2)));
+        const gLvl = 2 + Math.floor(this.bossKillCount / 2);
+        this.enemies.push(new Enemy(w.dungeonBoss || 'warden', (w.w - 8) * TS, (d.floorY - 3) * TS, gLvl, { elite: this.bossKillCount >= 3 }));
         this.sfx.play('bossroar');
         d.bossSpawned = true;
       }
@@ -415,16 +440,33 @@ class Game {
     }
   }
   spawnRoom(r) {
-    const w = this.world, pool = ['glitchling', 'ember', 'drone', 'zapper', 'spitter', 'brute', 'shielder'];
+    const w = this.world;
+    const pool = r.pool || ['glitchling', 'ember', 'drone', 'zapper', 'spitter', 'brute', 'shielder'];
+    const lvl = 1 + Math.floor(this.bossKillCount / 2);
+    // elite chambers spawn one buffed elite among the pack
+    if (r.type === 'elite') {
+      const et = pool[Math.floor(Math.random() * pool.length)];
+      this.enemies.push(new Enemy(et, (r.x0 + r.w / 2) * TS, (this.dungeon.floorY - 3) * TS, lvl + 1, { elite: true }));
+    }
     for (let k = 0; k < r.count; k++) {
       const type = pool[Math.floor(Math.random() * pool.length)];
-      this.enemies.push(new Enemy(type, (r.x0 + 3 + Math.random() * (r.w - 6)) * TS, (this.dungeon.floorY - 2) * TS, 1 + Math.floor(this.bossKillCount / 2)));
+      this.enemies.push(new Enemy(type, (r.x0 + 3 + Math.random() * (r.w - 6)) * TS, (this.dungeon.floorY - 2) * TS, lvl));
     }
+  }
+
+  // equip a cosmetic skin (from a purchase, or re-selecting an owned one; null clears it)
+  setCosmetic(c) {
+    this.progress.cosmetic = c;
+    if (c) this.fx.explode(this.player.x, this.player.y, '#ffd166', 16);
+    this.save();
+    if (typeof ui !== 'undefined') { ui.renderStore && ui.renderStore(); }
   }
 
   /* ---------------- shard store (simulated purchases) ---------------- */
   buyStore(id) {
     const item = STORE.find(s => s.id === id);
+    // re-selecting an already-owned cosmetic just equips it (free)
+    if (item && item.cosmetic && (this.progress.storeBought || {})[id]) { this.setCosmetic(item.cosmetic); this.toast('Equipped: ' + item.name, 'gold'); return; }
     if (!item) return;
     if (item.once && (this.progress.storeBought || {})[id]) { this.toast('Already owned.', 'warn'); return; }
     if (this.shards < item.cost) { this.toast('Not enough Shards (◈' + item.cost + '). Earn them from bosses/achievements or the daily grant.', 'warn'); return; }
@@ -509,7 +551,7 @@ class Game {
     } else if (id === 'dungeon') {
       this.world = World.genDungeon(this.bossKillCount);
       this.dungeon = { rooms: this.world.dungeonRooms, floorY: this.world.dungeonFloorY, room: 0, bossSpawned: false, done: false };
-      this.toast('THE DUNGEON — clear each room to open the next. Bring an ally (Shard Store) for co-op!', 'warn');
+      this.toast(this.world.name + ' — clear each room to open the next. Treasure, gauntlet & elite chambers await. Bring allies (Shard Store) for co-op!', 'warn');
       setTimeout(() => { if (this.dungeon) this.spawnRoom(this.dungeon.rooms[0]); }, 300);
     } else if (id === 'spire') {
       this.world = World.genSpire();
@@ -550,6 +592,7 @@ class Game {
       p.x = dtx * TS + TS / 2; p.y = (dty + 1) * TS - p.h / 2 - 1;
     }
     p.vx = 0; p.vy = 0;
+    this.respawnCompanions();
     this.cam.x = p.x - this.cam.view.w / 2; this.cam.y = p.y - this.cam.view.h / 2;
     this.world.buildMini(this);
     ui.updateHUD();
@@ -1051,7 +1094,7 @@ class Game {
     }
     if (this.pet && !wantPet) this.pet = null;
     if (this.pet) this.pet.update(dt, this);
-    if (this.companion) this.companion.update(dt, w, this);
+    for (const c of this.companions) c.update(dt, w, this);
     this.updateDungeon(dt);
 
     this.updateFishing(dt);
@@ -1108,7 +1151,7 @@ class Game {
     for (const k of this.keyPickups) k.draw(ctx, cam, this.time);
     if (this.boss && !this.boss.dead) this.boss.draw(ctx, cam, this.time);
     if (this.pet) this.pet.draw(ctx, cam, this.time);
-    if (this.companion) this.companion.draw(ctx, cam, this.time);
+    for (const c of this.companions) c.draw(ctx, cam, this.time);
     this.player.draw(ctx, cam, this.time);
     for (const pr of this.projectiles) pr.draw(ctx, cam);
     // tesla arcs

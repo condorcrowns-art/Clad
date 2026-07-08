@@ -483,13 +483,17 @@ const ui = {
     const list = this.el.storeList; list.innerHTML = '';
     for (const item of STORE) {
       const owned = item.once && (game.progress.storeBought || {})[item.id];
+      const isCosmetic = !!item.cosmetic;
+      const active = isCosmetic && game.progress.cosmetic === item.cosmetic;
       const d = document.createElement('div');
-      d.className = 'storeRow' + (owned ? ' owned' : '');
+      d.className = 'storeRow' + (owned && !isCosmetic ? ' owned' : '') + (active ? ' active' : '');
       d.innerHTML = '<div class="storeInfo"><div class="storeName">' + item.name + '</div><div class="storeDesc">' + item.desc + '</div></div>';
       const btn = document.createElement('button');
       btn.className = 'storeBuy';
-      btn.textContent = owned ? 'OWNED' : '◈ ' + item.cost;
-      btn.disabled = owned || game.shards < item.cost;
+      // cosmetics: once owned they can be equipped/unequipped for free
+      if (isCosmetic && owned) { btn.textContent = active ? 'ACTIVE' : 'EQUIP'; btn.disabled = active; }
+      else if (owned) { btn.textContent = 'OWNED'; btn.disabled = true; }
+      else { btn.textContent = '◈ ' + item.cost; btn.disabled = game.shards < item.cost; }
       btn.addEventListener('click', () => { game.buyStore(item.id); this.renderStore(); this.updateHUD(); });
       d.appendChild(btn);
       list.appendChild(d);

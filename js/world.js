@@ -27,6 +27,18 @@ const WEATHERS = [
   { name: 'VAPORWAVE', sky: ['#2b1055', '#ff6ec7'], dark: 0 },
 ];
 
+// dungeon themes — each run picks one, changing the palette, floor tile, enemy roster and guardian
+const DUNGEON_THEMES = [
+  { name: 'CATACOMB', sky: ['#0a0410', '#241033'], bgWall: 'rgba(20,8,32,0.92)', dark: 0.7, floor: 'brick',
+    enemies: ['glitchling', 'drone', 'spitter', 'brute', 'shielder'], boss: 'warden' },
+  { name: 'FOUNDRY', sky: ['#160604', '#3a1408'], bgWall: 'rgba(30,10,4,0.92)', dark: 0.62, floor: 'obsidian',
+    enemies: ['ember', 'zapper', 'spitter', 'sapper', 'brute'], boss: 'warden' },
+  { name: 'CRYOVAULT', sky: ['#04101a', '#0e2b3f'], bgWall: 'rgba(8,24,36,0.92)', dark: 0.58, floor: 'ice',
+    enemies: ['drone', 'glitchling', 'shielder', 'mender', 'zapper'], boss: 'warden' },
+  { name: 'SANDTOMB', sky: ['#1a1204', '#3f2f0e'], bgWall: 'rgba(30,22,6,0.9)', dark: 0.5, floor: 'sand',
+    enemies: ['hornet', 'sapper', 'spitter', 'brute', 'glitchling'], boss: 'warden' },
+];
+
 function hash2(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967295; }
 
 class World {
@@ -1211,6 +1223,50 @@ class World {
         x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(sx + 10, sy + 6); x.lineTo(sx + TS - 10, sy + 6); x.lineTo(sx + TS - 13, sy + 16); x.lineTo(sx + 13, sy + 16); x.closePath(); x.fill();
         x.fillRect(cx - 2, sy + 16, 4, 6); x.fillRect(cx - 7, sy + 22, 14, 3);
         x.strokeStyle = '#c9a227'; x.lineWidth = 2; x.beginPath(); x.arc(sx + 9, sy + 9, 4, 0.5, 3.7); x.arc(sx + TS - 9, sy + 9, 4, -0.5, 2.6, true); x.stroke(); break;
+      case 'throne':
+        x.fillStyle = '#8a3049'; x.fillRect(sx + 7, sy + 6, TS - 14, TS - 8); // cushion back
+        x.fillStyle = '#c9a227'; x.fillRect(sx + 4, sy + 2, 4, TS - 4); x.fillRect(sx + TS - 8, sy + 2, 4, TS - 4);
+        x.fillRect(sx + 6, sy + TS - 10, TS - 12, 4);
+        for (const dx of [6, TS - 6]) { x.beginPath(); x.arc(sx + dx, sy + 3, 3, 0, 7); x.fill(); } break;
+      case 'fountain_deco':
+        x.fillStyle = '#c9c2b4'; x.fillRect(sx + 4, sy + TS - 8, TS - 8, 6); x.fillRect(cx - 2, sy + 10, 4, TS - 14);
+        x.fillStyle = '#a8d8f0'; x.fillRect(sx + 6, sy + TS - 7, TS - 12, 3);
+        for (let i = 0; i < 3; i++) { const yy = sy + 8 + ((t * 20 + i * 7) % 12); x.fillStyle = 'rgba(168,216,240,0.8)'; x.fillRect(cx - 4 + i * 3, yy, 2, 3); } break;
+      case 'sconce':
+        x.fillStyle = '#7a4a1e'; x.fillRect(cx - 2, sy + 12, 4, TS - 14);
+        x.save(); x.shadowColor = '#ffb347'; x.shadowBlur = 8 + Math.sin(t * 9) * 3; x.fillStyle = '#ffd166';
+        x.beginPath(); x.ellipse(cx, sy + 9, 4, 6 + Math.sin(t * 12) * 1.5, 0, 0, 7); x.fill(); x.restore(); break;
+      case 'mirror':
+        x.fillStyle = '#c9a227'; x.fillRect(sx + 6, sy + 3, TS - 12, TS - 5);
+        x.fillStyle = '#1c2536'; x.fillRect(sx + 8, sy + 5, TS - 16, TS - 9);
+        x.fillStyle = 'rgba(139,233,253,0.5)'; x.beginPath(); x.moveTo(sx + 9, sy + 6); x.lineTo(sx + 15, sy + 6); x.lineTo(sx + 9, sy + 18); x.closePath(); x.fill(); break;
+      case 'vase':
+        x.fillStyle = '#4da3ff'; x.beginPath(); x.moveTo(cx - 6, sy + 16); x.quadraticCurveTo(cx - 10, sy + 26, cx, sy + TS - 3); x.quadraticCurveTo(cx + 10, sy + 26, cx + 6, sy + 16); x.closePath(); x.fill();
+        for (const [dx, c] of [[-5, '#ff6ec7'], [0, '#ffd166'], [5, '#ff4d6d']]) { x.fillStyle = c; x.beginPath(); x.arc(cx + dx, sy + 8, 3, 0, 7); x.fill(); }
+        x.strokeStyle = '#57904a'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(cx, sy + 16); x.lineTo(cx, sy + 10); x.stroke(); break;
+      case 'curtain':
+        for (let i = 0; i < 5; i++) { x.fillStyle = i % 2 ? '#9c2b3e' : '#7a1f30'; x.fillRect(sx + 2 + i * 6, sy + 2, 5, TS - 6); }
+        x.fillStyle = '#ffd166'; x.fillRect(sx + 2, sy + 2, TS - 4, 3); break;
+      case 'arcade': {
+        x.fillStyle = '#2b1055'; x.fillRect(sx + 5, sy + 2, TS - 10, TS - 2);
+        const on = 0.5 + 0.5 * Math.sin(t * 6);
+        x.fillStyle = 'rgba(110,231,255,' + on + ')'; x.fillRect(sx + 8, sy + 5, TS - 16, 9);
+        x.fillStyle = '#ff6ec7'; x.fillRect(sx + 9, sy + 17, 4, 4); x.fillStyle = '#57e0a0'; x.fillRect(sx + TS - 13, sy + 17, 4, 4); break;
+      }
+      case 'fishbowl':
+        x.fillStyle = 'rgba(110,231,255,0.35)'; x.beginPath(); x.arc(cx, sy + 16, 10, 0, 7); x.fill();
+        x.strokeStyle = '#8be9fd'; x.lineWidth = 1.5; x.beginPath(); x.arc(cx, sy + 16, 10, 0, 7); x.stroke();
+        x.fillStyle = '#ffb347'; const fx2 = cx + Math.sin(t * 2) * 5; x.beginPath(); x.ellipse(fx2, sy + 16, 4, 2.5, 0, 0, 7); x.fill(); break;
+      case 'disco_ball': {
+        x.fillStyle = '#dfe7f5'; x.beginPath(); x.arc(cx, sy + 14, 8, 0, 7); x.fill();
+        for (let i = 0; i < 6; i++) { const a = t * 2 + i; x.fillStyle = ['#ff6ec7', '#6ee7ff', '#ffd166', '#57e0a0'][i % 4]; x.globalAlpha = 0.6; x.fillRect(cx + Math.cos(a) * 12 - 1, sy + 14 + Math.sin(a) * 12 - 1, 3, 3); }
+        x.globalAlpha = 1; break;
+      }
+      case 'gargoyle':
+        x.fillStyle = '#4a4a52'; x.fillRect(sx + 8, sy + TS - 6, TS - 16, 6);
+        x.fillStyle = '#8a8a94'; x.beginPath(); x.arc(cx, sy + 12, 6, 0, 7); x.fill(); x.fillRect(cx - 6, sy + 12, 12, 10);
+        x.fillStyle = '#4a4a52'; x.beginPath(); x.moveTo(cx - 6, sy + 8); x.lineTo(cx - 9, sy + 3); x.lineTo(cx - 3, sy + 7); x.fill(); x.beginPath(); x.moveTo(cx + 6, sy + 8); x.lineTo(cx + 9, sy + 3); x.lineTo(cx + 3, sy + 7); x.fill();
+        x.fillStyle = '#ff4d6d'; x.fillRect(cx - 4, sy + 10, 2, 2); x.fillRect(cx + 2, sy + 10, 2, 2); break;
     }
   }
 
@@ -1256,29 +1312,49 @@ class World {
 
   /* ---- DUNGEON: procedural multi-room crawl (bring an ally!) ---- */
   static genDungeon(depth) {
+    // pick a theme — each dungeon run looks and fights differently
+    const theme = DUNGEON_THEMES[Math.floor(Math.random() * DUNGEON_THEMES.length)];
     const nRooms = 4 + Math.floor(Math.random() * 3); // 4–6 rooms
     const roomW = 22;
-    const w = new World('dungeon', 'THE DUNGEON', nRooms * roomW + roomW, 28, { sky: ['#0a0410', '#241033'], bgWall: 'rgba(20,8,32,0.92)', dark: 0.7 });
+    const w = new World('dungeon', 'THE ' + theme.name, nRooms * roomW + roomW, 28,
+      { sky: theme.sky, bgWall: theme.bgWall, dark: theme.dark });
     w.isDungeon = true;
+    w.dungeonTheme = theme;
     const fy = 22;
-    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? 'brick' : 'bedrock');
+    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? theme.floor : 'bedrock');
     // ceiling
-    for (let x = 0; x < w.w; x++) w.set(x, 2, 'brick');
+    for (let x = 0; x < w.w; x++) w.set(x, 2, theme.floor);
     World.frame(w);
+    // room-type deck: mix combat with the occasional treasure / gauntlet / elite chamber
+    const typeDeck = [];
+    for (let r = 0; r < nRooms - 1; r++) {
+      const roll = Math.random();
+      typeDeck.push(roll < 0.18 ? 'treasure' : roll < 0.36 ? 'gauntlet' : roll < 0.52 ? 'elite' : 'combat');
+    }
     const rooms = [];
     for (let r = 0; r < nRooms; r++) {
       const x0 = 1 + r * roomW;
       const doorCol = x0 + roomW - 1;
+      const type = r === nRooms - 1 ? 'boss' : typeDeck[r];
       // seal each room with a gate wall (opens when the room is cleared)
       if (r < nRooms - 1) for (let y = 3; y < fy; y++) w.set(doorCol, y, 'gate');
-      // scatter a chest + a trap or two
-      w.set(x0 + 4 + Math.floor(Math.random() * (roomW - 8)), fy - 1, 'chest');
-      if (Math.random() < 0.6) w.set(x0 + 2 + Math.floor(Math.random() * (roomW - 4)), fy - 1, 'spike_trap');
-      rooms.push({ x0, w: roomW, doorCol, openAt: (x0 + 2) * TS, count: 2 + r + Math.floor(Math.random() * 2) });
+      // per-type dressing
+      const chests = type === 'treasure' ? 3 : 1;
+      for (let c = 0; c < chests; c++) w.set(x0 + 3 + Math.floor(Math.random() * (roomW - 6)), fy - 1, 'chest');
+      const traps = type === 'gauntlet' ? 4 : (Math.random() < 0.5 ? 1 : 0);
+      for (let t = 0; t < traps; t++) w.set(x0 + 2 + Math.floor(Math.random() * (roomW - 4)), fy - 1, 'spike_trap');
+      // a few floating ledges for verticality
+      if (Math.random() < 0.6) { const ly = fy - 4 - Math.floor(Math.random() * 3), lx = x0 + 5 + Math.floor(Math.random() * (roomW - 12)); for (let i = 0; i < 3; i++) w.set(lx + i, ly, theme.floor); }
+      let count = 2 + r + Math.floor(Math.random() * 2);
+      if (type === 'treasure') count = Math.max(1, count - 2);
+      if (type === 'gauntlet') count += 2;
+      if (type === 'elite') count = Math.max(1, count - 1);
+      rooms.push({ x0, w: roomW, doorCol, openAt: (x0 + 2) * TS, count, type, pool: theme.enemies });
     }
     w.spawn = { x: 4 * TS, y: (fy - 2) * TS };
     w.portals.push({ x: 2 * TS, y: fy * TS, target: 'home', label: 'FLEE', color: '#2de2a3' });
     w.dungeonRooms = rooms; w.dungeonFloorY = fy;
+    w.dungeonBoss = theme.boss;
     return w;
   }
 

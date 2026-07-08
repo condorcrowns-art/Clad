@@ -696,8 +696,16 @@ class Player extends Entity {
     // cosmetic skin from the shard store (purely visual)
     const cos = (typeof game !== 'undefined' && game.progress && game.progress.cosmetic) || null;
     let bodyCol = '#4361ee', bodyTrim = '#3a0ca3';
-    if (cos === 'gold')      { bodyCol = '#ffcf3f'; bodyTrim = '#b8860b'; }
-    else if (cos === 'shadow') { bodyCol = '#2a2140'; bodyTrim = '#120a24'; }
+    const COSMETICS = {
+      gold:    { body: '#ffcf3f', trim: '#b8860b', glow: '255,207,63' },
+      shadow:  { body: '#2a2140', trim: '#120a24', glow: '120,90,200' },
+      crimson: { body: '#e63946', trim: '#7a1520', glow: '255,80,60' },
+      ocean:   { body: '#118ab2', trim: '#073b4c', glow: '80,200,255' },
+      toxic:   { body: '#70e000', trim: '#38610a', glow: '140,255,60' },
+      void:    { body: '#1a1030', trim: '#0a0518', glow: '150,110,255' },
+    };
+    const cm = COSMETICS[cos];
+    if (cm) { bodyCol = cm.body; bodyTrim = cm.trim; }
     else if (cos === 'rainbow') {
       const hue = (time * 90) % 360;
       bodyCol = 'hsl(' + hue + ',85%,60%)';
@@ -708,16 +716,23 @@ class Player extends Entity {
       ctx.save();
       ctx.translate(sx, sy - 4);
       const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 30);
-      const glow = cos === 'gold' ? '255,207,63' : cos === 'shadow' ? '120,90,200' : null;
       if (cos === 'rainbow') {
         g.addColorStop(0, 'hsla(' + ((time * 90) % 360) + ',90%,60%,0.5)');
         g.addColorStop(1, 'hsla(' + ((time * 90) % 360) + ',90%,60%,0)');
-      } else {
-        g.addColorStop(0, 'rgba(' + glow + ',0.45)');
-        g.addColorStop(1, 'rgba(' + glow + ',0)');
+      } else if (cm) {
+        g.addColorStop(0, 'rgba(' + cm.glow + ',0.45)');
+        g.addColorStop(1, 'rgba(' + cm.glow + ',0)');
       }
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
+      // void skin: orbiting starfield
+      if (cos === 'void') {
+        for (let i = 0; i < 7; i++) {
+          const a = time * 1.5 + i * 0.9, r = 18 + (i % 3) * 6;
+          ctx.fillStyle = 'rgba(220,210,255,' + (0.4 + 0.4 * Math.sin(time * 4 + i)) + ')';
+          ctx.fillRect(Math.cos(a) * r, Math.sin(a) * r * 0.8 - 4, 2, 2);
+        }
+      }
       ctx.restore();
     }
     ctx.save(); ctx.translate(sx, sy);

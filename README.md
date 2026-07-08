@@ -56,7 +56,7 @@ sectors** wait behind portals, each ending in a boss fight.
   awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic (unless you want it to be)
-**~195 splice recipes** form a true network — results splice with other results, four tiers deep,
+**~205 splice recipes** form a true network — results splice with other results, four tiers deep,
 and every recipe is validated reachable starting from the six natural blocks (dirt, stone, wood,
 sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Elixirs (full heal),
 Logic/Cluster Bombs, Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s
@@ -118,34 +118,44 @@ hit each goal, from First Blood to Compiler of All (discover 120 recipes).
 
 ### Building for looks, not just function
 Not everything has to *do* something. A **decorative branch** of the splice network compiles
-14 purely-cosmetic blocks — Marble, Fabric, Pillars, Statues, Paintings, Banners, Rugs,
-Chandeliers, Potted Plants, Neon Signs, Bookshelves, Stained Glass, a Grand Clock, and a
-Trophy — each with bespoke tile art and zero gameplay effect, straight out of the Growtopia
+**24 purely-cosmetic blocks** — Marble, Fabric, Pillars, Statues, Paintings, Banners, Rugs,
+Chandeliers, Potted Plants, Neon Signs, Bookshelves, Stained Glass, a Grand Clock, a Trophy,
+plus a second wave: a **Royal Throne, Ornate Fountain, Wall Sconce, Standing Mirror, Flower
+Vase, Silk Curtains, Arcade Cabinet, Fishbowl, Disco Ball, and Stone Gargoyle** — each with
+bespoke (often animated) tile art and zero gameplay effect, straight out of the Growtopia
 "just make it pretty" school of world-building. Splice them, place them, decorate your server.
 
 ### Guilds `[H]`
 Found a guild for ◆500, name it, and **contribute gems** to level it up. Every guild level
 grants stacking, account-wide perks that follow you into every world: **+3% gem drops, +3% XP,
-and +4 max HP per level** (capped at +50% / +50% / +60). It's a long-term gem sink that makes
-your whole account permanently stronger.
+and +4 max HP per level** (capped at +50% / +50% / +60). Hit **level 5, 10, 15, 20** and each
+milestone unlocks a **free permanent ally slot** for your roster (below). It's a long-term gem
+sink that makes your whole account permanently stronger.
 
-### Dungeons + a co-op ally
-Portal into **THE DUNGEON** from your home server — a procedurally generated multi-room crawl.
-Each room is sealed by a gate that only opens when you **clear every enemy inside**; push
-through 4–6 escalating rooms to reach the **final chamber and its guardian**, then loot the
-reward (gems, ◈ Shards, a Corrupted Drive, and a chance at a World Lock). Bring a friend: buy
-**Hire a Comrade** from the Shard Store to summon an **AI companion** — a humanoid ally that
-follows you, shoots your enemies, takes hits, and **revives after being downed**. Dungeons are
-built to be run together.
+### Dungeons + a co-op roster
+Portal into **THE DUNGEON** from your home server — a procedurally generated multi-room crawl
+that reshuffles every run. It rolls one of **four themes** (CATACOMB, FOUNDRY, CRYOVAULT,
+SANDTOMB), each with its own palette, floor tile, and enemy roster. Rooms come in flavors too:
+ordinary **combat**, loot-stuffed **treasure vaults**, trap-lined **gauntlets**, and **elite
+chambers** that spawn a buffed, crowned, aura-glowing elite worth extra loot. Each room is
+gate-sealed until you **clear it**; push through 4–6 rooms to the **themed guardian** (elite at
+higher progress), then loot the reward.
+
+Bring a squad. Buy **Hire a Comrade** from the Shard Store and each purchase permanently adds an
+**AI ally** to your **roster** (up to four) — distinct kits (**ALLY / GUNNER / WARDEN / HEXER**,
+each its own color, fire-rate, range and HP) that follow you across every world, spread out
+behind you, shoot your enemies, take hits, and **revive after being downed**. Guild milestones
+grant free roster slots on top of hired ones.
 
 ### ◈ Shard Store `[K]` — an honest monetization model
 Games like this sell premium currency for real money. Glitchtopia keeps the *shape* of that
 system but not the wallet-draining: **◈ Shards are a premium currency you earn by playing** —
 +2 per new boss kill, +1 per achievement, +3 from the daily login. Spend them in the Shard
-Store on gem pouches, a World Lock bundle, an XP surge, a Starter Pack, the AI comrade, and
-three purely-cosmetic avatar skins (**Golden**, **Shadow**, and color-cycling **Prism**, each
-with its own glowing aura). The store carries a permanent disclaimer: *no real money, nothing
-to buy.*
+Store on gem pouches, a World Lock bundle, an XP surge, a Starter Pack, extra roster allies, and
+**seven purely-cosmetic avatar skins** — **Golden, Shadow, color-cycling Prism, Crimson, Tidal,
+Toxic**, and the starfield **Void** — each with its own glowing aura. Owned skins can be
+re-equipped or swapped for free. The store carries a permanent disclaimer: *no real money,
+nothing to buy.*
 
 The first-tier basics:
 

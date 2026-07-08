@@ -96,14 +96,16 @@ const ENEMY_DEFS = {
 };
 
 class Enemy extends Entity {
-  constructor(type, x, y, lvl) {
+  constructor(type, x, y, lvl, opts) {
     const d = ENEMY_DEFS[type];
-    super(x, y, d.w, d.h);
+    const elite = !!(opts && opts.elite);
+    super(x, y, elite ? d.w * 1.5 : d.w, elite ? d.h * 1.5 : d.h);
     this.type = type; this.def = d;
     this.lvl = lvl || 1;
-    const mult = 1 + (this.lvl - 1) * 0.55;
+    this.elite = elite;
+    const mult = (1 + (this.lvl - 1) * 0.55) * (elite ? 3 : 1);
     this.maxHp = Math.round(d.hp * mult); this.hp = this.maxHp;
-    this.dmg = Math.round(d.dmg * (1 + (this.lvl - 1) * 0.3));
+    this.dmg = Math.round(d.dmg * (1 + (this.lvl - 1) * 0.3) * (elite ? 1.5 : 1));
     this.dir = Math.random() < 0.5 ? -1 : 1;
     this.t = Math.random() * 10;
     this.burn = 0; this.burnT = 0; this.chillT = 0;
@@ -125,7 +127,14 @@ class Enemy extends Entity {
       game.fx.explode(this.x, this.y, this.def.color, this.def.miniboss ? 34 : 14);
       game.sfx.play('kill');
       const [g0, g1] = this.def.gems;
-      game.spawnGems(this.x, this.y, g0 + Math.floor(Math.random() * (g1 - g0 + 1)) * this.lvl);
+      game.spawnGems(this.x, this.y, (g0 + Math.floor(Math.random() * (g1 - g0 + 1)) * this.lvl) * (this.elite ? 4 : 1));
+      if (this.elite) { // elite guaranteed loot
+        game.spawnDrop(this.x, this.y, 'medkit', 1);
+        game.spawnDrop(this.x, this.y, 'corrupted_drive', 1);
+        if (Math.random() < 0.3) game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
+        game.fx.explode(this.x, this.y, '#ffd166', 26);
+        game.toast('★ Elite purged — extra loot dropped!', 'gold');
+      }
       if (Math.random() < 0.06) game.spawnDrop(this.x, this.y, 'medkit', 1);
       if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'bomb', 1);
       if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'corrupted_drive', 1);
@@ -277,14 +286,22 @@ class Enemy extends Entity {
     });
     // contact damage — to the player, and to the ally if it's in the way
     if (!this.dead && this.overlaps(p)) p.hurt(this.dmg, game, Math.sign(p.x - this.x) * 260, this);
-    if (!this.dead && game.companion && game.companion.downT <= 0 && this.overlaps(game.companion)) {
-      game.companion.hurt(this.dmg * 0.5, game);
+    if (!this.dead && game.companions) for (const c of game.companions) {
+      if (c.downT <= 0 && this.overlaps(c)) { c.hurt(this.dmg * 0.5, game); break; }
     }
   }
   draw(ctx, cam, time) {
     const sx = this.x - cam.x, sy = this.y - cam.y;
     const d = this.def;
     ctx.save(); ctx.translate(sx, sy);
+    if (this.elite) { // pulsing golden aura + crown
+      const pr = this.w * 0.7 + Math.sin(time * 4) * 3;
+      const g = ctx.createRadialGradient(0, 0, 2, 0, 0, pr);
+      g.addColorStop(0, 'rgba(255,209,102,0.35)'); g.addColorStop(1, 'rgba(255,209,102,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, pr, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath(); ctx.moveTo(-8, -this.h / 2 - 2); ctx.lineTo(-8, -this.h / 2 - 10); ctx.lineTo(-3, -this.h / 2 - 5); ctx.lineTo(0, -this.h / 2 - 11); ctx.lineTo(3, -this.h / 2 - 5); ctx.lineTo(8, -this.h / 2 - 10); ctx.lineTo(8, -this.h / 2 - 2); ctx.closePath(); ctx.fill();
+    }
     if (this.hitFlash > 0) ctx.filter = 'brightness(2.5)';
     const wob = Math.sin(this.t * 8) * 2;
     if (d.ai === 'flyer') {
@@ -593,10 +610,18 @@ class Pet {
 }
 
 /* ===================== AI COMPANION (hired ally — the co-op stand-in) ===================== */
+const COMPANION_KITS = [
+  { name: 'ALLY',    body: '#2de2a3', trim: '#1c7a58', legs: '#2a6b4a', bolt: '#8be9fd', col: 640, cd: 0.55, hp: 120 },
+  { name: 'GUNNER',  body: '#ffa94d', trim: '#c9741f', legs: '#8a4b12', bolt: '#ffd166', col: 720, cd: 0.4,  hp: 100 },
+  { name: 'WARDEN',  body: '#4da3ff', trim: '#1f5fb0', legs: '#123a70', bolt: '#a5d8ff', col: 560, cd: 0.7,  hp: 170 },
+  { name: 'HEXER',   body: '#c77dff', trim: '#8b3fd6', legs: '#5a2494', bolt: '#e0b0ff', col: 600, cd: 0.5,  hp: 130 },
+];
 class Companion extends Entity {
-  constructor(x, y) {
+  constructor(x, y, slot) {
     super(x, y, 22, 44);
-    this.maxHp = 120; this.hp = 120;
+    this.slot = slot || 0;
+    this.kit = COMPANION_KITS[this.slot % COMPANION_KITS.length];
+    this.maxHp = this.kit.hp; this.hp = this.kit.hp;
     this.facing = 1; this.shootT = 0; this.downT = 0; this.t = Math.random() * 10;
   }
   update(dt, world, game) {
@@ -611,17 +636,19 @@ class Companion extends Entity {
     let best = null, bd = 11 * TS;
     for (const e of game.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - this.x, e.y - this.y); if (d < bd) { bd = d; best = e; } }
     if (game.boss && !game.boss.dead) { const d = Math.hypot(game.boss.x - this.x, game.boss.y - this.y); if (d < bd + 4 * TS) best = game.boss; }
-    const followX = p.x - p.facing * 40;
+    // spread roster members out behind the player so they don't stack
+    const spread = 40 + this.slot * 34;
+    const followX = p.x - p.facing * spread;
     let targetX = followX;
     if (best && Math.hypot(p.x - best.x, p.y - best.y) < 12 * TS) {
       // stay near the enemy but not on top of the player's target range
-      targetX = best.x - Math.sign(best.x - this.x) * 60;
+      targetX = best.x - Math.sign(best.x - this.x) * (60 + this.slot * 24);
       this.facing = Math.sign(best.x - this.x) || this.facing;
       this.shootT -= dt;
       if (this.shootT <= 0 && Math.abs(best.y - this.y) < 5 * TS) {
-        this.shootT = 0.55;
+        this.shootT = this.kit.cd;
         const a = Math.atan2(best.y - this.y, best.x - this.x);
-        game.projectiles.push(new Projectile(this.x + this.facing * 12, this.y - 6, Math.cos(a) * 640, Math.sin(a) * 640, 14, true, '#8be9fd'));
+        game.projectiles.push(new Projectile(this.x + this.facing * 12, this.y - 6, Math.cos(a) * this.kit.col, Math.sin(a) * this.kit.col, 14, true, this.kit.bolt));
         game.sfx.play('shoot');
       }
     } else this.facing = Math.sign(p.x - this.x) || this.facing;
@@ -649,21 +676,22 @@ class Companion extends Entity {
     const down = this.downT > 0;
     if (down) { ctx.globalAlpha = 0.4 + 0.2 * Math.sin(time * 10); ctx.rotate(1.4); }
     const walk = Math.abs(this.vx) > 20 && this.onGround ? Math.sin(time * 12) : 0;
-    // green-clad ally
-    ctx.fillStyle = '#2a6b4a'; ctx.fillRect(-9, 8 + walk * 3, 7, 15 - walk * 3); ctx.fillRect(2, 8 - walk * 3, 7, 15 + walk * 3);
-    ctx.fillStyle = '#2de2a3'; ctx.fillRect(-10, -12, 20, 22);
-    ctx.fillStyle = '#1c7a58'; ctx.fillRect(-10, 4, 20, 6);
+    const k = this.kit;
+    // kit-clad ally
+    ctx.fillStyle = k.legs; ctx.fillRect(-9, 8 + walk * 3, 7, 15 - walk * 3); ctx.fillRect(2, 8 - walk * 3, 7, 15 + walk * 3);
+    ctx.fillStyle = k.body; ctx.fillRect(-10, -12, 20, 22);
+    ctx.fillStyle = k.trim; ctx.fillRect(-10, 4, 20, 6);
     ctx.fillStyle = '#ffd8b1'; ctx.fillRect(-8, -30, 16, 17);
     ctx.fillStyle = '#0d1526'; ctx.fillRect(this.facing > 0 ? -2 : -10, -27, 12, 7);
-    ctx.fillStyle = '#8be9fd'; ctx.fillRect(this.facing > 0 ? 0 : -8, -26, 8, 4);
+    ctx.fillStyle = k.bolt; ctx.fillRect(this.facing > 0 ? 0 : -8, -26, 8, 4);
     // little blaster
     ctx.fillStyle = '#44506b'; ctx.fillRect(this.facing * 8, -8, this.facing * 12, 5);
     ctx.restore();
     // hp bar
     ctx.fillStyle = '#1a2a1a'; ctx.fillRect(sx - 15, sy - 40, 30, 4);
-    ctx.fillStyle = down ? '#ff4d6d' : '#2de2a3'; ctx.fillRect(sx - 15, sy - 40, 30 * Math.max(0, this.hp / this.maxHp), 4);
-    ctx.fillStyle = '#9fe8cf'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(down ? 'DOWN' : 'ALLY', sx, sy - 44);
+    ctx.fillStyle = down ? '#ff4d6d' : k.body; ctx.fillRect(sx - 15, sy - 40, 30 * Math.max(0, this.hp / this.maxHp), 4);
+    ctx.fillStyle = '#cfe8dd'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(down ? 'DOWN' : k.name, sx, sy - 44);
   }
 }
 

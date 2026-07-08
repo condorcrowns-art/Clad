@@ -564,6 +564,17 @@ defItem('bookshelf',   { name: 'Bookshelf', kind: 'block', tier: 2, hp: 6, solid
 defItem('stained_glass',{ name: 'Stained Glass', kind: 'block', tier: 3, hp: 5, solid: true, deco: true, transparent: true, color: '#c77dff', color2: '#6ee7ff', desc: 'DECOR: a jewel-toned cathedral window. Light pours through it.' });
 defItem('grand_clock', { name: 'Grand Clock', kind: 'block', tier: 3, hp: 6, solid: true, deco: true, animated: true, color: '#7a4a1e', color2: '#ffd166', desc: 'DECOR: a stately grandfather clock, hands sweeping. Tells no time, all vibe.' });
 defItem('trophy_deco', { name: 'Trophy', kind: 'block', tier: 2, hp: 5, solid: false, deco: true, color: '#ffd166', color2: '#c9a227', desc: 'DECOR: a gleaming golden trophy. You earned this. (Or crafted it.)' });
+// second decorative wave — the network keeps branching, still purely for looks
+defItem('throne',      { name: 'Royal Throne', kind: 'block', tier: 4, hp: 14, solid: true, deco: true, color: '#c9a227', color2: '#8a3049', desc: 'DECOR: a gilded throne draped in velvet. Sit atop your empire.' });
+defItem('fountain_deco',{ name: 'Ornate Fountain', kind: 'block', tier: 3, hp: 8, solid: true, deco: true, animated: true, color: '#a8d8f0', color2: '#c9c2b4', desc: 'DECOR: a marble fountain with trickling water. Pure ambiance.' });
+defItem('sconce',      { name: 'Wall Sconce', kind: 'block', tier: 2, hp: 4, solid: false, deco: true, animated: true, color: '#ffb347', color2: '#7a4a1e', desc: 'DECOR: a flickering wall candle. Sets the mood, casts no real light.' });
+defItem('mirror',      { name: 'Standing Mirror', kind: 'block', tier: 3, hp: 5, solid: true, deco: true, color: '#c9c2b4', color2: '#8be9fd', desc: 'DECOR: a tall gilded mirror. Admire your avatar.' });
+defItem('vase',        { name: 'Flower Vase', kind: 'block', tier: 2, hp: 4, solid: false, deco: true, color: '#4da3ff', color2: '#ff6ec7', desc: 'DECOR: a painted vase bursting with blooms.' });
+defItem('curtain',     { name: 'Silk Curtains', kind: 'block', tier: 2, hp: 4, solid: false, deco: true, color: '#9c2b3e', color2: '#ffd166', desc: 'DECOR: draped silk curtains. Frame a window in style.' });
+defItem('arcade',      { name: 'Arcade Cabinet', kind: 'block', tier: 3, hp: 8, solid: true, deco: true, animated: true, color: '#2b1055', color2: '#6ee7ff', desc: 'DECOR: a retro arcade machine, attract screen glowing. Plays nothing.' });
+defItem('fishbowl',    { name: 'Fishbowl', kind: 'block', tier: 2, hp: 4, solid: false, deco: true, animated: true, color: '#6ee7ff', color2: '#ffb347', desc: 'DECOR: a little fishbowl with a lazy goldfish.' });
+defItem('disco_ball',  { name: 'Disco Ball', kind: 'block', tier: 3, hp: 5, solid: false, deco: true, animated: true, color: '#dfe7f5', color2: '#c77dff', desc: 'DECOR: a mirrored ball scattering light. Non-functional glam.' });
+defItem('gargoyle',    { name: 'Stone Gargoyle', kind: 'block', tier: 3, hp: 12, solid: true, deco: true, color: '#8a8a94', color2: '#4a4a52', desc: 'DECOR: a brooding carved gargoyle. Guards nothing, judges everything.' });
 
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
@@ -806,6 +817,17 @@ defRecipe('wood', 'marble', 'bookshelf');
 defRecipe('glass', 'marble', 'stained_glass');
 defRecipe('fabric', 'marble', 'grand_clock');
 defRecipe('fabric', 'led_block', 'trophy_deco');
+// decorative wave 2 — deeper deco splices (results splice with results)
+defRecipe('pillar', 'fabric', 'throne');
+defRecipe('marble', 'ice', 'fountain_deco');
+defRecipe('wood', 'chandelier', 'sconce');
+defRecipe('glass', 'statue', 'mirror');
+defRecipe('fabric', 'potted_plant', 'vase');
+defRecipe('fabric', 'glass', 'curtain');
+defRecipe('neon_sign', 'brick', 'arcade');
+defRecipe('glass', 'potted_plant', 'fishbowl');
+defRecipe('neon_sign', 'glass', 'disco_ball');
+defRecipe('statue', 'brick', 'gargoyle');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
