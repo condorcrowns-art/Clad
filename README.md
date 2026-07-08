@@ -39,6 +39,15 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Data Caches**: loot chests scattered through every sector
 - Boss loot is the best gear in the game
 
+### Front end: profile, menu & settings
+- **Character creation** — first boot opens a "Create Your Avatar" screen: name your character
+  and pick an avatar colour from a palette (live preview). Your name floats over your avatar
+  in-world (Growtopia-style nameplate) and the chosen colour tints your body.
+- **Main menu** — **Continue** (greets you by name) vs **New Game**, plus **new character**,
+  **settings**, **credits**, and **wipe save**. Everything persists in your save.
+- **Menu & pause settings** — sound volume + mute and difficulty are reachable from the title
+  screen and mid-game via the pause menu `[P]`.
+
 ### RPG staples
 - **Skill tree `[T]`** — earn a skill point every level and spend it across five stats:
   **Vitality** (+max HP), **Power** (+weapon damage), **Mining** (+dig speed), **Agility**

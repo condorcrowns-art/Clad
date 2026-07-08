@@ -696,7 +696,10 @@ class Player extends Entity {
     const sx = this.x - cam.x, sy = this.y - cam.y;
     // cosmetic skin from the shard store (purely visual)
     const cos = (typeof game !== 'undefined' && game.progress && game.progress.cosmetic) || null;
-    let bodyCol = '#4361ee', bodyTrim = '#3a0ca3';
+    // base body colour comes from the chosen avatar colour at character creation
+    const baseCol = (typeof game !== 'undefined' && game.progress && game.progress.avatarColor) || '#4361ee';
+    const darken = (hex, f) => { const n = parseInt(hex.slice(1), 16); const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return 'rgb(' + Math.round(r * f) + ',' + Math.round(g * f) + ',' + Math.round(b * f) + ')'; };
+    let bodyCol = baseCol, bodyTrim = darken(baseCol, 0.55);
     const COSMETICS = {
       gold:    { body: '#ffcf3f', trim: '#b8860b', glow: '255,207,63' },
       shadow:  { body: '#2a2140', trim: '#120a24', glow: '120,90,200' },
@@ -781,9 +784,9 @@ class Player extends Entity {
       ctx.save(); ctx.translate(6, 9); ctx.rotate(-walk * 0.55 * this.facing); ctx.fillRect(-3.5, 0, 7, 14); ctx.restore();
     }
     // body
-    ctx.fillStyle = '#4361ee';
+    ctx.fillStyle = bodyCol;
     ctx.fillRect(-10, -12, 20, 22);
-    ctx.fillStyle = '#3a0ca3'; ctx.fillRect(-10, 4, 20, 6);
+    ctx.fillStyle = bodyTrim; ctx.fillRect(-10, 4, 20, 6);
     // head
     ctx.fillStyle = '#ffd8b1';
     ctx.fillRect(-8, -30, 16, 17);
@@ -843,5 +846,16 @@ class Player extends Entity {
       ctx.beginPath(); ctx.arc(0, -6, 34, 0, 7); ctx.stroke();
     }
     ctx.restore();
+    // floating nameplate (Growtopia-style) — drawn in screen space above the head
+    if (typeof game !== 'undefined' && game.progress && game.progress.playerName) {
+      const nm = game.progress.playerName;
+      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+      const tw = ctx.measureText(nm).width + 12;
+      const ny = sy - 48;
+      ctx.fillStyle = 'rgba(8,12,24,0.7)';
+      ctx.fillRect(sx - tw / 2, ny - 10, tw, 15);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(nm, sx, ny + 1);
+    }
   }
 }

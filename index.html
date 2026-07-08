@@ -137,6 +137,7 @@
     <div id="menuInner">
       <h1 class="glitchTitle" data-text="GLITCHTOPIA">GLITCHTOPIA</h1>
       <p class="tagline">Your home server is yours to build. The corrupted sectors are yours to purge.</p>
+      <p id="menuGreet" class="hidden"></p>
       <p class="menuBody">
         Punch blocks to harvest <b>data seeds</b>. Plant them, grow them, and <b>splice</b> two seeds
         together to compile new tech. Every item <i>does something</i> — springs launch you, sentries
@@ -154,8 +155,40 @@
         <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>H</b> guild</span><span><b>K</b> shard store</span><span><b>T</b> skill tree</span><span><b>P</b> pause / settings</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
         <span><b>SHIFT</b> dash (with boots)</span>
       </div>
-      <button id="playBtn">▶ BOOT UP</button>
-      <button id="wipeBtn">wipe save</button>
+      <div id="menuBtns">
+        <button id="playBtn">▶ BOOT UP</button>
+        <div id="menuMiniRow">
+          <button id="newCharBtn" class="menuMini hidden">new character</button>
+          <button id="settingsBtn" class="menuMini">⚙ settings</button>
+          <button id="creditsBtn" class="menuMini">credits</button>
+          <button id="wipeBtn" class="menuMini">wipe save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Character creation -->
+    <div id="profileScreen" class="hidden">
+      <h2 class="screenTitle">CREATE YOUR AVATAR</h2>
+      <canvas id="avatarPreview" width="88" height="104"></canvas>
+      <input id="nameInput" maxlength="14" placeholder="name your character…" autocomplete="off">
+      <div class="screenLabel">pick a colour</div>
+      <div id="colorPalette"></div>
+      <div class="screenBtns">
+        <button id="profileBack" class="menuMini">‹ back</button>
+        <button id="profileGo">▶ ENTER GLITCHTOPIA</button>
+      </div>
+    </div>
+
+    <!-- Credits -->
+    <div id="creditsBox" class="hidden">
+      <h2 class="screenTitle">CREDITS</h2>
+      <p class="creditsText">
+        <b>GLITCHTOPIA</b> — a world-building, boss-battling sandbox.<br>
+        Design, code, art &amp; sound: procedurally generated, zero dependencies.<br>
+        Inspired by <b>Growtopia</b> and <b>Pixel Worlds</b>.<br>
+        Built with vanilla JavaScript + HTML5 canvas.
+      </p>
+      <button id="creditsBack" class="menuMini">‹ back</button>
     </div>
   </div>
 

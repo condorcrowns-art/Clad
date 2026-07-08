@@ -130,7 +130,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee' };
     this.paused = false;
     this._questNotified = {};
     this._questT = 0; this._miniT = 0;
@@ -371,6 +371,15 @@ class Game {
   /* ---------------- audio settings ---------------- */
   setVolume(v) { v = Math.max(0, Math.min(1, v)); this.sfx.vol = v; this.progress.sfxVol = v; this.save(); }
   toggleMute() { this.sfx.muted = !this.sfx.muted; this.progress.sfxMuted = this.sfx.muted; if (!this.sfx.muted) this.sfx.play('buy'); this.save(); if (typeof ui !== 'undefined' && ui.renderSettings) ui.renderSettings(); }
+
+  /* ---------------- player profile ---------------- */
+  playerName() { return (this.progress.playerName || '').trim() || 'Player'; }
+  setProfile(name, color) {
+    const clean = (name || '').trim().slice(0, 14).replace(/[<>]/g, '');
+    this.progress.playerName = clean || 'Player';
+    if (color) this.progress.avatarColor = color;
+    this.save();
+  }
 
   /* ---------------- pause ---------------- */
   togglePause() {
@@ -951,6 +960,8 @@ class Game {
       this.progress.skills = this.progress.skills || {};
       if (typeof this.progress.skillPoints !== 'number') this.progress.skillPoints = 0;
       this.progress.difficulty = this.progress.difficulty || 'normal';
+      this.progress.playerName = this.progress.playerName || '';
+      this.progress.avatarColor = this.progress.avatarColor || '#4361ee';
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;
       this.sfx.muted = !!this.progress.sfxMuted;
@@ -979,6 +990,7 @@ class Game {
     this.enterWorld('home');
     ui.dirty = true;
     ui.updateHUD();
+    if (this.progress.tutorial !== 0) setTimeout(() => this.toast('Welcome back, ' + this.playerName() + '.', 'gold'), 400);
     // daily login bonus (streaks, like a proper live-service sandbox)
     const today = new Date().toDateString();
     if (this.progress.lastLogin !== today) {
@@ -1408,22 +1420,72 @@ window.addEventListener('DOMContentLoaded', () => {
   game = new Game();
 
   const hasSave = !!localStorage.getItem(SAVE_KEY);
-  const playBtn = document.getElementById('playBtn');
-  playBtn.textContent = hasSave ? '▶ RECONNECT' : '▶ BOOT UP';
+  const $ = (id) => document.getElementById(id);
+  const playBtn = $('playBtn');
+  const menuInner = $('menuInner'), profileScreen = $('profileScreen'), creditsBox = $('creditsBox');
 
-  playBtn.addEventListener('click', () => {
+  // peek at the saved profile name for a personal greeting / continue button
+  let savedName = 'Player';
+  if (hasSave) { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); savedName = (s.progress && s.progress.playerName) || 'Player'; } catch (e) {} }
+  playBtn.textContent = hasSave ? '▶ CONTINUE' : '▶ NEW GAME';
+  if (hasSave) {
+    $('menuGreet').textContent = 'Welcome back, ' + savedName + '.';
+    $('menuGreet').classList.remove('hidden');
+    $('newCharBtn').classList.remove('hidden');
+  }
+
+  // ---- character-creation state ----
+  const PALETTE = ['#4361ee', '#e63946', '#2de2a3', '#ffb703', '#c77dff', '#ff6ec7', '#38d9f5', '#f77f00', '#2a2140', '#e8e8e8'];
+  let chosenColor = PALETTE[0];
+  const preview = $('avatarPreview'), pctx = preview.getContext('2d');
+  pctx.imageSmoothingEnabled = false;
+  function drawPreview() {
+    pctx.clearRect(0, 0, 88, 104);
+    const cx = 44, dk = (h, f) => { const n = parseInt(h.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return 'rgb(' + (r * f | 0) + ',' + (g * f | 0) + ',' + (b * f | 0) + ')'; };
+    pctx.fillStyle = dk(chosenColor, 0.4); pctx.fillRect(cx - 12, 74, 10, 22); pctx.fillRect(cx + 2, 74, 10, 22); // legs
+    pctx.fillStyle = chosenColor; pctx.fillRect(cx - 16, 40, 32, 36); // body
+    pctx.fillStyle = dk(chosenColor, 0.55); pctx.fillRect(cx - 16, 66, 32, 8);
+    pctx.fillStyle = '#ffd8b1'; pctx.fillRect(cx - 13, 12, 26, 27); // head
+    pctx.fillStyle = '#0d1526'; pctx.fillRect(cx - 3, 20, 18, 10);   // visor
+    pctx.fillStyle = '#6ee7ff'; pctx.fillRect(cx + 1, 22, 12, 5);
+    pctx.fillStyle = '#e8c49e'; pctx.fillRect(cx + 14, 44, 14, 8);   // arm
+  }
+  const pal = $('colorPalette');
+  PALETTE.forEach((c, i) => {
+    const sw = document.createElement('button');
+    sw.className = 'swatch' + (i === 0 ? ' on' : ''); sw.style.background = c;
+    sw.addEventListener('click', () => { chosenColor = c; pal.querySelectorAll('.swatch').forEach(s => s.classList.remove('on')); sw.classList.add('on'); drawPreview(); });
+    pal.appendChild(sw);
+  });
+  drawPreview();
+  $('nameInput').addEventListener('keydown', e => e.stopPropagation());
+
+  function openProfile() { menuInner.classList.add('hidden'); creditsBox.classList.add('hidden'); profileScreen.classList.remove('hidden'); $('nameInput').focus(); }
+  function beginGame(newProfile) {
     game.sfx.init();
-    if (!game.load()) game.newGame();
-    document.getElementById('menu').classList.add('hidden');
-    game.start();
-  });
-  document.getElementById('wipeBtn').addEventListener('click', () => {
-    if (confirm('Delete your save and home world forever?')) {
+    if (newProfile) {
       localStorage.removeItem(SAVE_KEY);
-      location.reload();
+      game.newGame();
+      game.setProfile($('nameInput').value, chosenColor);
+    } else if (!game.load()) {
+      game.newGame();
+      game.setProfile($('nameInput').value, chosenColor);
     }
+    $('menu').classList.add('hidden');
+    game.start();
+  }
+
+  playBtn.addEventListener('click', () => { if (hasSave) beginGame(false); else openProfile(); });
+  $('newCharBtn').addEventListener('click', () => { if (confirm('Start a NEW character? Your current save will be erased.')) openProfile(); });
+  $('profileGo').addEventListener('click', () => beginGame(true));
+  $('profileBack').addEventListener('click', () => { profileScreen.classList.add('hidden'); menuInner.classList.remove('hidden'); });
+  $('settingsBtn').addEventListener('click', () => { game.sfx.init(); ui.togglePanel('settings'); });
+  $('creditsBtn').addEventListener('click', () => { menuInner.classList.add('hidden'); creditsBox.classList.remove('hidden'); });
+  $('creditsBack').addEventListener('click', () => { creditsBox.classList.add('hidden'); menuInner.classList.remove('hidden'); });
+  $('wipeBtn').addEventListener('click', () => {
+    if (confirm('Delete your save and home world forever?')) { localStorage.removeItem(SAVE_KEY); location.reload(); }
   });
-  document.getElementById('respawnBtn').addEventListener('click', () => game.respawn());
+  $('respawnBtn').addEventListener('click', () => game.respawn());
 
   let last = performance.now();
   function frame(now) {
