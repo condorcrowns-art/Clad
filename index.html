@@ -39,6 +39,15 @@
       <div class="equipSlot" data-slot="chip"><span class="equipLabel">CHIP</span><div class="equipIcon"></div></div>
       <div class="equipSlot" data-slot="pet"><span class="equipLabel">PET</span><div class="equipIcon"></div></div>
     </div>
+    <div id="invControls">
+      <input id="invSearch" placeholder="🔍 search items…" autocomplete="off">
+      <select id="invSort">
+        <option value="kind">sort: type</option>
+        <option value="name">sort: name</option>
+        <option value="tier">sort: rarity</option>
+        <option value="count">sort: count</option>
+      </select>
+    </div>
     <div id="invGrid"></div>
   </div>
 
@@ -83,6 +92,12 @@
     <div class="panelTitle">◈ SHARD STORE <span class="panelHint">[K] close · Shards earned from bosses, achievements & daily login</span></div>
     <div id="storeNote">This is an in-game store. Purchases use ◈ Shards you earn by playing — no real money, nothing to buy.</div>
     <div id="storeList"></div>
+  </div>
+
+  <!-- Character sheet -->
+  <div id="sheetPanel" class="panel hidden">
+    <div class="panelTitle">CHARACTER <span class="panelHint">[J] close</span></div>
+    <div id="sheetBody"></div>
   </div>
 
   <!-- Trade window -->
@@ -174,7 +189,7 @@
         <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
         <span><b>R-CLICK</b> build background walls</span><span><b>M-CLICK</b> pick block</span>
         <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
-        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>H</b> guild</span><span><b>K</b> shard store</span><span><b>T</b> skill tree</span><span><b>Y</b> trade (data broker)</span><span><b>P</b> pause / settings</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
+        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>H</b> guild</span><span><b>K</b> shard store</span><span><b>T</b> skill tree</span><span><b>J</b> character</span><span><b>Y</b> trade (data broker)</span><span><b>P</b> pause / settings (rebind keys)</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
         <span><b>SHIFT</b> dash (with boots)</span>
       </div>
       <div id="menuBtns">

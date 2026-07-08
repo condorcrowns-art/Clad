@@ -24,6 +24,8 @@ const ui = {
       skillsPanel: $('skillsPanel'), skillsBody: $('skillsBody'),
       settingsPanel: $('settingsPanel'), settingsBody: $('settingsBody'),
       tradePanel: $('tradePanel'),
+      sheetPanel: $('sheetPanel'), sheetBody: $('sheetBody'),
+      invSearch: $('invSearch'), invSort: $('invSort'),
       shardText: $('shardText'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
       codexPanel: $('codexPanel'), codexList: $('codexList'),
@@ -72,6 +74,10 @@ const ui = {
     // trade window static controls
     document.querySelectorAll('.tGem').forEach(b => b.addEventListener('click', () => game.tradeGems(b.dataset.side, +b.dataset.d)));
     $('tradeConfirmBtn').addEventListener('click', () => game.tradeConfirm());
+    // inventory search + sort
+    $('invSearch').addEventListener('keydown', e => { if (e.key === 'Escape') { e.target.blur(); } else { e.stopPropagation(); } });
+    $('invSearch').addEventListener('input', () => this.renderInv());
+    $('invSort').addEventListener('change', () => this.renderInv());
   },
 
   /* ---------- DEFRAG minigame (Growtopia surgery homage) ---------- */
@@ -242,7 +248,17 @@ const ui = {
     const p = game.player;
     const g = this.el.invGrid;
     g.innerHTML = '';
-    const ids = Object.keys(p.inv).sort((a, b) => (ITEMS[a].kind + ITEMS[a].name).localeCompare(ITEMS[b].kind + ITEMS[b].name));
+    const q = ((this.el.invSearch && this.el.invSearch.value) || '').toLowerCase().trim();
+    const mode = (this.el.invSort && this.el.invSort.value) || 'kind';
+    let ids = Object.keys(p.inv);
+    if (q) ids = ids.filter(id => ITEMS[id] && (ITEMS[id].name.toLowerCase().includes(q) || ITEMS[id].kind.includes(q)));
+    ids.sort((a, b) => {
+      const A = ITEMS[a], B = ITEMS[b];
+      if (mode === 'name') return A.name.localeCompare(B.name);
+      if (mode === 'tier') return (B.tier || 0) - (A.tier || 0) || A.name.localeCompare(B.name);
+      if (mode === 'count') return (p.inv[b] - p.inv[a]) || A.name.localeCompare(B.name);
+      return (A.kind + A.name).localeCompare(B.kind + B.name);
+    });
     for (const id of ids) {
       const d = document.createElement('div');
       d.className = 'invSlot';
@@ -442,9 +458,10 @@ const ui = {
   },
 
   togglePanel(name) {
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // release any focused text field
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -458,14 +475,15 @@ const ui = {
       if (name === 'skills') this.renderSkills();
       if (name === 'settings') this.renderSettings();
       if (name === 'trade') this.renderTrade();
+      if (name === 'sheet') this.renderSheet();
     }
     if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';
@@ -540,13 +558,66 @@ const ui = {
       html += '<button class="diffBtn' + (on ? ' on' : '') + '" data-d="' + k + '" title="' + d.desc + '">' + d.name + '</button>';
     }
     html += '</div><div class="setDiffDesc">' + DIFFICULTIES[game.progress.difficulty].desc + '</div>';
-    html += '<div class="setRow" style="margin-top:12px"><button class="setBtn" id="resumeBtn">▶ RESUME</button></div>';
+    // keybinds
+    html += '<div class="setLabel">Keybinds <span style="color:#5b7395;text-transform:none;letter-spacing:0">— click, then press a key (movement is fixed)</span></div>';
+    html += '<div id="keybindList">';
+    const km = game.progress.keys || DEFAULT_KEYS;
+    for (const act in km) {
+      const rebinding = game._rebinding === act;
+      html += '<div class="kbRow"><span>' + (KEY_LABELS[act] || act) + '</span><button class="kbBtn' + (rebinding ? ' listening' : '') + '" data-act="' + act + '">' + (rebinding ? '…press…' : '[' + km[act].toUpperCase() + ']') + '</button></div>';
+    }
+    html += '</div>';
+    html += '<div class="setRow" style="margin-top:12px"><button class="setBtn" id="resetKeysBtn">↺ reset keys</button><button class="setBtn" id="resumeBtn">▶ RESUME</button></div>';
     b.innerHTML = html;
     b.querySelector('#muteBtn').addEventListener('click', () => game.toggleMute());
     const slider = b.querySelector('#volSlider');
     slider.addEventListener('input', () => { game.setVolume(slider.value / 100); b.querySelector('#volVal').textContent = slider.value + '%'; });
     b.querySelectorAll('.diffBtn').forEach(btn => btn.addEventListener('click', () => game.setDifficulty(btn.dataset.d)));
+    b.querySelectorAll('.kbBtn').forEach(btn => btn.addEventListener('click', () => game.beginRebind(btn.dataset.act)));
+    b.querySelector('#resetKeysBtn').addEventListener('click', () => { game.progress.keys = Object.assign({}, DEFAULT_KEYS); game._rebinding = null; game.save(); this.renderSettings(); });
     b.querySelector('#resumeBtn').addEventListener('click', () => game.togglePause());
+  },
+
+  renderSheet() {
+    const b = this.el.sheetBody; if (!b) return;
+    const p = game.player, pr = game.progress, s = pr.stats;
+    const row = (label, val) => '<div class="sheetStat"><span>' + label + '</span><span>' + val + '</span></div>';
+    const guild = pr.guild ? (pr.guild.name + ' (Lv ' + pr.guild.level + ')') : 'None';
+    const cos = pr.cosmetic ? pr.cosmetic : 'default';
+    // active gear bonuses summary
+    const bonuses = [];
+    if (game.skillHp()) bonuses.push('+' + game.skillHp() + ' HP');
+    if (game.skillMult('power') > 1) bonuses.push('+' + Math.round((game.skillMult('power') - 1) * 100) + '% dmg');
+    if (game.skillMult('mining') > 1) bonuses.push('+' + Math.round((game.skillMult('mining') - 1) * 100) + '% mine');
+    if (game.skillMult('agility') > 1) bonuses.push('+' + Math.round((game.skillMult('agility') - 1) * 100) + '% move');
+    if (game.skillMult('fortune') > 1) bonuses.push('+' + Math.round((game.skillMult('fortune') - 1) * 100) + '% gems');
+    let html = '<div class="sheetName">⬢ ' + game.playerName() + '</div>';
+    html += '<div class="sheetGrid"><div class="sheetCol">';
+    html += '<div class="sheetHead">VITALS</div>';
+    html += row('Level', game.level);
+    html += row('XP', game.xp + ' / ' + game.xpNeed());
+    html += row('Max HP', p.maxHp);
+    html += row('◆ Gems', game.gems);
+    html += row('◈ Shards', game.shards);
+    html += row('Difficulty', (DIFFICULTIES[pr.difficulty] || DIFFICULTIES.normal).name);
+    html += row('Guild', guild);
+    html += row('Avatar', cos);
+    html += row('Skill points', pr.skillPoints || 0);
+    html += '</div><div class="sheetCol">';
+    html += '<div class="sheetHead">RECORD</div>';
+    html += row('Bosses purged', Object.keys(pr.beaten || {}).length + ' / 7');
+    html += row('Recipes found', Object.keys(pr.discovered || {}).length);
+    html += row('Enemies slain', s.kills || 0);
+    html += row('Blocks broken', s.broken || 0);
+    html += row('Seeds planted', s.planted || 0);
+    html += row('Splices made', s.splices || 0);
+    html += row('Fish caught', s.fish || 0);
+    html += row('Dungeons cleared', s.dungeons || 0);
+    html += row('Trades made', s.trades || 0);
+    html += '</div></div>';
+    html += '<div class="sheetHead" style="margin-top:12px">SKILL BONUSES</div>';
+    html += '<div class="sheetBonus">' + (bonuses.length ? bonuses.join(' · ') : 'Spend skill points [' + (game.progress.keys.skills || 't').toUpperCase() + '] to gain bonuses.') + '</div>';
+    b.innerHTML = html;
   },
 
   // one item cell: icon + count, with a click handler

@@ -106,6 +106,12 @@ const DIFFICULTIES = {
   hardcore: { name: 'HARDCORE', dmg: 1.7, xp: 1.25, desc: 'Enemies hit for 170%, but +25% XP.' },
 };
 
+/* ---------------- REMAPPABLE ACTION KEYS ---------------- */
+// panel/action keys the player can rebind (movement stays fixed with arrow aliases)
+const DEFAULT_KEYS = { inv: 'e', shop: 'b', codex: 'c', quest: 'q', worlds: 'v', ach: 'g', guild: 'h', store: 'k', skills: 't', trade: 'y', sheet: 'j', pause: 'p' };
+const KEY_LABELS = { inv: 'Inventory', shop: 'Shop', codex: 'Splice codex', quest: 'Quests', worlds: 'Worlds', ach: 'Achievements', guild: 'Guild', store: 'Shard store', skills: 'Skill tree', trade: 'Trade', sheet: 'Character sheet', pause: 'Pause / settings' };
+const RESERVED_KEYS = { a: 1, d: 1, w: 1, s: 1, ' ': 1, shift: 1, escape: 1, arrowleft: 1, arrowright: 1, arrowup: 1, arrowdown: 1, '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1 };
+
 /* ---------------- TRADING (Data Broker barter window) ---------------- */
 // items the broker offers to trade you (infinite stock; priced above their sell value)
 const TRADER_STOCK = ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'medkit', 'bomb', 'fishing_rod',
@@ -135,7 +141,8 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee' };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS) };
+    this._rebinding = null;
     this.paused = false;
     this._questNotified = {};
     this._questT = 0; this._miniT = 0;
@@ -162,8 +169,10 @@ class Game {
   bindInput() {
     window.addEventListener('keydown', (e) => {
       if (!this.running) return;
-      if (e.repeat) return;
       const k = e.key.toLowerCase();
+      // capture a key when rebinding from the settings screen
+      if (this._rebinding) { e.preventDefault(); this.rebindKey(this._rebinding, k); this._rebinding = null; if (ui.renderSettings) ui.renderSettings(); return; }
+      if (e.repeat) return;
       if (k === 'a' || k === 'arrowleft') this.input.left = true;
       if (k === 'd' || k === 'arrowright') this.input.right = true;
       if (k === ' ' || k === 'arrowup') { this.input.jump = true; this.input.jumpPressed = true; e.preventDefault(); }
@@ -171,18 +180,10 @@ class Game {
       if (k === 'shift') this.input.dashPressed = true;
       if (k === 's' || k === 'arrowdown') { this.input.down = true; this.tryTeleport(); }
       if (k >= '1' && k <= '9') { this.player.sel = +k - 1; ui.dirty = true; }
-      if (k === 'e') ui.togglePanel('inv');
-      if (k === 'b') ui.togglePanel('shop');
-      if (k === 'c') ui.togglePanel('codex');
-      if (k === 'q') ui.togglePanel('quest');
-      if (k === 'v') ui.togglePanel('worlds');
-      if (k === 'g') ui.togglePanel('ach');
-      if (k === 'h') ui.togglePanel('guild');
-      if (k === 'k') ui.togglePanel('store');
-      if (k === 't') ui.togglePanel('skills');
-      if (k === 'y') this.toggleTrade();
-      if (k === 'p') this.togglePause();
-      if (k === 'escape') { ui.closeAll(); this.paused = false; }
+      if (k === 'escape') { ui.closeAll(); this.paused = false; return; }
+      // remappable action keys
+      const km = this.progress.keys || DEFAULT_KEYS;
+      for (const act in km) { if (km[act] === k) { this.doAction(act); break; } }
     });
     window.addEventListener('keyup', (e) => {
       const k = e.key.toLowerCase();
@@ -384,6 +385,26 @@ class Game {
     const clean = (name || '').trim().slice(0, 14).replace(/[<>]/g, '');
     this.progress.playerName = clean || 'Player';
     if (color) this.progress.avatarColor = color;
+    this.save();
+  }
+
+  /* ---------------- keybinds ---------------- */
+  doAction(a) {
+    if (a === 'trade') this.toggleTrade();
+    else if (a === 'pause') this.togglePause();
+    else ui.togglePanel(a);
+  }
+  beginRebind(act) { this._rebinding = act; if (ui.renderSettings) ui.renderSettings(); }
+  rebindKey(act, k) {
+    if (k === 'escape') return;             // cancel
+    if (RESERVED_KEYS[k]) { this.toast('That key is reserved for movement/hotbar.', 'warn'); return; }
+    this.progress.keys = this.progress.keys || Object.assign({}, DEFAULT_KEYS);
+    // if another action already uses this key, swap them
+    for (const other in this.progress.keys) {
+      if (other !== act && this.progress.keys[other] === k) this.progress.keys[other] = this.progress.keys[act];
+    }
+    this.progress.keys[act] = k;
+    this.toast('Bound ' + (KEY_LABELS[act] || act) + ' to [' + k.toUpperCase() + ']', 'gold');
     this.save();
   }
 
@@ -1023,6 +1044,7 @@ class Game {
       this.progress.difficulty = this.progress.difficulty || 'normal';
       this.progress.playerName = this.progress.playerName || '';
       this.progress.avatarColor = this.progress.avatarColor || '#4361ee';
+      this.progress.keys = Object.assign({}, DEFAULT_KEYS, this.progress.keys || {});
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;
       this.sfx.muted = !!this.progress.sfxMuted;

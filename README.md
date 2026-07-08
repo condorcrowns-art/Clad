@@ -48,6 +48,15 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Menu & pause settings** — sound volume + mute and difficulty are reachable from the title
   screen and mid-game via the pause menu `[P]`.
 
+### Quality-of-life
+- **Character sheet `[J]`** — a full read-out of your run: level, XP, HP, gems, shards,
+  difficulty, guild, avatar, skill points, and a record page (bosses purged, recipes found,
+  enemies slain, blocks broken, splices, fish, dungeons, trades) plus your active skill bonuses.
+- **Inventory search & sort** — a search box and a sort selector (type / name / rarity / count)
+  in the inventory panel.
+- **Rebindable keys** — every panel/action key can be remapped in the pause menu (movement stays
+  fixed); reserved keys are protected and your layout is saved.
+
 ### RPG staples
 - **Skill tree `[T]`** — earn a skill point every level and spend it across five stats:
   **Vitality** (+max HP), **Power** (+weapon damage), **Mining** (+dig speed), **Agility**
@@ -311,8 +320,9 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 | `H` | Guild — found, contribute, view perks |
 | `K` | ◈ Shard Store |
 | `T` | Skill tree — spend level-up points |
+| `J` | Character sheet — stats & records |
 | `Y` | Trade — the Data Broker trade window |
-| `P` | Pause / settings — sound & difficulty |
+| `P` | Pause / settings — sound, difficulty & keybinds |
 | `S` | Use teleporter / cycle Weather Core under your feet |
 | `W` | Enter portal |
 | `SHIFT` | Dash (Stormstep Boots) |
