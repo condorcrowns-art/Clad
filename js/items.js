@@ -595,6 +595,21 @@ defItem('ward_chip', { name: 'Ward Chip', kind: 'gear', slot: 'chip', tier: 4,
 defItem('nano_broth', { name: 'Nano Broth', kind: 'consumable', tier: 2, heal: 55, buff: { dur: 15, dmg: 1.25, speed: 1.15 },
   desc: 'FUNCTION: restores 55 HP and grants +25% damage & +15% speed for 15s. Field rations for the corrupted frontier.' });
 
+/* ===================== CONTENT WAVE 7 — weapons, gear, pet, block, consumable, decor ===================== */
+defItem('war_maul', { name: 'War Maul', kind: 'weapon', tier: 4, dmg: 46, rate: 1.7, range: 1.4, knock: 400, minePower: 3, mineRate: 3,
+  color: '#9aa4b4', desc: 'FUNCTION: a colossal two-hand maul — slow, but it flattens crowds and knocks them flying.' });
+defItem('plasma_smg', { name: 'Plasma SMG', kind: 'weapon', tier: 4, dmg: 8, rate: 8, minePower: 1, mineRate: 3,
+  projectile: { speed: 900, color: '#6ee7ff' }, desc: 'FUNCTION: a buzzsaw of plasma bolts — low damage each, absurd fire rate.' });
+defItem('titan_chip', { name: 'Titan Chip', kind: 'gear', slot: 'chip', tier: 4,
+  fx: { armor: 0.35 }, desc: 'FUNCTION: heavy plating — take 35% less damage from everything. Tank up.' });
+defItem('guardian_orb', { name: 'Guardian Orb', kind: 'gear', slot: 'pet', tier: 4,
+  fx: { pet: { dmg: 15, rate: 1.4, range: 8, color: '#ffd166' } },
+  desc: 'FUNCTION: a heavy combat familiar — slow shots, but each one hits like a cannon.' });
+defItem('battle_stim', { name: 'Battle Stim', kind: 'consumable', tier: 3, heal: 25, buff: { dur: 22, dmg: 1.4, speed: 1.25 },
+  desc: 'FUNCTION: a combat injector — +40% damage & +25% speed for 22s, with a small heal. Go loud.' });
+defItem('crystal_lamp', { name: 'Crystal Lamp', kind: 'block', tier: 3, hp: 6, solid: true, deco: true, animated: true,
+  color: '#a5e8ff', color2: '#6ee7ff', fx: { glow: 4 }, desc: 'DECOR: a faceted crystal lamp that casts soft light. Beautiful, and it actually glows.' });
+
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
 const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 4: 240, 9: 170 }; // seconds by tier
@@ -854,6 +869,13 @@ defRecipe('blaster', 'crystal_cluster', 'prism_lance');
 defRecipe('speed_boots', 'glider_wings', 'scout_boots');
 defRecipe('aegis_chip', 'thorn_chip', 'ward_chip');
 defRecipe('crystal_cluster', 'fountain', 'nano_broth');
+// content wave 7 — weapons, gear, pet, block, consumable
+defRecipe('crystal_cluster', 'spike_trap', 'war_maul');
+defRecipe('blaster', 'battery_chip', 'plasma_smg');
+defRecipe('aegis_chip', 'crystal_cluster', 'titan_chip');
+defRecipe('drone_pet', 'sentry', 'guardian_orb');
+defRecipe('crystal_cluster', 'sand', 'battle_stim');
+defRecipe('crystal_cluster', 'snow', 'crystal_lamp');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
@@ -907,12 +929,15 @@ const _iconStub = {
   idx: () => -1, isSolid: () => false, get: () => null, item: () => null,
 };
 
+const ICON_SS = 3;    // supersample: render source art at 3× for smoother, higher-fidelity curves
+const ICON_PIX = 36;  // pixelate target (was 24) — 2.25× the pixels per object, more detail retained
 function iconFor(id) {
   if (_iconCache[id]) return _iconCache[id];
   const art = document.createElement('canvas');
-  art.width = 40; art.height = 40;
+  art.width = 40 * ICON_SS; art.height = 40 * ICON_SS;
   const x = art.getContext('2d');
   x.imageSmoothingEnabled = false;
+  x.scale(ICON_SS, ICON_SS); // drawItemIcon keeps drawing in its native 40-unit space
   const it = ITEMS[id];
   if (it) {
     try { drawItemIcon(x, it, id); }
@@ -925,12 +950,12 @@ function iconFor(id) {
 
 // Growtopia-style sticker finish: pixelate → dark outline → gloss bevel
 function gtFinish(art) {
-  // 1) pixelate through a low-res pass (chunky, cohesive pixel art)
+  // 1) pixelate through a mid-res pass (crisp pixel art, finer than before)
   const small = document.createElement('canvas');
-  small.width = 24; small.height = 24;
+  small.width = ICON_PIX; small.height = ICON_PIX;
   const sx2 = small.getContext('2d');
   sx2.imageSmoothingEnabled = true;
-  sx2.drawImage(art, 0, 0, 24, 24);
+  sx2.drawImage(art, 0, 0, ICON_PIX, ICON_PIX);
   const c = document.createElement('canvas');
   c.width = 40; c.height = 40;
   const ox = c.getContext('2d', { willReadFrequently: true });

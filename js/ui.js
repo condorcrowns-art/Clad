@@ -222,7 +222,7 @@ const ui = {
       if (cv) cv.remove();
       if (id) {
         cv = iconFor(id).cloneNode();
-        cv.getContext('2d').drawImage(iconFor(id), 0, 0);
+        cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
         d.appendChild(cv);
         const it = ITEMS[id];
         d.querySelector('.cnt').textContent = (it.kind === 'block' || it.kind === 'seed' || it.kind === 'consumable') ? (p.inv[id] || 0) : '';
@@ -243,7 +243,7 @@ const ui = {
       d.style.borderColor = tierColor(id) + '99';
       const cv = document.createElement('canvas');
       cv.width = 40; cv.height = 40;
-      cv.getContext('2d').drawImage(iconFor(id), 0, 0);
+      cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
       d.appendChild(cv);
       const cnt = document.createElement('span');
       cnt.className = 'cnt'; cnt.textContent = p.inv[id];
@@ -281,7 +281,7 @@ const ui = {
       if (id) {
         const cv = document.createElement('canvas');
         cv.width = 40; cv.height = 40;
-        cv.getContext('2d').drawImage(iconFor(id), 0, 0);
+        cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
         box.appendChild(cv);
       }
     });
@@ -326,7 +326,7 @@ const ui = {
       const d = document.createElement('div');
       d.className = 'shopRow';
       const cv = document.createElement('canvas'); cv.width = 40; cv.height = 40;
-      cv.getContext('2d').drawImage(iconFor(row.id), 0, 0);
+      cv.getContext('2d').drawImage(iconFor(row.id), 0, 0, cv.width, cv.height);
       d.appendChild(cv);
       const info = document.createElement('div');
       info.className = 'shopInfo';
@@ -361,7 +361,7 @@ const ui = {
       d.className = 'invSlot';
       d.style.borderColor = tierColor(id) + '99';
       const cv = document.createElement('canvas'); cv.width = 40; cv.height = 40;
-      cv.getContext('2d').drawImage(iconFor(id), 0, 0);
+      cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
       d.appendChild(cv);
       const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.textContent = p.inv[id];
       d.appendChild(cnt);

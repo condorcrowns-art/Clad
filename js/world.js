@@ -30,13 +30,13 @@ const WEATHERS = [
 // dungeon themes — each run picks one, changing the palette, floor tile, enemy roster and guardian
 const DUNGEON_THEMES = [
   { name: 'CATACOMB', sky: ['#0a0410', '#241033'], bgWall: 'rgba(20,8,32,0.92)', dark: 0.7, floor: 'brick',
-    enemies: ['glitchling', 'drone', 'spitter', 'brute', 'shielder'], boss: 'warden' },
+    enemies: ['glitchling', 'drone', 'spitter', 'brute', 'shielder', 'phantom'], boss: 'warden' },
   { name: 'FOUNDRY', sky: ['#160604', '#3a1408'], bgWall: 'rgba(30,10,4,0.92)', dark: 0.62, floor: 'obsidian',
-    enemies: ['ember', 'zapper', 'spitter', 'sapper', 'brute'], boss: 'warden' },
+    enemies: ['ember', 'zapper', 'spitter', 'sapper', 'brute', 'golem'], boss: 'warden' },
   { name: 'CRYOVAULT', sky: ['#04101a', '#0e2b3f'], bgWall: 'rgba(8,24,36,0.92)', dark: 0.58, floor: 'ice',
-    enemies: ['drone', 'glitchling', 'shielder', 'mender', 'zapper'], boss: 'warden' },
+    enemies: ['drone', 'glitchling', 'shielder', 'mender', 'zapper', 'golem'], boss: 'warden' },
   { name: 'SANDTOMB', sky: ['#1a1204', '#3f2f0e'], bgWall: 'rgba(30,22,6,0.9)', dark: 0.5, floor: 'sand',
-    enemies: ['hornet', 'sapper', 'spitter', 'brute', 'glitchling'], boss: 'warden' },
+    enemies: ['hornet', 'sapper', 'spitter', 'brute', 'glitchling', 'phantom'], boss: 'warden' },
 ];
 
 function hash2(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967295; }
@@ -1359,6 +1359,16 @@ class World {
         x.fillStyle = '#dfe7f5'; x.beginPath(); x.arc(cx, sy + 14, 8, 0, 7); x.fill();
         for (let i = 0; i < 6; i++) { const a = t * 2 + i; x.fillStyle = ['#ff6ec7', '#6ee7ff', '#ffd166', '#57e0a0'][i % 4]; x.globalAlpha = 0.6; x.fillRect(cx + Math.cos(a) * 12 - 1, sy + 14 + Math.sin(a) * 12 - 1, 3, 3); }
         x.globalAlpha = 1; break;
+      }
+      case 'crystal_lamp': {
+        const pulse = 0.6 + 0.4 * Math.sin(t * 3);
+        x.fillStyle = '#3a4a55'; x.fillRect(cx - 3, sy + TS - 8, 6, 6); // base
+        x.save(); x.shadowColor = '#6ee7ff'; x.shadowBlur = 10 * pulse;
+        x.fillStyle = '#a5e8ff';
+        x.beginPath(); x.moveTo(cx, sy + 4); x.lineTo(cx + 8, sy + 15); x.lineTo(cx, sy + TS - 6); x.lineTo(cx - 8, sy + 15); x.closePath(); x.fill();
+        x.fillStyle = 'rgba(255,255,255,' + (0.4 + 0.4 * pulse) + ')';
+        x.beginPath(); x.moveTo(cx, sy + 7); x.lineTo(cx + 3, sy + 15); x.lineTo(cx, sy + 20); x.lineTo(cx - 3, sy + 15); x.closePath(); x.fill();
+        x.restore(); break;
       }
       case 'gargoyle':
         x.fillStyle = '#4a4a52'; x.fillRect(sx + 8, sy + TS - 6, TS - 16, 6);

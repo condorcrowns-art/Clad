@@ -56,7 +56,7 @@ sectors** wait behind portals, each ending in a boss fight.
   awards the Overclock Chip and the Core Sprite pet.
 
 ### The twist: nothing is cosmetic (unless you want it to be)
-**~210 splice recipes** form a true network — results splice with other results, four tiers deep,
+**~215 splice recipes** form a true network — results splice with other results, four tiers deep,
 and every recipe is validated reachable starting from the six natural blocks (dirt, stone, wood,
 sand, snow, ice). You can even **farm consumables**: grow trees of Medkits, Elixirs (full heal),
 Logic/Cluster Bombs, Fireworks, Warp Whistles (teleport home from anywhere), Nano Shields (4s
@@ -245,7 +245,8 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   atmosphere behind the play space
 - **Volumetric tile shading**: a cached soft form-light + corner ambient-occlusion pass gives
   every block rounded volume instead of a flat fill, with extra contact shadows in concave corners
-- **Sticker-finish icons**: each item icon is pixelated, dark-outlined, gloss-beveled, rim-lit
+- **Sticker-finish icons**: each item icon is 3×-supersampled for smooth source art, pixelated at
+  higher resolution (36² — over 2× the pixels of the old pass), dark-outlined, gloss-beveled, rim-lit
   from the top-left and lifted off a soft drop shadow — the polished Growtopia "inventory sticker" look
 - **Auto-tiled terrain**: neighbor-aware edges, grass-capped dirt with waving blades, real brick
   courses, wood planks with knots, glass shine, flickering corrupted blocks

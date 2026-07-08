@@ -93,6 +93,8 @@ const ENEMY_DEFS = {
   sapper:     { hp: 46, dmg: 16, speed: 60, color: '#8d6a3f', color2: '#4d3620', w: 28, h: 26, ai: 'walker', digger: true, gems: [4, 9] },
   shielder:   { hp: 60, dmg: 12, speed: 70, color: '#4a5568', color2: '#8ecae6', w: 30, h: 30, ai: 'walker', frontShield: true, gems: [5, 11] },
   mender:     { hp: 34, dmg: 6, speed: 90, color: '#95d5b2', color2: '#2d6a4f', w: 24, h: 22, ai: 'flyer', mender: true, gems: [5, 12] },
+  golem:      { hp: 210, dmg: 24, speed: 34, color: '#6b7280', color2: '#374151', w: 44, h: 42, ai: 'walker', gems: [10, 18] },
+  phantom:    { hp: 28, dmg: 15, speed: 185, color: '#7048c0', color2: '#c77dff', w: 24, h: 24, ai: 'flyer', shoots: true, gems: [5, 11] },
 };
 
 class Enemy extends Entity {
