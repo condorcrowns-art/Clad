@@ -930,7 +930,8 @@ const _iconStub = {
 };
 
 const ICON_SS = 3;    // supersample: render source art at 3× for smoother, higher-fidelity curves
-const ICON_PIX = 36;  // pixelate target (was 24) — 2.25× the pixels per object, more detail retained
+const ICON_N = 56;    // final icon resolution (was 40) — bigger, crisper stickers in the UI
+const ICON_PIX = 46;  // pixelate target — high pixel count per object, detail retained
 function iconFor(id) {
   if (_iconCache[id]) return _iconCache[id];
   const art = document.createElement('canvas');
@@ -948,55 +949,57 @@ function iconFor(id) {
   return c;
 }
 
-// Growtopia-style sticker finish: pixelate → dark outline → gloss bevel
+// Growtopia-style sticker finish: pixelate → dark outline → gloss bevel → rim → drop shadow
 function gtFinish(art) {
-  // 1) pixelate through a mid-res pass (crisp pixel art, finer than before)
+  const N = ICON_N;
+  const inset = Math.round(N * 0.045), inner = N - inset * 2;
+  // 1) pixelate through a mid-res pass (crisp pixel art)
   const small = document.createElement('canvas');
   small.width = ICON_PIX; small.height = ICON_PIX;
   const sx2 = small.getContext('2d');
   sx2.imageSmoothingEnabled = true;
   sx2.drawImage(art, 0, 0, ICON_PIX, ICON_PIX);
   const c = document.createElement('canvas');
-  c.width = 40; c.height = 40;
+  c.width = N; c.height = N;
   const ox = c.getContext('2d', { willReadFrequently: true });
   ox.imageSmoothingEnabled = false;
-  ox.drawImage(small, 2, 2, 36, 36);
+  ox.drawImage(small, inset, inset, inner, inner);
   // 2) dark sticker outline traced from alpha
-  const img = ox.getImageData(0, 0, 40, 40);
+  const img = ox.getImageData(0, 0, N, N);
   const d = img.data;
-  const a = new Uint8Array(1600);
-  for (let i = 0; i < 1600; i++) a[i] = d[i * 4 + 3];
-  for (let y = 0; y < 40; y++) for (let xx = 0; xx < 40; xx++) {
-    const i = y * 40 + xx;
+  const a = new Uint8Array(N * N);
+  for (let i = 0; i < N * N; i++) a[i] = d[i * 4 + 3];
+  for (let y = 0; y < N; y++) for (let xx = 0; xx < N; xx++) {
+    const i = y * N + xx;
     if (a[i] > 50) continue;
-    const n = (xx > 0 && a[i - 1] > 90) || (xx < 39 && a[i + 1] > 90) || (y > 0 && a[i - 40] > 90) || (y < 39 && a[i + 40] > 90);
+    const n = (xx > 0 && a[i - 1] > 90) || (xx < N - 1 && a[i + 1] > 90) || (y > 0 && a[i - N] > 90) || (y < N - 1 && a[i + N] > 90);
     if (n) { const p = i * 4; d[p] = 10; d[p + 1] = 14; d[p + 2] = 26; d[p + 3] = 255; }
   }
   ox.putImageData(img, 0, 0);
   // 3) gloss bevel masked to the sprite
   ox.globalCompositeOperation = 'source-atop';
-  const g = ox.createLinearGradient(0, 0, 0, 40);
+  const g = ox.createLinearGradient(0, 0, 0, N);
   g.addColorStop(0, 'rgba(255,255,255,0.28)');
   g.addColorStop(0.4, 'rgba(255,255,255,0.05)');
   g.addColorStop(0.62, 'rgba(0,0,0,0)');
   g.addColorStop(1, 'rgba(0,0,0,0.26)');
   ox.fillStyle = g;
-  ox.fillRect(0, 0, 40, 40);
+  ox.fillRect(0, 0, N, N);
   // 3b) soft top-left rim light for a rounded, sculpted read
-  const rim = ox.createRadialGradient(13, 12, 2, 15, 14, 26);
+  const rim = ox.createRadialGradient(N * 0.33, N * 0.3, N * 0.05, N * 0.37, N * 0.35, N * 0.66);
   rim.addColorStop(0, 'rgba(255,255,255,0.30)');
   rim.addColorStop(0.5, 'rgba(255,255,255,0.06)');
   rim.addColorStop(1, 'rgba(255,255,255,0)');
-  ox.fillStyle = rim; ox.fillRect(0, 0, 40, 40);
+  ox.fillStyle = rim; ox.fillRect(0, 0, N, N);
   ox.globalCompositeOperation = 'source-over';
   // 4) composite the finished sprite over its own soft drop shadow for a sticker lift
   const out = document.createElement('canvas');
-  out.width = 42; out.height = 42;
+  out.width = N; out.height = N;
   const oc = out.getContext('2d');
   oc.save();
   oc.globalAlpha = 0.30;
-  try { oc.filter = 'blur(0.8px) brightness(0)'; } catch (e) {}
-  oc.drawImage(c, 2, 3);   // darkened, blurred, offset silhouette = drop shadow
+  try { oc.filter = 'blur(1px) brightness(0)'; } catch (e) {}
+  oc.drawImage(c, N * 0.04, N * 0.06);   // darkened, blurred, offset silhouette = drop shadow
   oc.restore();
   oc.drawImage(c, 0, 0);   // crisp finished sprite on top
   return out;

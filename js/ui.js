@@ -242,7 +242,7 @@ const ui = {
       d.className = 'invSlot';
       d.style.borderColor = tierColor(id) + '99';
       const cv = document.createElement('canvas');
-      cv.width = 40; cv.height = 40;
+      cv.width = ICON_N; cv.height = ICON_N;
       cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
       d.appendChild(cv);
       const cnt = document.createElement('span');
@@ -280,7 +280,7 @@ const ui = {
       el.style.borderColor = id ? tierColor(id) : '';
       if (id) {
         const cv = document.createElement('canvas');
-        cv.width = 40; cv.height = 40;
+        cv.width = ICON_N; cv.height = ICON_N;
         cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
         box.appendChild(cv);
       }
@@ -325,7 +325,7 @@ const ui = {
       const it = ITEMS[row.id];
       const d = document.createElement('div');
       d.className = 'shopRow';
-      const cv = document.createElement('canvas'); cv.width = 40; cv.height = 40;
+      const cv = document.createElement('canvas'); cv.width = ICON_N; cv.height = ICON_N;
       cv.getContext('2d').drawImage(iconFor(row.id), 0, 0, cv.width, cv.height);
       d.appendChild(cv);
       const info = document.createElement('div');
@@ -360,7 +360,7 @@ const ui = {
       const d = document.createElement('div');
       d.className = 'invSlot';
       d.style.borderColor = tierColor(id) + '99';
-      const cv = document.createElement('canvas'); cv.width = 40; cv.height = 40;
+      const cv = document.createElement('canvas'); cv.width = ICON_N; cv.height = ICON_N;
       cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
       d.appendChild(cv);
       const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.textContent = p.inv[id];

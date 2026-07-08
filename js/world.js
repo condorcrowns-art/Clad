@@ -415,7 +415,17 @@ class World {
     const g = ctx.createLinearGradient(0, 0, 0, vh);
     g.addColorStop(0, this.theme.sky[0]); g.addColorStop(1, this.theme.sky[1]);
     ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
-    // layered parallax backdrop for depth
+    // day/night phase for outdoor (home/owned/public) worlds
+    this._cyc = -1; this._night = 0; this._warm = 0;
+    if (this.isHome && game) {
+      const DAY = 150; // seconds per full cycle
+      const cyc = (((game.time || 0) / DAY) + 0.32) % 1; // start mid-morning
+      this._cyc = cyc;
+      const sun = Math.sin(cyc * Math.PI * 2 - Math.PI / 2); // -1 midnight, +1 noon
+      this._night = Math.max(0, -sun);
+      this._warm = Math.max(0, 1 - Math.abs(sun) * 2.5); // sunrise/sunset warmth
+    }
+    // layered parallax backdrop for depth (stars fade in as night falls)
     this.drawParallax(ctx, cam, time);
     // parallax grid scanlines for digital vibe
     ctx.globalAlpha = 0.05; ctx.strokeStyle = '#6ee7ff'; ctx.lineWidth = 1;
@@ -543,9 +553,11 @@ class World {
     if (glows.length) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       for (const [gx, gy, r, col] of glows) {
-        const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, r);
-        gr.addColorStop(0, col + '55'); gr.addColorStop(1, col + '00');
-        ctx.fillStyle = gr; ctx.fillRect(gx - r, gy - r, r * 2, r * 2);
+        const pr = r * (0.9 + 0.1 * Math.sin(time * 2.5 + gx * 0.04 + gy * 0.03)); // gentle breathing pulse
+        const a = Math.floor(66 + 14 * Math.sin(time * 2.5 + gx * 0.04)).toString(16).padStart(2, '0');
+        const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, pr);
+        gr.addColorStop(0, col + a); gr.addColorStop(1, col + '00');
+        ctx.fillStyle = gr; ctx.fillRect(gx - pr, gy - pr, pr * 2, pr * 2);
       }
       ctx.restore();
     }
@@ -555,6 +567,9 @@ class World {
       ctx.fillStyle = 'rgba(2,4,10,' + this.theme.dark * 0.25 + ')';
       ctx.fillRect(0, 0, vw, vh);
     }
+    // day/night: dim the whole scene at night, warm it at sunrise/sunset
+    if (this._night > 0.01) { ctx.fillStyle = 'rgba(8,12,36,' + (this._night * 0.5) + ')'; ctx.fillRect(0, 0, vw, vh); }
+    if (this._warm > 0.01) { ctx.fillStyle = 'rgba(255,140,55,' + (this._warm * 0.13) + ')'; ctx.fillRect(0, 0, vw, vh); }
   }
 
   // layered, deterministic parallax backdrop — hazy hills, floating server towers,
@@ -563,8 +578,31 @@ class World {
     const { w: vw, h: vh } = cam.view;
     const seed = ((World.nameHash ? World.nameHash(this.name || 'world') : 1234567) >>> 0);
     const rnd = (n) => { let h = (seed ^ Math.imul(n, 2654435761)) >>> 0; h ^= h >> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >> 16)) >>> 0) / 4294967295; };
-    const dark = this.theme.dark || 0;
+    const dark = Math.max(this.theme.dark || 0, this._night || 0); // night raises effective darkness → stars appear
     const baseY = vh * 0.66;
+
+    // sun / moon arcing across the sky on outdoor worlds
+    if (this._cyc >= 0) {
+      const cyc = this._cyc;
+      const isDay = cyc > 0.25 && cyc < 0.75;
+      const t2 = isDay ? (cyc - 0.25) / 0.5 : (cyc >= 0.75 ? (cyc - 0.75) / 0.5 : (cyc + 0.25) / 0.5);
+      const bx = vw * t2, by = baseY - Math.sin(t2 * Math.PI) * (vh * 0.52);
+      ctx.save();
+      if (isDay) {
+        const gr = ctx.createRadialGradient(bx, by, 4, bx, by, 60);
+        gr.addColorStop(0, 'rgba(255,241,180,0.9)'); gr.addColorStop(0.3, 'rgba(255,210,90,0.5)'); gr.addColorStop(1, 'rgba(255,210,90,0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(bx, by, 60, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff3c0'; ctx.beginPath(); ctx.arc(bx, by, 16, 0, 7); ctx.fill();
+      } else {
+        const gr = ctx.createRadialGradient(bx, by, 3, bx, by, 44);
+        gr.addColorStop(0, 'rgba(220,230,255,0.55)'); gr.addColorStop(1, 'rgba(180,200,255,0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(bx, by, 44, 0, 7); ctx.fill();
+        ctx.fillStyle = '#e8eeff'; ctx.beginPath(); ctx.arc(bx, by, 13, 0, 7); ctx.fill();
+        ctx.fillStyle = '#c8d2ec'; // craters
+        ctx.beginPath(); ctx.arc(bx - 4, by - 3, 3, 0, 7); ctx.arc(bx + 5, by + 2, 2.2, 0, 7); ctx.arc(bx - 1, by + 5, 1.8, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
 
     // upper sky: twinkling stars on dark worlds, drifting clouds on bright ones
     if (dark >= 0.3) {
@@ -1287,9 +1325,12 @@ class World {
         x.fillStyle = '#57904a'; x.fillRect(sx + 6, sy + TS - 14, TS - 12, 8);
         x.fillStyle = '#ffd166'; x.beginPath(); x.arc(sx + TS - 12, sy + 12, 3, 0, 7); x.fill();
         x.strokeStyle = '#c9a227'; x.lineWidth = 2; x.strokeRect(sx + 5, sy + 5, TS - 10, TS - 10); break;
-      case 'banner':
-        x.fillStyle = '#c9556e'; x.beginPath(); x.moveTo(sx + 7, sy + 2); x.lineTo(sx + TS - 7, sy + 2); x.lineTo(sx + TS - 7, sy + TS - 4); x.lineTo(cx, sy + TS - 10); x.lineTo(sx + 7, sy + TS - 4); x.closePath(); x.fill();
-        x.fillStyle = '#ffd166'; x.beginPath(); x.arc(cx, sy + 13, 4, 0, 7); x.fill(); break;
+      case 'banner': {
+        const sw = Math.sin(t * 2 + sx * 0.12) * 2.6; // fabric sway
+        x.fillStyle = '#c9556e'; x.beginPath(); x.moveTo(sx + 7, sy + 2); x.lineTo(sx + TS - 7, sy + 2);
+        x.lineTo(sx + TS - 7 + sw, sy + TS - 4); x.lineTo(cx + sw * 0.6, sy + TS - 10); x.lineTo(sx + 7 + sw, sy + TS - 4); x.closePath(); x.fill();
+        x.fillStyle = '#ffd166'; x.beginPath(); x.arc(cx + sw * 0.3, sy + 13, 4, 0, 7); x.fill(); break;
+      }
       case 'rug':
         x.fillStyle = '#9c2b3e'; x.fillRect(sx + 2, sy + TS - 12, TS - 4, 10);
         x.strokeStyle = '#ffd166'; x.lineWidth = 1.5; x.strokeRect(sx + 5, sy + TS - 10, TS - 10, 6); break;
@@ -1343,7 +1384,11 @@ class World {
         for (const [dx, c] of [[-5, '#ff6ec7'], [0, '#ffd166'], [5, '#ff4d6d']]) { x.fillStyle = c; x.beginPath(); x.arc(cx + dx, sy + 8, 3, 0, 7); x.fill(); }
         x.strokeStyle = '#57904a'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(cx, sy + 16); x.lineTo(cx, sy + 10); x.stroke(); break;
       case 'curtain':
-        for (let i = 0; i < 5; i++) { x.fillStyle = i % 2 ? '#9c2b3e' : '#7a1f30'; x.fillRect(sx + 2 + i * 6, sy + 2, 5, TS - 6); }
+        for (let i = 0; i < 5; i++) {
+          x.fillStyle = i % 2 ? '#9c2b3e' : '#7a1f30';
+          const wv = Math.sin(t * 2 + i * 0.9) * 2; // billowing hem
+          x.fillRect(sx + 2 + i * 6 + wv * 0.4, sy + 2, 5, TS - 6 + wv);
+        }
         x.fillStyle = '#ffd166'; x.fillRect(sx + 2, sy + 2, TS - 4, 3); break;
       case 'arcade': {
         x.fillStyle = '#2b1055'; x.fillRect(sx + 5, sy + 2, TS - 10, TS - 2);

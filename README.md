@@ -239,15 +239,21 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **Secret vaults** — every sector hides a sealed treasure room. Dig.
 
 ### Presentation & building feel
+- **Day/night cycle**: outdoor worlds (home + your founded/visited worlds) run a live ~2.5-minute
+  day — a sun and cratered moon arc across the sky, the light warms at sunrise/sunset, the scene
+  dims at night and a starfield fades in overhead
 - **Layered parallax backdrops**: every world renders a deterministic multi-depth sky — hazy
   ridgelines, floating "server tower" monoliths with blinking windows, drifting clouds on bright
   worlds and a twinkling starfield on dark ones — all scrolling at their own depth for real
   atmosphere behind the play space
+- **Animated tiles**: flowing water, banners and curtains that billow in the breeze, and a gentle
+  breathing pulse on every light source (LEDs, lamps, crystals, teleporters)
 - **Volumetric tile shading**: a cached soft form-light + corner ambient-occlusion pass gives
   every block rounded volume instead of a flat fill, with extra contact shadows in concave corners
-- **Sticker-finish icons**: each item icon is 3×-supersampled for smooth source art, pixelated at
-  higher resolution (36² — over 2× the pixels of the old pass), dark-outlined, gloss-beveled, rim-lit
-  from the top-left and lifted off a soft drop shadow — the polished Growtopia "inventory sticker" look
+- **Sticker-finish icons**: each item icon is 3×-supersampled for smooth source art, rendered at
+  56² and pixelated at 46² (well over 2× the pixels of the original pass), dark-outlined,
+  gloss-beveled, rim-lit from the top-left and lifted off a soft drop shadow — the polished
+  Growtopia "inventory sticker" look, shown in enlarged hotbar/inventory slots
 - **Auto-tiled terrain**: neighbor-aware edges, grass-capped dirt with waving blades, real brick
   courses, wood planks with knots, glass shine, flickering corrupted blocks
 - **Background wall layer**: right-click places any block as wallpaper behind the world
