@@ -43,7 +43,7 @@ class Player extends Entity {
     return Math.max(this.gearFx('magnet') || 1.2, held.magnet || 0);
   }
   dmgMult() {
-    let m = (this.gearFx('dmgMult') || 1) * (game.buffActive() ? game.buff.dmg : 1);
+    let m = (this.gearFx('dmgMult') || 1) * (game.buffActive() ? game.buff.dmg : 1) * (game.skillMult ? game.skillMult('power') : 1);
     const berserk = this.gearFx('berserk');
     if (berserk && this.hp < this.maxHp * 0.4) m *= berserk;
     return m;
@@ -95,7 +95,8 @@ class Player extends Entity {
       return;
     }
     const armor = this.gearFx('armor') || 0;
-    dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - (this.shieldNear || 0))));
+    const diff = game.diffMult ? game.diffMult() : 1; // difficulty scales incoming damage
+    dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - (this.shieldNear || 0)) * diff));
     this.hp -= dmg;
     this.iframes = 0.7;
     if (kx) { this.vx = kx; this.vy = -220; }
@@ -111,11 +112,11 @@ class Player extends Entity {
   update(dt, world, game, input) {
     const feet = this.equip.feet ? ITEMS[this.equip.feet].fx : null;
     let speedMult = ((feet && feet.speed) || 1) * ((this.equip.chip && ITEMS[this.equip.chip].fx.speed) || 1)
-      * ((this.equip.back && ITEMS[this.equip.back].fx.speed) || 1) * (this.speedAuraM || 1);
+      * ((this.equip.back && ITEMS[this.equip.back].fx.speed) || 1) * (this.speedAuraM || 1) * (game.skillMult ? game.skillMult('agility') : 1);
     if (game.buffActive()) speedMult *= game.buff.speed;
     const baseSpeed = 250 * speedMult;
-    // crystal heart & level scaling
-    const wantMax = 100 + (game.level - 1) * 3 + (this.gearFx('maxHp') || 0) + (game.guildPerks ? game.guildPerks().hpBonus : 0);
+    // crystal heart, level, guild & vitality-skill scaling
+    const wantMax = 100 + (game.level - 1) * 3 + (this.gearFx('maxHp') || 0) + (game.guildPerks ? game.guildPerks().hpBonus : 0) + (game.skillHp ? game.skillHp() : 0);
     if (this.maxHp !== wantMax) { this.maxHp = wantMax; this.hp = Math.min(this.hp, this.maxHp); ui.updateHUD(); }
     this.iframes = Math.max(0, this.iframes - dt);
     this.actionCd = Math.max(0, this.actionCd - dt);
@@ -607,7 +608,7 @@ class Player extends Entity {
       if (world.isHome) game.saveSoon();
     } else if (world.bgT[i] && !world.tiles[i]) {
       const tool = (held.kind === 'tool' || held.kind === 'weapon') ? held : ITEMS.fist;
-      this.actionCd = 1 / (tool.mineRate || 4);
+      this.actionCd = 1 / ((tool.mineRate || 4) * (game.skillMult ? game.skillMult('mining') : 1));
       this.swingT = 0.15;
       game.sfx.play('punch');
       if (world.hitBg(tx, ty, tool.minePower || 1, game)) game.sfx.play('break');

@@ -21,6 +21,8 @@ const ui = {
       achPanel: $('achPanel'), achList: $('achList'),
       guildPanel: $('guildPanel'), guildBody: $('guildBody'),
       storePanel: $('storePanel'), storeList: $('storeList'),
+      skillsPanel: $('skillsPanel'), skillsBody: $('skillsBody'),
+      settingsPanel: $('settingsPanel'), settingsBody: $('settingsBody'),
       shardText: $('shardText'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
       codexPanel: $('codexPanel'), codexList: $('codexList'),
@@ -438,7 +440,7 @@ const ui = {
   togglePanel(name) {
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel'].forEach(p => this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -449,13 +451,16 @@ const ui = {
       if (name === 'ach') this.renderAch();
       if (name === 'guild') this.renderGuild();
       if (name === 'store') this.renderStore();
+      if (name === 'skills') this.renderSkills();
+      if (name === 'settings') this.renderSettings();
     }
+    if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'defragPanel'].some(p => !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel'].forEach(p => this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';
@@ -498,6 +503,45 @@ const ui = {
       d.appendChild(btn);
       list.appendChild(d);
     }
+  },
+
+  renderSkills() {
+    const b = this.el.skillsBody; if (!b) return;
+    const pts = game.progress.skillPoints || 0;
+    let html = '<div class="skillPts">Skill points: <b>' + pts + '</b> · earn 1 per level</div>';
+    for (const s of SKILLS) {
+      const r = game.skillRank(s.id), maxed = r >= SKILL_MAX;
+      const bonus = s.per < 1 ? '+' + Math.round(r * s.per * 100) + s.unit : '+' + (r * s.per) + ' ' + s.unit;
+      let pips = '';
+      for (let i = 0; i < SKILL_MAX; i++) pips += '<span class="skillPip' + (i < r ? ' on' : '') + '"></span>';
+      html += '<div class="skillRow">' +
+        '<div class="skillIco">' + s.icon + '</div>' +
+        '<div class="skillMain"><div class="skillName">' + s.name + ' <span class="skillCur">' + bonus + '</span></div>' +
+        '<div class="skillDesc">' + s.desc + '</div><div class="skillPips">' + pips + '</div></div>' +
+        '<button class="skillBtn" data-id="' + s.id + '"' + ((maxed || pts <= 0) ? ' disabled' : '') + '>' + (maxed ? 'MAX' : '+') + '</button></div>';
+    }
+    b.innerHTML = html;
+    b.querySelectorAll('.skillBtn').forEach(btn => btn.addEventListener('click', () => { if (game.spendSkill(btn.dataset.id)) this.renderSkills(); }));
+  },
+
+  renderSettings() {
+    const b = this.el.settingsBody; if (!b) return;
+    const vol = Math.round((game.sfx.vol || 0) * 100);
+    let html = '<div class="setRow"><span>Sound FX</span><button class="setBtn" id="muteBtn">' + (game.sfx.muted ? '🔇 MUTED' : '🔊 ON') + '</button></div>';
+    html += '<div class="setRow"><span>Volume</span><input type="range" id="volSlider" min="0" max="100" value="' + vol + '"><span id="volVal">' + vol + '%</span></div>';
+    html += '<div class="setLabel">Difficulty</div><div class="diffRow">';
+    for (const k of ['chill', 'normal', 'hardcore']) {
+      const d = DIFFICULTIES[k], on = game.progress.difficulty === k;
+      html += '<button class="diffBtn' + (on ? ' on' : '') + '" data-d="' + k + '" title="' + d.desc + '">' + d.name + '</button>';
+    }
+    html += '</div><div class="setDiffDesc">' + DIFFICULTIES[game.progress.difficulty].desc + '</div>';
+    html += '<div class="setRow" style="margin-top:12px"><button class="setBtn" id="resumeBtn">▶ RESUME</button></div>';
+    b.innerHTML = html;
+    b.querySelector('#muteBtn').addEventListener('click', () => game.toggleMute());
+    const slider = b.querySelector('#volSlider');
+    slider.addEventListener('input', () => { game.setVolume(slider.value / 100); b.querySelector('#volVal').textContent = slider.value + '%'; });
+    b.querySelectorAll('.diffBtn').forEach(btn => btn.addEventListener('click', () => game.setDifficulty(btn.dataset.d)));
+    b.querySelector('#resumeBtn').addEventListener('click', () => game.togglePause());
   },
 
   renderAch() {

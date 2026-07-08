@@ -91,6 +91,21 @@ const STORE = [
   { id: 'skin_void', name: 'Void Avatar', desc: 'COSMETIC: a walking starfield', cost: 75, once: true, cosmetic: 'void', give: (g) => { g.setCosmetic('void'); } },
 ];
 
+/* ---------------- SKILL TREE (spend a point each level) ---------------- */
+const SKILL_MAX = 10;
+const SKILLS = [
+  { id: 'vitality', name: 'Vitality', icon: '❤', per: 8,    unit: 'HP',       desc: '+8 max HP per rank' },
+  { id: 'power',    name: 'Power',    icon: '⚔', per: 0.06, unit: '% dmg',    desc: '+6% weapon damage per rank' },
+  { id: 'mining',   name: 'Mining',   icon: '⛏', per: 0.08, unit: '% speed',  desc: '+8% mining speed per rank' },
+  { id: 'agility',  name: 'Agility',  icon: '👟', per: 0.04, unit: '% move',   desc: '+4% movement speed per rank' },
+  { id: 'fortune',  name: 'Fortune',  icon: '◆', per: 0.05, unit: '% gems',   desc: '+5% gem drops per rank' },
+];
+const DIFFICULTIES = {
+  chill:    { name: 'CHILL',    dmg: 0.6, xp: 0.9,  desc: 'Enemies hit for 60% — relax and build.' },
+  normal:   { name: 'NORMAL',   dmg: 1.0, xp: 1.0,  desc: 'The intended experience.' },
+  hardcore: { name: 'HARDCORE', dmg: 1.7, xp: 1.25, desc: 'Enemies hit for 170%, but +25% XP.' },
+};
+
 class Game {
   constructor() {
     this.canvas = document.getElementById('canvas');
@@ -115,7 +130,8 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '' };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false };
+    this.paused = false;
     this._questNotified = {};
     this._questT = 0; this._miniT = 0;
     this.time = 0; this.shake = 0;
@@ -158,7 +174,9 @@ class Game {
       if (k === 'g') ui.togglePanel('ach');
       if (k === 'h') ui.togglePanel('guild');
       if (k === 'k') ui.togglePanel('store');
-      if (k === 'escape') ui.closeAll();
+      if (k === 't') ui.togglePanel('skills');
+      if (k === 'p') this.togglePause();
+      if (k === 'escape') { ui.closeAll(); this.paused = false; }
     });
     window.addEventListener('keyup', (e) => {
       const k = e.key.toLowerCase();
@@ -327,12 +345,45 @@ class Game {
     this.sfx.play('tp');
   }
 
+  /* ---------------- skill tree ---------------- */
+  skillRank(id) { return (this.progress.skills && this.progress.skills[id]) || 0; }
+  skillMult(id) { const s = SKILLS.find(k => k.id === id); return s ? 1 + this.skillRank(id) * s.per : 1; }
+  skillHp() { return this.skillRank('vitality') * 8; }
+  spendSkill(id) {
+    if ((this.progress.skillPoints || 0) <= 0) { this.toast('No skill points. Level up to earn them.', 'warn'); return false; }
+    if (this.skillRank(id) >= SKILL_MAX) { this.toast('That skill is maxed.', 'warn'); return false; }
+    this.progress.skills = this.progress.skills || {};
+    this.progress.skills[id] = this.skillRank(id) + 1;
+    this.progress.skillPoints--;
+    const s = SKILLS.find(k => k.id === id);
+    this.toast('▲ ' + s.name + ' rank ' + this.progress.skills[id] + '!', 'gold');
+    this.sfx.play('buy');
+    this.player.recomputeSoon = true;
+    this.save(); ui.updateHUD();
+    return true;
+  }
+
+  /* ---------------- difficulty ---------------- */
+  difficulty() { return DIFFICULTIES[this.progress.difficulty] || DIFFICULTIES.normal; }
+  diffMult() { return this.difficulty().dmg; }
+  setDifficulty(d) { if (DIFFICULTIES[d]) { this.progress.difficulty = d; this.toast('Difficulty: ' + DIFFICULTIES[d].name, 'gold'); this.save(); if (typeof ui !== 'undefined' && ui.renderSettings) ui.renderSettings(); } }
+
+  /* ---------------- audio settings ---------------- */
+  setVolume(v) { v = Math.max(0, Math.min(1, v)); this.sfx.vol = v; this.progress.sfxVol = v; this.save(); }
+  toggleMute() { this.sfx.muted = !this.sfx.muted; this.progress.sfxMuted = this.sfx.muted; if (!this.sfx.muted) this.sfx.play('buy'); this.save(); if (typeof ui !== 'undefined' && ui.renderSettings) ui.renderSettings(); }
+
+  /* ---------------- pause ---------------- */
+  togglePause() {
+    ui.togglePanel('settings');
+    this.paused = !ui.el.settingsPanel.classList.contains('hidden');
+  }
+
   /* ---------------- economy / spawning ---------------- */
   guildPerks() { return this.progress.guild ? guildPerks(this.progress.guild.level) : { gemBonus: 0, xpBonus: 0, hpBonus: 0 }; }
   addShards(n) { this.shards = Math.max(0, this.shards + n); ui.updateHUD(); }
   addGems(n) {
     if (n > 0 && this.progress.overdrive) n = Math.round(n * 2);
-    if (n > 0) n = Math.round(n * (1 + this.guildPerks().gemBonus)); // guild perk
+    if (n > 0) n = Math.round(n * (1 + this.guildPerks().gemBonus) * this.skillMult('fortune')); // guild + fortune skill
     this.gems = Math.max(0, this.gems + n);
     if (n > 0) {
       this.progress.stats.gemsEarned += n;
@@ -489,14 +540,15 @@ class Game {
     }
   }
   addXp(n) {
-    n = Math.max(1, Math.round(n * (this.player.gearFx('xpMult') || 1) * (this.player.xpAuraM || 1) * (1 + this.guildPerks().xpBonus)));
+    n = Math.max(1, Math.round(n * (this.player.gearFx('xpMult') || 1) * (this.player.xpAuraM || 1) * (1 + this.guildPerks().xpBonus) * this.difficulty().xp));
     this.xp += n;
     while (this.xp >= this.xpNeed()) {
       this.xp -= this.xpNeed();
       this.level++;
+      this.progress.skillPoints = (this.progress.skillPoints || 0) + 1; // earn a skill point each level
       this.player.maxHp = 100 + (this.level - 1) * 3;
       this.player.hp = Math.min(this.player.maxHp, this.player.hp + 30);
-      this.toast('▲ LEVEL UP! You are now level ' + this.level + ' (+3 max HP)', 'gold');
+      this.toast('▲ LEVEL UP! Level ' + this.level + ' — +3 max HP, +1 skill point [T]', 'gold');
       this.fx.explode(this.player.x, this.player.y, '#2de2a3', 24);
       this.sfx.play('victory');
       this.save();
@@ -896,6 +948,12 @@ class Game {
       this.progress.achievements = this.progress.achievements || {};
       this.progress.stats = Object.assign({}, STATS_DEFAULT, this.progress.stats || {});
       this.progress.quests = this.progress.quests || {};
+      this.progress.skills = this.progress.skills || {};
+      if (typeof this.progress.skillPoints !== 'number') this.progress.skillPoints = 0;
+      this.progress.difficulty = this.progress.difficulty || 'normal';
+      // apply saved audio settings
+      this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;
+      this.sfx.muted = !!this.progress.sfxMuted;
       this.player.equip = Object.assign({ back: null, feet: null, chip: null, pet: null }, this.player.equip);
       this.homeWorld = World.deserializeHome(s.home);
       this.ownedWorlds = {};
@@ -1371,7 +1429,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function frame(now) {
     const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
-    try { if (game.running) game.loop(dt); }
+    try { if (game.running && !game.paused) game.loop(dt); }
     catch (e) { console.error('loop error', e); }  // never let one bad frame kill the game
     requestAnimationFrame(frame);
   }

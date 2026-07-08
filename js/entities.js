@@ -785,22 +785,22 @@ class FXSystem {
 
 /* ===================== SOUND (tiny webaudio synth) ===================== */
 class SFX {
-  constructor() { this.ctx = null; }
+  constructor() { this.ctx = null; this.vol = 0.8; this.muted = false; }
   init() { if (!this.ctx) try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   note(semitone) { // chime blocks: pentatonic-ish pitches
-    if (!this.ctx) return;
+    if (!this.ctx || this.muted) return;
     const t = this.ctx.currentTime;
     const f = 440 * Math.pow(2, (semitone - 5) / 12);
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = 'triangle';
     o.frequency.setValueAtTime(f, t);
-    g.gain.setValueAtTime(0.16, t);
+    g.gain.setValueAtTime(0.16 * this.vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
     o.connect(g).connect(this.ctx.destination);
     o.start(t); o.stop(t + 0.55);
   }
   play(name) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.muted) return;
     const t = this.ctx.currentTime;
     const defs = {
       punch:  [{ f: 180, f2: 90, dur: 0.08, type: 'square', vol: 0.12 }],
@@ -836,7 +836,7 @@ class SFX {
       o.type = s.type;
       o.frequency.setValueAtTime(s.f, t0);
       o.frequency.exponentialRampToValueAtTime(Math.max(20, s.f2), t0 + s.dur);
-      g.gain.setValueAtTime(s.vol, t0);
+      g.gain.setValueAtTime(s.vol * this.vol, t0);
       g.gain.exponentialRampToValueAtTime(0.001, t0 + s.dur);
       o.connect(g).connect(this.ctx.destination);
       o.start(t0); o.stop(t0 + s.dur + 0.02);

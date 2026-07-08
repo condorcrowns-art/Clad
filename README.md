@@ -39,6 +39,15 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Data Caches**: loot chests scattered through every sector
 - Boss loot is the best gear in the game
 
+### RPG staples
+- **Skill tree `[T]`** — earn a skill point every level and spend it across five stats:
+  **Vitality** (+max HP), **Power** (+weapon damage), **Mining** (+dig speed), **Agility**
+  (+move speed), and **Fortune** (+gem drops), up to 10 ranks each. Persisted with your save.
+- **Difficulty modes** — **Chill / Normal / Hardcore** (set in the pause menu) scale how hard
+  enemies hit and, on Hardcore, hand back +25% XP for the extra risk.
+- **Pause & settings menu `[P]`** — freezes the game and opens sound controls (SFX volume slider
+  + mute) and the difficulty selector. Everything's remembered between sessions.
+
 ### More systems, borrowed from both games
 - **Fishing** — buy a Data Rod, cast into your home ponds, reel on the `[!]` for gems, healing
   fish, seeds, and the rare Golden Fish
@@ -286,6 +295,8 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 | `G` | Achievements |
 | `H` | Guild — found, contribute, view perks |
 | `K` | ◈ Shard Store |
+| `T` | Skill tree — spend level-up points |
+| `P` | Pause / settings — sound & difficulty |
 | `S` | Use teleporter / cycle Weather Core under your feet |
 | `W` | Enter portal |
 | `SHIFT` | Dash (Stormstep Boots) |
