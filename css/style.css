@@ -154,6 +154,30 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 .diffBtn.on { border-color: #ffd166; color: #ffd166; box-shadow: 0 0 10px rgba(255,209,102,0.3); }
 .setDiffDesc { color: #8ba0c0; font-size: 11px; min-height: 14px; }
 
+/* ---------- Trade window ---------- */
+#tradePanel { min-width: 640px; }
+#tradeCols { display: flex; gap: 14px; }
+.tradeCol { flex: 1; background: linear-gradient(#111a2c, #0a1120); border: 1px solid #2c3a55; border-radius: 12px; padding: 10px; min-width: 0; }
+.tradeColHead { color: #cfe0f2; font-weight: bold; font-size: 13px; letter-spacing: 1px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+.tradeVal { color: var(--ui-gold); }
+.tradeOffer { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; min-height: 56px; background: rgba(0,0,0,0.25); border: 1px dashed #33507a; border-radius: 8px; padding: 5px; }
+.tradeGemRow { display: flex; align-items: center; gap: 6px; margin: 8px 0; color: #cfe0f2; font-size: 12px; }
+.tGem { background: #16233c; border: 1px solid #34435f; color: #9fd8ff; font-family: var(--font); font-size: 11px; padding: 3px 8px; cursor: pointer; border-radius: 6px; }
+.tGem:hover { border-color: var(--ui-accent); }
+.tGemVal { margin-left: auto; color: var(--ui-gold); font-weight: bold; }
+.tradeSrcLabel { color: #7d93b3; font-size: 10px; margin: 6px 0 4px; letter-spacing: 0.5px; }
+.tradeSrc { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; max-height: 168px; overflow-y: auto; }
+.tradeCell { position: relative; aspect-ratio: 1; background: linear-gradient(#1b2740, #0c1322); border: 2px solid #34435f; border-radius: 8px; cursor: pointer; transition: transform 0.07s; }
+.tradeCell:hover { transform: translateY(-2px); filter: brightness(1.2); }
+.tradeCell canvas { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); image-rendering: pixelated; }
+.tradeCell .cnt { position: absolute; right: 2px; bottom: 0; font-size: 10px; color: #fff; font-weight: bold; text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; z-index: 2; }
+#tradeFooter { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+.tradeOk { color: #3ddc84; font-size: 13px; font-weight: bold; }
+.tradeBad { color: #ffb4a0; font-size: 13px; }
+#tradeConfirmBtn { background: linear-gradient(#3ff0b0, #1cae7d); color: #05231a; border: none; border-radius: 10px; font-family: var(--font); font-size: 15px; font-weight: bold; padding: 11px 22px; cursor: pointer; letter-spacing: 1px; box-shadow: 0 4px 0 #12795a; }
+#tradeConfirmBtn:hover:not(:disabled) { box-shadow: 0 4px 0 #12795a, 0 0 18px rgba(45,226,163,0.6); }
+#tradeConfirmBtn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+
 /* ---------- Achievements ---------- */
 #achList { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .achRow { display: flex; align-items: center; gap: 10px; background: linear-gradient(#141d30, #0c1322); border: 1px solid #2c3a55; border-radius: 10px; padding: 8px 10px; }

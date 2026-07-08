@@ -23,6 +23,7 @@ const ui = {
       storePanel: $('storePanel'), storeList: $('storeList'),
       skillsPanel: $('skillsPanel'), skillsBody: $('skillsBody'),
       settingsPanel: $('settingsPanel'), settingsBody: $('settingsBody'),
+      tradePanel: $('tradePanel'),
       shardText: $('shardText'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
       codexPanel: $('codexPanel'), codexList: $('codexList'),
@@ -68,6 +69,9 @@ const ui = {
     document.querySelectorAll('.dfBtn').forEach(b => {
       b.addEventListener('click', () => this.defragPress(b.dataset.op));
     });
+    // trade window static controls
+    document.querySelectorAll('.tGem').forEach(b => b.addEventListener('click', () => game.tradeGems(b.dataset.side, +b.dataset.d)));
+    $('tradeConfirmBtn').addEventListener('click', () => game.tradeConfirm());
   },
 
   /* ---------- DEFRAG minigame (Growtopia surgery homage) ---------- */
@@ -440,7 +444,7 @@ const ui = {
   togglePanel(name) {
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -453,14 +457,15 @@ const ui = {
       if (name === 'store') this.renderStore();
       if (name === 'skills') this.renderSkills();
       if (name === 'settings') this.renderSettings();
+      if (name === 'trade') this.renderTrade();
     }
     if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';
@@ -542,6 +547,50 @@ const ui = {
     slider.addEventListener('input', () => { game.setVolume(slider.value / 100); b.querySelector('#volVal').textContent = slider.value + '%'; });
     b.querySelectorAll('.diffBtn').forEach(btn => btn.addEventListener('click', () => game.setDifficulty(btn.dataset.d)));
     b.querySelector('#resumeBtn').addEventListener('click', () => game.togglePause());
+  },
+
+  // one item cell: icon + count, with a click handler
+  tradeCell(id, count, onClick) {
+    const d = document.createElement('div');
+    d.className = 'tradeCell'; d.style.borderColor = tierColor(id) + '99';
+    const cv = document.createElement('canvas'); cv.width = ICON_N; cv.height = ICON_N;
+    cv.getContext('2d').drawImage(iconFor(id), 0, 0, cv.width, cv.height);
+    d.appendChild(cv);
+    if (count != null) { const c = document.createElement('span'); c.className = 'cnt'; c.textContent = count; d.appendChild(c); }
+    d.addEventListener('mousemove', (e) => this.showTip(e, id));
+    d.addEventListener('mouseleave', () => this.hideTip());
+    d.addEventListener('click', () => { this.hideTip(); onClick(); });
+    return d;
+  },
+  renderTrade() {
+    const $ = (id) => document.getElementById(id);
+    const t = game.trade; if (!t || this.el.tradePanel.classList.contains('hidden')) return;
+    const giveOffer = $('tradeGiveOffer'), getOffer = $('tradeGetOffer');
+    const giveInv = $('tradeGiveInv'), getStock = $('tradeGetStock');
+    giveOffer.innerHTML = ''; getOffer.innerHTML = ''; giveInv.innerHTML = ''; getStock.innerHTML = '';
+    // offered items (click to pull back)
+    for (const id in t.give) giveOffer.appendChild(this.tradeCell(id, t.give[id], () => game.tradeRemove('give', id)));
+    for (const id in t.get) getOffer.appendChild(this.tradeCell(id, t.get[id], () => game.tradeRemove('get', id)));
+    // your inventory (click to offer) — skip boss tech / no-sell
+    const ids = Object.keys(game.player.inv).filter(id => (sellPrice(id) > 0)).sort();
+    for (const id of ids) {
+      const remaining = (game.player.count(id) || 0) - (t.give[id] || 0);
+      if (remaining <= 0) continue;
+      giveInv.appendChild(this.tradeCell(id, remaining, () => game.tradeAdd('give', id)));
+    }
+    // broker stock (click to request)
+    for (const id of TRADER_STOCK) getStock.appendChild(this.tradeCell(id, '◆' + game.brokerPrice(id), () => game.tradeAdd('get', id)));
+    // gem tallies + values
+    $('tradeGiveGems').textContent = t.giveGems;
+    $('tradeGetGems').textContent = t.getGems;
+    const gv = game.tradeVal('give'), gt = game.tradeVal('get');
+    $('tradeGiveVal').textContent = '◆' + gv;
+    $('tradeGetVal').textContent = '◆' + gt;
+    const ok = gv >= gt && (Object.keys(t.give).length || t.giveGems) && (Object.keys(t.get).length || t.getGems);
+    const bal = $('tradeBalance');
+    bal.textContent = gt === 0 ? 'Build an offer on both sides.' : (ok ? '✔ Fair trade — broker accepts.' : 'Your offer is ◆' + (gt - gv) + ' short.');
+    bal.className = ok ? 'tradeOk' : 'tradeBad';
+    $('tradeConfirmBtn').disabled = !ok;
   },
 
   renderAch() {

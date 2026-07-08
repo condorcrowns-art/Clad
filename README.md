@@ -58,6 +58,12 @@ sectors** wait behind portals, each ending in a boss fight.
   + mute) and the difficulty selector. Everything's remembered between sessions.
 
 ### More systems, borrowed from both games
+- **Trading `[Y]`** — the classic Growtopia/Pixel Worlds **trade window**, against a **Data
+  Broker**. Drag your items and gems into YOUR OFFER, request items or gems from the broker,
+  and the window live-balances both sides by value — the broker only accepts when your offer is
+  worth at least as much as theirs. Sell surplus for gems, buy stock, or barter item-for-item.
+  *(This game is offline/single-player, so the counterparty is an in-game broker rather than a
+  live player.)*
 - **Fishing** — buy a Data Rod, cast into your home ponds, reel on the `[!]` for gems, healing
   fish, seeds, and the rare Golden Fish
 - **Pets/familiars** — splice a Pocket Drone (Sentry + Blaster) that hovers beside you and fights;
@@ -305,6 +311,7 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 | `H` | Guild — found, contribute, view perks |
 | `K` | ◈ Shard Store |
 | `T` | Skill tree — spend level-up points |
+| `Y` | Trade — the Data Broker trade window |
 | `P` | Pause / settings — sound & difficulty |
 | `S` | Use teleporter / cycle Weather Core under your feet |
 | `W` | Enter portal |

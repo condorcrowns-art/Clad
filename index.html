@@ -85,6 +85,28 @@
     <div id="storeList"></div>
   </div>
 
+  <!-- Trade window -->
+  <div id="tradePanel" class="panel hidden">
+    <div class="panelTitle">TRADE — DATA BROKER <span class="panelHint">[Y] close · offer items/gems, the broker matches value</span></div>
+    <div id="tradeCols">
+      <div class="tradeCol">
+        <div class="tradeColHead">YOUR OFFER <span id="tradeGiveVal" class="tradeVal"></span></div>
+        <div id="tradeGiveOffer" class="tradeOffer"></div>
+        <div class="tradeGemRow"><span>◆ gems</span><button class="tGem" data-side="give" data-d="100">+100</button><button class="tGem" data-side="give" data-d="-100">−100</button><span id="tradeGiveGems" class="tGemVal">0</span></div>
+        <div class="tradeSrcLabel">your inventory — click to offer</div>
+        <div id="tradeGiveInv" class="tradeSrc"></div>
+      </div>
+      <div class="tradeCol">
+        <div class="tradeColHead">BROKER OFFER <span id="tradeGetVal" class="tradeVal"></span></div>
+        <div id="tradeGetOffer" class="tradeOffer"></div>
+        <div class="tradeGemRow"><span>◆ gems</span><button class="tGem" data-side="get" data-d="100">+100</button><button class="tGem" data-side="get" data-d="-100">−100</button><span id="tradeGetGems" class="tGemVal">0</span></div>
+        <div class="tradeSrcLabel">broker stock — click to request</div>
+        <div id="tradeGetStock" class="tradeSrc"></div>
+      </div>
+    </div>
+    <div id="tradeFooter"><span id="tradeBalance"></span><button id="tradeConfirmBtn">✔ CONFIRM TRADE</button></div>
+  </div>
+
   <!-- Skill tree -->
   <div id="skillsPanel" class="panel hidden">
     <div class="panelTitle">SKILL TREE <span class="panelHint">[T] close · spend skill points earned on level-up</span></div>
@@ -152,7 +174,7 @@
         <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
         <span><b>R-CLICK</b> build background walls</span><span><b>M-CLICK</b> pick block</span>
         <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
-        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>H</b> guild</span><span><b>K</b> shard store</span><span><b>T</b> skill tree</span><span><b>P</b> pause / settings</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
+        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>H</b> guild</span><span><b>K</b> shard store</span><span><b>T</b> skill tree</span><span><b>Y</b> trade (data broker)</span><span><b>P</b> pause / settings</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
         <span><b>SHIFT</b> dash (with boots)</span>
       </div>
       <div id="menuBtns">

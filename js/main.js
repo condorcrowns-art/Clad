@@ -106,6 +106,11 @@ const DIFFICULTIES = {
   hardcore: { name: 'HARDCORE', dmg: 1.7, xp: 1.25, desc: 'Enemies hit for 170%, but +25% XP.' },
 };
 
+/* ---------------- TRADING (Data Broker barter window) ---------------- */
+// items the broker offers to trade you (infinite stock; priced above their sell value)
+const TRADER_STOCK = ['dirt_seed', 'stone_seed', 'wood_seed', 'sand_seed', 'medkit', 'bomb', 'fishing_rod',
+  'firework', 'mystery_seed', 'crystal_cluster', 'speed_boots', 'glider_wings', 'drone_pet', 'world_lock'];
+
 class Game {
   constructor() {
     this.canvas = document.getElementById('canvas');
@@ -120,7 +125,7 @@ class Game {
     this.keysGot = 0; this.keysNeed = 0;
     this.pet = null; this.fishing = null; this.rush = null;
     this.xp = 0; this.level = 1;
-    this.shards = 0; this.companions = []; this.dungeon = null;
+    this.shards = 0; this.companions = []; this.dungeon = null; this.trade = null;
     this.buff = null;
     this.ownedWorlds = {};   // name -> World instance
     this.spire = null;       // wave-defense state
@@ -175,6 +180,7 @@ class Game {
       if (k === 'h') ui.togglePanel('guild');
       if (k === 'k') ui.togglePanel('store');
       if (k === 't') ui.togglePanel('skills');
+      if (k === 'y') this.toggleTrade();
       if (k === 'p') this.togglePause();
       if (k === 'escape') { ui.closeAll(); this.paused = false; }
     });
@@ -385,6 +391,61 @@ class Game {
   togglePause() {
     ui.togglePanel('settings');
     this.paused = !ui.el.settingsPanel.classList.contains('hidden');
+  }
+
+  /* ---------------- trading (Data Broker) ---------------- */
+  brokerPrice(id) { // what the broker charges you for one of its items
+    const shop = SHOP.find(s => s.id === id);
+    if (shop) return shop.price;
+    return Math.max(4, Math.ceil((sellPrice(id) || 2) * 2.6));
+  }
+  toggleTrade() {
+    const open = !ui.el.tradePanel.classList.contains('hidden');
+    if (!open) this.trade = { give: {}, get: {}, giveGems: 0, getGems: 0 };
+    ui.togglePanel('trade');
+  }
+  tradeVal(side) {
+    const t = this.trade; if (!t) return 0;
+    let v = side === 'give' ? t.giveGems : t.getGems;
+    const map = side === 'give' ? t.give : t.get;
+    for (const id in map) v += (side === 'give' ? (sellPrice(id) || 1) : this.brokerPrice(id)) * map[id];
+    return v;
+  }
+  tradeAdd(side, id) {
+    const t = this.trade; if (!t) return;
+    if (side === 'give') { if ((this.player.count(id) || 0) > (t.give[id] || 0)) t.give[id] = (t.give[id] || 0) + 1; }
+    else t.get[id] = (t.get[id] || 0) + 1;
+    ui.renderTrade();
+  }
+  tradeRemove(side, id) {
+    const t = this.trade; if (!t) return;
+    const m = side === 'give' ? t.give : t.get;
+    if (m[id]) { m[id]--; if (m[id] <= 0) delete m[id]; }
+    ui.renderTrade();
+  }
+  tradeGems(side, delta) {
+    const t = this.trade; if (!t) return;
+    if (side === 'give') t.giveGems = Math.max(0, Math.min(this.gems, t.giveGems + delta));
+    else t.getGems = Math.max(0, t.getGems + delta);
+    ui.renderTrade();
+  }
+  tradeConfirm() {
+    const t = this.trade; if (!t) return;
+    const gv = this.tradeVal('give'), gt = this.tradeVal('get');
+    const hasGive = Object.keys(t.give).length || t.giveGems;
+    const hasGet = Object.keys(t.get).length || t.getGems;
+    if (!hasGive || !hasGet) { this.toast('Put an offer on both sides of the trade.', 'warn'); return; }
+    if (t.giveGems > this.gems) { this.toast('You don\'t have that many gems.', 'warn'); return; }
+    if (gv < gt) { this.toast('The broker declines — your offer (◆' + gv + ') is worth less than theirs (◆' + gt + ').', 'warn'); return; }
+    for (const id in t.give) this.player.take(id, t.give[id]);
+    if (t.giveGems) { this.gems -= t.giveGems; }
+    for (const id in t.get) this.player.give(id, t.get[id]);
+    if (t.getGems) { this.gems += t.getGems; }
+    this.progress.stats.trades = (this.progress.stats.trades || 0) + 1;
+    this.toast('✔ Trade complete with the Data Broker.', 'gold');
+    this.sfx.play('buy');
+    this.trade = { give: {}, get: {}, giveGems: 0, getGems: 0 };
+    this.save(); ui.updateHUD(); ui.renderTrade();
   }
 
   /* ---------------- economy / spawning ---------------- */
