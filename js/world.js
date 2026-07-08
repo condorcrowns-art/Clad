@@ -415,6 +415,8 @@ class World {
     const g = ctx.createLinearGradient(0, 0, 0, vh);
     g.addColorStop(0, this.theme.sky[0]); g.addColorStop(1, this.theme.sky[1]);
     ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
+    // layered parallax backdrop for depth
+    this.drawParallax(ctx, cam, time);
     // parallax grid scanlines for digital vibe
     ctx.globalAlpha = 0.05; ctx.strokeStyle = '#6ee7ff'; ctx.lineWidth = 1;
     const gs = 64, ox = -(cam.x * 0.3) % gs, oy = -(cam.y * 0.3) % gs;
@@ -555,6 +557,97 @@ class World {
     }
   }
 
+  // layered, deterministic parallax backdrop — hazy hills, floating server towers,
+  // and stars (dark worlds) or drifting clouds (bright worlds)
+  drawParallax(ctx, cam, time) {
+    const { w: vw, h: vh } = cam.view;
+    const seed = ((World.nameHash ? World.nameHash(this.name || 'world') : 1234567) >>> 0);
+    const rnd = (n) => { let h = (seed ^ Math.imul(n, 2654435761)) >>> 0; h ^= h >> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >> 16)) >>> 0) / 4294967295; };
+    const dark = this.theme.dark || 0;
+    const baseY = vh * 0.66;
+
+    // upper sky: twinkling stars on dark worlds, drifting clouds on bright ones
+    if (dark >= 0.3) {
+      ctx.save();
+      for (let i = 0; i < 44; i++) {
+        let bx = (rnd(i) * vw * 2 - cam.x * 0.05) % (vw + 40); if (bx < 0) bx += vw + 40;
+        const by = rnd(i + 100) * vh * 0.55;
+        const tw = 0.35 + 0.65 * Math.abs(Math.sin(time * 1.4 + i * 1.7));
+        ctx.globalAlpha = 0.55 * tw; ctx.fillStyle = i % 7 === 0 ? '#9fd8ff' : '#e6f0ff';
+        const s = rnd(i + 7) < 0.18 ? 2 : 1; ctx.fillRect(bx, by, s, s);
+      }
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 6; i++) {
+        const cw = 70 + rnd(i) * 90;
+        let cxp = (rnd(i + 3) * (vw + cw * 2) - cam.x * 0.08 + time * 3 * (0.5 + rnd(i))) % (vw + cw * 2);
+        if (cxp < -cw) cxp += vw + cw * 2;
+        const cyp = 24 + rnd(i + 50) * vh * 0.28;
+        ctx.globalAlpha = 0.09 + rnd(i + 9) * 0.05;
+        ctx.beginPath();
+        ctx.ellipse(cxp, cyp, cw * 0.5, cw * 0.2, 0, 0, 7);
+        ctx.ellipse(cxp + cw * 0.32, cyp + 4, cw * 0.34, cw * 0.16, 0, 0, 7);
+        ctx.ellipse(cxp - cw * 0.3, cyp + 5, cw * 0.28, cw * 0.14, 0, 0, 7);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // two hazy ridgelines (atmospheric perspective: farther = fainter)
+    const ridge = (par, amp, yOff, alpha) => {
+      ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.moveTo(0, vh);
+      const off = cam.x * par;
+      for (let x = 0; x <= vw; x += 16) {
+        const wx = x + off;
+        const y = baseY + yOff + Math.sin(wx * 0.006 + seed) * amp + Math.sin(wx * 0.013 + seed * 2) * amp * 0.4;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(vw, vh); ctx.closePath(); ctx.fill(); ctx.restore();
+    };
+    ridge(0.12, 24, 24, 0.10);
+    ridge(0.22, 34, 58, 0.15);
+
+    // floating monolith "server towers" with blinking windows
+    ctx.save();
+    for (let i = 0; i < 7; i++) {
+      const par = 0.3;
+      let mx = (rnd(i + 11) * (vw + 140) - cam.x * par) % (vw + 140); if (mx < -140) mx += vw + 140;
+      const mw = 16 + rnd(i + 21) * 26, mh = 44 + rnd(i + 31) * 120;
+      const my = baseY - 6 - rnd(i + 41) * 44;
+      ctx.globalAlpha = 0.17; ctx.fillStyle = dark >= 0.3 ? '#0a1226' : '#132038';
+      ctx.fillRect(mx, my - mh, mw, mh);
+      ctx.globalAlpha = 0.5; ctx.fillStyle = dark >= 0.3 ? '#6ee7ff' : '#ffd166';
+      for (let wy = my - mh + 7; wy < my - 6; wy += 10) {
+        if (rnd(i * 13 + Math.floor(wy)) > 0.5 && Math.sin(time * 2 + wy + i) > 0) ctx.fillRect(mx + 4, wy, mw - 8, 2);
+      }
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // one cached 32×32 shading overlay (soft top-light, bottom-shade, corner AO)
+  // reused for every solid block so all terrain reads as volumetric, not flat
+  static tileShade() {
+    if (World._shade) return World._shade;
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const x = c.getContext('2d');
+    // vertical form light
+    const v = x.createLinearGradient(0, 0, 0, 32);
+    v.addColorStop(0, 'rgba(255,255,255,0.10)');
+    v.addColorStop(0.5, 'rgba(255,255,255,0)');
+    v.addColorStop(1, 'rgba(0,0,0,0.14)');
+    x.fillStyle = v; x.fillRect(0, 0, 32, 32);
+    // corner ambient occlusion vignette
+    const r = x.createRadialGradient(16, 15, 6, 16, 16, 22);
+    r.addColorStop(0, 'rgba(0,0,0,0)');
+    r.addColorStop(1, 'rgba(0,0,0,0.16)');
+    x.fillStyle = r; x.fillRect(0, 0, 32, 32);
+    World._shade = c;
+    return c;
+  }
+
   drawTile(ctx, id, tx, ty, sx, sy, time, game) {
     const it = ITEMS[id];
     // fully custom non-cube tiles
@@ -668,11 +761,16 @@ class World {
         ctx.fillRect(bx, sy - 3 - Math.floor(hash2(tx + k, ty * 9) * 3), 2, 5);
       }
     }
+    // soft form/AO overlay gives every block rounded volume + gentle corner darkening
+    ctx.drawImage(World.tileShade(), sx, sy, TS, TS);
     // exposed-edge shading (sun above, shadow below, side AO)
     if (openU && id !== 'dirt') { ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(sx, sy, TS, 3); }
     if (openD) { ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(sx, sy + TS - 3, TS, 3); }
     if (openL) { ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(sx, sy, 2, TS); }
     if (openR) { ctx.fillStyle = 'rgba(0,0,0,0.14)'; ctx.fillRect(sx + TS - 2, sy, 2, TS); }
+    // concave corner contact shadows where two open edges meet (convex block corners catch light-loss)
+    if (openD && openR) { ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.fillRect(sx + TS - 6, sy + TS - 6, 6, 6); }
+    if (openD && openL) { ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(sx, sy + TS - 6, 6, 6); }
     // paint tint
     const paintM = this.meta[this.idx(tx, ty)];
     if (paintM && paintM.tint) {

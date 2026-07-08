@@ -576,6 +576,25 @@ defItem('fishbowl',    { name: 'Fishbowl', kind: 'block', tier: 2, hp: 4, solid:
 defItem('disco_ball',  { name: 'Disco Ball', kind: 'block', tier: 3, hp: 5, solid: false, deco: true, animated: true, color: '#dfe7f5', color2: '#c77dff', desc: 'DECOR: a mirrored ball scattering light. Non-functional glam.' });
 defItem('gargoyle',    { name: 'Stone Gargoyle', kind: 'block', tier: 3, hp: 12, solid: true, deco: true, color: '#8a8a94', color2: '#4a4a52', desc: 'DECOR: a brooding carved gargoyle. Guards nothing, judges everything.' });
 
+/* ===================== CONTENT WAVE 6 — new functional gear/pets/consumable ===================== */
+defItem('medic_drone', { name: 'Medic Drone', kind: 'gear', slot: 'pet', tier: 3,
+  fx: { pet: { dmg: 5, rate: 1.3, range: 8, color: '#3ddc84', heal: 4 } },
+  desc: 'FUNCTION: a support familiar — light shots, but it mends your HP while it hovers beside you.' });
+defItem('venom_drone', { name: 'Venom Wasp', kind: 'gear', slot: 'pet', tier: 4,
+  fx: { pet: { dmg: 8, rate: 1.1, range: 7, color: '#94d82d', burn: { dps: 8, dur: 3 } } },
+  desc: 'FUNCTION: a stinging familiar whose shots leave enemies dissolving in acid over time.' });
+defItem('prism_lance', { name: 'Prism Lance', kind: 'weapon', tier: 4, dmg: 24, rate: 2.8, minePower: 1, mineRate: 4,
+  projectile: { speed: 780, color: '#c77dff', pierce: true },
+  desc: 'FUNCTION: fires a refracted crystal beam that skewers everything in a line.' });
+defItem('scout_boots', { name: 'Scout Boots', kind: 'gear', slot: 'feet', tier: 3,
+  fx: { speed: 1.42, doubleJump: 2 },
+  desc: 'FUNCTION: +42% run speed and a TRIPLE jump. Cover ground and climb sky-builds fast.' });
+defItem('ward_chip', { name: 'Ward Chip', kind: 'gear', slot: 'chip', tier: 4,
+  fx: { armor: 0.2, thorns: 0.25 },
+  desc: 'FUNCTION: 20% less damage taken, and 25% of every hit reflected back at the attacker.' });
+defItem('nano_broth', { name: 'Nano Broth', kind: 'consumable', tier: 2, heal: 55, buff: { dur: 15, dmg: 1.25, speed: 1.15 },
+  desc: 'FUNCTION: restores 55 HP and grants +25% damage & +15% speed for 15s. Field rations for the corrupted frontier.' });
+
 /* ===================== SEEDS (auto-generated) ===================== */
 // Everything spliceable/growable gets a seed. Trees yield the item.
 const GROW_TIMES = { 0: 25, 1: 55, 2: 110, 3: 170, 4: 240, 9: 170 }; // seconds by tier
@@ -828,6 +847,13 @@ defRecipe('neon_sign', 'brick', 'arcade');
 defRecipe('glass', 'potted_plant', 'fishbowl');
 defRecipe('neon_sign', 'glass', 'disco_ball');
 defRecipe('statue', 'brick', 'gargoyle');
+// content wave 6 — new functional gear/pets/weapon/consumable
+defRecipe('drone_pet', 'fountain', 'medic_drone');
+defRecipe('drone_pet', 'spike_trap', 'venom_drone');
+defRecipe('blaster', 'crystal_cluster', 'prism_lance');
+defRecipe('speed_boots', 'glider_wings', 'scout_boots');
+defRecipe('aegis_chip', 'thorn_chip', 'ward_chip');
+defRecipe('crystal_cluster', 'fountain', 'nano_broth');
 
 function spliceResult(grownA, grownB) { return RECIPES[[grownA, grownB].sort().join('+')] || null; }
 
@@ -925,14 +951,30 @@ function gtFinish(art) {
   // 3) gloss bevel masked to the sprite
   ox.globalCompositeOperation = 'source-atop';
   const g = ox.createLinearGradient(0, 0, 0, 40);
-  g.addColorStop(0, 'rgba(255,255,255,0.22)');
-  g.addColorStop(0.45, 'rgba(255,255,255,0)');
-  g.addColorStop(0.75, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(0,0,0,0.22)');
+  g.addColorStop(0, 'rgba(255,255,255,0.28)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.05)');
+  g.addColorStop(0.62, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.26)');
   ox.fillStyle = g;
   ox.fillRect(0, 0, 40, 40);
+  // 3b) soft top-left rim light for a rounded, sculpted read
+  const rim = ox.createRadialGradient(13, 12, 2, 15, 14, 26);
+  rim.addColorStop(0, 'rgba(255,255,255,0.30)');
+  rim.addColorStop(0.5, 'rgba(255,255,255,0.06)');
+  rim.addColorStop(1, 'rgba(255,255,255,0)');
+  ox.fillStyle = rim; ox.fillRect(0, 0, 40, 40);
   ox.globalCompositeOperation = 'source-over';
-  return c;
+  // 4) composite the finished sprite over its own soft drop shadow for a sticker lift
+  const out = document.createElement('canvas');
+  out.width = 42; out.height = 42;
+  const oc = out.getContext('2d');
+  oc.save();
+  oc.globalAlpha = 0.30;
+  try { oc.filter = 'blur(0.8px) brightness(0)'; } catch (e) {}
+  oc.drawImage(c, 2, 3);   // darkened, blurred, offset silhouette = drop shadow
+  oc.restore();
+  oc.drawImage(c, 0, 0);   // crisp finished sprite on top
+  return out;
 }
 
 function drawItemIcon(x, it, id) {
