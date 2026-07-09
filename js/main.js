@@ -141,7 +141,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, back: null }, ownedCosmetics: { cap: 1, round_glasses: 1 } };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, ownedCosmetics: { cap: 1, round_glasses: 1 } };
     this._rebinding = null;
     this.paused = false;
     this._questNotified = {};
@@ -652,14 +652,14 @@ class Game {
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
   }
   clearWardrobe() {
-    this.progress.wardrobe = { hat: null, face: null, back: null };
+    this.progress.wardrobe = { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null };
     this.save();
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
   }
   randomizeWardrobe() {
     if (typeof COSMETICS === 'undefined') return;
-    const wr = { hat: null, face: null, back: null };
-    for (const slot of ['hat', 'face', 'back']) {
+    const wr = { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null };
+    for (const slot of ['hat', 'face', 'hair', 'back', 'shirt', 'hand', 'aura']) {
       const owned = COSMETICS.filter(c => c.slot === slot && this.ownsCosmetic(c.id));
       if (owned.length) wr[slot] = owned[Math.floor(Math.random() * owned.length)].id;
     }
@@ -1038,12 +1038,14 @@ class Game {
       }
       // --- wardrobe cosmetic unlocks tied to boss progression ---
       const bossesBeaten = Object.keys(this.progress.beaten).length;
-      this.grantCosmetic('crown_c');                          // first boss ever → the Royal Crown
-      if (bossesBeaten >= 2) this.grantCosmetic('pirate_hat'); // 2 bosses → the Pirate Tricorn
-      if (bossesBeaten >= 3) this.grantCosmetic('cape');       // 3 bosses → the Hero Cape
-      if (bossesBeaten >= 5) this.grantCosmetic('dragon_wings'); // 5 bosses → the Dragon Wings
-      if (bossesBeaten >= 7) this.grantCosmetic('cyber_visor'); // all 7 bosses → the Cyber Visor
-      if (boss.id === 'admin') this.grantCosmetic('halo');     // liberate the network → the Angel Halo
+      this.grantCosmetic('crown_c');                          // 1 boss → Royal Crown
+      if (bossesBeaten >= 2) this.grantCosmetic('pirate_hat'); // 2 → Pirate Tricorn
+      if (bossesBeaten >= 3) this.grantCosmetic('cape');       // 3 → Hero Cape
+      if (bossesBeaten >= 4) this.grantCosmetic('shirt_armor'); // 4 → Plate Armor
+      if (bossesBeaten >= 5) this.grantCosmetic('dragon_wings'); // 5 → Dragon Wings
+      if (bossesBeaten >= 6) this.grantCosmetic('hand_katana_c'); // 6 → Spirit Katana
+      if (bossesBeaten >= 7) { this.grantCosmetic('cyber_visor'); this.grantCosmetic('aura_rainbow'); } // all 7
+      if (boss.id === 'admin') { this.grantCosmetic('halo'); this.grantCosmetic('aura_fire'); this.grantCosmetic('hair_flame'); } // liberate the network
     } else {
       this.toast(boss.meta.name + ' purged again. Gems acquired.', 'gold');
       if (Math.random() < 0.5) this.spawnDrop(boss.x, boss.y, 'medkit', 2);
@@ -1120,7 +1122,7 @@ class Game {
       this.progress.avatarColor = this.progress.avatarColor || '#4361ee';
       this.progress.keys = Object.assign({}, DEFAULT_KEYS, this.progress.keys || {});
       if (typeof this.progress.bloom !== 'boolean') this.progress.bloom = true;
-      this.progress.wardrobe = Object.assign({ hat: null, face: null, back: null }, this.progress.wardrobe || {});
+      this.progress.wardrobe = Object.assign({ hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, this.progress.wardrobe || {});
       this.progress.ownedCosmetics = Object.assign({ cap: 1, round_glasses: 1 }, this.progress.ownedCosmetics || {});
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;

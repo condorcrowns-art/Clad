@@ -52,18 +52,26 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Character sheet `[J]`** — a full read-out of your run: level, XP, HP, gems, shards,
   difficulty, guild, avatar, skill points, and a record page (bosses purged, recipes found,
   enemies slain, blocks broken, splices, fish, dungeons, trades) plus your active skill bonuses.
-- **Wardrobe `[U]`** — a Growtopia-style **dress-up panel** with **27 hand-drawn, layered pixel
-  cosmetics** that stack on your avatar across three slots: **hats** (ball cap, top hat, safari
-  hat, wizard hat, royal crown, angel halo, knit beanie, party hat, headphones, flower crown,
-  demon horns, pirate tricorn, cyber visor), **face** (round glasses, cool shades, eye patch,
-  monocle, moustache, ninja mask), and **back** (angel wings, bat wings, hero cape, flowing scarf,
-  explorer pack, butterfly wings, chrome jetpack, dragon wings). A **live animated avatar preview**
-  shows your current look — wings flap, the halo glows, the cape billows, the jetpack flickers.
-  Every piece has a **rarity tier** (common → legendary) that colours its cell border, plus
-  **🎲 Randomize** and **✖ Clear all** and a collection counter. Pieces unlock from honest sources —
-  **starters** (free), the **◈ Shard Store** (buy with shards), **boss drops** (Royal Crown at your
-  first purge, Pirate Tricorn at 2, Hero Cape at 3, Dragon Wings at 5), and **milestones** (Angel
-  Halo for liberating the network, Cyber Visor for purging all seven). Saved with your character.
+- **Wardrobe `[U]`** — a Growtopia-style **head-to-toe dress-up panel** with **53 hand-drawn,
+  layered pixel cosmetics** that stack on your avatar across **seven slots**:
+  - **Hats** — ball cap, top hat, safari, wizard, royal crown, angel halo, knit beanie, party hat,
+    headphones, flower crown, demon horns, pirate tricorn, cyber visor
+  - **Hair** — spiky, long, mohawk, afro, ponytail, flame hair
+  - **Face** — round glasses, cool shades, eye patch, monocle, moustache, ninja mask
+  - **Shirts** — hoodie, sharp suit, star tee, hazmat, overalls, plate armor
+  - **Back** — angel wings, bat wings, hero cape, flowing scarf, explorer pack, butterfly wings,
+    chrome jetpack, dragon wings
+  - **Held** — torch, balloon, bouquet, arcane staff, round shield, umbrella, lantern, spirit katana
+  - **Auras** — sparkle, frost, shadow, hearts, inferno, prism (rainbow)
+
+  A **live animated avatar preview** shows your look with everything moving — wings flap, the halo
+  glows, the cape billows, torches flicker, auras orbit and cycle. Every piece has a **rarity tier**
+  (common → legendary) that colours its cell border, plus **🎲 Randomize**, **✖ Clear all**, and a
+  collection counter. Pieces unlock from honest sources — **starters** (free), the **◈ Shard Store**
+  (buy with shards), **boss drops** (Royal Crown at 1 boss, Pirate Tricorn at 2, Hero Cape at 3,
+  Plate Armor at 4, Dragon Wings at 5, Spirit Katana at 6), and **milestones** (Angel Halo, Inferno
+  Aura & Flame Hair for liberating the network; Cyber Visor & Prism Aura for purging all seven).
+  Saved with your character.
 - **Inventory search & sort** — a search box and a sort selector (type / name / rarity / count)
   in the inventory panel.
 - **Rebindable keys** — every panel/action key can be remapped in the pause menu (movement stays

@@ -755,6 +755,10 @@ class Player extends Entity {
     else if (!this.onGround) { legSpread = Math.max(-1, Math.min(1, this.vy / 500)); }
     else { bob = Math.sin(time * 2.2) * 1.1; } // idle breathing
     ctx.translate(0, bob);
+    const _cw = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || null;
+    const _cd = (slot) => { if (_cw && _cw[slot] && typeof COSMO !== 'undefined' && COSMO[_cw[slot]]) { try { COSMO[_cw[slot]].draw(ctx, this.facing, time, this); } catch (e) {} } };
+    // aura cosmetic — radiates behind everything
+    _cd('aura');
 
     // back gear: jetpack or glider wings
     if (this.equip.back === 'glider_wings') {
@@ -775,8 +779,7 @@ class Player extends Entity {
       if (this.jetting) { ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(-this.facing * 16 - 4, 6); ctx.lineTo(-this.facing * 16, 16 + Math.random() * 8); ctx.lineTo(-this.facing * 16 + 4, 6); ctx.fill(); }
     }
     // back cosmetic (wings / cape) — behind the body
-    const _cw = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || null;
-    if (_cw && _cw.back && typeof COSMO !== 'undefined' && COSMO[_cw.back]) { try { COSMO[_cw.back].draw(ctx, this.facing, time, this); } catch (e) {} }
+    _cd('back');
     // legs: walk cycle swing / air split / swim kick
     ctx.fillStyle = this.equip.feet ? (this.equip.feet === 'storm_boots' ? '#ffd166' : '#2de2a3') : '#33415e';
     if (!this.onGround && !this.inWater) {
@@ -790,9 +793,13 @@ class Player extends Entity {
     ctx.fillStyle = bodyCol;
     ctx.fillRect(-10, -12, 20, 22);
     ctx.fillStyle = bodyTrim; ctx.fillRect(-10, 4, 20, 6);
+    // shirt cosmetic — over the torso
+    _cd('shirt');
     // head
     ctx.fillStyle = '#ffd8b1';
     ctx.fillRect(-8, -30, 16, 17);
+    // hair cosmetic — frames the head (under the hat)
+    _cd('hair');
     // visor
     ctx.fillStyle = '#0d1526';
     ctx.fillRect(this.facing > 0 ? -2 : -10, -27, 12, 7);
@@ -804,8 +811,8 @@ class Player extends Entity {
       ctx.beginPath(); ctx.moveTo(-8, -30); ctx.lineTo(-8, -38); ctx.lineTo(-3, -33); ctx.lineTo(0, -39); ctx.lineTo(3, -33); ctx.lineTo(8, -38); ctx.lineTo(8, -30); ctx.closePath(); ctx.fill();
     }
     // face + hat cosmetics — layered over the head
-    if (_cw && _cw.face && typeof COSMO !== 'undefined' && COSMO[_cw.face]) { try { COSMO[_cw.face].draw(ctx, this.facing, time, this); } catch (e) {} }
-    if (_cw && _cw.hat && typeof COSMO !== 'undefined' && COSMO[_cw.hat]) { try { COSMO[_cw.hat].draw(ctx, this.facing, time, this); } catch (e) {} }
+    _cd('face');
+    _cd('hat');
     // back arm (behind body counter-swing)
     ctx.fillStyle = '#e8c49e';
     ctx.save();
@@ -830,6 +837,8 @@ class Player extends Entity {
       ctx.restore();
     }
     ctx.restore();
+    // hand cosmetic — held in the front hand (front-most layer)
+    _cd('hand');
     // melee slash arc
     if (swingP > 0 && !held.projectile && (held.kind === 'weapon' || held.kind === 'tool')) {
       const range = ((held.range || 1.4) * TS) * 0.9;

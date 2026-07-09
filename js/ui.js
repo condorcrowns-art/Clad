@@ -634,7 +634,7 @@ const ui = {
     preview.appendChild(pcv);
     this._wrPreviewCanvas = pcv;
     const worn = [];
-    for (const slot of ['hat', 'face', 'back']) if (wr[slot] && COSMO[wr[slot]]) worn.push(COSMO[wr[slot]].name);
+    for (const slot of ['hat', 'hair', 'face', 'shirt', 'back', 'hand', 'aura']) if (wr[slot] && COSMO[wr[slot]]) worn.push(COSMO[wr[slot]].name);
     const cap = document.createElement('div'); cap.className = 'wrWorn';
     const ownedCount = COSMETICS.filter(c => game.ownsCosmetic(c.id)).length;
     cap.innerHTML = '<div class="wrName">⬢ ' + game.playerName() + '</div>' +
@@ -646,7 +646,10 @@ const ui = {
     cap.querySelector('#wrRandom').addEventListener('click', () => game.randomizeWardrobe());
     cap.querySelector('#wrClear').addEventListener('click', () => game.clearWardrobe());
 
-    const SLOTS = [{ k: 'hat', label: '🎩 Hats' }, { k: 'face', label: '🕶 Face' }, { k: 'back', label: '🪽 Back' }];
+    const SLOTS = [
+      { k: 'hat', label: '🎩 Hats' }, { k: 'hair', label: '💇 Hair' }, { k: 'face', label: '🕶 Face' },
+      { k: 'shirt', label: '👕 Shirts' }, { k: 'back', label: '🪽 Back' }, { k: 'hand', label: '✋ Held' }, { k: 'aura', label: '✨ Auras' },
+    ];
     for (const s of SLOTS) {
       const sect = document.createElement('div'); sect.className = 'wrSection';
       sect.innerHTML = '<div class="wrHead">' + s.label + '</div>';
@@ -713,20 +716,24 @@ const ui = {
     x.save();
     x.translate(60, 118); x.scale(2, 2);
     const wr = game.progress.wardrobe || {};
-    // back layer
-    if (wr.back && COSMO[wr.back]) try { COSMO[wr.back].draw(x, 1, performance.now() / 1000); } catch (e) {}
-    // body + head (mirror the in-game avatar proportions)
+    const t = performance.now() / 1000;
+    const d = (slot) => { if (wr[slot] && COSMO[wr[slot]]) try { COSMO[wr[slot]].draw(x, 1, t); } catch (e) {} };
+    // layered head-to-toe, matching the in-game avatar z-order
+    d('aura');
+    d('back');
     const col = game.progress.avatarColor || '#4361ee';
     x.fillStyle = col; x.fillRect(-10, -12, 20, 20);
     x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(-10, -12, 20, 4);
+    d('shirt');
     x.fillStyle = '#ffd8b1'; x.fillRect(-8, -30, 16, 17);
+    d('hair');
     x.fillStyle = '#0d1526'; x.fillRect(-2, -27, 10, 6);
     x.fillStyle = '#6ee7ff'; x.fillRect(0, -26, 6, 3);
     // legs
     x.fillStyle = '#2a3142'; x.fillRect(-8, 8, 6, 8); x.fillRect(2, 8, 6, 8);
-    // face + hat layers
-    if (wr.face && COSMO[wr.face]) try { COSMO[wr.face].draw(x, 1, performance.now() / 1000); } catch (e) {}
-    if (wr.hat && COSMO[wr.hat]) try { COSMO[wr.hat].draw(x, 1, performance.now() / 1000); } catch (e) {}
+    d('face');
+    d('hat');
+    d('hand');
     x.restore();
   },
 

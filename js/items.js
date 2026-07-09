@@ -1078,6 +1078,111 @@ const COSMETICS = [
       x.restore();
     }
   } },
+
+  // ===== HAIR (framing the head, under the hat) =====
+  { id: 'hair_spiky', slot: 'hair', name: 'Spiky Hair', src: 'store', cost: 12, tier: 1, desc: 'Gravity-defying spikes.', draw: (x) => {
+    x.fillStyle = '#3a2a1a'; for (let i = -7; i <= 7; i += 3.5) { x.beginPath(); x.moveTo(i - 2, -29); x.lineTo(i, -38); x.lineTo(i + 2, -29); x.closePath(); x.fill(); }
+  } },
+  { id: 'hair_long', slot: 'hair', name: 'Long Hair', src: 'store', cost: 12, tier: 1, desc: 'Flowing locks.', draw: (x) => {
+    x.fillStyle = '#5a3a1a'; x.fillRect(-9, -31, 18, 5); x.fillRect(-10, -30, 3, 18); x.fillRect(7, -30, 3, 18);
+  } },
+  { id: 'hair_mohawk', slot: 'hair', name: 'Mohawk', src: 'store', cost: 18, tier: 2, desc: 'Punk to the core.', draw: (x) => {
+    x.fillStyle = '#ff4d6d'; for (let i = -6; i <= 6; i += 3) { x.beginPath(); x.moveTo(i - 1.5, -30); x.lineTo(i, -41); x.lineTo(i + 1.5, -30); x.closePath(); x.fill(); }
+  } },
+  { id: 'hair_afro', slot: 'hair', name: 'Afro', src: 'store', cost: 18, tier: 2, desc: 'Big, round and proud.', draw: (x) => {
+    x.fillStyle = '#25201a'; for (let a = 0; a <= Math.PI; a += 0.5) { x.beginPath(); x.arc(Math.cos(a) * 11, -30 - Math.sin(a) * 6, 5, 0, 7); x.fill(); }
+  } },
+  { id: 'hair_ponytail', slot: 'hair', name: 'Ponytail', src: 'store', cost: 15, tier: 1, desc: 'Tied back and tidy.', draw: (x, f) => {
+    x.fillStyle = '#e0a92b'; x.fillRect(-9, -31, 18, 5);
+    x.beginPath(); x.moveTo(-f * 8, -30); x.quadraticCurveTo(-f * 15, -24, -f * 12, -12); x.quadraticCurveTo(-f * 8, -20, -f * 6, -28); x.closePath(); x.fill();
+  } },
+  { id: 'hair_flame', slot: 'hair', name: 'Flame Hair', src: 'ach', tier: 4, desc: 'Hair of living fire. Earned by liberating the network.', draw: (x, f, t) => {
+    const fl = Math.sin((t || 0) * 8);
+    for (let i = -6; i <= 6; i += 3) { x.fillStyle = i % 2 ? '#ff5714' : '#ffb703'; x.beginPath(); x.moveTo(i - 2, -29); x.lineTo(i + fl, -40 - Math.abs(fl) * 3); x.lineTo(i + 2, -29); x.closePath(); x.fill(); }
+  } },
+
+  // ===== SHIRTS (over the torso) =====
+  { id: 'shirt_hoodie', slot: 'shirt', name: 'Hoodie', src: 'store', cost: 15, tier: 1, desc: 'Comfy street style.', draw: (x) => {
+    x.fillStyle = '#3a86ff'; x.fillRect(-10, -12, 20, 20); x.fillStyle = '#2f6fd6'; x.fillRect(-10, -12, 20, 4);
+    x.fillStyle = '#254e9c'; x.fillRect(-2, -12, 4, 8); x.strokeStyle = '#dfe8ff'; x.lineWidth = 1; x.beginPath(); x.moveTo(-1, -6); x.lineTo(-1, 4); x.moveTo(1, -6); x.lineTo(1, 4); x.stroke();
+  } },
+  { id: 'shirt_suit', slot: 'shirt', name: 'Sharp Suit', src: 'store', cost: 22, tier: 2, desc: 'Dressed to impress.', draw: (x) => {
+    x.fillStyle = '#20232b'; x.fillRect(-10, -12, 20, 20);
+    x.fillStyle = '#f4f6ff'; x.beginPath(); x.moveTo(-4, -12); x.lineTo(4, -12); x.lineTo(0, 2); x.closePath(); x.fill();
+    x.fillStyle = '#c1121f'; x.beginPath(); x.moveTo(-1.5, -8); x.lineTo(1.5, -8); x.lineTo(1, 2); x.lineTo(-1, 2); x.closePath(); x.fill();
+  } },
+  { id: 'shirt_tee_star', slot: 'shirt', name: 'Star Tee', src: 'store', cost: 12, tier: 1, desc: 'A bright graphic tee.', draw: (x) => {
+    x.fillStyle = '#2de2a3'; x.fillRect(-10, -12, 20, 20);
+    x.fillStyle = '#ffd166'; x.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 4 * Math.PI / 5; const px = Math.cos(a) * 6, py = -2 + Math.sin(a) * 6; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.closePath(); x.fill();
+  } },
+  { id: 'shirt_hazmat', slot: 'shirt', name: 'Hazmat Suit', src: 'store', cost: 20, tier: 2, desc: 'Contamination-proof.', draw: (x, f, t) => {
+    x.fillStyle = '#f2b807'; x.fillRect(-10, -12, 20, 20); x.fillStyle = '#c99400'; x.fillRect(-1, -12, 2, 20);
+    const g = 0.5 + 0.5 * Math.abs(Math.sin((t || 0) * 4)); x.globalAlpha = g; x.fillStyle = '#2de2a3'; x.beginPath(); x.arc(0, -2, 3, 0, 7); x.fill(); x.globalAlpha = 1;
+  } },
+  { id: 'shirt_overalls', slot: 'shirt', name: 'Overalls', src: 'store', cost: 15, tier: 1, desc: 'Ready to work.', draw: (x) => {
+    x.fillStyle = '#3457a8'; x.fillRect(-10, -2, 20, 12); x.fillRect(-8, -12, 3, 12); x.fillRect(5, -12, 3, 12);
+    x.fillStyle = '#ffd166'; x.fillRect(-3, 0, 6, 4);
+  } },
+  { id: 'shirt_armor', slot: 'shirt', name: 'Plate Armor', src: 'boss', tier: 3, desc: 'Battle-forged plating. Purge four processes to earn it.', draw: (x, f, t) => {
+    x.fillStyle = '#9aa7bd'; x.fillRect(-10, -12, 20, 20); x.fillStyle = '#c3cede'; x.fillRect(-10, -12, 20, 4);
+    x.fillStyle = '#727f95'; x.fillRect(-10, -1, 20, 2); x.fillRect(-1, -12, 2, 20);
+    const g = 0.4 + 0.3 * Math.sin((t || 0) * 3); x.fillStyle = 'rgba(110,231,255,' + g + ')'; x.beginPath(); x.arc(0, -4, 2.4, 0, 7); x.fill();
+  } },
+
+  // ===== HELD (front-hand item) =====
+  { id: 'hand_torch', slot: 'hand', name: 'Torch', src: 'store', cost: 12, tier: 1, desc: 'A merrily burning torch.', draw: (x, f, t) => {
+    const hx = f * 15; x.fillStyle = '#7a4a1e'; x.fillRect(hx - 1.5, -6, 3, 12);
+    const fl = 2 + Math.abs(Math.sin((t || 0) * 10)) * 3; x.fillStyle = '#ffb703'; x.beginPath(); x.moveTo(hx - 3, -6); x.lineTo(hx, -8 - fl); x.lineTo(hx + 3, -6); x.closePath(); x.fill();
+    x.fillStyle = '#ff5714'; x.beginPath(); x.arc(hx, -6, 1.6, 0, 7); x.fill();
+  } },
+  { id: 'hand_balloon', slot: 'hand', name: 'Balloon', src: 'store', cost: 12, tier: 1, desc: 'A cheerful floating balloon.', draw: (x, f, t) => {
+    const hx = f * 15, sw = Math.sin((t || 0) * 2) * 1.5; x.strokeStyle = '#cfd8e6'; x.lineWidth = 0.8; x.beginPath(); x.moveTo(hx, -4); x.lineTo(hx + sw, -20); x.stroke();
+    x.fillStyle = '#ff4d6d'; x.beginPath(); x.arc(hx + sw, -24, 5, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,0.5)'; x.beginPath(); x.arc(hx + sw - 1.5, -26, 1.4, 0, 7); x.fill();
+  } },
+  { id: 'hand_flower', slot: 'hand', name: 'Bouquet', src: 'store', cost: 15, tier: 1, desc: 'A little bunch of flowers.', draw: (x, f) => {
+    const hx = f * 15; x.strokeStyle = '#3ddc84'; x.lineWidth = 1.4; x.beginPath(); x.moveTo(hx, -2); x.lineTo(hx, -14); x.stroke();
+    const cols = ['#ff6392', '#ffd166', '#c77dff']; cols.forEach((c, i) => { x.fillStyle = c; x.beginPath(); x.arc(hx + (i - 1) * 3, -15, 2.2, 0, 7); x.fill(); });
+  } },
+  { id: 'hand_staff', slot: 'hand', name: 'Arcane Staff', src: 'store', cost: 25, tier: 2, desc: 'Crackles with idle magic.', draw: (x, f, t) => {
+    const hx = f * 15; x.strokeStyle = '#6f4620'; x.lineWidth = 2; x.beginPath(); x.moveTo(hx, 8); x.lineTo(hx, -18); x.stroke();
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 5); x.save(); x.shadowColor = '#c77dff'; x.shadowBlur = 8 * g; x.fillStyle = '#c77dff'; x.beginPath(); x.arc(hx, -20, 3, 0, 7); x.fill(); x.restore();
+  } },
+  { id: 'hand_shield', slot: 'hand', name: 'Round Shield', src: 'store', cost: 22, tier: 2, desc: 'A sturdy cosmetic shield.', draw: (x, f) => {
+    const hx = f * 13; x.fillStyle = '#8a5a2b'; x.beginPath(); x.arc(hx, -4, 7, 0, 7); x.fill(); x.strokeStyle = '#c9a227'; x.lineWidth = 1.4; x.beginPath(); x.arc(hx, -4, 7, 0, 7); x.stroke(); x.fillStyle = '#c9a227'; x.beginPath(); x.arc(hx, -4, 2, 0, 7); x.fill();
+  } },
+  { id: 'hand_umbrella', slot: 'hand', name: 'Umbrella', src: 'store', cost: 20, tier: 2, desc: 'Rain or shine.', draw: (x, f) => {
+    const hx = f * 15; x.strokeStyle = '#cfd8e6'; x.lineWidth = 1.2; x.beginPath(); x.moveTo(hx, -6); x.lineTo(hx, 8); x.stroke();
+    x.fillStyle = '#e63946'; x.beginPath(); x.arc(hx, -6, 9, Math.PI, 0); x.fill(); x.fillStyle = '#b5202e'; for (let i = -9; i < 9; i += 6) { x.beginPath(); x.moveTo(hx + i, -6); x.lineTo(hx + i + 3, -9); x.lineTo(hx + i + 6, -6); x.closePath(); x.fill(); }
+  } },
+  { id: 'hand_lantern', slot: 'hand', name: 'Lantern', src: 'store', cost: 18, tier: 2, desc: 'A warm guiding glow.', draw: (x, f, t) => {
+    const hx = f * 15; x.strokeStyle = '#555'; x.lineWidth = 1; x.beginPath(); x.moveTo(hx, -8); x.lineTo(hx, -14); x.stroke();
+    const g = 0.6 + 0.3 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#ffd166'; x.shadowBlur = 9 * g; x.fillStyle = '#3a3a2a'; x.fillRect(hx - 4, -8, 8, 10); x.fillStyle = 'rgba(255,209,102,' + g + ')'; x.fillRect(hx - 2.5, -6, 5, 6); x.restore();
+  } },
+  { id: 'hand_katana_c', slot: 'hand', name: 'Spirit Katana', src: 'boss', tier: 3, desc: 'A ceremonial blade. Purge six processes to earn it.', draw: (x, f, t) => {
+    const hx = f * 14; x.save(); x.translate(hx, -2); x.rotate(f * -0.5);
+    x.fillStyle = '#20242e'; x.fillRect(-1.5, 4, 3, 6); x.fillStyle = '#c9a227'; x.fillRect(-3, 2, 6, 2);
+    const g = 0.5 + 0.4 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#6ee7ff'; x.shadowBlur = 6 * g; x.fillStyle = '#dbe9ff'; x.fillRect(-1, -20, 2, 22); x.restore(); x.restore();
+  } },
+
+  // ===== AURAS (radiating around the avatar) =====
+  { id: 'aura_sparkle', slot: 'aura', name: 'Sparkle Aura', src: 'store', cost: 25, tier: 2, desc: 'Twinkling motes orbit you.', draw: (x, f, t) => {
+    const tt = (t || 0); for (let i = 0; i < 6; i++) { const a = tt * 1.5 + i * Math.PI / 3; const px = Math.cos(a) * 26, py = -6 + Math.sin(a) * 22; const s = 0.5 + 0.5 * Math.sin(tt * 5 + i); x.globalAlpha = s; x.fillStyle = '#fff5cc'; x.fillRect(px - 1, py - 1, 2, 2); } x.globalAlpha = 1;
+  } },
+  { id: 'aura_ice', slot: 'aura', name: 'Frost Aura', src: 'store', cost: 30, tier: 2, desc: 'A ring of drifting frost.', draw: (x, f, t) => {
+    const tt = (t || 0); for (let i = 0; i < 7; i++) { const a = -tt * 1.2 + i * 2 * Math.PI / 7; const px = Math.cos(a) * 27, py = -6 + Math.sin(a) * 23; x.globalAlpha = 0.7; x.fillStyle = '#8ecae6'; x.beginPath(); x.moveTo(px, py - 2.5); x.lineTo(px + 2, py); x.lineTo(px, py + 2.5); x.lineTo(px - 2, py); x.closePath(); x.fill(); } x.globalAlpha = 1;
+  } },
+  { id: 'aura_shadow', slot: 'aura', name: 'Shadow Aura', src: 'store', cost: 30, tier: 2, desc: 'Darkness pulses around you.', draw: (x, f, t) => {
+    const p = 26 + Math.sin((t || 0) * 3) * 3; const g = x.createRadialGradient(0, -6, 8, 0, -6, p); g.addColorStop(0, 'rgba(80,20,120,0)'); g.addColorStop(0.7, 'rgba(60,10,90,0.28)'); g.addColorStop(1, 'rgba(20,0,40,0)'); x.fillStyle = g; x.beginPath(); x.arc(0, -6, p, 0, 7); x.fill();
+  } },
+  { id: 'aura_hearts', slot: 'aura', name: 'Heart Aura', src: 'store', cost: 25, tier: 2, desc: 'Floating hearts of adoration.', draw: (x, f, t) => {
+    const tt = (t || 0); for (let i = 0; i < 3; i++) { const ph = (tt * 0.6 + i / 3) % 1; const py = 8 - ph * 34, px = Math.sin(tt * 2 + i * 2) * 16; x.globalAlpha = 1 - ph; x.fillStyle = '#ff6392'; x.beginPath(); x.arc(px - 1.5, py, 1.5, 0, 7); x.arc(px + 1.5, py, 1.5, 0, 7); x.moveTo(px + 3, py + 0.5); x.lineTo(px, py + 4); x.lineTo(px - 3, py + 0.5); x.closePath(); x.fill(); } x.globalAlpha = 1;
+  } },
+  { id: 'aura_fire', slot: 'aura', name: 'Inferno Aura', src: 'boss', tier: 4, desc: 'A roaring ring of flame. Dropped by the A D M I N.', draw: (x, f, t) => {
+    const tt = (t || 0); for (let i = 0; i < 10; i++) { const a = i * 2 * Math.PI / 10; const fl = 3 + Math.abs(Math.sin(tt * 8 + i)) * 5; const px = Math.cos(a) * 24, py = -6 + Math.sin(a) * 20; x.fillStyle = i % 2 ? '#ff5714' : '#ffb703'; x.globalAlpha = 0.85; x.beginPath(); x.moveTo(px - 2, py); x.lineTo(px + Math.cos(a) * fl, py + Math.sin(a) * fl); x.lineTo(px + 2, py); x.closePath(); x.fill(); } x.globalAlpha = 1;
+  } },
+  { id: 'aura_rainbow', slot: 'aura', name: 'Prism Aura', src: 'ach', tier: 4, desc: 'A cycling rainbow halo. Earned by purging all seven.', draw: (x, f, t) => {
+    const tt = (t || 0); x.lineWidth = 2.5; for (let i = 0; i < 12; i++) { const a = i * 2 * Math.PI / 12; x.strokeStyle = 'hsl(' + ((tt * 90 + i * 30) % 360) + ',90%,62%)'; x.globalAlpha = 0.8; x.beginPath(); x.arc(0, -6, 26, a, a + 0.4); x.stroke(); } x.globalAlpha = 1;
+  } },
 ];
 const COSMO = {}; for (const c of COSMETICS) COSMO[c.id] = c;
 // rarity tier for a cosmetic (drives the wardrobe cell border colour, Growtopia-style)
