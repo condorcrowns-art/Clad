@@ -309,6 +309,11 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   (wood), or scratches (metal)** — with a **light-from-top-left gradient baked in**, so every block
   reads as a chiseled, directionally-lit 3D surface instead of a flat colour. A generate-graphics-
   in-code system, no image assets.
+- **Smooth, shaded characters**: the player avatar and AI allies are drawn with **rounded
+  silhouettes**, **vertical body/head gradients**, a **left-side rim light** and a soft dark
+  outline, capsule limbs with rounded hands, a glossy visor, and a **soft ground contact shadow** —
+  volume and polish instead of flat rectangles. The wardrobe preview and cosmetic swatches use the
+  same rounded, shaded rendering so the look is consistent everywhere.
 - **Volumetric tile shading**: a cached soft form-light + corner ambient-occlusion pass gives
   every block rounded volume instead of a flat fill, with extra contact shadows in concave corners
 - **Sticker-finish icons**: each item icon is 3×-supersampled for smooth source art, rendered at

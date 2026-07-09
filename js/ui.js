@@ -718,19 +718,34 @@ const ui = {
     const wr = game.progress.wardrobe || {};
     const t = performance.now() / 1000;
     const d = (slot) => { if (wr[slot] && COSMO[wr[slot]]) try { COSMO[wr[slot]].draw(x, 1, t); } catch (e) {} };
+    const rr = (typeof _rrPath === 'function') ? _rrPath : (c, X, Y, w, h) => c.rect(X, Y, w, h);
+    const sh = (typeof _shade === 'function') ? _shade : (c) => c;
+    const col = game.progress.avatarColor || '#4361ee';
+    // ground shadow
+    x.save(); x.translate(0, 20); x.scale(1, 0.4); const gs = x.createRadialGradient(0, 0, 1, 0, 0, 13); gs.addColorStop(0, 'rgba(0,0,0,0.3)'); gs.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = gs; x.beginPath(); x.arc(0, 0, 13, 0, 7); x.fill(); x.restore();
     // layered head-to-toe, matching the in-game avatar z-order
     d('aura');
     d('back');
-    const col = game.progress.avatarColor || '#4361ee';
-    x.fillStyle = col; x.fillRect(-10, -12, 20, 20);
-    x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(-10, -12, 20, 4);
+    // legs (rounded + shoes)
+    for (const lx of [-5, 6]) { x.fillStyle = '#3a4a68'; rr(x, lx - 3.5, 8, 7, 12, 3); x.fill(); x.fillStyle = '#161d29'; rr(x, lx - 4, 17.5, 8, 4, 2); x.fill(); }
+    // body (rounded, shaded, rim light)
+    x.save(); rr(x, -10, -12, 20, 23, 6); x.clip();
+    const bg = x.createLinearGradient(0, -12, 0, 11); bg.addColorStop(0, sh(col, 0.26)); bg.addColorStop(0.55, col); bg.addColorStop(1, sh(col, -0.22));
+    x.fillStyle = bg; x.fillRect(-10, -12, 20, 23);
+    x.fillStyle = 'rgba(255,255,255,0.16)'; x.fillRect(-10, -12, 3, 23);
     d('shirt');
-    x.fillStyle = '#ffd8b1'; x.fillRect(-8, -30, 16, 17);
+    x.restore();
+    x.strokeStyle = 'rgba(0,0,0,0.28)'; x.lineWidth = 1; rr(x, -10, -12, 20, 23, 6); x.stroke();
+    // head (rounded, soft skin gradient)
+    rr(x, -8, -30, 16, 18, 5); const hg = x.createLinearGradient(0, -30, 0, -12); hg.addColorStop(0, sh('#ffd8b1', 0.13)); hg.addColorStop(1, sh('#ffd8b1', -0.16)); x.fillStyle = hg; x.fill();
+    x.strokeStyle = 'rgba(0,0,0,0.2)'; x.lineWidth = 1; rr(x, -8, -30, 16, 18, 5); x.stroke();
     d('hair');
-    x.fillStyle = '#0d1526'; x.fillRect(-2, -27, 10, 6);
-    x.fillStyle = '#6ee7ff'; x.fillRect(0, -26, 6, 3);
-    // legs
-    x.fillStyle = '#2a3142'; x.fillRect(-8, 8, 6, 8); x.fillRect(2, 8, 6, 8);
+    // visor
+    rr(x, -3, -27, 12, 8, 3); x.fillStyle = '#0b1220'; x.fill();
+    x.fillStyle = '#6ee7ff'; rr(x, -1.5, -25.5, 8.5, 4, 2); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.55)'; rr(x, -1, -25, 3, 1.6, 0.8); x.fill();
+    // arms with hands
+    for (const s of [-1, 1]) { x.fillStyle = sh('#e8c49e', s < 0 ? -0.12 : 0); rr(x, s < 0 ? -18 : 8, -9, 10, 6, 3); x.fill(); x.fillStyle = '#ffd8b1'; x.beginPath(); x.arc(s * 13, -6, 3.2, 0, 7); x.fill(); }
     d('face');
     d('hat');
     d('hand');

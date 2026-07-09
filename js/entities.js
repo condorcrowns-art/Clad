@@ -679,15 +679,27 @@ class Companion extends Entity {
     if (down) { ctx.globalAlpha = 0.4 + 0.2 * Math.sin(time * 10); ctx.rotate(1.4); }
     const walk = Math.abs(this.vx) > 20 && this.onGround ? Math.sin(time * 12) : 0;
     const k = this.kit;
-    // kit-clad ally
-    ctx.fillStyle = k.legs; ctx.fillRect(-9, 8 + walk * 3, 7, 15 - walk * 3); ctx.fillRect(2, 8 - walk * 3, 7, 15 + walk * 3);
-    ctx.fillStyle = k.body; ctx.fillRect(-10, -12, 20, 22);
+    const rr = (typeof _rrPath === 'function') ? _rrPath : (c, X, Y, w, h) => c.rect(X, Y, w, h);
+    const sh = (typeof _shade === 'function') ? _shade : (h) => h;
+    // ground shadow
+    ctx.save(); ctx.translate(0, this.h / 2 - 1); ctx.scale(1, 0.4); const gs = ctx.createRadialGradient(0, 0, 1, 0, 0, 13); gs.addColorStop(0, 'rgba(0,0,0,0.28)'); gs.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gs; ctx.beginPath(); ctx.arc(0, 0, 13, 0, 7); ctx.fill(); ctx.restore();
+    // kit-clad ally — rounded, shaded to match the player
+    ctx.fillStyle = sh(k.legs, -0.1); rr(ctx, -9, 8 + walk * 3, 7, 15 - walk * 3, 3); ctx.fill(); rr(ctx, 2, 8 - walk * 3, 7, 15 + walk * 3, 3); ctx.fill();
+    ctx.save(); rr(ctx, -10, -12, 20, 23, 6); ctx.clip();
+    const bg = ctx.createLinearGradient(0, -12, 0, 11); bg.addColorStop(0, sh(k.body, 0.26)); bg.addColorStop(0.55, k.body); bg.addColorStop(1, sh(k.body, -0.22));
+    ctx.fillStyle = bg; ctx.fillRect(-10, -12, 20, 23);
     ctx.fillStyle = k.trim; ctx.fillRect(-10, 4, 20, 6);
-    ctx.fillStyle = '#ffd8b1'; ctx.fillRect(-8, -30, 16, 17);
-    ctx.fillStyle = '#0d1526'; ctx.fillRect(this.facing > 0 ? -2 : -10, -27, 12, 7);
-    ctx.fillStyle = k.bolt; ctx.fillRect(this.facing > 0 ? 0 : -8, -26, 8, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(-10, -12, 3, 23);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(0,0,0,0.26)'; ctx.lineWidth = 1; rr(ctx, -10, -12, 20, 23, 6); ctx.stroke();
+    const hg = ctx.createLinearGradient(0, -30, 0, -12); hg.addColorStop(0, sh('#ffd8b1', 0.13)); hg.addColorStop(1, sh('#ffd8b1', -0.16));
+    rr(ctx, -8, -30, 16, 18, 5); ctx.fillStyle = hg; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1; rr(ctx, -8, -30, 16, 18, 5); ctx.stroke();
+    const vx = this.facing > 0 ? -3 : -9;
+    rr(ctx, vx, -27, 12, 8, 3); ctx.fillStyle = '#0b1220'; ctx.fill();
+    ctx.fillStyle = k.bolt; rr(ctx, vx + 1.5, -25.5, 8.5, 4, 2); ctx.fill();
     // little blaster
-    ctx.fillStyle = '#44506b'; ctx.fillRect(this.facing * 8, -8, this.facing * 12, 5);
+    ctx.fillStyle = '#44506b'; rr(ctx, this.facing > 0 ? 8 : -20, -8.5, 12, 5, 2); ctx.fill();
     ctx.restore();
     // hp bar
     ctx.fillStyle = '#1a2a1a'; ctx.fillRect(sx - 15, sy - 40, 30, 4);

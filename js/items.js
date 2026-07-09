@@ -1199,10 +1199,15 @@ function cosmeticIcon(id) {
   const c = document.createElement('canvas'); c.width = 52; c.height = 52;
   const x = c.getContext('2d');
   x.translate(26, 42); x.scale(0.66, 0.66);
-  x.fillStyle = '#4361ee'; x.fillRect(-10, -12, 20, 20);
-  x.fillStyle = '#ffd8b1'; x.fillRect(-8, -30, 16, 17);
-  x.fillStyle = '#0d1526'; x.fillRect(-2, -27, 10, 6);
-  x.fillStyle = '#6ee7ff'; x.fillRect(0, -26, 6, 3);
+  const rr = (typeof _rrPath === 'function') ? _rrPath : (ctx, X, Y, w, h) => ctx.rect(X, Y, w, h);
+  const sh = (typeof _shade === 'function') ? _shade : (h) => h;
+  // rounded, shaded mini-avatar to match the in-game look
+  const bg = x.createLinearGradient(0, -12, 0, 10); bg.addColorStop(0, sh('#4361ee', 0.26)); bg.addColorStop(0.55, '#4361ee'); bg.addColorStop(1, sh('#4361ee', -0.22));
+  rr(x, -10, -12, 20, 22, 6); x.fillStyle = bg; x.fill();
+  const hg = x.createLinearGradient(0, -30, 0, -12); hg.addColorStop(0, sh('#ffd8b1', 0.13)); hg.addColorStop(1, sh('#ffd8b1', -0.16));
+  rr(x, -8, -30, 16, 18, 5); x.fillStyle = hg; x.fill();
+  rr(x, -3, -27, 12, 8, 3); x.fillStyle = '#0b1220'; x.fill();
+  x.fillStyle = '#6ee7ff'; rr(x, -1.5, -25.5, 8.5, 4, 2); x.fill();
   const cm = COSMO[id]; if (cm) try { cm.draw(x, 1, 1.2); } catch (e) {}
   return c;
 }

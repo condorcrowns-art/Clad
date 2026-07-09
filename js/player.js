@@ -3,6 +3,25 @@
    GLITCHTOPIA — player: physics, inventory, gear, actions
    ============================================================ */
 
+// ---- avatar rendering helpers (rounded, shaded forms) ----
+function _rrPath(ctx, x, y, w, h, r) {
+  r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function _shade(hex, f) {
+  if (typeof hex !== 'string' || hex[0] !== '#') return hex;
+  const n = parseInt(hex.slice(1), 16); let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+  else { r *= (1 + f); g *= (1 + f); b *= (1 + f); }
+  return 'rgb(' + Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b) + ')';
+}
+
 class Player extends Entity {
   constructor() {
     super(0, 0, 22, 46);
@@ -739,6 +758,19 @@ class Player extends Entity {
       }
       ctx.restore();
     }
+    // soft ground contact shadow (grounds the avatar, adds depth)
+    {
+      const air = this.onGround ? 1 : 0.5;
+      ctx.save();
+      ctx.translate(sx, sy + this.h / 2 - 1);
+      ctx.scale(1, 0.4);
+      const gs = ctx.createRadialGradient(0, 0, 1, 0, 0, 15);
+      gs.addColorStop(0, 'rgba(0,0,0,' + (0.32 * air) + ')');
+      gs.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gs;
+      ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     ctx.save(); ctx.translate(sx, sy);
     // squash & stretch anchored at the feet
     if (this.squash > 0) {
@@ -780,31 +812,46 @@ class Player extends Entity {
     }
     // back cosmetic (wings / cape) — behind the body
     _cd('back');
-    // legs: walk cycle swing / air split / swim kick
-    ctx.fillStyle = this.equip.feet ? (this.equip.feet === 'storm_boots' ? '#ffd166' : '#2de2a3') : '#33415e';
-    if (!this.onGround && !this.inWater) {
-      ctx.save(); ctx.translate(-5, 10); ctx.rotate(-0.35 - legSpread * 0.3); ctx.fillRect(-3, 0, 7, 14); ctx.restore();
-      ctx.save(); ctx.translate(6, 10); ctx.rotate(0.35 + legSpread * 0.2); ctx.fillRect(-3, 0, 7, 14); ctx.restore();
-    } else {
-      ctx.save(); ctx.translate(-5, 9); ctx.rotate(walk * 0.55 * this.facing); ctx.fillRect(-3.5, 0, 7, 14); ctx.restore();
-      ctx.save(); ctx.translate(6, 9); ctx.rotate(-walk * 0.55 * this.facing); ctx.fillRect(-3.5, 0, 7, 14); ctx.restore();
-    }
-    // body
-    ctx.fillStyle = bodyCol;
-    ctx.fillRect(-10, -12, 20, 22);
-    ctx.fillStyle = bodyTrim; ctx.fillRect(-10, 4, 20, 6);
-    // shirt cosmetic — over the torso
+    // legs: rounded capsules with a shoe + walk cycle
+    const legBase = (this.equip.feet ? (this.equip.feet === 'storm_boots' ? '#ffd166' : '#2de2a3') : '#3a4a68');
+    const drawLeg = (dx, ty, rot) => {
+      ctx.save(); ctx.translate(dx, ty); ctx.rotate(rot);
+      const lg = ctx.createLinearGradient(-3.5, 0, 3.5, 0);
+      lg.addColorStop(0, _shade(legBase, 0.12)); lg.addColorStop(1, _shade(legBase, -0.4));
+      ctx.fillStyle = lg; _rrPath(ctx, -3.5, 0, 7, 15, 3); ctx.fill();
+      ctx.fillStyle = '#161d29'; _rrPath(ctx, -4, 12.5, 8, 4, 2); ctx.fill(); // shoe
+      ctx.restore();
+    };
+    if (!this.onGround && !this.inWater) { drawLeg(-5, 9, -0.35 - legSpread * 0.3); drawLeg(6, 9, 0.35 + legSpread * 0.2); }
+    else { drawLeg(-5, 9, walk * 0.55 * this.facing); drawLeg(6, 9, -walk * 0.55 * this.facing); }
+    // body — rounded torso with vertical shading, waist trim, rim light + soft outline
+    const bodyHex = (typeof bodyCol === 'string' && bodyCol[0] === '#') ? bodyCol : baseCol;
+    ctx.save();
+    _rrPath(ctx, -10, -12, 20, 23, 6); ctx.clip();
+    const bg = ctx.createLinearGradient(0, -12, 0, 11);
+    bg.addColorStop(0, _shade(bodyHex, 0.26)); bg.addColorStop(0.55, bodyCol); bg.addColorStop(1, _shade(bodyHex, -0.22));
+    ctx.fillStyle = bg; ctx.fillRect(-10, -12, 20, 23);
+    ctx.fillStyle = bodyTrim; ctx.fillRect(-10, 4, 20, 6);               // waist band
+    ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(-10, -12, 3, 23); // left rim
+    ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(7, -12, 3, 23);        // right core shadow
+    // shirt cosmetic — over the torso, clipped to the rounded silhouette
     _cd('shirt');
-    // head
-    ctx.fillStyle = '#ffd8b1';
-    ctx.fillRect(-8, -30, 16, 17);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = 1; _rrPath(ctx, -10, -12, 20, 23, 6); ctx.stroke();
+    // head — rounded with soft skin gradient + outline
+    const skin = '#ffd8b1';
+    _rrPath(ctx, -8, -30, 16, 18, 5);
+    const hg = ctx.createLinearGradient(0, -30, 0, -12);
+    hg.addColorStop(0, _shade(skin, 0.13)); hg.addColorStop(1, _shade(skin, -0.16));
+    ctx.fillStyle = hg; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1; _rrPath(ctx, -8, -30, 16, 18, 5); ctx.stroke();
     // hair cosmetic — frames the head (under the hat)
     _cd('hair');
-    // visor
-    ctx.fillStyle = '#0d1526';
-    ctx.fillRect(this.facing > 0 ? -2 : -10, -27, 12, 7);
-    ctx.fillStyle = '#6ee7ff';
-    ctx.fillRect(this.facing > 0 ? 0 : -8, -26, 8, 4);
+    // visor — rounded dark lens with cyan eye-strip + glossy highlight
+    const vx = this.facing > 0 ? -3 : -9;
+    _rrPath(ctx, vx, -27, 12, 8, 3); ctx.fillStyle = '#0b1220'; ctx.fill();
+    ctx.fillStyle = '#6ee7ff'; _rrPath(ctx, vx + 1.5, -25.5, 8.5, 4, 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; _rrPath(ctx, vx + 2, -25, 3, 1.6, 0.8); ctx.fill();
     // crown if admin chip
     if (this.equip.chip === 'admin_crown') {
       ctx.fillStyle = '#ffd166';
@@ -813,12 +860,13 @@ class Player extends Entity {
     // face + hat cosmetics — layered over the head
     _cd('face');
     _cd('hat');
-    // back arm (behind body counter-swing)
-    ctx.fillStyle = '#e8c49e';
+    // back arm (behind body counter-swing) — rounded, slightly shaded
     ctx.save();
     ctx.translate(-this.facing * 8, -8);
     ctx.rotate(-walk * 0.5 * this.facing + (this.gliding ? -1.9 * this.facing : 0));
-    ctx.fillRect(0, -3, -this.facing * 10, 6);
+    const baw = -this.facing * 10;
+    ctx.fillStyle = _shade('#e8c49e', -0.12); _rrPath(ctx, Math.min(0, baw), -3, Math.abs(baw), 6, 3); ctx.fill();
+    ctx.fillStyle = _shade('#e8c49e', -0.2); ctx.beginPath(); ctx.arc(baw, 0, 3.2, 0, 7); ctx.fill(); // hand
     ctx.restore();
     // held item / front arm
     const held = this.heldItem();
@@ -827,7 +875,11 @@ class Player extends Entity {
     ctx.save();
     ctx.translate(this.facing * 10, -6);
     ctx.rotate(this.facing * (0.3 + swing));
-    ctx.fillStyle = '#ffd8b1'; ctx.fillRect(0, -3, this.facing * 12, 6);
+    const faw = this.facing * 12;
+    const fag = ctx.createLinearGradient(0, -3, 0, 3);
+    fag.addColorStop(0, _shade('#ffd8b1', 0.1)); fag.addColorStop(1, _shade('#ffd8b1', -0.14));
+    ctx.fillStyle = fag; _rrPath(ctx, Math.min(0, faw), -3, Math.abs(faw), 6, 3); ctx.fill();
+    ctx.fillStyle = '#ffd8b1'; ctx.beginPath(); ctx.arc(faw, 0, 3.3, 0, 7); ctx.fill(); // hand
     if (held.id !== 'fist') {
       const ic = iconFor(held.id);
       ctx.save();
