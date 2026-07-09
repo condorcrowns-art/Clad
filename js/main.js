@@ -651,6 +651,24 @@ class Game {
     this.save();
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
   }
+  clearWardrobe() {
+    this.progress.wardrobe = { hat: null, face: null, back: null };
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
+  randomizeWardrobe() {
+    if (typeof COSMETICS === 'undefined') return;
+    const wr = { hat: null, face: null, back: null };
+    for (const slot of ['hat', 'face', 'back']) {
+      const owned = COSMETICS.filter(c => c.slot === slot && this.ownsCosmetic(c.id));
+      if (owned.length) wr[slot] = owned[Math.floor(Math.random() * owned.length)].id;
+    }
+    this.progress.wardrobe = wr;
+    this.fx.explode(this.player.x, this.player.y, '#c77dff', 16);
+    this.sfx && this.sfx.play('place');
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
 
   /* ---------------- shard store (simulated purchases) ---------------- */
   buyStore(id) {
@@ -1020,9 +1038,12 @@ class Game {
       }
       // --- wardrobe cosmetic unlocks tied to boss progression ---
       const bossesBeaten = Object.keys(this.progress.beaten).length;
-      this.grantCosmetic('crown_c');                    // first boss ever → the Data Crown
-      if (bossesBeaten >= 3) this.grantCosmetic('cape'); // 3 distinct bosses → the Champion's Cape
-      if (boss.id === 'admin') this.grantCosmetic('halo'); // liberate the network → the Root Halo
+      this.grantCosmetic('crown_c');                          // first boss ever → the Royal Crown
+      if (bossesBeaten >= 2) this.grantCosmetic('pirate_hat'); // 2 bosses → the Pirate Tricorn
+      if (bossesBeaten >= 3) this.grantCosmetic('cape');       // 3 bosses → the Hero Cape
+      if (bossesBeaten >= 5) this.grantCosmetic('dragon_wings'); // 5 bosses → the Dragon Wings
+      if (bossesBeaten >= 7) this.grantCosmetic('cyber_visor'); // all 7 bosses → the Cyber Visor
+      if (boss.id === 'admin') this.grantCosmetic('halo');     // liberate the network → the Angel Halo
     } else {
       this.toast(boss.meta.name + ' purged again. Gems acquired.', 'gold');
       if (Math.random() < 0.5) this.spawnDrop(boss.x, boss.y, 'medkit', 2);

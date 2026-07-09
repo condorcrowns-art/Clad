@@ -985,8 +985,110 @@ const COSMETICS = [
     x.fillStyle = '#9c2b3e'; x.beginPath(); x.moveTo(-8, -12); x.lineTo(8, -12); x.lineTo(6 + sw, 17); x.lineTo(-6 + sw, 17); x.closePath(); x.fill();
     x.fillStyle = '#7a1f30'; x.fillRect(-8, -12, 16, 3);
   } },
+
+  // ===== EXPANSION WAVE — more hand-drawn cosmetics =====
+  // ---- HATS ----
+  { id: 'beanie', slot: 'hat', name: 'Knit Beanie', src: 'store', cost: 12, tier: 1, desc: 'Snug and warm.', draw: (x) => {
+    x.fillStyle = '#2a9d8f'; x.beginPath(); x.arc(0, -29, 9, Math.PI, 0); x.fill(); x.fillRect(-9, -29, 18, 3);
+    x.fillStyle = '#21867a'; x.fillRect(-9, -31, 18, 3);
+    x.strokeStyle = '#1c716a'; x.lineWidth = 1; for (let i = -7; i <= 7; i += 3) { x.beginPath(); x.moveTo(i, -37); x.lineTo(i, -29); x.stroke(); }
+    x.fillStyle = '#e9f5db'; x.beginPath(); x.arc(0, -39, 2.4, 0, 7); x.fill();
+  } },
+  { id: 'party_hat', slot: 'hat', name: 'Party Hat', src: 'store', cost: 12, tier: 1, desc: 'Every day is a celebration.', draw: (x, f, t) => {
+    x.fillStyle = '#ff6392'; x.beginPath(); x.moveTo(-8, -30); x.lineTo(0, -50); x.lineTo(8, -30); x.closePath(); x.fill();
+    x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(-8, -30); x.lineTo(-5, -38); x.lineTo(1, -34); x.lineTo(-2, -30); x.closePath(); x.fill();
+    const b = 0.7 + 0.3 * Math.sin((t || 0) * 5);
+    x.globalAlpha = b; x.fillStyle = '#6ee7ff'; x.beginPath(); x.arc(0, -51, 2.6, 0, 7); x.fill(); x.globalAlpha = 1;
+  } },
+  { id: 'headphones', slot: 'hat', name: 'Headphones', src: 'store', cost: 22, tier: 2, desc: 'Beats while you build.', draw: (x, f, t) => {
+    x.strokeStyle = '#20242e'; x.lineWidth = 3; x.beginPath(); x.arc(0, -30, 11, Math.PI, 0); x.stroke();
+    for (const s of [-1, 1]) { x.fillStyle = '#2b2f3a'; x.fillRect(s * 11 - 3, -32, 6, 9); x.fillStyle = '#ff4d6d'; x.fillRect(s * 11 - 2, -30, 4, 2); }
+    const b = 0.4 + 0.4 * Math.abs(Math.sin((t || 0) * 6));
+    x.globalAlpha = b; x.fillStyle = '#6ee7ff'; x.fillRect(-1, -42, 2, 2); x.globalAlpha = 1;
+  } },
+  { id: 'flower_crown', slot: 'hat', name: 'Flower Crown', src: 'store', cost: 22, tier: 2, desc: 'A ring of blossoms.', draw: (x) => {
+    const cols = ['#ff6392', '#ffd166', '#8ecae6', '#c77dff', '#3ddc84'];
+    for (let i = 0; i < 5; i++) { const px = -8 + i * 4; x.fillStyle = cols[i]; x.beginPath(); x.arc(px, -30, 2.4, 0, 7); x.fill(); x.fillStyle = '#fff5cc'; x.beginPath(); x.arc(px, -30, 0.9, 0, 7); x.fill(); }
+    x.strokeStyle = '#3ddc84'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(-9, -29); x.quadraticCurveTo(0, -33, 9, -29); x.stroke();
+  } },
+  { id: 'horns', slot: 'hat', name: 'Demon Horns', src: 'store', cost: 25, tier: 2, desc: 'A little mischief.', draw: (x) => {
+    for (const s of [-1, 1]) { x.fillStyle = '#c1121f'; x.beginPath(); x.moveTo(s * 5, -29); x.quadraticCurveTo(s * 11, -34, s * 8, -44); x.quadraticCurveTo(s * 6, -36, s * 2, -30); x.closePath(); x.fill(); x.fillStyle = '#7a0c15'; x.beginPath(); x.arc(s * 4, -30, 1, 0, 7); x.fill(); }
+  } },
+  { id: 'pirate_hat', slot: 'hat', name: 'Pirate Tricorn', src: 'boss', tier: 3, desc: 'Yarr. Dropped by a purged process.', draw: (x) => {
+    x.fillStyle = '#1a1a22'; x.beginPath(); x.moveTo(-13, -30); x.quadraticCurveTo(0, -46, 13, -30); x.quadraticCurveTo(0, -35, -13, -30); x.closePath(); x.fill();
+    x.fillStyle = '#c9a227'; x.fillRect(-9, -33, 18, 1.5);
+    x.fillStyle = '#eaeaea'; x.beginPath(); x.arc(0, -37, 1.8, 0, 7); x.fill(); x.fillRect(-2.4, -36, 4.8, 1.4);
+  } },
+  { id: 'cyber_visor', slot: 'hat', name: 'Cyber Visor', src: 'ach', tier: 4, desc: 'A glowing band of light. Earned by clearing the network.', draw: (x, f, t) => {
+    const b = 0.6 + 0.4 * Math.sin((t || 0) * 4);
+    x.save(); x.shadowColor = '#6ee7ff'; x.shadowBlur = 7 * b;
+    x.fillStyle = '#0e2233'; x.fillRect(-10, -33, 20, 5);
+    x.fillStyle = 'rgba(110,231,255,' + b + ')'; x.fillRect(-9, -32, 18, 2);
+    x.restore();
+  } },
+  // ---- FACE ----
+  { id: 'eyepatch', slot: 'face', name: 'Eye Patch', src: 'store', cost: 12, tier: 1, desc: 'Battle-scarred.', draw: (x) => {
+    x.strokeStyle = '#15151d'; x.lineWidth = 1.2; x.beginPath(); x.moveTo(-8, -27); x.lineTo(8, -25); x.stroke();
+    x.fillStyle = '#15151d'; x.fillRect(-7, -26, 6, 5);
+  } },
+  { id: 'monocle', slot: 'face', name: 'Monocle', src: 'store', cost: 18, tier: 2, desc: 'Quite distinguished.', draw: (x) => {
+    x.strokeStyle = '#d4af37'; x.lineWidth = 1.4; x.beginPath(); x.arc(4, -23, 3.4, 0, 7); x.stroke();
+    x.fillStyle = 'rgba(200,240,255,0.4)'; x.beginPath(); x.arc(3, -24, 1.2, 0, 7); x.fill();
+    x.strokeStyle = '#d4af37'; x.lineWidth = 0.8; x.beginPath(); x.moveTo(6, -20); x.lineTo(8, -13); x.stroke();
+  } },
+  { id: 'mustache', slot: 'face', name: 'Fancy Stache', src: 'store', cost: 10, tier: 1, desc: 'A magnificent moustache.', draw: (x) => {
+    x.fillStyle = '#3a2a1a'; x.beginPath(); x.moveTo(0, -16); x.quadraticCurveTo(-6, -18, -8, -14); x.quadraticCurveTo(-5, -15, 0, -15); x.quadraticCurveTo(5, -15, 8, -14); x.quadraticCurveTo(6, -18, 0, -16); x.closePath(); x.fill();
+  } },
+  { id: 'ninja_mask', slot: 'face', name: 'Ninja Mask', src: 'store', cost: 20, tier: 2, desc: 'Silent and unseen.', draw: (x) => {
+    x.fillStyle = '#1b2430'; x.fillRect(-8, -27, 16, 5);
+    x.fillStyle = '#0d1017'; x.fillRect(-8, -22, 16, 9);
+    x.fillStyle = '#6ee7ff'; x.fillRect(-5, -25, 3, 1.6); x.fillRect(3, -25, 3, 1.6);
+  } },
+  // ---- BACK ----
+  { id: 'scarf', slot: 'back', name: 'Flowing Scarf', src: 'store', cost: 15, tier: 1, desc: 'Trails dramatically in the wind.', draw: (x, f, t) => {
+    const sw = Math.sin((t || 0) * 3.5) * 3;
+    x.fillStyle = '#e63946'; x.fillRect(-7, -13, 14, 4);
+    x.beginPath(); x.moveTo(-f * 4, -10); x.lineTo(-f * 4 - 4, -9); x.lineTo(-f * 9 + sw, 6); x.lineTo(-f * 5 + sw, 6); x.closePath(); x.fill();
+  } },
+  { id: 'backpack', slot: 'back', name: 'Explorer Pack', src: 'store', cost: 25, tier: 2, desc: 'Ready for adventure.', draw: (x) => {
+    x.fillStyle = '#8a5a2b'; x.fillRect(-7, -10, 14, 16); x.fillStyle = '#6f4620'; x.fillRect(-7, -10, 14, 3);
+    x.fillStyle = '#c98f4f'; x.fillRect(-5, -4, 10, 6); x.fillStyle = '#3a2a1a'; x.fillRect(-1, -5, 2, 8);
+  } },
+  { id: 'butterfly_wings', slot: 'back', name: 'Butterfly Wings', src: 'store', cost: 45, tier: 3, desc: 'Delicate, iridescent wings.', draw: (x, f, t) => {
+    const fl = 1 + 0.12 * Math.sin((t || 0) * 4);
+    for (const s of [-1, 1]) {
+      x.save(); x.scale(s * fl, 1);
+      x.fillStyle = '#c77dff'; x.beginPath(); x.ellipse(13, -6, 9, 7, -0.4, 0, 7); x.fill();
+      x.fillStyle = '#8ecae6'; x.beginPath(); x.ellipse(11, 6, 6, 5, 0.3, 0, 7); x.fill();
+      x.fillStyle = 'rgba(255,255,255,0.5)'; x.beginPath(); x.arc(14, -7, 1.6, 0, 7); x.fill();
+      x.restore();
+    }
+  } },
+  { id: 'jetpack_c', slot: 'back', name: 'Chrome Jetpack', src: 'store', cost: 50, tier: 3, desc: 'Cosmetic jetpack with a live flame.', draw: (x, f, t) => {
+    for (const s of [-1, 1]) { x.fillStyle = '#b8c0cc'; x.fillRect(s * 6 - 3, -11, 6, 15); x.fillStyle = '#7f8896'; x.fillRect(s * 6 - 3, -11, 6, 3); }
+    const fl = 3 + 2 * Math.abs(Math.sin((t || 0) * 12));
+    for (const s of [-1, 1]) { x.fillStyle = '#ffb703'; x.beginPath(); x.moveTo(s * 6 - 2, 4); x.lineTo(s * 6 + 2, 4); x.lineTo(s * 6, 4 + fl); x.closePath(); x.fill(); }
+  } },
+  { id: 'dragon_wings', slot: 'back', name: 'Dragon Wings', src: 'boss', tier: 4, desc: 'Vast draconic wings. Purge five processes to earn them.', draw: (x, f, t) => {
+    const fl = 1 + 0.1 * Math.sin((t || 0) * 3);
+    for (const s of [-1, 1]) {
+      x.save(); x.scale(s * fl, 1);
+      x.fillStyle = '#3a1a4a'; x.beginPath(); x.moveTo(6, -12); x.lineTo(26, -20); x.lineTo(22, -8); x.lineTo(28, -3); x.lineTo(20, 0); x.lineTo(24, 8); x.lineTo(14, 4); x.lineTo(7, 2); x.closePath(); x.fill();
+      x.strokeStyle = '#7b2ff7'; x.lineWidth = 1; x.beginPath(); x.moveTo(8, -9); x.lineTo(24, -16); x.moveTo(8, -2); x.lineTo(26, -2); x.moveTo(9, 2); x.lineTo(22, 6); x.stroke();
+      x.restore();
+    }
+  } },
 ];
 const COSMO = {}; for (const c of COSMETICS) COSMO[c.id] = c;
+// rarity tier for a cosmetic (drives the wardrobe cell border colour, Growtopia-style)
+function cosTier(c) {
+  if (!c) return 0;
+  if (c.tier != null) return c.tier;
+  if (c.src === 'boss') return 3;
+  if (c.src === 'ach') return 4;
+  if (c.src === 'store') return (c.cost || 0) >= 40 ? 3 : (c.cost || 0) >= 20 ? 2 : 1;
+  return 0;
+}
 // small mini-avatar swatch showing a cosmetic, for the wardrobe UI
 function cosmeticIcon(id) {
   const c = document.createElement('canvas'); c.width = 52; c.height = 52;

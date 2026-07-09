@@ -52,14 +52,18 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Character sheet `[J]`** — a full read-out of your run: level, XP, HP, gems, shards,
   difficulty, guild, avatar, skill points, and a record page (bosses purged, recipes found,
   enemies slain, blocks broken, splices, fish, dungeons, trades) plus your active skill bonuses.
-- **Wardrobe `[U]`** — a Growtopia-style **dress-up panel** with hand-drawn, layered pixel
-  cosmetics that stack on your avatar across three slots: **hats** (ball cap, top hat, safari hat,
-  wizard hat, royal crown, angel halo), **face** (round glasses, cool shades), and **back**
-  (angel wings, bat wings, hero cape). A live animated avatar preview shows your current look;
-  wings flap, the halo glows and the cape billows. Pieces unlock from three honest sources —
-  **starters** (free), the **◈ Shard Store** (buy with shards), **boss drops** (the Royal Crown
-  from your first purge, the Hero Cape at three bosses), and a **milestone** (the Angel Halo for
-  liberating the network). Everything is saved with your character.
+- **Wardrobe `[U]`** — a Growtopia-style **dress-up panel** with **27 hand-drawn, layered pixel
+  cosmetics** that stack on your avatar across three slots: **hats** (ball cap, top hat, safari
+  hat, wizard hat, royal crown, angel halo, knit beanie, party hat, headphones, flower crown,
+  demon horns, pirate tricorn, cyber visor), **face** (round glasses, cool shades, eye patch,
+  monocle, moustache, ninja mask), and **back** (angel wings, bat wings, hero cape, flowing scarf,
+  explorer pack, butterfly wings, chrome jetpack, dragon wings). A **live animated avatar preview**
+  shows your current look — wings flap, the halo glows, the cape billows, the jetpack flickers.
+  Every piece has a **rarity tier** (common → legendary) that colours its cell border, plus
+  **🎲 Randomize** and **✖ Clear all** and a collection counter. Pieces unlock from honest sources —
+  **starters** (free), the **◈ Shard Store** (buy with shards), **boss drops** (Royal Crown at your
+  first purge, Pirate Tricorn at 2, Hero Cape at 3, Dragon Wings at 5), and **milestones** (Angel
+  Halo for liberating the network, Cyber Visor for purging all seven). Saved with your character.
 - **Inventory search & sort** — a search box and a sort selector (type / name / rarity / count)
   in the inventory panel.
 - **Rebindable keys** — every panel/action key can be remapped in the pause menu (movement stays

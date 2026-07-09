@@ -636,10 +636,15 @@ const ui = {
     const worn = [];
     for (const slot of ['hat', 'face', 'back']) if (wr[slot] && COSMO[wr[slot]]) worn.push(COSMO[wr[slot]].name);
     const cap = document.createElement('div'); cap.className = 'wrWorn';
+    const ownedCount = COSMETICS.filter(c => game.ownsCosmetic(c.id)).length;
     cap.innerHTML = '<div class="wrName">⬢ ' + game.playerName() + '</div>' +
-      '<div class="wrWornList">' + (worn.length ? worn.join(' · ') : 'Nothing equipped') + '</div>';
+      '<div class="wrWornList">' + (worn.length ? worn.join(' · ') : 'Nothing equipped') + '</div>' +
+      '<div class="wrCollect">Collection: ' + ownedCount + ' / ' + COSMETICS.length + ' cosmetics</div>' +
+      '<div class="wrTools"><button class="wrTool" id="wrRandom">🎲 Randomize</button><button class="wrTool" id="wrClear">✖ Clear all</button></div>';
     preview.appendChild(cap);
     b.appendChild(preview);
+    cap.querySelector('#wrRandom').addEventListener('click', () => game.randomizeWardrobe());
+    cap.querySelector('#wrClear').addEventListener('click', () => game.clearWardrobe());
 
     const SLOTS = [{ k: 'hat', label: '🎩 Hats' }, { k: 'face', label: '🕶 Face' }, { k: 'back', label: '🪽 Back' }];
     for (const s of SLOTS) {
@@ -652,6 +657,8 @@ const ui = {
         const worn = wr[s.k] === c.id;
         const cell = document.createElement('div');
         cell.className = 'wrCell' + (worn ? ' worn' : '') + (owned ? '' : ' locked');
+        // rarity tint on the cell border (worn cells keep the gold highlight from CSS)
+        if (!worn) cell.style.borderColor = (TIER_COLORS[cosTier(c)] || TIER_COLORS[0]) + (owned ? 'cc' : '55');
         const cv = document.createElement('canvas'); cv.width = 52; cv.height = 52;
         cv.getContext('2d').drawImage(cosmeticIcon(c.id), 0, 0);
         cell.appendChild(cv);
@@ -691,10 +698,12 @@ const ui = {
     const t = this.el.tooltip;
     t.classList.remove('hidden');
     const src = c.src === 'store' ? 'Shard store' : c.src === 'boss' ? 'Boss drop' : c.src === 'ach' ? 'Milestone reward' : 'Starter';
-    t.innerHTML = '<div class="ttName" style="color:#8ecae6">' + c.name + '</div>' +
-      '<div class="ttKind">cosmetic · ' + c.slot + ' · <span style="color:#8ecae6">' + src + '</span></div>' +
+    const rc = TIER_COLORS[cosTier(c)] || TIER_COLORS[0];
+    const rn = TIER_NAMES[cosTier(c)] || 'COMMON';
+    t.innerHTML = '<div class="ttName" style="color:' + rc + '">' + c.name + '</div>' +
+      '<div class="ttKind">cosmetic · ' + c.slot + ' · <span style="color:' + rc + '">' + rn + '</span> · ' + src + '</div>' +
       '<div class="ttDesc">' + c.desc + (owned ? '' : (c.src === 'store' ? '<br><b>◈ ' + (c.cost || 0) + ' shards</b>' : '<br><b>Locked</b>')) + '</div>';
-    t.style.borderColor = '#8ecae6';
+    t.style.borderColor = rc;
     t.style.left = Math.min(e.clientX + 14, window.innerWidth - 280) + 'px';
     t.style.top = Math.min(e.clientY + 14, window.innerHeight - 120) + 'px';
   },

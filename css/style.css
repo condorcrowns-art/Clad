@@ -206,6 +206,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 .wrWorn { flex: 1; }
 .wrName { color: var(--ui-gold); font-size: 18px; font-weight: bold; letter-spacing: 2px; margin-bottom: 6px; }
 .wrWornList { color: #8ecae6; font-size: 13px; }
+.wrCollect { color: #7d93b3; font-size: 11px; margin-top: 6px; letter-spacing: 0.5px; }
+.wrTools { display: flex; gap: 8px; margin-top: 10px; }
+.wrTool { background: #16233c; border: 1px solid #34435f; color: #9fd8ff; font-family: var(--font); font-size: 11px; padding: 5px 10px; cursor: pointer; border-radius: 6px; transition: border-color 0.1s, filter 0.1s; }
+.wrTool:hover { border-color: var(--ui-accent); filter: brightness(1.2); }
 .wrSection { margin-bottom: 14px; }
 .wrHead { color: #6ee7ff; font-size: 12px; letter-spacing: 2px; margin-bottom: 7px; border-bottom: 1px solid #24354f; padding-bottom: 3px; }
 .wrGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
