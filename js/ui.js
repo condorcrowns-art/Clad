@@ -25,6 +25,7 @@ const ui = {
       settingsPanel: $('settingsPanel'), settingsBody: $('settingsBody'),
       tradePanel: $('tradePanel'),
       sheetPanel: $('sheetPanel'), sheetBody: $('sheetBody'),
+      wardrobePanel: $('wardrobePanel'), wardrobeBody: $('wardrobeBody'),
       invSearch: $('invSearch'), invSort: $('invSort'),
       shardText: $('shardText'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
@@ -461,7 +462,7 @@ const ui = {
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // release any focused text field
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -476,14 +477,15 @@ const ui = {
       if (name === 'settings') this.renderSettings();
       if (name === 'trade') this.renderTrade();
       if (name === 'sheet') this.renderSheet();
+      if (name === 'wardrobe') this.renderWardrobe();
     }
     if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';
@@ -620,6 +622,103 @@ const ui = {
     html += '<div class="sheetHead" style="margin-top:12px">SKILL BONUSES</div>';
     html += '<div class="sheetBonus">' + (bonuses.length ? bonuses.join(' · ') : 'Spend skill points [' + (game.progress.keys.skills || 't').toUpperCase() + '] to gain bonuses.') + '</div>';
     b.innerHTML = html;
+  },
+
+  renderWardrobe() {
+    const b = this.el.wardrobeBody; if (!b) return;
+    const wr = game.progress.wardrobe || { hat: null, face: null, back: null };
+    b.innerHTML = '';
+    // live avatar preview
+    const preview = document.createElement('div'); preview.className = 'wrPreview';
+    const pcv = document.createElement('canvas'); pcv.width = 120; pcv.height = 150; pcv.className = 'wrAvatar';
+    preview.appendChild(pcv);
+    this._wrPreviewCanvas = pcv;
+    const worn = [];
+    for (const slot of ['hat', 'face', 'back']) if (wr[slot] && COSMO[wr[slot]]) worn.push(COSMO[wr[slot]].name);
+    const cap = document.createElement('div'); cap.className = 'wrWorn';
+    cap.innerHTML = '<div class="wrName">⬢ ' + game.playerName() + '</div>' +
+      '<div class="wrWornList">' + (worn.length ? worn.join(' · ') : 'Nothing equipped') + '</div>';
+    preview.appendChild(cap);
+    b.appendChild(preview);
+
+    const SLOTS = [{ k: 'hat', label: '🎩 Hats' }, { k: 'face', label: '🕶 Face' }, { k: 'back', label: '🪽 Back' }];
+    for (const s of SLOTS) {
+      const sect = document.createElement('div'); sect.className = 'wrSection';
+      sect.innerHTML = '<div class="wrHead">' + s.label + '</div>';
+      const grid = document.createElement('div'); grid.className = 'wrGrid';
+      const pieces = COSMETICS.filter(c => c.slot === s.k);
+      for (const c of pieces) {
+        const owned = game.ownsCosmetic(c.id);
+        const worn = wr[s.k] === c.id;
+        const cell = document.createElement('div');
+        cell.className = 'wrCell' + (worn ? ' worn' : '') + (owned ? '' : ' locked');
+        const cv = document.createElement('canvas'); cv.width = 52; cv.height = 52;
+        cv.getContext('2d').drawImage(cosmeticIcon(c.id), 0, 0);
+        cell.appendChild(cv);
+        const nm = document.createElement('div'); nm.className = 'wrLabel'; nm.textContent = c.name;
+        cell.appendChild(nm);
+        const tag = document.createElement('div'); tag.className = 'wrTag';
+        if (owned) tag.textContent = worn ? 'WORN' : 'EQUIP';
+        else if (c.src === 'store') { tag.textContent = '◈ ' + (c.cost || 0); tag.classList.add('buy'); }
+        else if (c.src === 'boss') { tag.textContent = 'BOSS DROP'; tag.classList.add('src'); }
+        else if (c.src === 'ach') { tag.textContent = 'MILESTONE'; tag.classList.add('src'); }
+        cell.appendChild(tag);
+        cell.addEventListener('mousemove', (e) => this._wardrobeTip(e, c, owned));
+        cell.addEventListener('mouseleave', () => this.hideTip());
+        cell.addEventListener('click', () => {
+          this.hideTip();
+          if (owned) game.equipCosmetic(c.id);
+          else if (c.src === 'store') { game.buyCosmetic(c.id); this.updateHUD(); }
+          else game.toast('Unlock this by ' + (c.src === 'boss' ? 'purging bosses.' : 'earning the milestone.'), 'warn');
+        });
+        grid.appendChild(cell);
+      }
+      sect.appendChild(grid);
+      b.appendChild(sect);
+    }
+    // start the live preview animation loop (idempotent — guarded by a token)
+    this._wrAnimTok = (this._wrAnimTok || 0) + 1;
+    const tok = this._wrAnimTok;
+    const anim = () => {
+      if (tok !== this._wrAnimTok) return; // superseded by a newer render
+      if (!this.el.wardrobePanel || this.el.wardrobePanel.classList.contains('hidden')) return;
+      if (this._wrPreviewCanvas) this._drawWardrobeAvatar(this._wrPreviewCanvas);
+      requestAnimationFrame(anim);
+    };
+    anim();
+  },
+  _wardrobeTip(e, c, owned) {
+    const t = this.el.tooltip;
+    t.classList.remove('hidden');
+    const src = c.src === 'store' ? 'Shard store' : c.src === 'boss' ? 'Boss drop' : c.src === 'ach' ? 'Milestone reward' : 'Starter';
+    t.innerHTML = '<div class="ttName" style="color:#8ecae6">' + c.name + '</div>' +
+      '<div class="ttKind">cosmetic · ' + c.slot + ' · <span style="color:#8ecae6">' + src + '</span></div>' +
+      '<div class="ttDesc">' + c.desc + (owned ? '' : (c.src === 'store' ? '<br><b>◈ ' + (c.cost || 0) + ' shards</b>' : '<br><b>Locked</b>')) + '</div>';
+    t.style.borderColor = '#8ecae6';
+    t.style.left = Math.min(e.clientX + 14, window.innerWidth - 280) + 'px';
+    t.style.top = Math.min(e.clientY + 14, window.innerHeight - 120) + 'px';
+  },
+  _drawWardrobeAvatar(cv) {
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, cv.width, cv.height);
+    x.save();
+    x.translate(60, 118); x.scale(2, 2);
+    const wr = game.progress.wardrobe || {};
+    // back layer
+    if (wr.back && COSMO[wr.back]) try { COSMO[wr.back].draw(x, 1, performance.now() / 1000); } catch (e) {}
+    // body + head (mirror the in-game avatar proportions)
+    const col = game.progress.avatarColor || '#4361ee';
+    x.fillStyle = col; x.fillRect(-10, -12, 20, 20);
+    x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(-10, -12, 20, 4);
+    x.fillStyle = '#ffd8b1'; x.fillRect(-8, -30, 16, 17);
+    x.fillStyle = '#0d1526'; x.fillRect(-2, -27, 10, 6);
+    x.fillStyle = '#6ee7ff'; x.fillRect(0, -26, 6, 3);
+    // legs
+    x.fillStyle = '#2a3142'; x.fillRect(-8, 8, 6, 8); x.fillRect(2, 8, 6, 8);
+    // face + hat layers
+    if (wr.face && COSMO[wr.face]) try { COSMO[wr.face].draw(x, 1, performance.now() / 1000); } catch (e) {}
+    if (wr.hat && COSMO[wr.hat]) try { COSMO[wr.hat].draw(x, 1, performance.now() / 1000); } catch (e) {}
+    x.restore();
   },
 
   // one item cell: icon + count, with a click handler

@@ -774,6 +774,9 @@ class Player extends Entity {
       ctx.fillRect(-this.facing * 16 - 4, -14, 8, 20);
       if (this.jetting) { ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(-this.facing * 16 - 4, 6); ctx.lineTo(-this.facing * 16, 16 + Math.random() * 8); ctx.lineTo(-this.facing * 16 + 4, 6); ctx.fill(); }
     }
+    // back cosmetic (wings / cape) — behind the body
+    const _cw = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || null;
+    if (_cw && _cw.back && typeof COSMO !== 'undefined' && COSMO[_cw.back]) { try { COSMO[_cw.back].draw(ctx, this.facing, time, this); } catch (e) {} }
     // legs: walk cycle swing / air split / swim kick
     ctx.fillStyle = this.equip.feet ? (this.equip.feet === 'storm_boots' ? '#ffd166' : '#2de2a3') : '#33415e';
     if (!this.onGround && !this.inWater) {
@@ -800,6 +803,9 @@ class Player extends Entity {
       ctx.fillStyle = '#ffd166';
       ctx.beginPath(); ctx.moveTo(-8, -30); ctx.lineTo(-8, -38); ctx.lineTo(-3, -33); ctx.lineTo(0, -39); ctx.lineTo(3, -33); ctx.lineTo(8, -38); ctx.lineTo(8, -30); ctx.closePath(); ctx.fill();
     }
+    // face + hat cosmetics — layered over the head
+    if (_cw && _cw.face && typeof COSMO !== 'undefined' && COSMO[_cw.face]) { try { COSMO[_cw.face].draw(ctx, this.facing, time, this); } catch (e) {} }
+    if (_cw && _cw.hat && typeof COSMO !== 'undefined' && COSMO[_cw.hat]) { try { COSMO[_cw.hat].draw(ctx, this.facing, time, this); } catch (e) {} }
     // back arm (behind body counter-swing)
     ctx.fillStyle = '#e8c49e';
     ctx.save();

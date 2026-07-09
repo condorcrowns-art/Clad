@@ -916,6 +916,90 @@ function sellPrice(id) {
 }
 
 
+/* ===================== COSMETIC WARDROBE ===================== */
+// hand-drawn, layered avatar cosmetics (Growtopia-style dress-up). Each draw()
+// runs in the avatar's local space (head ≈ x[-8..8] y[-30..-13], f = facing).
+const COSMETICS = [
+  // ---- HATS ----
+  { id: 'cap', slot: 'hat', name: 'Ball Cap', src: 'start', desc: 'A classic curved-brim cap.', draw: (x, f) => {
+    x.fillStyle = '#e63946'; x.beginPath(); x.arc(0, -30, 9, Math.PI, 0); x.fill();
+    x.fillRect(f > 0 ? 0 : -15, -31, 15, 3);
+    x.fillStyle = '#b5202e'; x.fillRect(-9, -31, 18, 2);
+    x.fillStyle = '#fff'; x.beginPath(); x.arc(0, -37, 1.6, 0, 7); x.fill();
+  } },
+  { id: 'tophat', slot: 'hat', name: 'Top Hat', src: 'store', cost: 20, desc: 'Dapper as it gets.', draw: (x) => {
+    x.fillStyle = '#15151d'; x.fillRect(-12, -31, 24, 3);
+    x.fillRect(-7, -43, 14, 12);
+    x.fillStyle = '#c9556e'; x.fillRect(-7, -35, 14, 3);
+  } },
+  { id: 'safari', slot: 'hat', name: 'Safari Hat', src: 'store', cost: 25, desc: 'For the explorer. Feather included.', draw: (x, f) => {
+    x.fillStyle = '#c9b280'; x.beginPath(); x.ellipse(0, -30, 14, 4, 0, 0, 7); x.fill();
+    x.fillStyle = '#b09a68'; x.fillRect(-7, -40, 14, 10);
+    x.fillStyle = '#7a5a2a'; x.fillRect(-7, -33, 14, 2);
+    x.strokeStyle = '#e63946'; x.lineWidth = 2; x.beginPath(); x.moveTo(f * 5, -39); x.lineTo(f * 10, -48); x.stroke();
+  } },
+  { id: 'wizard', slot: 'hat', name: 'Wizard Hat', src: 'store', cost: 30, desc: 'Star-speckled arcane cone.', draw: (x, f, t) => {
+    x.fillStyle = '#4a2a82'; x.beginPath(); x.moveTo(-10, -30); x.lineTo(2, -52); x.lineTo(10, -30); x.closePath(); x.fill();
+    x.fillStyle = '#2f1a55'; x.fillRect(-11, -31, 22, 3);
+    x.fillStyle = '#ffd166'; const tw = 0.6 + 0.4 * Math.sin((t || 0) * 4);
+    x.globalAlpha = tw; x.fillRect(-3, -40, 2, 2); x.fillRect(4, -45, 2, 2); x.fillRect(0, -48, 2, 2); x.globalAlpha = 1;
+  } },
+  { id: 'crown_c', slot: 'hat', name: 'Royal Crown', src: 'boss', desc: 'Dropped by purging a corrupted process.', draw: (x) => {
+    x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(-9, -30); x.lineTo(-9, -39); x.lineTo(-3.5, -33); x.lineTo(0, -41); x.lineTo(3.5, -33); x.lineTo(9, -39); x.lineTo(9, -30); x.closePath(); x.fill();
+    x.fillStyle = '#ff4d6d'; x.beginPath(); x.arc(0, -34, 1.6, 0, 7); x.fill();
+    x.fillStyle = '#6ee7ff'; x.beginPath(); x.arc(-6, -33, 1.2, 0, 7); x.arc(6, -33, 1.2, 0, 7); x.fill();
+  } },
+  { id: 'halo', slot: 'hat', name: 'Angel Halo', src: 'ach', desc: 'A glowing ring of light. Earned, not bought.', draw: (x, f, t) => {
+    x.save(); x.strokeStyle = '#ffe066'; x.lineWidth = 3; x.shadowColor = '#ffe066'; x.shadowBlur = 8 + 3 * Math.sin((t || 0) * 3);
+    x.beginPath(); x.ellipse(0, -40, 9, 3, 0, 0, 7); x.stroke(); x.restore();
+  } },
+  // ---- FACE ----
+  { id: 'round_glasses', slot: 'face', name: 'Round Glasses', src: 'start', desc: 'Scholarly and cute.', draw: (x) => {
+    x.strokeStyle = '#20242e'; x.lineWidth = 1.5;
+    x.beginPath(); x.arc(-4, -23, 3.4, 0, 7); x.arc(4, -23, 3.4, 0, 7); x.stroke();
+    x.beginPath(); x.moveTo(-0.6, -23); x.lineTo(0.6, -23); x.stroke();
+    x.fillStyle = 'rgba(200,240,255,0.5)'; x.beginPath(); x.arc(-5, -24, 1, 0, 7); x.arc(3, -24, 1, 0, 7); x.fill();
+  } },
+  { id: 'shades', slot: 'face', name: 'Cool Shades', src: 'store', cost: 15, desc: 'Deal with it.', draw: (x) => {
+    x.fillStyle = '#0d0d12'; x.fillRect(-8, -26, 7, 5); x.fillRect(1, -26, 7, 5); x.fillRect(-2, -25, 3, 1);
+    x.fillStyle = 'rgba(110,231,255,0.55)'; x.fillRect(-7, -25, 3, 2); x.fillRect(2, -25, 3, 2);
+  } },
+  // ---- BACK ----
+  { id: 'angel_wings', slot: 'back', name: 'Angel Wings', src: 'store', cost: 40, desc: 'Feathered wings that spread as you glide.', draw: (x, f, t) => {
+    for (const s of [-1, 1]) {
+      x.fillStyle = '#f4f6ff';
+      x.beginPath(); x.moveTo(s * 7, -10); x.quadraticCurveTo(s * 24, -20, s * 21, 4); x.quadraticCurveTo(s * 14, -3, s * 7, 0); x.closePath(); x.fill();
+      x.strokeStyle = '#d3daf0'; x.lineWidth = 1;
+      for (let k = 1; k <= 3; k++) { x.beginPath(); x.moveTo(s * 8, -8 + k * 3); x.lineTo(s * (10 + k * 4), -6 + k * 4); x.stroke(); }
+    }
+  } },
+  { id: 'bat_wings', slot: 'back', name: 'Bat Wings', src: 'store', cost: 40, desc: 'Membraned wings for a darker look.', draw: (x) => {
+    for (const s of [-1, 1]) {
+      x.fillStyle = '#2a2140';
+      x.beginPath(); x.moveTo(s * 7, -12); x.lineTo(s * 24, -16); x.lineTo(s * 20, -6); x.lineTo(s * 25, -2); x.lineTo(s * 18, 0); x.lineTo(s * 22, 6); x.lineTo(s * 8, 2); x.closePath(); x.fill();
+      x.strokeStyle = '#4a3a68'; x.lineWidth = 1; x.beginPath(); x.moveTo(s * 8, -10); x.lineTo(s * 20, -12); x.moveTo(s * 8, -4); x.lineTo(s * 22, -2); x.stroke();
+    }
+  } },
+  { id: 'cape', slot: 'back', name: 'Hero Cape', src: 'boss', desc: 'A billowing cape. Boss-tier drip.', draw: (x, f, t) => {
+    const sw = Math.sin((t || 0) * 3) * 2;
+    x.fillStyle = '#9c2b3e'; x.beginPath(); x.moveTo(-8, -12); x.lineTo(8, -12); x.lineTo(6 + sw, 17); x.lineTo(-6 + sw, 17); x.closePath(); x.fill();
+    x.fillStyle = '#7a1f30'; x.fillRect(-8, -12, 16, 3);
+  } },
+];
+const COSMO = {}; for (const c of COSMETICS) COSMO[c.id] = c;
+// small mini-avatar swatch showing a cosmetic, for the wardrobe UI
+function cosmeticIcon(id) {
+  const c = document.createElement('canvas'); c.width = 52; c.height = 52;
+  const x = c.getContext('2d');
+  x.translate(26, 42); x.scale(0.66, 0.66);
+  x.fillStyle = '#4361ee'; x.fillRect(-10, -12, 20, 20);
+  x.fillStyle = '#ffd8b1'; x.fillRect(-8, -30, 16, 17);
+  x.fillStyle = '#0d1526'; x.fillRect(-2, -27, 10, 6);
+  x.fillStyle = '#6ee7ff'; x.fillRect(0, -26, 6, 3);
+  const cm = COSMO[id]; if (cm) try { cm.draw(x, 1, 1.2); } catch (e) {}
+  return c;
+}
+
 /* ===================== ICON RENDERER v2 ===================== */
 // rarity tiers drive icon accents and UI slot borders
 const TIER_COLORS = { 0: '#8d99ae', 1: '#3ddc84', 2: '#4cc9f0', 3: '#c77dff', 4: '#ffd166', 9: '#ff4d6d' };

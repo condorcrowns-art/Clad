@@ -108,8 +108,8 @@ const DIFFICULTIES = {
 
 /* ---------------- REMAPPABLE ACTION KEYS ---------------- */
 // panel/action keys the player can rebind (movement stays fixed with arrow aliases)
-const DEFAULT_KEYS = { inv: 'e', shop: 'b', codex: 'c', quest: 'q', worlds: 'v', ach: 'g', guild: 'h', store: 'k', skills: 't', trade: 'y', sheet: 'j', pause: 'p' };
-const KEY_LABELS = { inv: 'Inventory', shop: 'Shop', codex: 'Splice codex', quest: 'Quests', worlds: 'Worlds', ach: 'Achievements', guild: 'Guild', store: 'Shard store', skills: 'Skill tree', trade: 'Trade', sheet: 'Character sheet', pause: 'Pause / settings' };
+const DEFAULT_KEYS = { inv: 'e', shop: 'b', codex: 'c', quest: 'q', worlds: 'v', ach: 'g', guild: 'h', store: 'k', skills: 't', trade: 'y', sheet: 'j', wardrobe: 'u', pause: 'p' };
+const KEY_LABELS = { inv: 'Inventory', shop: 'Shop', codex: 'Splice codex', quest: 'Quests', worlds: 'Worlds', ach: 'Achievements', guild: 'Guild', store: 'Shard store', skills: 'Skill tree', trade: 'Trade', sheet: 'Character sheet', wardrobe: 'Wardrobe', pause: 'Pause / settings' };
 const RESERVED_KEYS = { a: 1, d: 1, w: 1, s: 1, ' ': 1, shift: 1, escape: 1, arrowleft: 1, arrowright: 1, arrowup: 1, arrowdown: 1, '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1 };
 
 /* ---------------- TRADING (Data Broker barter window) ---------------- */
@@ -141,7 +141,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, back: null }, ownedCosmetics: { cap: 1, round_glasses: 1 } };
     this._rebinding = null;
     this.paused = false;
     this._questNotified = {};
@@ -607,6 +607,51 @@ class Game {
     if (typeof ui !== 'undefined') { ui.renderStore && ui.renderStore(); }
   }
 
+  /* ---------------- wardrobe (layered accessories) ---------------- */
+  ownsCosmetic(id) { return !!(this.progress.ownedCosmetics && this.progress.ownedCosmetics[id]); }
+  grantCosmetic(id, quiet) {
+    if (typeof COSMO === 'undefined' || !COSMO[id]) return;
+    this.progress.ownedCosmetics = this.progress.ownedCosmetics || {};
+    if (this.progress.ownedCosmetics[id]) return;
+    this.progress.ownedCosmetics[id] = 1;
+    this.save();
+    if (!quiet) {
+      this.toast('✦ Unlocked cosmetic: ' + COSMO[id].name + '! Equip it in the Wardrobe [' + (this.progress.keys.wardrobe || 'U').toUpperCase() + ']', 'gold');
+      this.sfx && this.sfx.play('victory');
+    }
+  }
+  buyCosmetic(id) {
+    const c = (typeof COSMO !== 'undefined') ? COSMO[id] : null;
+    if (!c) return;
+    if (this.ownsCosmetic(id)) { this.equipCosmetic(id); return; }
+    if (c.src !== 'store') { this.toast('That cosmetic is unlocked by playing, not bought.', 'warn'); return; }
+    const cost = c.cost || 0;
+    if (this.shards < cost) { this.toast('Not enough Shards (◈' + cost + '). Earn them from bosses/achievements or the daily grant.', 'warn'); return; }
+    this.addShards(-cost);
+    this.grantCosmetic(id, true);
+    this.equipCosmetic(id);
+    this.toast('◈ Purchased & equipped: ' + c.name + '!', 'gold');
+    this.sfx && this.sfx.play('buy');
+    this.save();
+  }
+  equipCosmetic(id) {
+    const c = (typeof COSMO !== 'undefined') ? COSMO[id] : null;
+    if (!c || !this.ownsCosmetic(id)) return;
+    this.progress.wardrobe = this.progress.wardrobe || { hat: null, face: null, back: null };
+    // toggle off if already worn
+    if (this.progress.wardrobe[c.slot] === id) this.progress.wardrobe[c.slot] = null;
+    else this.progress.wardrobe[c.slot] = id;
+    this.fx.explode(this.player.x, this.player.y, '#8ecae6', 12);
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
+  unequipSlot(slot) {
+    this.progress.wardrobe = this.progress.wardrobe || { hat: null, face: null, back: null };
+    this.progress.wardrobe[slot] = null;
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
+
   /* ---------------- shard store (simulated purchases) ---------------- */
   buyStore(id) {
     const item = STORE.find(s => s.id === id);
@@ -973,6 +1018,11 @@ class Game {
       } else {
         this.toast('A new portal has unlocked on your HOME SERVER.', 'gold');
       }
+      // --- wardrobe cosmetic unlocks tied to boss progression ---
+      const bossesBeaten = Object.keys(this.progress.beaten).length;
+      this.grantCosmetic('crown_c');                    // first boss ever → the Data Crown
+      if (bossesBeaten >= 3) this.grantCosmetic('cape'); // 3 distinct bosses → the Champion's Cape
+      if (boss.id === 'admin') this.grantCosmetic('halo'); // liberate the network → the Root Halo
     } else {
       this.toast(boss.meta.name + ' purged again. Gems acquired.', 'gold');
       if (Math.random() < 0.5) this.spawnDrop(boss.x, boss.y, 'medkit', 2);
@@ -1049,6 +1099,8 @@ class Game {
       this.progress.avatarColor = this.progress.avatarColor || '#4361ee';
       this.progress.keys = Object.assign({}, DEFAULT_KEYS, this.progress.keys || {});
       if (typeof this.progress.bloom !== 'boolean') this.progress.bloom = true;
+      this.progress.wardrobe = Object.assign({ hat: null, face: null, back: null }, this.progress.wardrobe || {});
+      this.progress.ownedCosmetics = Object.assign({ cap: 1, round_glasses: 1 }, this.progress.ownedCosmetics || {});
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;
       this.sfx.muted = !!this.progress.sfxMuted;
