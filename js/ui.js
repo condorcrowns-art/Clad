@@ -552,6 +552,7 @@ const ui = {
     const vol = Math.round((game.sfx.vol || 0) * 100);
     let html = '<div class="setRow"><span>Sound FX</span><button class="setBtn" id="muteBtn">' + (game.sfx.muted ? '🔇 MUTED' : '🔊 ON') + '</button></div>';
     html += '<div class="setRow"><span>Volume</span><input type="range" id="volSlider" min="0" max="100" value="' + vol + '"><span id="volVal">' + vol + '%</span></div>';
+    html += '<div class="setRow"><span>Bloom glow</span><button class="setBtn" id="bloomBtn">' + (game.progress.bloom === false ? '✦ OFF' : '✦ ON') + '</button></div>';
     html += '<div class="setLabel">Difficulty</div><div class="diffRow">';
     for (const k of ['chill', 'normal', 'hardcore']) {
       const d = DIFFICULTIES[k], on = game.progress.difficulty === k;
@@ -570,6 +571,7 @@ const ui = {
     html += '<div class="setRow" style="margin-top:12px"><button class="setBtn" id="resetKeysBtn">↺ reset keys</button><button class="setBtn" id="resumeBtn">▶ RESUME</button></div>';
     b.innerHTML = html;
     b.querySelector('#muteBtn').addEventListener('click', () => game.toggleMute());
+    b.querySelector('#bloomBtn').addEventListener('click', () => game.toggleBloom());
     const slider = b.querySelector('#volSlider');
     slider.addEventListener('input', () => { game.setVolume(slider.value / 100); b.querySelector('#volVal').textContent = slider.value + '%'; });
     b.querySelectorAll('.diffBtn').forEach(btn => btn.addEventListener('click', () => game.setDifficulty(btn.dataset.d)));

@@ -272,6 +272,9 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **Secret vaults** — every sector hides a sealed treasure room. Dig.
 
 ### Presentation & building feel
+- **Bloom post-processing**: a real screen-space glow pipeline — the frame is bright-passed at
+  half-res, blurred, and additively composited back, so every light source, lava tile, crystal,
+  projectile, sun/moon and boss effect blooms cinematically. Toggle it in the pause menu.
 - **Day/night cycle**: outdoor worlds (home + your founded/visited worlds) run a live ~2.5-minute
   day — a sun and cratered moon arc across the sky, the light warms at sunrise/sunset, the scene
   dims at night and a starfield fades in overhead

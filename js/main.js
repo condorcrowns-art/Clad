@@ -141,7 +141,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS) };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true };
     this._rebinding = null;
     this.paused = false;
     this._questNotified = {};
@@ -374,6 +374,9 @@ class Game {
   difficulty() { return DIFFICULTIES[this.progress.difficulty] || DIFFICULTIES.normal; }
   diffMult() { return this.difficulty().dmg; }
   setDifficulty(d) { if (DIFFICULTIES[d]) { this.progress.difficulty = d; this.toast('Difficulty: ' + DIFFICULTIES[d].name, 'gold'); this.save(); if (typeof ui !== 'undefined' && ui.renderSettings) ui.renderSettings(); } }
+
+  /* ---------------- graphics settings ---------------- */
+  toggleBloom() { this.progress.bloom = !this.progress.bloom; this.save(); if (typeof ui !== 'undefined' && ui.renderSettings) ui.renderSettings(); }
 
   /* ---------------- audio settings ---------------- */
   setVolume(v) { v = Math.max(0, Math.min(1, v)); this.sfx.vol = v; this.progress.sfxVol = v; this.save(); }
@@ -1045,6 +1048,7 @@ class Game {
       this.progress.playerName = this.progress.playerName || '';
       this.progress.avatarColor = this.progress.avatarColor || '#4361ee';
       this.progress.keys = Object.assign({}, DEFAULT_KEYS, this.progress.keys || {});
+      if (typeof this.progress.bloom !== 'boolean') this.progress.bloom = true;
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;
       this.sfx.muted = !!this.progress.sfxMuted;
@@ -1332,9 +1336,38 @@ class Game {
     }
     for (const h of this.hazards) h.draw(ctx, cam, this.time, cam.view.h);
     this.fx.draw(ctx, cam);
+    this.postProcess(ctx, cam);   // bloom over the world + effects (before HUD overlays)
     this.drawMinimap(ctx);
     this.drawCursor(ctx, cam);
     this.drawScreenFx(ctx, cam);
+  }
+
+  // additive bloom: bright-pass the frame at half-res, blur it, add it back so
+  // lights, lava, crystals, projectiles and boss effects glow cinematically
+  postProcess(ctx, cam) {
+    if (this.progress && this.progress.bloom === false) return;
+    const vw = cam.view.w, vh = cam.view.h;
+    if (!vw || !vh) return;
+    const bw = Math.max(1, vw >> 1), bh = Math.max(1, vh >> 1);
+    if (!this._bloom || this._bloom.width !== bw || this._bloom.height !== bh) {
+      this._bloom = document.createElement('canvas'); this._bloom.width = bw; this._bloom.height = bh;
+      this._bloomCtx = this._bloom.getContext('2d');
+    }
+    const bc = this._bloomCtx;
+    bc.setTransform(1, 0, 0, 1, 0, 0);
+    bc.clearRect(0, 0, bw, bh);
+    // bright-pass: downscale + hard contrast so only genuine highlights survive
+    try { bc.filter = 'brightness(0.9) contrast(3.2) saturate(1.25)'; } catch (e) {}
+    bc.drawImage(this.canvas, 0, 0, bw, bh);
+    bc.filter = 'none';
+    // additive, blurred composite back over the scene
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.3;
+    try { ctx.filter = 'blur(5px)'; } catch (e) {}
+    ctx.drawImage(this._bloom, 0, 0, vw, vh);
+    ctx.filter = 'none';
+    ctx.restore();
   }
 
   // full-screen juice: scanlines, low-HP danger vignette, damage flash
