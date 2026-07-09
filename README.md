@@ -284,6 +284,9 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   atmosphere behind the play space
 - **Animated tiles**: flowing water, banners and curtains that billow in the breeze, and a gentle
   breathing pulse on every light source (LEDs, lamps, crystals, teleporters)
+- **Procedural block textures**: a value-noise texture is baked once per material (cached) and
+  stamped on every tile, so surfaces read as real stone/wood/metal/crystal grain instead of a flat
+  colour — a generate-graphics-in-code system, no image assets
 - **Volumetric tile shading**: a cached soft form-light + corner ambient-occlusion pass gives
   every block rounded volume instead of a flat fill, with extra contact shadows in concave corners
 - **Sticker-finish icons**: each item icon is 3×-supersampled for smooth source art, rendered at

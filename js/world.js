@@ -665,6 +665,42 @@ class World {
     ctx.globalAlpha = 1;
   }
 
+  // procedural material texture: value-noise mottling baked once per block id, so
+  // every surface reads as rich stone/wood/metal grain instead of a flat colour fill
+  static tex(id) {
+    World._tex = World._tex || {};
+    if (World._tex[id]) return World._tex[id];
+    const it = ITEMS[id] || {};
+    const col = it.color || '#888888', col2 = it.color2 || col;
+    const S = 32;
+    const c = document.createElement('canvas'); c.width = S; c.height = S;
+    const x = c.getContext('2d');
+    const seed = (World.nameHash ? World.nameHash(id) : 12345) >>> 0;
+    const rnd = (n) => { let h = (seed ^ Math.imul(n, 2654435761)) >>> 0; h ^= h >> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >> 16)) >>> 0) / 4294967295; };
+    const hx = (h) => { h = h.replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const A = hx(col), B = hx(col2);
+    // base
+    x.fillStyle = col; x.fillRect(0, 0, S, S);
+    // mottled blobs blending toward the secondary colour (the "grain")
+    for (let i = 0; i < 64; i++) {
+      const mix = 0.25 + 0.75 * rnd(i * 3);
+      const r = Math.round(A[0] + (B[0] - A[0]) * mix), g = Math.round(A[1] + (B[1] - A[1]) * mix), b = Math.round(A[2] + (B[2] - A[2]) * mix);
+      x.globalAlpha = 0.18 + 0.35 * rnd(i * 3 + 1);
+      x.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+      const sz = 1 + Math.floor(rnd(i * 3 + 2) * 3);
+      x.fillRect(Math.floor(rnd(i + 7) * S), Math.floor(rnd(i + 19) * S), sz, sz);
+    }
+    // fine light/dark speckle for depth
+    for (let i = 0; i < 40; i++) {
+      x.globalAlpha = 0.08 + 0.1 * rnd(i + 100);
+      x.fillStyle = rnd(i + 200) < 0.5 ? '#000' : '#fff';
+      x.fillRect(Math.floor(rnd(i * 5 + 1) * S), Math.floor(rnd(i * 5 + 3) * S), 1, 1);
+    }
+    x.globalAlpha = 1;
+    World._tex[id] = c;
+    return c;
+  }
+
   // one cached 32×32 shading overlay (soft top-light, bottom-shade, corner AO)
   // reused for every solid block so all terrain reads as volumetric, not flat
   static tileShade() {
@@ -758,7 +794,9 @@ class World {
     // neighbor-aware base render: edges only where exposed, per-material texture
     const openU = !this.isSolid(tx, ty - 1), openD = !this.isSolid(tx, ty + 1);
     const openL = !this.isSolid(tx - 1, ty), openR = !this.isSolid(tx + 1, ty);
-    ctx.fillStyle = it.color; ctx.fillRect(sx, sy, TS, TS);
+    // procedurally-textured base surface (baked once per material), flat fill for see-through blocks
+    if (it.transparent) { ctx.fillStyle = it.color; ctx.fillRect(sx, sy, TS, TS); }
+    else ctx.drawImage(World.tex(id), sx, sy, TS, TS);
     if (it.transparent) { ctx.clearRect(sx + 3, sy + 3, TS - 6, TS - 6); ctx.fillStyle = it.color + '44'; ctx.fillRect(sx + 3, sy + 3, TS - 6, TS - 6); }
     ctx.fillStyle = it.color2;
     if (id === 'brick' || id === 'bedrock' || id === 'ghost_brick') {
@@ -785,10 +823,7 @@ class World {
       }
       ctx.fillStyle = it.color2;
     } else {
-      for (let k = 0; k < 4; k++) {
-        const nx = Math.floor(hash2(tx * 3 + k, ty * 5 + k) * (TS - 8)), ny = Math.floor(hash2(tx * 5 + k, ty * 3 - k) * (TS - 8));
-        ctx.fillRect(sx + nx + 2, sy + ny + 2, 4, 4);
-      }
+      // generic materials: the baked procedural texture already supplies surface detail
     }
     // grass cap on exposed dirt (home-world greenery)
     if (id === 'dirt' && openU) {
