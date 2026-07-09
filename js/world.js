@@ -679,24 +679,43 @@ class World {
     const rnd = (n) => { let h = (seed ^ Math.imul(n, 2654435761)) >>> 0; h ^= h >> 13; h = Math.imul(h, 1274126177); return ((h ^ (h >> 16)) >>> 0) / 4294967295; };
     const hx = (h) => { h = h.replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
     const A = hx(col), B = hx(col2);
-    // base
     x.fillStyle = col; x.fillRect(0, 0, S, S);
-    // mottled blobs blending toward the secondary colour (the "grain")
-    for (let i = 0; i < 64; i++) {
-      const mix = 0.25 + 0.75 * rnd(i * 3);
+    // dense mottled grain blending toward the secondary colour
+    for (let i = 0; i < 96; i++) {
+      const mix = 0.2 + 0.8 * rnd(i * 3);
       const r = Math.round(A[0] + (B[0] - A[0]) * mix), g = Math.round(A[1] + (B[1] - A[1]) * mix), b = Math.round(A[2] + (B[2] - A[2]) * mix);
-      x.globalAlpha = 0.18 + 0.35 * rnd(i * 3 + 1);
+      x.globalAlpha = 0.15 + 0.32 * rnd(i * 3 + 1);
       x.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
       const sz = 1 + Math.floor(rnd(i * 3 + 2) * 3);
       x.fillRect(Math.floor(rnd(i + 7) * S), Math.floor(rnd(i + 19) * S), sz, sz);
     }
-    // fine light/dark speckle for depth
-    for (let i = 0; i < 40; i++) {
-      x.globalAlpha = 0.08 + 0.1 * rnd(i + 100);
+    // material-family detail: rock cracks, wood grain, or metal scratches
+    const fam = it.kind === 'block' ? id : '';
+    x.lineWidth = 1;
+    if (/stone|brick|obsidian|bedrock|marble|rock|granite|slate|core|crystal|gargoyle|pillar|statue|ore/.test(fam)) {
+      x.strokeStyle = 'rgba(0,0,0,0.28)';
+      for (let k = 0; k < 3; k++) { let cx = rnd(k + 30) * S, cy = rnd(k + 40) * S; x.beginPath(); x.moveTo(cx, cy); for (let s = 0; s < 3; s++) { cx += (rnd(k * 9 + s) - 0.5) * 13; cy += (rnd(k * 9 + s + 5) - 0.5) * 13; x.lineTo(cx, cy); } x.stroke(); }
+    } else if (/wood|plank|log|tar|dirt|sand|fabric|rug|book|banner/.test(fam)) {
+      x.strokeStyle = 'rgba(0,0,0,0.15)';
+      for (let k = 0; k < 3; k++) { const gy = 4 + k * 9 + Math.floor(rnd(k + 12) * 3); x.beginPath(); x.moveTo(0, gy); x.bezierCurveTo(S * 0.33, gy + (rnd(k) - 0.5) * 3, S * 0.66, gy + (rnd(k + 1) - 0.5) * 3, S, gy); x.stroke(); }
+    } else if (/led|steel|iron|metal|sentry|drill|blast|turret|chip|node|coil|gate|vault|magnet/.test(fam)) {
+      x.strokeStyle = 'rgba(255,255,255,0.18)';
+      for (let k = 0; k < 3; k++) { const mx = rnd(k + 50) * S; x.beginPath(); x.moveTo(mx, 0); x.lineTo(mx + 6, S); x.stroke(); }
+    }
+    // fine light/dark speckle
+    for (let i = 0; i < 46; i++) {
+      x.globalAlpha = 0.07 + 0.1 * rnd(i + 100);
       x.fillStyle = rnd(i + 200) < 0.5 ? '#000' : '#fff';
       x.fillRect(Math.floor(rnd(i * 5 + 1) * S), Math.floor(rnd(i * 5 + 3) * S), 1, 1);
     }
     x.globalAlpha = 1;
+    // directional light baked in — lit from top-left, shaded bottom-right (3D form)
+    const lg = x.createLinearGradient(0, 0, S, S);
+    lg.addColorStop(0, 'rgba(255,255,255,0.15)');
+    lg.addColorStop(0.5, 'rgba(255,255,255,0)');
+    lg.addColorStop(0.5, 'rgba(0,0,0,0)');
+    lg.addColorStop(1, 'rgba(0,0,0,0.19)');
+    x.fillStyle = lg; x.fillRect(0, 0, S, S);
     World._tex[id] = c;
     return c;
   }
