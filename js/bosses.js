@@ -12,6 +12,7 @@ const BOSS_META = {
   rootkit:         { name: 'R O O T K I T', hp: 1650, gems: [300, 440], drops: [['wraith_chip', 1]] },
   admin:           { name: 'A D M I N', hp: 1900, gems: [400, 600], drops: [['admin_crown', 1], ['trophy_core', 1]] },
   swarm_queen:     { name: 'SWARM QUEEN', hp: 1550, gems: [280, 400], drops: [['hive_staff', 1], ['queen_wing', 1]] },
+  overseer:        { name: 'THE OVERSEER', hp: 4200, gems: [900, 1400], drops: [] },
 };
 
 class Boss extends Entity {
@@ -26,6 +27,8 @@ class Boss extends Entity {
   }
   hurt(dmg, game) {
     if (this.dead) return;
+    // cosmetics that are hard to obtain hit bosses harder
+    if (game && game.cosmeticBossDmg) dmg = Math.round(dmg * game.cosmeticBossDmg());
     this.hp -= dmg;
     this.hitFlash = 0.1;
     game.fx.hitNum(this.x + (Math.random() - 0.5) * this.w, this.y - this.h / 2, dmg);
@@ -737,8 +740,88 @@ class SwarmQueen extends Boss {
   }
 }
 
+/* ============ WORLD BOSS — THE OVERSEER ============ */
+class Overseer extends Boss {
+  constructor(x, y) {
+    super('overseer', x, y, 120, 120);
+    this.homeX = x; this.homeY = y;
+    this.contactDmg = 34;
+    this.ringT = 2.5; this.aimT = 1.6; this.pillarT = 5; this.spin = 0;
+  }
+  update(dt, world, game) {
+    this.baseUpdate(dt);
+    const p = game.player;
+    const spd = this.phase2 ? 1.5 : 1;
+    this.spin += dt * (this.phase2 ? 1.6 : 1);
+    this.homeX += Math.sign(p.x - this.homeX) * 34 * spd * dt;
+    this.x = this.homeX + Math.sin(this.t * 0.9 * spd) * 120;
+    this.y = this.homeY + Math.sin(this.t * 1.8 * spd) * 40;
+    // A) radial ring burst
+    this.ringT -= dt;
+    if (this.ringT <= 0) {
+      this.ringT = this.phase2 ? 2.2 : 3.4;
+      const n = this.phase2 ? 16 : 11, off = this.spin;
+      for (let i = 0; i < n; i++) {
+        const a = off + i * 2 * Math.PI / n;
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 250, Math.sin(a) * 250, 16, false, '#ff2e63', { r: 8, life: 4 }));
+      }
+      game.sfx.play('eshoot');
+    }
+    // B) aimed triple volley
+    this.aimT -= dt;
+    if (this.aimT <= 0) {
+      this.aimT = this.phase2 ? 1.1 : 1.7;
+      for (let i = 0; i < 3; i++) {
+        const a = Math.atan2(p.y - this.y, p.x - this.x) + (i - 1) * 0.22;
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 380, Math.sin(a) * 380, 18, false, '#c77dff', { r: 7, life: 3 }));
+      }
+    }
+    // C) telegraphed pillars beneath the player
+    this.pillarT -= dt;
+    if (this.pillarT <= 0) {
+      this.pillarT = this.phase2 ? 3 : 5;
+      const xs = this.phase2 ? [p.x - TS * 4, p.x, p.x + TS * 4] : [p.x - TS * 2, p.x + TS * 2];
+      for (const px of xs) game.hazards.push(new FirePillar(px, 0.9));
+      game.sfx.play('bossroar');
+    }
+    this.contact(game, dt);
+  }
+  onPhase2(game) { this.contactDmg = 44; }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    if (this.hitFlash > 0) ctx.filter = 'brightness(2.2)';
+    const col = this.phase2 ? '#ff2e63' : '#7b2ff7';
+    // outer glow
+    const gl = ctx.createRadialGradient(0, 0, 10, 0, 0, 80);
+    gl.addColorStop(0, (this.phase2 ? 'rgba(255,46,99,0.45)' : 'rgba(123,47,247,0.4)'));
+    gl.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 80, 0, 7); ctx.fill();
+    // rotating rune ring
+    ctx.save(); ctx.rotate(this.spin);
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.globalAlpha = 0.9;
+    for (let i = 0; i < 12; i++) { const a = i * 2 * Math.PI / 12; ctx.beginPath(); ctx.arc(0, 0, 58, a, a + 0.32); ctx.stroke(); }
+    ctx.globalAlpha = 1; ctx.restore();
+    // rounded dark core with vertical gradient
+    const bg = ctx.createLinearGradient(0, -46, 0, 46);
+    bg.addColorStop(0, '#2b1055'); bg.addColorStop(1, '#0a0518');
+    ctx.beginPath(); ctx.moveTo(-46, 0); ctx.arc(0, 0, 46, Math.PI, 0); ctx.arc(0, 0, 46, 0, Math.PI); ctx.closePath();
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(0, 0, 46, 0, 7); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 46, 0, 7); ctx.stroke();
+    // single glaring eye
+    const bl = 8 + 4 * Math.sin(time * 4);
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = bl;
+    ctx.fillStyle = '#ffe0ec'; ctx.beginPath(); ctx.ellipse(0, -2, 20, 13, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(Math.sin(time) * 6, -2, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = '#0a0518'; ctx.beginPath(); ctx.arc(Math.sin(time) * 6, -2, 3, 0, 7); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+}
+
 function spawnBoss(id, x, y) {
   switch (id) {
+    case 'overseer': return new Overseer(x, y);
     case 'firewall_daemon': return new FirewallDaemon(x, y);
     case 'null_wurm': return new NullWurm(x, y);
     case 'kraken': return new KrakenBoss(x, y);

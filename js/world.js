@@ -1669,6 +1669,21 @@ class World {
     return w;
   }
 
+  static genOverseer() {
+    const w = new World('overseer', 'THE OVERSEER', 96, 40, { sky: ['#050110', '#1a0533'], bgWall: 'rgba(14,4,30,0.92)', dark: 0.85 });
+    const fy = 30;
+    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? 'obsidian' : 'bedrock');
+    // a couple of floating platforms to dodge on
+    for (const [px, py, pw] of [[20, 24, 6], [70, 24, 6], [45, 20, 6]]) for (let x = 0; x < pw; x++) w.set(px + x, py, 'obsidian');
+    World.frame(w);
+    w.spawn = { x: 6 * TS, y: (fy - 2) * TS };
+    w.portals.push({ x: 3 * TS, y: fy * TS, target: 'home', label: 'FLEE', color: '#2de2a3' });
+    w.isOverseer = true;
+    w.bossId = 'overseer';
+    w.bossZone = { x1: 16 * TS, spawnX: (w.w / 2) * TS, spawnY: 16 * TS };
+    return w;
+  }
+
   static genRush() {
     const w = new World('rush', 'BOSS RUSH', 74, 36, { sky: ['#14020a', '#4a1024'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.4 });
     const fy = 27;

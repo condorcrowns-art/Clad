@@ -111,6 +111,11 @@ const DIFFICULTIES = {
 const DEFAULT_KEYS = { inv: 'e', shop: 'b', codex: 'c', quest: 'q', worlds: 'v', ach: 'g', guild: 'h', store: 'k', skills: 't', trade: 'y', sheet: 'j', wardrobe: 'u', pause: 'p' };
 const KEY_LABELS = { inv: 'Inventory', shop: 'Shop', codex: 'Splice codex', quest: 'Quests', worlds: 'Worlds', ach: 'Achievements', guild: 'Guild', store: 'Shard store', skills: 'Skill tree', trade: 'Trade', sheet: 'Character sheet', wardrobe: 'Wardrobe', pause: 'Pause / settings' };
 const RESERVED_KEYS = { a: 1, d: 1, w: 1, s: 1, ' ': 1, shift: 1, escape: 1, arrowleft: 1, arrowright: 1, arrowup: 1, arrowdown: 1, '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1 };
+// seasonal / limited events (real-calendar windows). Reward sets only drop while live.
+const EVENTS = [
+  { id: 'solstice', name: 'SOLSTICE SURGE', from: [5, 1], to: [8, 31], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Jun 1 – Aug 31
+  { id: 'winterburn', name: 'WINTERBURN', from: [11, 1], to: [1, 29], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Dec 1 – Feb 29 (wraps year)
+];
 
 /* ---------------- TRADING (Data Broker barter window) ---------------- */
 // items the broker offers to trade you (infinite stock; priced above their sell value)
@@ -669,6 +674,69 @@ class Game {
     this.save();
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
   }
+  // combat value of the currently-worn cosmetics (rarity-scaled + set bonuses)
+  cosmeticStats() {
+    const wr = this.progress.wardrobe || {};
+    let power = 0; const setCount = {};
+    if (typeof COSMO !== 'undefined') {
+      for (const slot in wr) {
+        const c = COSMO[wr[slot]]; if (!c) continue;
+        power += cosPower(c);
+        if (c.set) setCount[c.set] = (setCount[c.set] || 0) + 1;
+      }
+    }
+    let set = null;
+    if (typeof COSMO_SETS !== 'undefined') {
+      for (const s in setCount) { const def = COSMO_SETS[s]; if (def && setCount[s] >= def.need) set = Object.assign({ id: s }, def); }
+    }
+    let bossDmg = 1 + power * 0.012;                 // ~1.2% boss damage per power point
+    let reduce = Math.min(0.30, power * 0.0025);     // up to 30% incoming reduction from power
+    if (set) { bossDmg += set.dmg; reduce = Math.min(0.55, reduce + set.reduce); }
+    return { power, bossDmg, reduce, set };
+  }
+  cosmeticBossDmg() { return this.cosmeticStats().bossDmg; }
+  cosmeticReduce() { return this.cosmeticStats().reduce; }
+
+  /* ---------------- seasonal / limited events ---------------- */
+  activeEvent() {
+    const d = new Date(), m = d.getMonth(), day = d.getDate();
+    for (const ev of EVENTS) {
+      const [fm, fd] = ev.from, [tm, td] = ev.to;
+      const after = (m > fm) || (m === fm && day >= fd);
+      const before = (m < tm) || (m === tm && day <= td);
+      const inWin = (fm <= tm) ? (after && before) : (after || before); // handle wrap (e.g. Dec→Feb)
+      if (inWin) return ev;
+    }
+    return null;
+  }
+  // one-time founding reward — granted once, ever, per save
+  grantFounderReward() {
+    if (this.progress.founder) return;
+    this.progress.founder = true;
+    this.grantCosmetic('founder_halo', true);
+    this.save();
+    this.toast("✦ ONE-TIME: Founder's Aureole granted — the permanent mark of an early player. Equip it in the Wardrobe [U].", 'gold');
+  }
+  onOverseerDefeated(boss) {
+    this.bossDefeatedThisVisit = true;
+    const first = !this.progress.beaten.overseer;
+    this.progress.beaten.overseer = true;
+    this.addShards(first ? 15 : 5);
+    this.addXp(500);
+    this.spawnGems(boss.x, boss.y, 300);
+    // world-boss loot: the Overseer set (strong)
+    this.grantCosmetic('overseer_halo'); this.grantCosmetic('overseer_cape'); this.grantCosmetic('overseer_blade');
+    this.toast('★★★ THE OVERSEER FALLS — the Overseer world-boss set is yours! (+' + (first ? 15 : 5) + ' ◈)', 'gold');
+    // limited seasonal loot — only while an event is live
+    const ev = this.activeEvent();
+    if (ev) {
+      for (const pid of ev.pieces) this.grantCosmetic(pid, true);
+      this.toast('✦ LIMITED — the ' + ev.setName + ' set dropped! Only obtainable during the ' + ev.name + ' event.', 'gold');
+    }
+    this.fx.explode(boss.x, boss.y, '#ff2e63', 60);
+    setTimeout(() => { this.boss = null; ui.bossBar(null); }, 100);
+    this.save();
+  }
 
   /* ---------------- shard store (simulated purchases) ---------------- */
   buyStore(id) {
@@ -766,6 +834,11 @@ class Game {
       this.world = World.genSpire();
       this.spire = { wave: 0, betweenT: 4, active: false };
       this.toast('BLACK SPIRE — survive escalating waves. Leave through the exit between waves.', 'warn');
+    } else if (id === 'overseer') {
+      this.world = World.genOverseer();
+      const ev = this.activeEvent();
+      this.toast('⚠ THE OVERSEER — a world boss of another magnitude. Approach to begin the fight.', 'warn');
+      if (ev) this.toast('✦ ' + ev.name + ' EVENT is LIVE — defeat the Overseer now to claim the limited ' + ev.setName + ' set!', 'gold');
     } else if (id === 'rush') {
       this.world = World.genRush();
       this.rush = { stage: 0, timer: 3 };
@@ -830,6 +903,14 @@ class Game {
     const name = this.normalizeWorldName(rawName);
     if (!name) { this.toast('Type a world name to travel there.', 'warn'); return false; }
     if (name === 'home') { this.enterWorld('home'); return true; }
+    // special: the OVERSEER world boss (endgame — gated behind 3 sector bosses)
+    if (name === 'overseer') {
+      if (Object.keys(this.progress.beaten).filter(b => b !== 'overseer').length < 3) {
+        this.toast('THE OVERSEER senses you are not ready. Purge at least 3 corrupted processes first.', 'warn');
+        return false;
+      }
+      this.enterWorld('overseer'); return true;
+    }
     this.progress.visited = this.progress.visited || {};
     this.progress.visited[name] = Date.now();
     this.enterWorld(this.ownedWorlds[name] ? 'world:' + name : 'visit:' + name);
@@ -1025,6 +1106,7 @@ class Game {
     const [g0, g1] = boss.meta.gems;
     this.spawnGems(boss.x, boss.y, g0 + Math.floor(Math.random() * (g1 - g0)));
     this.addXp(120);
+    if (boss.id === 'overseer') { this.onOverseerDefeated(boss); return; }
     const first = !this.progress.beaten[boss.id];
     if (first) {
       this.progress.beaten[boss.id] = true;
@@ -1152,6 +1234,7 @@ class Game {
     this.enterWorld('home');
     ui.dirty = true;
     ui.updateHUD();
+    setTimeout(() => this.grantFounderReward(), 1800); // one-time founding cosmetic
     if (this.progress.tutorial !== 0) setTimeout(() => this.toast('Welcome back, ' + this.playerName() + '.', 'gold'), 400);
     // daily login bonus (streaks, like a proper live-service sandbox)
     const today = new Date().toDateString();
@@ -1381,7 +1464,20 @@ class Game {
     for (const e of this.enemies) e.draw(ctx, cam, this.time);
     if (this.merchant) this.drawMerchant(ctx, cam);
     for (const k of this.keyPickups) k.draw(ctx, cam, this.time);
-    if (this.boss && !this.boss.dead) this.boss.draw(ctx, cam, this.time);
+    if (this.boss && !this.boss.dead) {
+      // soft menacing glow behind every boss (cheap, universal polish)
+      const b = this.boss, bsx = b.x - cam.x, bsy = b.y - cam.y, br = Math.max(b.w, b.h) * (b.phase2 ? 1.1 : 0.9);
+      const bgl = ctx.createRadialGradient(bsx, bsy, br * 0.3, bsx, bsy, br);
+      const bc = b.phase2 ? '255,60,80' : '255,120,60';
+      bgl.addColorStop(0, 'rgba(' + bc + ',' + (0.22 + 0.08 * Math.sin(this.time * 4)) + ')');
+      bgl.addColorStop(1, 'rgba(' + bc + ',0)');
+      ctx.fillStyle = bgl; ctx.beginPath(); ctx.arc(bsx, bsy, br, 0, 7); ctx.fill();
+      // ground shadow under the boss
+      ctx.save(); ctx.translate(bsx, bsy + b.h / 2); ctx.scale(1, 0.35);
+      const bs = ctx.createRadialGradient(0, 0, 2, 0, 0, b.w * 0.6); bs.addColorStop(0, 'rgba(0,0,0,0.3)'); bs.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = bs; ctx.beginPath(); ctx.arc(0, 0, b.w * 0.6, 0, 7); ctx.fill(); ctx.restore();
+      this.boss.draw(ctx, cam, this.time);
+    }
     if (this.pet) this.pet.draw(ctx, cam, this.time);
     for (const c of this.companions) c.draw(ctx, cam, this.time);
     this.player.draw(ctx, cam, this.time);

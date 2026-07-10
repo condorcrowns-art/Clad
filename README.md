@@ -65,13 +65,29 @@ sectors** wait behind portals, each ending in a boss fight.
   - **Auras** — sparkle, frost, shadow, hearts, inferno, prism (rainbow)
 
   A **live animated avatar preview** shows your look with everything moving — wings flap, the halo
-  glows, the cape billows, torches flicker, auras orbit and cycle. Every piece has a **rarity tier**
-  (common → legendary) that colours its cell border, plus **🎲 Randomize**, **✖ Clear all**, and a
-  collection counter. Pieces unlock from honest sources — **starters** (free), the **◈ Shard Store**
-  (buy with shards), **boss drops** (Royal Crown at 1 boss, Pirate Tricorn at 2, Hero Cape at 3,
-  Plate Armor at 4, Dragon Wings at 5, Spirit Katana at 6), and **milestones** (Angel Halo, Inferno
-  Aura & Flame Hair for liberating the network; Cyber Visor & Prism Aura for purging all seven).
-  Saved with your character.
+  glows, the cape billows, torches flicker, auras orbit and cycle. **Held items are gripped in the
+  hand** and follow the swing. Every piece has a **rarity tier** (common → legendary) that colours
+  its cell border, plus **🎲 Randomize**, **✖ Clear all**, and a collection counter.
+- **Cosmetics that fight** — cosmetics aren't just for looks: each has a **combat power** (shown as
+  a ⚔ badge) that grants **bonus damage vs bosses** and **damage resistance**. Crucially, **the
+  harder a piece is to obtain, the stronger it is** — easy-to-buy store clothes give ~1 power, boss
+  drops ~6, all-boss milestones ~8, **world-boss loot ~12**, and **limited seasonal / one-time event
+  gear is the strongest (15–20)**. Wear a full themed **set** (Overseer, Frostfire) for a big extra
+  bonus. The wardrobe shows your live totals (e.g. *+109% boss damage · 29% resist*).
+- **Where cosmetics come from** — **starters** (free), the **◈ Shard Store**, **sector-boss drops**
+  (Royal Crown → Spirit Katana as you purge more), **milestones** (Angel Halo, Prism Aura, …), the
+  **World Boss** (the Overseer set), and **limited events** (the Frostfire set — only while an event
+  is live) plus a permanent **one-time Founder's Aureole**. Everything saves with your character.
+
+### World Boss & live events
+- **THE OVERSEER `[V]` → type "OVERSEER"** — a true **world boss**, unlocked after purging 3 sector
+  bosses. It's another magnitude tougher (4,200 HP, radial bullet-hell rings, aimed volleys, and
+  telegraphed pillars, with an enraged phase). Beat it to claim the **Overseer world-boss set**
+  (halo, cape, greatblade) — some of the strongest cosmetics in the game.
+- **Seasonal / limited events** — real-calendar event windows (e.g. **Solstice Surge** in summer,
+  **Winterburn** in winter). While an event is live, defeating the Overseer also drops that event's
+  **limited set** (the ice-and-fire **Frostfire** gear) — unobtainable once the window closes, so
+  event loot is genuinely rare and among the most powerful in the game.
 - **Inventory search & sort** — a search box and a sort selector (type / name / rarity / count)
   in the inventory panel.
 - **Rebindable keys** — every panel/action key can be remapped in the pause menu (movement stays

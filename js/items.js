@@ -1129,39 +1129,42 @@ const COSMETICS = [
     const g = 0.4 + 0.3 * Math.sin((t || 0) * 3); x.fillStyle = 'rgba(110,231,255,' + g + ')'; x.beginPath(); x.arc(0, -4, 2.4, 0, 7); x.fill();
   } },
 
-  // ===== HELD (front-hand item) =====
+  // ===== HELD (drawn at a hand origin (0,0); item rises upward, gripped by the front hand) =====
   { id: 'hand_torch', slot: 'hand', name: 'Torch', src: 'store', cost: 12, tier: 1, desc: 'A merrily burning torch.', draw: (x, f, t) => {
-    const hx = f * 15; x.fillStyle = '#7a4a1e'; x.fillRect(hx - 1.5, -6, 3, 12);
-    const fl = 2 + Math.abs(Math.sin((t || 0) * 10)) * 3; x.fillStyle = '#ffb703'; x.beginPath(); x.moveTo(hx - 3, -6); x.lineTo(hx, -8 - fl); x.lineTo(hx + 3, -6); x.closePath(); x.fill();
-    x.fillStyle = '#ff5714'; x.beginPath(); x.arc(hx, -6, 1.6, 0, 7); x.fill();
+    x.fillStyle = '#7a4a1e'; x.fillRect(-1.5, -2, 3, 12);
+    const fl = 2 + Math.abs(Math.sin((t || 0) * 10)) * 3; x.save(); x.shadowColor = '#ff8a00'; x.shadowBlur = 6;
+    x.fillStyle = '#ffb703'; x.beginPath(); x.moveTo(-3, -2); x.lineTo(0, -6 - fl); x.lineTo(3, -2); x.closePath(); x.fill();
+    x.fillStyle = '#ff5714'; x.beginPath(); x.arc(0, -3, 1.8, 0, 7); x.fill(); x.restore();
   } },
   { id: 'hand_balloon', slot: 'hand', name: 'Balloon', src: 'store', cost: 12, tier: 1, desc: 'A cheerful floating balloon.', draw: (x, f, t) => {
-    const hx = f * 15, sw = Math.sin((t || 0) * 2) * 1.5; x.strokeStyle = '#cfd8e6'; x.lineWidth = 0.8; x.beginPath(); x.moveTo(hx, -4); x.lineTo(hx + sw, -20); x.stroke();
-    x.fillStyle = '#ff4d6d'; x.beginPath(); x.arc(hx + sw, -24, 5, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,0.5)'; x.beginPath(); x.arc(hx + sw - 1.5, -26, 1.4, 0, 7); x.fill();
+    const sw = Math.sin((t || 0) * 2) * 1.5; x.strokeStyle = '#cfd8e6'; x.lineWidth = 0.8; x.beginPath(); x.moveTo(0, 2); x.lineTo(sw, -16); x.stroke();
+    x.fillStyle = '#ff4d6d'; x.beginPath(); x.arc(sw, -20, 5, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,0.5)'; x.beginPath(); x.arc(sw - 1.5, -22, 1.4, 0, 7); x.fill();
   } },
   { id: 'hand_flower', slot: 'hand', name: 'Bouquet', src: 'store', cost: 15, tier: 1, desc: 'A little bunch of flowers.', draw: (x, f) => {
-    const hx = f * 15; x.strokeStyle = '#3ddc84'; x.lineWidth = 1.4; x.beginPath(); x.moveTo(hx, -2); x.lineTo(hx, -14); x.stroke();
-    const cols = ['#ff6392', '#ffd166', '#c77dff']; cols.forEach((c, i) => { x.fillStyle = c; x.beginPath(); x.arc(hx + (i - 1) * 3, -15, 2.2, 0, 7); x.fill(); });
+    x.strokeStyle = '#3ddc84'; x.lineWidth = 1.4; x.beginPath(); x.moveTo(0, 4); x.lineTo(0, -10); x.stroke();
+    const cols = ['#ff6392', '#ffd166', '#c77dff']; cols.forEach((c, i) => { x.fillStyle = c; x.beginPath(); x.arc((i - 1) * 3, -12, 2.2, 0, 7); x.fill(); });
   } },
   { id: 'hand_staff', slot: 'hand', name: 'Arcane Staff', src: 'store', cost: 25, tier: 2, desc: 'Crackles with idle magic.', draw: (x, f, t) => {
-    const hx = f * 15; x.strokeStyle = '#6f4620'; x.lineWidth = 2; x.beginPath(); x.moveTo(hx, 8); x.lineTo(hx, -18); x.stroke();
-    const g = 0.6 + 0.4 * Math.sin((t || 0) * 5); x.save(); x.shadowColor = '#c77dff'; x.shadowBlur = 8 * g; x.fillStyle = '#c77dff'; x.beginPath(); x.arc(hx, -20, 3, 0, 7); x.fill(); x.restore();
+    x.strokeStyle = '#6f4620'; x.lineWidth = 2; x.beginPath(); x.moveTo(0, 12); x.lineTo(0, -16); x.stroke();
+    x.strokeStyle = '#5a3818'; x.lineWidth = 1; x.beginPath(); x.moveTo(-1.5, -13); x.lineTo(1.5, -13); x.stroke();
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 5); x.save(); x.shadowColor = '#c77dff'; x.shadowBlur = 9 * g;
+    x.fillStyle = '#c77dff'; x.beginPath(); x.arc(0, -19, 3.2, 0, 7); x.fill(); x.fillStyle = '#f0dbff'; x.beginPath(); x.arc(-1, -20, 1, 0, 7); x.fill(); x.restore();
   } },
   { id: 'hand_shield', slot: 'hand', name: 'Round Shield', src: 'store', cost: 22, tier: 2, desc: 'A sturdy cosmetic shield.', draw: (x, f) => {
-    const hx = f * 13; x.fillStyle = '#8a5a2b'; x.beginPath(); x.arc(hx, -4, 7, 0, 7); x.fill(); x.strokeStyle = '#c9a227'; x.lineWidth = 1.4; x.beginPath(); x.arc(hx, -4, 7, 0, 7); x.stroke(); x.fillStyle = '#c9a227'; x.beginPath(); x.arc(hx, -4, 2, 0, 7); x.fill();
+    x.fillStyle = '#8a5a2b'; x.beginPath(); x.arc(0, 0, 7, 0, 7); x.fill(); x.strokeStyle = '#c9a227'; x.lineWidth = 1.4; x.beginPath(); x.arc(0, 0, 7, 0, 7); x.stroke(); x.fillStyle = '#c9a227'; x.beginPath(); x.arc(0, 0, 2, 0, 7); x.fill();
   } },
   { id: 'hand_umbrella', slot: 'hand', name: 'Umbrella', src: 'store', cost: 20, tier: 2, desc: 'Rain or shine.', draw: (x, f) => {
-    const hx = f * 15; x.strokeStyle = '#cfd8e6'; x.lineWidth = 1.2; x.beginPath(); x.moveTo(hx, -6); x.lineTo(hx, 8); x.stroke();
-    x.fillStyle = '#e63946'; x.beginPath(); x.arc(hx, -6, 9, Math.PI, 0); x.fill(); x.fillStyle = '#b5202e'; for (let i = -9; i < 9; i += 6) { x.beginPath(); x.moveTo(hx + i, -6); x.lineTo(hx + i + 3, -9); x.lineTo(hx + i + 6, -6); x.closePath(); x.fill(); }
+    x.strokeStyle = '#cfd8e6'; x.lineWidth = 1.2; x.beginPath(); x.moveTo(0, -8); x.lineTo(0, 10); x.stroke();
+    x.fillStyle = '#e63946'; x.beginPath(); x.arc(0, -8, 9, Math.PI, 0); x.fill(); x.fillStyle = '#b5202e'; for (let i = -9; i < 9; i += 6) { x.beginPath(); x.moveTo(i, -8); x.lineTo(i + 3, -11); x.lineTo(i + 6, -8); x.closePath(); x.fill(); }
   } },
   { id: 'hand_lantern', slot: 'hand', name: 'Lantern', src: 'store', cost: 18, tier: 2, desc: 'A warm guiding glow.', draw: (x, f, t) => {
-    const hx = f * 15; x.strokeStyle = '#555'; x.lineWidth = 1; x.beginPath(); x.moveTo(hx, -8); x.lineTo(hx, -14); x.stroke();
-    const g = 0.6 + 0.3 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#ffd166'; x.shadowBlur = 9 * g; x.fillStyle = '#3a3a2a'; x.fillRect(hx - 4, -8, 8, 10); x.fillStyle = 'rgba(255,209,102,' + g + ')'; x.fillRect(hx - 2.5, -6, 5, 6); x.restore();
+    x.strokeStyle = '#555'; x.lineWidth = 1; x.beginPath(); x.moveTo(0, -4); x.lineTo(0, -10); x.stroke();
+    const g = 0.6 + 0.3 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#ffd166'; x.shadowBlur = 9 * g; x.fillStyle = '#3a3a2a'; x.fillRect(-4, -4, 8, 10); x.fillStyle = 'rgba(255,209,102,' + g + ')'; x.fillRect(-2.5, -2, 5, 6); x.restore();
   } },
   { id: 'hand_katana_c', slot: 'hand', name: 'Spirit Katana', src: 'boss', tier: 3, desc: 'A ceremonial blade. Purge six processes to earn it.', draw: (x, f, t) => {
-    const hx = f * 14; x.save(); x.translate(hx, -2); x.rotate(f * -0.5);
-    x.fillStyle = '#20242e'; x.fillRect(-1.5, 4, 3, 6); x.fillStyle = '#c9a227'; x.fillRect(-3, 2, 6, 2);
-    const g = 0.5 + 0.4 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#6ee7ff'; x.shadowBlur = 6 * g; x.fillStyle = '#dbe9ff'; x.fillRect(-1, -20, 2, 22); x.restore(); x.restore();
+    x.save(); x.rotate(-0.15);
+    x.fillStyle = '#20242e'; x.fillRect(-1.5, 2, 3, 7); x.fillStyle = '#c9a227'; x.fillRect(-3, 0, 6, 2);
+    const g = 0.5 + 0.4 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#6ee7ff'; x.shadowBlur = 7 * g; x.fillStyle = '#dbe9ff'; x.fillRect(-1, -22, 2, 22); x.restore(); x.restore();
   } },
 
   // ===== AURAS (radiating around the avatar) =====
@@ -1183,17 +1186,82 @@ const COSMETICS = [
   { id: 'aura_rainbow', slot: 'aura', name: 'Prism Aura', src: 'ach', tier: 4, desc: 'A cycling rainbow halo. Earned by purging all seven.', draw: (x, f, t) => {
     const tt = (t || 0); x.lineWidth = 2.5; for (let i = 0; i < 12; i++) { const a = i * 2 * Math.PI / 12; x.strokeStyle = 'hsl(' + ((tt * 90 + i * 30) % 360) + ',90%,62%)'; x.globalAlpha = 0.8; x.beginPath(); x.arc(0, -6, 26, a, a + 0.4); x.stroke(); } x.globalAlpha = 1;
   } },
+
+  // ===== WORLD-BOSS LOOT — the "Overseer" set (src 'world', very strong) =====
+  { id: 'overseer_halo', slot: 'hat', name: 'Overseer Halo', src: 'world', set: 'overseer', desc: 'A crown of corrupted light dropped by THE OVERSEER world boss.', draw: (x, f, t) => {
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 3); x.save(); x.shadowColor = '#ff2e63'; x.shadowBlur = 10 * g;
+    x.strokeStyle = '#ff2e63'; x.lineWidth = 2.5; x.beginPath(); x.ellipse(0, -40, 10, 3.4, 0, 0, 7); x.stroke();
+    x.fillStyle = '#ff2e63'; for (let i = -1; i <= 1; i++) { x.beginPath(); x.moveTo(i * 6, -41); x.lineTo(i * 6, -47); x.lineTo(i * 6 + 2, -41); x.closePath(); x.fill(); } x.restore();
+  } },
+  { id: 'overseer_cape', slot: 'back', name: 'Overseer Cape', src: 'world', set: 'overseer', desc: 'A cape woven from the void. World-boss loot.', draw: (x, f, t) => {
+    const sw = Math.sin((t || 0) * 3) * 2.5;
+    const g = x.createLinearGradient(0, -12, 0, 18); g.addColorStop(0, '#2b1055'); g.addColorStop(1, '#0a0518');
+    x.fillStyle = g; x.beginPath(); x.moveTo(-9, -12); x.lineTo(9, -12); x.lineTo(7 + sw, 18); x.lineTo(-7 + sw, 18); x.closePath(); x.fill();
+    x.save(); x.shadowColor = '#7b2ff7'; x.shadowBlur = 6; x.strokeStyle = '#a06bff'; x.lineWidth = 1; x.beginPath(); x.moveTo(0, -10); x.lineTo(sw, 16); x.stroke(); x.restore();
+  } },
+  { id: 'overseer_blade', slot: 'hand', name: 'Overseer Greatblade', src: 'world', set: 'overseer', desc: 'A humming greatblade. World-boss loot.', draw: (x, f, t) => {
+    x.save(); x.rotate(-0.12);
+    x.fillStyle = '#20242e'; x.fillRect(-2, 2, 4, 9); x.fillStyle = '#7b2ff7'; x.fillRect(-5, 0, 10, 2.5);
+    const g = 0.5 + 0.5 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#ff2e63'; x.shadowBlur = 9 * g;
+    const bg = x.createLinearGradient(0, -26, 0, 0); bg.addColorStop(0, '#ff6b9d'); bg.addColorStop(1, '#c77dff');
+    x.fillStyle = bg; x.beginPath(); x.moveTo(-2.5, 0); x.lineTo(2.5, 0); x.lineTo(1.5, -26); x.lineTo(0, -30); x.lineTo(-1.5, -26); x.closePath(); x.fill(); x.restore(); x.restore();
+  } },
+
+  // ===== EVENT / SEASONAL / LIMITED — the strongest gear (src 'event') =====
+  { id: 'frostfire_crown', slot: 'hat', name: 'Frostfire Crown', src: 'event', set: 'frostfire', desc: 'LIMITED — a crown of eternal ice and flame. Winterburn event.', draw: (x, f, t) => {
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 4); x.save(); x.shadowBlur = 9 * g;
+    x.shadowColor = '#6ee7ff'; x.fillStyle = '#8ecae6'; x.beginPath(); x.moveTo(-9, -30); x.lineTo(-9, -40); x.lineTo(-3, -34); x.closePath(); x.fill();
+    x.shadowColor = '#ff5714'; x.fillStyle = '#ff8a3d'; x.beginPath(); x.moveTo(9, -30); x.lineTo(9, -40); x.lineTo(3, -34); x.closePath(); x.fill();
+    x.shadowColor = '#fff'; x.fillStyle = '#e9f5ff'; x.beginPath(); x.moveTo(-3, -34); x.lineTo(0, -44); x.lineTo(3, -34); x.closePath(); x.fill();
+    x.fillStyle = '#ffd166'; x.fillRect(-9, -31, 18, 2.5); x.restore();
+  } },
+  { id: 'frostfire_wings', slot: 'back', name: 'Frostfire Wings', src: 'event', set: 'frostfire', desc: 'LIMITED — one wing of ice, one of fire. Winterburn event.', draw: (x, f, t) => {
+    const fl = 1 + 0.12 * Math.sin((t || 0) * 4);
+    x.save(); x.scale(-fl, 1); x.shadowColor = '#6ee7ff'; x.shadowBlur = 7; x.fillStyle = '#8ecae6';
+    x.beginPath(); x.moveTo(7, -10); x.quadraticCurveTo(24, -20, 21, 4); x.quadraticCurveTo(14, -3, 7, 0); x.closePath(); x.fill(); x.restore();
+    x.save(); x.scale(fl, 1); x.shadowColor = '#ff5714'; x.shadowBlur = 7; x.fillStyle = '#ff8a3d';
+    x.beginPath(); x.moveTo(7, -10); x.quadraticCurveTo(24, -20, 21, 4); x.quadraticCurveTo(14, -3, 7, 0); x.closePath(); x.fill(); x.restore();
+  } },
+  { id: 'frostfire_aura', slot: 'aura', name: 'Frostfire Aura', src: 'event', set: 'frostfire', desc: 'LIMITED — a swirling ring of frost and ember. Winterburn event.', draw: (x, f, t) => {
+    const tt = (t || 0); for (let i = 0; i < 10; i++) { const a = tt * 1.4 + i * 2 * Math.PI / 10; const px = Math.cos(a) * 25, py = -6 + Math.sin(a) * 21; const ice = i % 2 === 0; x.save(); x.shadowColor = ice ? '#6ee7ff' : '#ff5714'; x.shadowBlur = 6; x.fillStyle = ice ? '#bfeaff' : '#ffb703'; x.beginPath(); x.arc(px, py, 1.8, 0, 7); x.fill(); x.restore(); }
+  } },
+  { id: 'founder_halo', slot: 'hat', name: "Founder's Aureole", src: 'event', pw: 20, desc: 'ONE-TIME — the mark of a founding player. Never obtainable again.', draw: (x, f, t) => {
+    const tt = (t || 0); x.save(); x.shadowColor = '#ffd700'; x.shadowBlur = 12;
+    x.strokeStyle = '#ffe066'; x.lineWidth = 3; x.beginPath(); x.ellipse(0, -41, 11, 3.6, 0, 0, 7); x.stroke();
+    for (let i = 0; i < 8; i++) { const a = tt * 2 + i * Math.PI / 4; x.fillStyle = 'rgba(255,224,102,' + (0.4 + 0.4 * Math.sin(tt * 5 + i)) + ')'; x.fillRect(Math.cos(a) * 13 - 1, -41 + Math.sin(a) * 5 - 1, 2, 2); } x.restore();
+  } },
 ];
 const COSMO = {}; for (const c of COSMETICS) COSMO[c.id] = c;
 // rarity tier for a cosmetic (drives the wardrobe cell border colour, Growtopia-style)
 function cosTier(c) {
   if (!c) return 0;
   if (c.tier != null) return c.tier;
+  if (c.src === 'event' || c.src === 'world') return 4;
   if (c.src === 'boss') return 3;
   if (c.src === 'ach') return 4;
   if (c.src === 'store') return (c.cost || 0) >= 40 ? 3 : (c.cost || 0) >= 20 ? 2 : 1;
   return 0;
 }
+// combat POWER of a cosmetic — the harder to obtain, the stronger.
+// Easy-to-splice store clothes barely help; boss/milestone gear is solid;
+// world-boss loot is strong; seasonal / limited / one-time event gear is the best.
+function cosPower(c) {
+  if (!c) return 0;
+  if (c.pw != null) return c.pw;
+  switch (c.src) {
+    case 'event': return 15;   // seasonal / limited / 1-time — strongest
+    case 'world': return 12;   // world-boss drops
+    case 'ach':   return 8;    // milestones (all-boss clears)
+    case 'boss':  return 6;    // sector boss drops
+    case 'store': return (c.tier || 1); // 1–3, easy to buy
+    default:      return 0;    // starters
+  }
+}
+// themed set bonuses — wear the whole set for a big extra kick
+const COSMO_SETS = {
+  overseer:  { name: 'Overseer', need: 3, dmg: 0.30, reduce: 0.12, desc: '+30% boss damage · +12% resist' },
+  frostfire: { name: 'Frostfire', need: 3, dmg: 0.35, reduce: 0.08, desc: '+35% boss damage · +8% resist' },
+};
 // small mini-avatar swatch showing a cosmetic, for the wardrobe UI
 function cosmeticIcon(id) {
   const c = document.createElement('canvas'); c.width = 52; c.height = 52;
@@ -1208,7 +1276,7 @@ function cosmeticIcon(id) {
   rr(x, -8, -30, 16, 18, 5); x.fillStyle = hg; x.fill();
   rr(x, -3, -27, 12, 8, 3); x.fillStyle = '#0b1220'; x.fill();
   x.fillStyle = '#6ee7ff'; rr(x, -1.5, -25.5, 8.5, 4, 2); x.fill();
-  const cm = COSMO[id]; if (cm) try { cm.draw(x, 1, 1.2); } catch (e) {}
+  const cm = COSMO[id]; if (cm) { x.save(); if (cm.slot === 'hand') x.translate(13, -6); try { cm.draw(x, 1, 1.2); } catch (e) {} x.restore(); }
   return c;
 }
 

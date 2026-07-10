@@ -637,8 +637,16 @@ const ui = {
     for (const slot of ['hat', 'hair', 'face', 'shirt', 'back', 'hand', 'aura']) if (wr[slot] && COSMO[wr[slot]]) worn.push(COSMO[wr[slot]].name);
     const cap = document.createElement('div'); cap.className = 'wrWorn';
     const ownedCount = COSMETICS.filter(c => game.ownsCosmetic(c.id)).length;
+    const st = game.cosmeticStats ? game.cosmeticStats() : { power: 0, bossDmg: 1, reduce: 0, set: null };
+    const bd = Math.round((st.bossDmg - 1) * 100), rd = Math.round(st.reduce * 100);
+    let statLine = '<div class="wrStats">⚔ +' + bd + '% boss damage · 🛡 ' + rd + '% resist <span class="wrPow">(power ' + st.power + ')</span>';
+    if (st.set) statLine += '<br><span class="wrSet">✦ ' + st.set.name + ' set: ' + st.set.desc + '</span>';
+    statLine += '</div>';
+    const ev = game.activeEvent ? game.activeEvent() : null;
+    const evLine = ev ? '<div class="wrEvent">✦ ' + ev.name + ' event LIVE — beat THE OVERSEER for the limited ' + ev.setName + ' set</div>' : '';
     cap.innerHTML = '<div class="wrName">⬢ ' + game.playerName() + '</div>' +
       '<div class="wrWornList">' + (worn.length ? worn.join(' · ') : 'Nothing equipped') + '</div>' +
+      statLine + evLine +
       '<div class="wrCollect">Collection: ' + ownedCount + ' / ' + COSMETICS.length + ' cosmetics</div>' +
       '<div class="wrTools"><button class="wrTool" id="wrRandom">🎲 Randomize</button><button class="wrTool" id="wrClear">✖ Clear all</button></div>';
     preview.appendChild(cap);
@@ -671,8 +679,13 @@ const ui = {
         if (owned) tag.textContent = worn ? 'WORN' : 'EQUIP';
         else if (c.src === 'store') { tag.textContent = '◈ ' + (c.cost || 0); tag.classList.add('buy'); }
         else if (c.src === 'boss') { tag.textContent = 'BOSS DROP'; tag.classList.add('src'); }
+        else if (c.src === 'world') { tag.textContent = 'WORLD BOSS'; tag.classList.add('src'); }
+        else if (c.src === 'event') { tag.textContent = 'LIMITED'; tag.classList.add('evt'); }
         else if (c.src === 'ach') { tag.textContent = 'MILESTONE'; tag.classList.add('src'); }
         cell.appendChild(tag);
+        // combat-power badge (higher = stronger vs bosses)
+        const pw = (typeof cosPower === 'function') ? cosPower(c) : 0;
+        if (pw > 0) { const pb = document.createElement('div'); pb.className = 'wrPwBadge'; pb.textContent = '⚔' + pw; cell.appendChild(pb); }
         cell.addEventListener('mousemove', (e) => this._wardrobeTip(e, c, owned));
         cell.addEventListener('mouseleave', () => this.hideTip());
         cell.addEventListener('click', () => {
@@ -700,12 +713,16 @@ const ui = {
   _wardrobeTip(e, c, owned) {
     const t = this.el.tooltip;
     t.classList.remove('hidden');
-    const src = c.src === 'store' ? 'Shard store' : c.src === 'boss' ? 'Boss drop' : c.src === 'ach' ? 'Milestone reward' : 'Starter';
+    const srcMap = { store: 'Shard store', boss: 'Boss drop', world: 'World-boss loot', event: 'Limited event', ach: 'Milestone reward' };
+    const src = srcMap[c.src] || 'Starter';
     const rc = TIER_COLORS[cosTier(c)] || TIER_COLORS[0];
     const rn = TIER_NAMES[cosTier(c)] || 'COMMON';
+    const pw = (typeof cosPower === 'function') ? cosPower(c) : 0;
     t.innerHTML = '<div class="ttName" style="color:' + rc + '">' + c.name + '</div>' +
       '<div class="ttKind">cosmetic · ' + c.slot + ' · <span style="color:' + rc + '">' + rn + '</span> · ' + src + '</div>' +
-      '<div class="ttDesc">' + c.desc + (owned ? '' : (c.src === 'store' ? '<br><b>◈ ' + (c.cost || 0) + ' shards</b>' : '<br><b>Locked</b>')) + '</div>';
+      '<div class="ttDesc">' + c.desc + '</div>' +
+      (pw > 0 ? '<div class="ttPow">⚔ combat power ' + pw + (c.set && COSMO_SETS[c.set] ? ' · part of the ' + COSMO_SETS[c.set].name + ' set' : '') + '</div>' : '') +
+      (owned ? '' : (c.src === 'store' ? '<div class="ttDesc"><b>◈ ' + (c.cost || 0) + ' shards</b></div>' : '<div class="ttDesc"><b>Locked</b></div>'));
     t.style.borderColor = rc;
     t.style.left = Math.min(e.clientX + 14, window.innerWidth - 280) + 'px';
     t.style.top = Math.min(e.clientY + 14, window.innerHeight - 120) + 'px';
@@ -748,7 +765,8 @@ const ui = {
     for (const s of [-1, 1]) { x.fillStyle = sh('#e8c49e', s < 0 ? -0.12 : 0); rr(x, s < 0 ? -18 : 8, -9, 10, 6, 3); x.fill(); x.fillStyle = '#ffd8b1'; x.beginPath(); x.arc(s * 13, -6, 3.2, 0, 7); x.fill(); }
     d('face');
     d('hat');
-    d('hand');
+    // held item — anchored at the front hand
+    if (wr.hand && COSMO[wr.hand]) { x.save(); x.translate(13, -6); try { COSMO[wr.hand].draw(x, 1, t); } catch (e) {} x.restore(); }
     x.restore();
   },
 

@@ -114,8 +114,9 @@ class Player extends Entity {
       return;
     }
     const armor = this.gearFx('armor') || 0;
+    const cosR = game.cosmeticReduce ? game.cosmeticReduce() : 0; // cosmetic power softens hits
     const diff = game.diffMult ? game.diffMult() : 1; // difficulty scales incoming damage
-    dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - (this.shieldNear || 0)) * diff));
+    dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - cosR) * (1 - (this.shieldNear || 0)) * diff));
     this.hp -= dmg;
     this.iframes = 0.7;
     if (kx) { this.vx = kx; this.vy = -220; }
@@ -880,6 +881,14 @@ class Player extends Entity {
     fag.addColorStop(0, _shade('#ffd8b1', 0.1)); fag.addColorStop(1, _shade('#ffd8b1', -0.14));
     ctx.fillStyle = fag; _rrPath(ctx, Math.min(0, faw), -3, Math.abs(faw), 6, 3); ctx.fill();
     ctx.fillStyle = '#ffd8b1'; ctx.beginPath(); ctx.arc(faw, 0, 3.3, 0, 7); ctx.fill(); // hand
+    // held cosmetic — gripped by the hand (counter-rotates to stay upright, still follows the swing)
+    if (_cw && _cw.hand && typeof COSMO !== 'undefined' && COSMO[_cw.hand]) {
+      ctx.save();
+      ctx.translate(faw, 0);
+      ctx.rotate(-this.facing * (0.3 + swing) * 0.82);
+      try { COSMO[_cw.hand].draw(ctx, this.facing, time, this); } catch (e) {}
+      ctx.restore();
+    }
     if (held.id !== 'fist') {
       const ic = iconFor(held.id);
       ctx.save();
@@ -889,8 +898,6 @@ class Player extends Entity {
       ctx.restore();
     }
     ctx.restore();
-    // hand cosmetic — held in the front hand (front-most layer)
-    _cd('hand');
     // melee slash arc
     if (swingP > 0 && !held.projectile && (held.kind === 'weapon' || held.kind === 'tool')) {
       const range = ((held.range || 1.4) * TS) * 0.9;
