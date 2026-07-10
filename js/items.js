@@ -1230,6 +1230,78 @@ const COSMETICS = [
     x.strokeStyle = '#ffe066'; x.lineWidth = 3; x.beginPath(); x.ellipse(0, -41, 11, 3.6, 0, 0, 7); x.stroke();
     for (let i = 0; i < 8; i++) { const a = tt * 2 + i * Math.PI / 4; x.fillStyle = 'rgba(255,224,102,' + (0.4 + 0.4 * Math.sin(tt * 5 + i)) + ')'; x.fillRect(Math.cos(a) * 13 - 1, -41 + Math.sin(a) * 5 - 1, 2, 2); } x.restore();
   } },
+
+  // ===== WORLD-BOSS LOOT — the "Archivist" set (teal/gold) =====
+  { id: 'archivist_crown', slot: 'hat', name: 'Archivist Circlet', src: 'world', set: 'archivist', desc: 'A circlet of living script. Dropped by THE ARCHIVIST world boss.', draw: (x, f, t) => {
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 4); x.save(); x.shadowColor = '#2de2a3'; x.shadowBlur = 9 * g;
+    x.strokeStyle = '#2de2a3'; x.lineWidth = 2; x.beginPath(); x.arc(0, -30, 10, Math.PI * 1.15, Math.PI * 1.85); x.stroke();
+    x.fillStyle = '#ffd166'; for (let i = -1; i <= 1; i++) { x.beginPath(); x.arc(i * 6, -38, 1.6, 0, 7); x.fill(); } x.restore();
+  } },
+  { id: 'archivist_wings', slot: 'back', name: 'Scroll Wings', src: 'world', set: 'archivist', desc: 'Wings of endless parchment. World-boss loot.', draw: (x, f, t) => {
+    const fl = 1 + 0.1 * Math.sin((t || 0) * 4);
+    for (const s of [-1, 1]) { x.save(); x.scale(s * fl, 1); x.fillStyle = '#eaf7f0';
+      x.beginPath(); x.moveTo(7, -10); x.lineTo(23, -16); x.lineTo(21, -6); x.lineTo(24, 0); x.lineTo(18, 2); x.lineTo(20, 8); x.lineTo(7, 2); x.closePath(); x.fill();
+      x.strokeStyle = '#2de2a3'; x.lineWidth = 1; for (let k = -8; k < 4; k += 4) { x.beginPath(); x.moveTo(9, k); x.lineTo(20, k - 2); x.stroke(); } x.restore(); }
+  } },
+  { id: 'archivist_quill', slot: 'hand', name: 'Living Quill', src: 'world', set: 'archivist', desc: 'A quill that writes reality. World-boss loot.', draw: (x, f, t) => {
+    x.save(); x.rotate(-0.2); x.fillStyle = '#2de2a3'; x.beginPath(); x.moveTo(0, 4); x.lineTo(-2, -18); x.lineTo(2, -18); x.closePath(); x.fill();
+    const g = 0.5 + 0.5 * Math.sin((t || 0) * 5); x.save(); x.shadowColor = '#ffd166'; x.shadowBlur = 7 * g; x.fillStyle = '#0b1220'; x.fillRect(-1, 3, 2, 6); x.fillStyle = '#ffd166'; x.beginPath(); x.arc(0, 9, 1.6, 0, 7); x.fill(); x.restore(); x.restore();
+  } },
+
+  // ===== WORLD-BOSS LOOT — the "Null Sovereign" set (void purple/cyan) =====
+  { id: 'sovereign_crown', slot: 'hat', name: 'Sovereign Crown', src: 'world', set: 'sovereign', desc: 'The crown of a fallen king. Dropped by the NULL SOVEREIGN.', draw: (x, f, t) => {
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 3.5); x.save(); x.shadowColor = '#c77dff'; x.shadowBlur = 10 * g;
+    x.fillStyle = '#c9a227'; x.beginPath(); x.moveTo(-10, -30); x.lineTo(-10, -42); x.lineTo(-4, -35); x.lineTo(0, -46); x.lineTo(4, -35); x.lineTo(10, -42); x.lineTo(10, -30); x.closePath(); x.fill();
+    x.fillStyle = '#6ee7ff'; x.beginPath(); x.arc(0, -34, 1.8, 0, 7); x.fill(); x.fillStyle = '#7b2ff7'; x.beginPath(); x.arc(-6, -33, 1.2, 0, 7); x.arc(6, -33, 1.2, 0, 7); x.fill(); x.restore();
+  } },
+  { id: 'sovereign_mantle', slot: 'back', name: 'Void Mantle', src: 'world', set: 'sovereign', desc: 'A mantle of collapsed stars. World-boss loot.', draw: (x, f, t) => {
+    const sw = Math.sin((t || 0) * 3) * 2.5;
+    const g = x.createLinearGradient(0, -13, 0, 18); g.addColorStop(0, '#3a1a6a'); g.addColorStop(1, '#050110');
+    x.fillStyle = g; x.beginPath(); x.moveTo(-10, -13); x.lineTo(10, -13); x.lineTo(8 + sw, 18); x.lineTo(-8 + sw, 18); x.closePath(); x.fill();
+    x.fillStyle = '#e9eef7'; x.fillRect(-10, -14, 20, 3); // fur trim
+    x.save(); x.shadowColor = '#6ee7ff'; x.shadowBlur = 5; for (let i = 0; i < 4; i++) { x.fillStyle = '#8ec4ff'; x.fillRect(-6 + i * 4 + sw * 0.5, -6 + (i % 2) * 8, 1.5, 1.5); } x.restore();
+  } },
+  { id: 'sovereign_scepter', slot: 'hand', name: 'Null Scepter', src: 'world', set: 'sovereign', desc: 'A scepter cradling a dying star. World-boss loot.', draw: (x, f, t) => {
+    x.strokeStyle = '#c9a227'; x.lineWidth = 2; x.beginPath(); x.moveTo(0, 12); x.lineTo(0, -14); x.stroke();
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 5); x.save(); x.shadowColor = '#7b2ff7'; x.shadowBlur = 10 * g;
+    x.fillStyle = '#1a0533'; x.beginPath(); x.arc(0, -18, 4, 0, 7); x.fill(); x.strokeStyle = '#6ee7ff'; x.lineWidth = 1.4; x.beginPath(); x.arc(0, -18, 4, 0, 7); x.stroke(); x.restore();
+  } },
+
+  // ===== EVENT — HALLOW'S END (October only), set 'hallow' =====
+  { id: 'pumpkin_hat', slot: 'hat', name: "Jack-o'-Topper", src: 'event', set: 'hallow', desc: "LIMITED — a grinning pumpkin. Hallow's End event.", draw: (x, f, t) => {
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 3); x.save(); x.shadowColor = '#ff8a00'; x.shadowBlur = 7 * g;
+    x.fillStyle = '#ff7518'; x.beginPath(); x.arc(0, -36, 7, 0, 7); x.fill(); x.fillStyle = '#3a5a1a'; x.fillRect(-1, -45, 2, 4);
+    x.fillStyle = '#2a1400'; x.beginPath(); x.moveTo(-4, -37); x.lineTo(-1, -34); x.lineTo(-4, -34); x.closePath(); x.moveTo(4, -37); x.lineTo(1, -34); x.lineTo(4, -34); x.closePath(); x.fill();
+    x.fillRect(-3, -33, 6, 1.4); x.restore();
+  } },
+  { id: 'spectre_cloak', slot: 'back', name: 'Spectre Cloak', src: 'event', set: 'hallow', desc: "LIMITED — a tattered ghostly cloak. Hallow's End event.", draw: (x, f, t) => {
+    const sw = Math.sin((t || 0) * 3) * 2; x.save(); x.globalAlpha = 0.8;
+    const g = x.createLinearGradient(0, -12, 0, 18); g.addColorStop(0, '#c9d6e6'); g.addColorStop(1, 'rgba(120,140,170,0.1)');
+    x.fillStyle = g; x.beginPath(); x.moveTo(-9, -12); x.lineTo(9, -12);
+    for (let i = 3; i >= -3; i--) x.lineTo(i * 3 + sw, 16 + (i % 2) * 4);
+    x.closePath(); x.fill(); x.restore();
+  } },
+  { id: 'pumpkin_lantern', slot: 'hand', name: 'Hallow Lantern', src: 'event', set: 'hallow', desc: "LIMITED — a jack-o'-lantern on a stick. Hallow's End event.", draw: (x, f, t) => {
+    x.strokeStyle = '#3a2a1a'; x.lineWidth = 1.4; x.beginPath(); x.moveTo(0, 6); x.lineTo(0, -8); x.stroke();
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 5); x.save(); x.shadowColor = '#ff8a00'; x.shadowBlur = 10 * g;
+    x.fillStyle = '#ff7518'; x.beginPath(); x.arc(0, -12, 5, 0, 7); x.fill(); x.fillStyle = '#2a1400'; x.fillRect(-2.5, -13, 1.5, 1.5); x.fillRect(1, -13, 1.5, 1.5); x.fillRect(-1.5, -10, 3, 1.2); x.restore();
+  } },
+
+  // ===== EVENT — BLOOMFALL (spring only), set 'bloom' =====
+  { id: 'petal_crown', slot: 'hat', name: 'Bloomfall Crown', src: 'event', set: 'bloom', desc: 'LIMITED — a radiant ring of spring blossoms. Bloomfall event.', draw: (x, f, t) => {
+    const g = 0.6 + 0.4 * Math.sin((t || 0) * 3); x.save(); x.shadowColor = '#ff8fbf'; x.shadowBlur = 6 * g;
+    const cols = ['#ff6392', '#ffd166', '#ff8fbf', '#c77dff', '#8ecae6'];
+    for (let i = 0; i < 5; i++) { const px = -9 + i * 4.5; x.fillStyle = cols[i]; x.beginPath(); x.arc(px, -31, 2.8, 0, 7); x.fill(); x.fillStyle = '#fff7d6'; x.beginPath(); x.arc(px, -31, 1, 0, 7); x.fill(); } x.restore();
+  } },
+  { id: 'petal_wings', slot: 'back', name: 'Petal Wings', src: 'event', set: 'bloom', desc: 'LIMITED — soft wings of drifting petals. Bloomfall event.', draw: (x, f, t) => {
+    const fl = 1 + 0.14 * Math.sin((t || 0) * 4);
+    for (const s of [-1, 1]) { x.save(); x.scale(s * fl, 1); x.fillStyle = '#ff8fbf';
+      x.beginPath(); x.ellipse(14, -7, 9, 7, -0.4, 0, 7); x.fill(); x.fillStyle = '#ffc2dd'; x.beginPath(); x.ellipse(12, 5, 6, 5, 0.3, 0, 7); x.fill();
+      x.fillStyle = 'rgba(255,255,255,0.5)'; x.beginPath(); x.arc(15, -8, 1.6, 0, 7); x.fill(); x.restore(); }
+  } },
+  { id: 'bloom_aura', slot: 'aura', name: 'Petalfall Aura', src: 'event', set: 'bloom', desc: 'LIMITED — a gentle rain of petals. Bloomfall event.', draw: (x, f, t) => {
+    const tt = (t || 0); const cols = ['#ff6392', '#ffd166', '#ff8fbf']; for (let i = 0; i < 6; i++) { const ph = (tt * 0.5 + i / 6) % 1; const py = -22 + ph * 40, px = Math.sin(tt * 1.5 + i * 2) * 20; x.save(); x.globalAlpha = 0.8 * (1 - ph * 0.5); x.translate(px, py); x.rotate(tt * 3 + i); x.fillStyle = cols[i % 3]; x.beginPath(); x.ellipse(0, 0, 2.6, 1.4, 0, 0, 7); x.fill(); x.restore(); }
+  } },
 ];
 const COSMO = {}; for (const c of COSMETICS) COSMO[c.id] = c;
 // rarity tier for a cosmetic (drives the wardrobe cell border colour, Growtopia-style)
@@ -1260,7 +1332,11 @@ function cosPower(c) {
 // themed set bonuses — wear the whole set for a big extra kick
 const COSMO_SETS = {
   overseer:  { name: 'Overseer', need: 3, dmg: 0.30, reduce: 0.12, desc: '+30% boss damage · +12% resist' },
+  archivist: { name: 'Archivist', need: 3, dmg: 0.34, reduce: 0.14, desc: '+34% boss damage · +14% resist' },
+  sovereign: { name: 'Null Sovereign', need: 3, dmg: 0.40, reduce: 0.16, desc: '+40% boss damage · +16% resist' },
   frostfire: { name: 'Frostfire', need: 3, dmg: 0.35, reduce: 0.08, desc: '+35% boss damage · +8% resist' },
+  hallow:    { name: "Hallow's End", need: 3, dmg: 0.38, reduce: 0.10, desc: '+38% boss damage · +10% resist' },
+  bloom:     { name: 'Bloomfall', need: 3, dmg: 0.32, reduce: 0.14, desc: '+32% boss damage · +14% resist' },
 };
 // small mini-avatar swatch showing a cosmetic, for the wardrobe UI
 function cosmeticIcon(id) {

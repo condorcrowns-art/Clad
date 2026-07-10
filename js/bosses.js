@@ -13,6 +13,8 @@ const BOSS_META = {
   admin:           { name: 'A D M I N', hp: 1900, gems: [400, 600], drops: [['admin_crown', 1], ['trophy_core', 1]] },
   swarm_queen:     { name: 'SWARM QUEEN', hp: 1550, gems: [280, 400], drops: [['hive_staff', 1], ['queen_wing', 1]] },
   overseer:        { name: 'THE OVERSEER', hp: 4200, gems: [900, 1400], drops: [] },
+  archivist:       { name: 'THE ARCHIVIST', hp: 5200, gems: [1100, 1700], drops: [] },
+  sovereign:       { name: 'NULL SOVEREIGN', hp: 6400, gems: [1400, 2100], drops: [] },
 };
 
 class Boss extends Entity {
@@ -819,9 +821,131 @@ class Overseer extends Boss {
   }
 }
 
+/* ============ WORLD BOSS — THE ARCHIVIST (spiral pages + sweeping ink) ============ */
+class Archivist extends Boss {
+  constructor(x, y) {
+    super('archivist', x, y, 110, 110);
+    this.homeX = x; this.homeY = y; this.contactDmg = 36;
+    this.spiralT = 0.3; this.inkT = 2; this.spin = 0; this.arm = 0;
+  }
+  update(dt, world, game) {
+    this.baseUpdate(dt);
+    const p = game.player, spd = this.phase2 ? 1.5 : 1;
+    this.spin += dt * 2.4; this.arm += dt;
+    this.homeX += Math.sign(p.x - this.homeX) * 28 * spd * dt;
+    this.x = this.homeX + Math.cos(this.t * 0.7) * 90;
+    this.y = this.homeY + Math.sin(this.t * 1.3) * 34;
+    // A) continuous spiral of pages
+    this.spiralT -= dt;
+    if (this.spiralT <= 0) {
+      this.spiralT = this.phase2 ? 0.12 : 0.2;
+      const a = this.arm * (this.phase2 ? 5 : 3.5);
+      for (const s of (this.phase2 ? [0, Math.PI] : [0])) {
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a + s) * 230, Math.sin(a + s) * 230, 14, false, '#2de2a3', { r: 7, life: 4 }));
+      }
+    }
+    // B) homing ink orbs
+    this.inkT -= dt;
+    if (this.inkT <= 0) {
+      this.inkT = this.phase2 ? 1.6 : 2.6;
+      const a = Math.atan2(p.y - this.y, p.x - this.x);
+      for (let i = -1; i <= 1; i++) game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a + i * 0.3) * 300, Math.sin(a + i * 0.3) * 300, 17, false, '#0b1220', { r: 9, life: 3.5 }));
+      game.sfx.play('eshoot');
+    }
+    this.contact(game, dt);
+  }
+  onPhase2(game) { this.contactDmg = 46; }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    if (this.hitFlash > 0) ctx.filter = 'brightness(2.2)';
+    const col = this.phase2 ? '#ffd166' : '#2de2a3';
+    const gl = ctx.createRadialGradient(0, 0, 8, 0, 0, 72); gl.addColorStop(0, 'rgba(45,226,163,0.4)'); gl.addColorStop(1, 'rgba(45,226,163,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 72, 0, 7); ctx.fill();
+    // spinning page ring
+    ctx.save(); ctx.rotate(this.spin);
+    for (let i = 0; i < 6; i++) { ctx.rotate(Math.PI / 3); ctx.fillStyle = 'rgba(230,240,255,0.9)'; ctx.fillRect(38, -8, 16, 20); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.strokeRect(38, -8, 16, 20); }
+    ctx.restore();
+    // tome body
+    const bg = ctx.createLinearGradient(0, -40, 0, 40); bg.addColorStop(0, '#1c3a4a'); bg.addColorStop(1, '#0a1a22');
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.moveTo(-40, -34); ctx.lineTo(40, -34); ctx.lineTo(40, 34); ctx.lineTo(-40, 34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = col; ctx.fillRect(-3, -34, 6, 68); // spine
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.strokeRect(-40, -34, 80, 68);
+    // the all-seeing eye
+    const bl = 8 + 4 * Math.sin(time * 4); ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = bl;
+    ctx.fillStyle = '#eafff6'; ctx.beginPath(); ctx.ellipse(0, 0, 22, 14, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(Math.sin(time * 1.5) * 8, 0, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#04120c'; ctx.beginPath(); ctx.arc(Math.sin(time * 1.5) * 8, 0, 3.5, 0, 7); ctx.fill(); ctx.restore();
+    ctx.restore();
+  }
+}
+
+/* ============ WORLD BOSS — NULL SOVEREIGN (gravity wells + void bolts) ============ */
+class NullSovereign extends Boss {
+  constructor(x, y) {
+    super('sovereign', x, y, 130, 130);
+    this.homeX = x; this.homeY = y; this.contactDmg = 42;
+    this.boltT = 1.4; this.wellT = 4; this.spin = 0;
+  }
+  update(dt, world, game) {
+    this.baseUpdate(dt);
+    const p = game.player, spd = this.phase2 ? 1.5 : 1;
+    this.spin += dt * 1.2;
+    this.homeX += Math.sign(p.x - this.homeX) * 24 * spd * dt;
+    this.x = this.homeX + Math.sin(this.t * 0.6) * 70;
+    this.y = this.homeY + Math.sin(this.t * 1.1) * 26;
+    // A) twin counter-rotating rings of void bolts
+    this.boltT -= dt;
+    if (this.boltT <= 0) {
+      this.boltT = this.phase2 ? 1.5 : 2.4;
+      const n = this.phase2 ? 14 : 10;
+      for (let i = 0; i < n; i++) {
+        const a = this.spin + i * 2 * Math.PI / n;
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 220, Math.sin(a) * 220, 18, false, '#7b2ff7', { r: 8, life: 4.2 }));
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(-a) * 300, Math.sin(-a) * 300, 20, false, '#6ee7ff', { r: 6, life: 3 }));
+      }
+      game.sfx.play('eshoot');
+    }
+    // B) gravity-well pillars beneath the player
+    this.wellT -= dt;
+    if (this.wellT <= 0) {
+      this.wellT = this.phase2 ? 2.6 : 4.2;
+      const xs = this.phase2 ? [p.x - TS * 5, p.x, p.x + TS * 5] : [p.x];
+      for (const px of xs) game.hazards.push(new FirePillar(px, 0.85));
+      game.sfx.play('bossroar');
+    }
+    this.contact(game, dt);
+  }
+  onPhase2(game) { this.contactDmg = 54; }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    if (this.hitFlash > 0) ctx.filter = 'brightness(2.2)';
+    // event-horizon glow
+    const gl = ctx.createRadialGradient(0, 0, 6, 0, 0, 90); gl.addColorStop(0, 'rgba(123,47,247,0.5)'); gl.addColorStop(0.6, 'rgba(40,10,80,0.3)'); gl.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 90, 0, 7); ctx.fill();
+    // accretion ring
+    ctx.save(); ctx.rotate(this.spin);
+    for (let i = 0; i < 16; i++) { const a = i * 2 * Math.PI / 16; ctx.strokeStyle = i % 2 ? '#6ee7ff' : '#7b2ff7'; ctx.lineWidth = 3; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(0, 0, 62, a, a + 0.28); ctx.stroke(); }
+    ctx.globalAlpha = 1; ctx.restore();
+    // void core
+    ctx.fillStyle = '#050110'; ctx.beginPath(); ctx.arc(0, 0, 44, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#7b2ff7'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 44, 0, 7); ctx.stroke();
+    // crown of a fallen king
+    ctx.save(); ctx.shadowColor = '#c77dff'; ctx.shadowBlur = 10;
+    ctx.fillStyle = '#c9a227'; ctx.beginPath(); ctx.moveTo(-24, -30); ctx.lineTo(-24, -46); ctx.lineTo(-10, -36); ctx.lineTo(0, -50); ctx.lineTo(10, -36); ctx.lineTo(24, -46); ctx.lineTo(24, -30); ctx.closePath(); ctx.fill();
+    // twin eyes
+    const bl = 6 + 3 * Math.sin(time * 5); ctx.shadowBlur = bl; ctx.fillStyle = '#6ee7ff';
+    ctx.beginPath(); ctx.arc(-13, -2, 5, 0, 7); ctx.arc(13, -2, 5, 0, 7); ctx.fill(); ctx.restore();
+    ctx.restore();
+  }
+}
+
 function spawnBoss(id, x, y) {
   switch (id) {
     case 'overseer': return new Overseer(x, y);
+    case 'archivist': return new Archivist(x, y);
+    case 'sovereign': return new NullSovereign(x, y);
     case 'firewall_daemon': return new FirewallDaemon(x, y);
     case 'null_wurm': return new NullWurm(x, y);
     case 'kraken': return new KrakenBoss(x, y);

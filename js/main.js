@@ -111,10 +111,18 @@ const DIFFICULTIES = {
 const DEFAULT_KEYS = { inv: 'e', shop: 'b', codex: 'c', quest: 'q', worlds: 'v', ach: 'g', guild: 'h', store: 'k', skills: 't', trade: 'y', sheet: 'j', wardrobe: 'u', pause: 'p' };
 const KEY_LABELS = { inv: 'Inventory', shop: 'Shop', codex: 'Splice codex', quest: 'Quests', worlds: 'Worlds', ach: 'Achievements', guild: 'Guild', store: 'Shard store', skills: 'Skill tree', trade: 'Trade', sheet: 'Character sheet', wardrobe: 'Wardrobe', pause: 'Pause / settings' };
 const RESERVED_KEYS = { a: 1, d: 1, w: 1, s: 1, ' ': 1, shift: 1, escape: 1, arrowleft: 1, arrowright: 1, arrowup: 1, arrowdown: 1, '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1 };
+// world bosses — endgame arenas gated behind N sector-boss clears; each drops a strong set
+const WORLD_BOSSES = {
+  overseer:  { need: 3, setName: 'Overseer', pieces: ['overseer_halo', 'overseer_cape', 'overseer_blade'] },
+  archivist: { need: 5, setName: 'Archivist', pieces: ['archivist_crown', 'archivist_wings', 'archivist_quill'] },
+  sovereign: { need: 7, setName: 'Null Sovereign', pieces: ['sovereign_crown', 'sovereign_mantle', 'sovereign_scepter'] },
+};
 // seasonal / limited events (real-calendar windows). Reward sets only drop while live.
 const EVENTS = [
-  { id: 'solstice', name: 'SOLSTICE SURGE', from: [5, 1], to: [8, 31], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Jun 1 – Aug 31
-  { id: 'winterburn', name: 'WINTERBURN', from: [11, 1], to: [1, 29], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Dec 1 – Feb 29 (wraps year)
+  { id: 'bloomfall', name: 'BLOOMFALL', from: [2, 1], to: [4, 31], set: 'bloom', setName: 'Bloomfall', pieces: ['petal_crown', 'petal_wings', 'bloom_aura'] }, // Mar 1 – May 31
+  { id: 'solstice', name: 'SOLSTICE SURGE', from: [5, 1], to: [8, 30], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Jun 1 – Sep 30
+  { id: 'hallow', name: "HALLOW'S END", from: [9, 1], to: [10, 15], set: 'hallow', setName: "Hallow's End", pieces: ['pumpkin_hat', 'spectre_cloak', 'pumpkin_lantern'] }, // Oct 1 – Nov 15
+  { id: 'winterburn', name: 'WINTERBURN', from: [10, 16], to: [1, 29], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Nov 16 – Feb 29 (wraps)
 ];
 
 /* ---------------- TRADING (Data Broker barter window) ---------------- */
@@ -717,16 +725,17 @@ class Game {
     this.save();
     this.toast("✦ ONE-TIME: Founder's Aureole granted — the permanent mark of an early player. Equip it in the Wardrobe [U].", 'gold');
   }
-  onOverseerDefeated(boss) {
+  onWorldBossDefeated(boss) {
     this.bossDefeatedThisVisit = true;
-    const first = !this.progress.beaten.overseer;
-    this.progress.beaten.overseer = true;
+    const wb = WORLD_BOSSES[boss.id];
+    const first = !this.progress.beaten[boss.id];
+    this.progress.beaten[boss.id] = true;
     this.addShards(first ? 15 : 5);
     this.addXp(500);
     this.spawnGems(boss.x, boss.y, 300);
-    // world-boss loot: the Overseer set (strong)
-    this.grantCosmetic('overseer_halo'); this.grantCosmetic('overseer_cape'); this.grantCosmetic('overseer_blade');
-    this.toast('★★★ THE OVERSEER FALLS — the Overseer world-boss set is yours! (+' + (first ? 15 : 5) + ' ◈)', 'gold');
+    // world-boss loot: its signature set (strong)
+    for (const pid of wb.pieces) this.grantCosmetic(pid);
+    this.toast('★★★ ' + boss.meta.name + ' FALLS — the ' + wb.setName + ' world-boss set is yours! (+' + (first ? 15 : 5) + ' ◈)', 'gold');
     // limited seasonal loot — only while an event is live
     const ev = this.activeEvent();
     if (ev) {
@@ -834,11 +843,11 @@ class Game {
       this.world = World.genSpire();
       this.spire = { wave: 0, betweenT: 4, active: false };
       this.toast('BLACK SPIRE — survive escalating waves. Leave through the exit between waves.', 'warn');
-    } else if (id === 'overseer') {
-      this.world = World.genOverseer();
+    } else if (WORLD_BOSSES[id]) {
+      this.world = id === 'archivist' ? World.genArchivist() : id === 'sovereign' ? World.genSovereign() : World.genOverseer();
       const ev = this.activeEvent();
-      this.toast('⚠ THE OVERSEER — a world boss of another magnitude. Approach to begin the fight.', 'warn');
-      if (ev) this.toast('✦ ' + ev.name + ' EVENT is LIVE — defeat the Overseer now to claim the limited ' + ev.setName + ' set!', 'gold');
+      this.toast('⚠ ' + this.world.name + ' — a world boss of another magnitude. Approach to begin the fight.', 'warn');
+      if (ev) this.toast('✦ ' + ev.name + ' EVENT is LIVE — defeat it now to claim the limited ' + ev.setName + ' set!', 'gold');
     } else if (id === 'rush') {
       this.world = World.genRush();
       this.rush = { stage: 0, timer: 3 };
@@ -903,13 +912,15 @@ class Game {
     const name = this.normalizeWorldName(rawName);
     if (!name) { this.toast('Type a world name to travel there.', 'warn'); return false; }
     if (name === 'home') { this.enterWorld('home'); return true; }
-    // special: the OVERSEER world boss (endgame — gated behind 3 sector bosses)
-    if (name === 'overseer') {
-      if (Object.keys(this.progress.beaten).filter(b => b !== 'overseer').length < 3) {
-        this.toast('THE OVERSEER senses you are not ready. Purge at least 3 corrupted processes first.', 'warn');
+    // special: world bosses (endgame — each gated behind N sector-boss clears)
+    if (WORLD_BOSSES[name]) {
+      const wb = WORLD_BOSSES[name];
+      const sectorKills = Object.keys(this.progress.beaten).filter(b => !WORLD_BOSSES[b]).length;
+      if (sectorKills < wb.need) {
+        this.toast('You are not ready for ' + name.toUpperCase() + '. Purge at least ' + wb.need + ' corrupted processes first.', 'warn');
         return false;
       }
-      this.enterWorld('overseer'); return true;
+      this.enterWorld(name); return true;
     }
     this.progress.visited = this.progress.visited || {};
     this.progress.visited[name] = Date.now();
@@ -1106,7 +1117,7 @@ class Game {
     const [g0, g1] = boss.meta.gems;
     this.spawnGems(boss.x, boss.y, g0 + Math.floor(Math.random() * (g1 - g0)));
     this.addXp(120);
-    if (boss.id === 'overseer') { this.onOverseerDefeated(boss); return; }
+    if (WORLD_BOSSES[boss.id]) { this.onWorldBossDefeated(boss); return; }
     const first = !this.progress.beaten[boss.id];
     if (first) {
       this.progress.beaten[boss.id] = true;

@@ -79,15 +79,18 @@ sectors** wait behind portals, each ending in a boss fight.
   **World Boss** (the Overseer set), and **limited events** (the Frostfire set — only while an event
   is live) plus a permanent **one-time Founder's Aureole**. Everything saves with your character.
 
-### World Boss & live events
-- **THE OVERSEER `[V]` → type "OVERSEER"** — a true **world boss**, unlocked after purging 3 sector
-  bosses. It's another magnitude tougher (4,200 HP, radial bullet-hell rings, aimed volleys, and
-  telegraphed pillars, with an enraged phase). Beat it to claim the **Overseer world-boss set**
-  (halo, cape, greatblade) — some of the strongest cosmetics in the game.
-- **Seasonal / limited events** — real-calendar event windows (e.g. **Solstice Surge** in summer,
-  **Winterburn** in winter). While an event is live, defeating the Overseer also drops that event's
-  **limited set** (the ice-and-fire **Frostfire** gear) — unobtainable once the window closes, so
-  event loot is genuinely rare and among the most powerful in the game.
+### World Bosses & live events
+- **Three world bosses** `[V]` — travel by name to fight escalating endgame bosses, each far tougher
+  than a sector boss and each with a signature bullet-hell moveset, enrage phase, polished
+  rounded/glowing render, and its own powerful cosmetic set:
+  - **THE OVERSEER** (unlock: 3 bosses, 4,200 HP) — radial rings, aimed volleys, pillars → **Overseer set**
+  - **THE ARCHIVIST** (5 bosses, 5,200 HP) — spiralling pages + homing ink → **Archivist set**
+  - **NULL SOVEREIGN** (7 bosses, 6,400 HP) — counter-rotating void rings + gravity wells → **Sovereign set**
+- **Seasonal / limited events** — real-calendar windows that rotate all year: **Bloomfall** (spring),
+  **Solstice Surge** (summer), **Hallow's End** (autumn), **Winterburn** (winter). While an event is
+  live, defeating **any** world boss also drops that event's **limited set** (Bloomfall petals,
+  Frostfire ice-and-fire, Hallow's End pumpkins) — unobtainable once the window closes, so event loot
+  is genuinely rare and among the strongest in the game. Plus a permanent **one-time Founder's Aureole**.
 - **Inventory search & sort** — a search box and a sort selector (type / name / rarity / count)
   in the inventory panel.
 - **Rebindable keys** — every panel/action key can be remapped in the pause menu (movement stays
@@ -325,11 +328,12 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   (wood), or scratches (metal)** — with a **light-from-top-left gradient baked in**, so every block
   reads as a chiseled, directionally-lit 3D surface instead of a flat colour. A generate-graphics-
   in-code system, no image assets.
-- **Smooth, shaded characters**: the player avatar and AI allies are drawn with **rounded
-  silhouettes**, **vertical body/head gradients**, a **left-side rim light** and a soft dark
-  outline, capsule limbs with rounded hands, a glossy visor, and a **soft ground contact shadow** —
-  volume and polish instead of flat rectangles. The wardrobe preview and cosmetic swatches use the
-  same rounded, shaded rendering so the look is consistent everywhere.
+- **Smooth, shaded characters**: the player avatar, AI allies, and **enemies** are drawn with
+  **rounded silhouettes**, **body/head gradients**, a **rim light** and a soft dark outline, capsule
+  limbs with rounded hands, a glossy visor, and a **soft ground contact shadow** — volume and polish
+  instead of flat rectangles. Enemies get radial shading + glossy eyes; every **boss** gets a soft
+  menacing glow and ground shadow. The wardrobe preview and cosmetic swatches use the same rounded,
+  shaded rendering so the look is consistent everywhere.
 - **Volumetric tile shading**: a cached soft form-light + corner ambient-occlusion pass gives
   every block rounded volume instead of a flat fill, with extra contact shadows in concave corners
 - **Sticker-finish icons**: each item icon is 3×-supersampled for smooth source art, rendered at

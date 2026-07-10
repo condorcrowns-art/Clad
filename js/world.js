@@ -1669,20 +1669,22 @@ class World {
     return w;
   }
 
-  static genOverseer() {
-    const w = new World('overseer', 'THE OVERSEER', 96, 40, { sky: ['#050110', '#1a0533'], bgWall: 'rgba(14,4,30,0.92)', dark: 0.85 });
+  static genWorldBoss(id, name, sky, bgWall, ground) {
+    const w = new World(id, name, 96, 40, { sky, bgWall, dark: 0.85 });
     const fy = 30;
-    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? 'obsidian' : 'bedrock');
-    // a couple of floating platforms to dodge on
-    for (const [px, py, pw] of [[20, 24, 6], [70, 24, 6], [45, 20, 6]]) for (let x = 0; x < pw; x++) w.set(px + x, py, 'obsidian');
+    for (let x = 0; x < w.w; x++) for (let y = fy; y < w.h; y++) w.set(x, y, y === fy ? (ground || 'obsidian') : 'bedrock');
+    for (const [px, py, pw] of [[20, 24, 6], [70, 24, 6], [45, 20, 6]]) for (let x = 0; x < pw; x++) w.set(px + x, py, ground || 'obsidian');
     World.frame(w);
     w.spawn = { x: 6 * TS, y: (fy - 2) * TS };
     w.portals.push({ x: 3 * TS, y: fy * TS, target: 'home', label: 'FLEE', color: '#2de2a3' });
-    w.isOverseer = true;
-    w.bossId = 'overseer';
+    w.isWorldBoss = true;
+    w.bossId = id;
     w.bossZone = { x1: 16 * TS, spawnX: (w.w / 2) * TS, spawnY: 16 * TS };
     return w;
   }
+  static genOverseer() { return World.genWorldBoss('overseer', 'THE OVERSEER', ['#050110', '#1a0533'], 'rgba(14,4,30,0.92)', 'obsidian'); }
+  static genArchivist() { return World.genWorldBoss('archivist', 'THE ARCHIVIST', ['#02120e', '#0a3d33'], 'rgba(6,30,24,0.92)', 'marble'); }
+  static genSovereign() { return World.genWorldBoss('sovereign', 'NULL SOVEREIGN', ['#04010a', '#150a33'], 'rgba(10,4,26,0.94)', 'obsidian'); }
 
   static genRush() {
     const w = new World('rush', 'BOSS RUSH', 74, 36, { sky: ['#14020a', '#4a1024'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.4 });

@@ -295,6 +295,14 @@ class Enemy extends Entity {
   draw(ctx, cam, time) {
     const sx = this.x - cam.x, sy = this.y - cam.y;
     const d = this.def;
+    const _rr = (typeof _rrPath === 'function') ? _rrPath : (c, X, Y, w, h) => c.rect(X, Y, w, h);
+    const _sh = (typeof _shade === 'function') ? _shade : (h) => h;
+    // soft ground shadow (grounders only)
+    if (d.ai !== 'flyer') {
+      ctx.save(); ctx.translate(sx, sy + this.h / 2 - 1); ctx.scale(1, 0.4);
+      const gs = ctx.createRadialGradient(0, 0, 1, 0, 0, this.w * 0.7); gs.addColorStop(0, 'rgba(0,0,0,0.28)'); gs.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gs; ctx.beginPath(); ctx.arc(0, 0, this.w * 0.7, 0, 7); ctx.fill(); ctx.restore();
+    }
     ctx.save(); ctx.translate(sx, sy);
     if (this.elite) { // pulsing golden aura + crown
       const pr = this.w * 0.7 + Math.sin(time * 4) * 3;
@@ -307,25 +315,29 @@ class Enemy extends Entity {
     if (this.hitFlash > 0) ctx.filter = 'brightness(2.5)';
     const wob = Math.sin(this.t * 8) * 2;
     if (d.ai === 'flyer') {
-      ctx.fillStyle = d.color;
-      ctx.fillRect(-this.w / 2, -this.h / 2 + wob, this.w, this.h - 6);
-      ctx.fillStyle = d.color2;
-      ctx.fillRect(-4, -this.h / 2 + 4 + wob, 8, 6);
+      // rounded shaded chassis with a rim light
+      const bg = ctx.createLinearGradient(0, -this.h / 2 + wob, 0, this.h / 2 - 6 + wob);
+      bg.addColorStop(0, _sh(d.color, 0.25)); bg.addColorStop(1, _sh(d.color, -0.25));
+      ctx.fillStyle = bg; _rr(ctx, -this.w / 2, -this.h / 2 + wob, this.w, this.h - 6, 4); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = 1; _rr(ctx, -this.w / 2, -this.h / 2 + wob, this.w, this.h - 6, 4); ctx.stroke();
+      ctx.fillStyle = d.color2; _rr(ctx, -4, -this.h / 2 + 4 + wob, 8, 6, 2); ctx.fill();
       // rotor
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       const rw = Math.abs(Math.sin(this.t * 20)) * this.w;
-      ctx.fillRect(-rw / 2, -this.h / 2 - 4 + wob, rw, 3);
+      _rr(ctx, -rw / 2, -this.h / 2 - 4 + wob, rw, 3, 1.5); ctx.fill();
     } else {
-      // blobby glitch creature
-      ctx.fillStyle = d.color;
-      ctx.beginPath(); ctx.arc(0, wob * 0.5, this.w / 2, 0, 7); ctx.fill();
-      ctx.fillStyle = d.color2;
-      ctx.fillRect(-this.w / 2 + 2, -2 + wob * 0.5, this.w - 4, 4);
-      // eyes
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(this.dir * 4 - 5, -8 + wob * 0.5, 5, 5); ctx.fillRect(this.dir * 4 + 2, -8 + wob * 0.5, 5, 5);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(this.dir * 4 - 4 + this.dir, -7 + wob * 0.5, 3, 3); ctx.fillRect(this.dir * 4 + 3 + this.dir, -7 + wob * 0.5, 3, 3);
+      // blobby glitch creature — radial shading + soft outline
+      const r = this.w / 2, cyy = wob * 0.5;
+      const bg = ctx.createRadialGradient(-r * 0.3, cyy - r * 0.3, 1, 0, cyy, r);
+      bg.addColorStop(0, _sh(d.color, 0.28)); bg.addColorStop(1, _sh(d.color, -0.22));
+      ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(0, cyy, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(0, cyy, r, 0, 7); ctx.stroke();
+      ctx.fillStyle = _sh(d.color2, -0.05); _rr(ctx, -this.w / 2 + 2, -2 + cyy, this.w - 4, 4, 2); ctx.fill();
+      // eyes (rounded, with a highlight)
+      for (const ex of [this.dir * 4 - 2.5, this.dir * 4 + 4.5]) {
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex, -6 + cyy, 2.6, 0, 7); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ex + this.dir * 0.6, -6 + cyy, 1.5, 0, 7); ctx.fill();
+      }
     }
     // distinctive markers for the new enemy types
     if (d.frontShield) { // shielder plate on facing side
