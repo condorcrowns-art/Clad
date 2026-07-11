@@ -165,6 +165,7 @@ const WORLD_BOSSES = {
   overseer:  { need: 3, setName: 'Overseer', pieces: ['overseer_halo', 'overseer_cape', 'overseer_blade'] },
   archivist: { need: 5, setName: 'Archivist', pieces: ['archivist_crown', 'archivist_wings', 'archivist_quill'] },
   sovereign: { need: 7, setName: 'Null Sovereign', pieces: ['sovereign_crown', 'sovereign_mantle', 'sovereign_scepter'] },
+  omega: { needWorld: true, setName: 'Omega', pieces: ['omega_crown', 'omega_wings', 'omega_blade'] },
 };
 // seasonal / limited events (real-calendar windows). Reward sets only drop while live.
 const EVENTS = [
@@ -975,7 +976,7 @@ class Game {
       this.spire = { wave: 0, betweenT: 4, active: false };
       this.toast('BLACK SPIRE — survive escalating waves. Leave through the exit between waves.', 'warn');
     } else if (WORLD_BOSSES[id]) {
-      this.world = id === 'archivist' ? World.genArchivist() : id === 'sovereign' ? World.genSovereign() : World.genOverseer();
+      this.world = id === 'omega' ? World.genOmega() : id === 'archivist' ? World.genArchivist() : id === 'sovereign' ? World.genSovereign() : World.genOverseer();
       const ev = this.activeEvent();
       this.toast('⚠ ' + this.world.name + ' — a world boss of another magnitude. Approach to begin the fight.', 'warn');
       if (ev) this.toast('✦ ' + ev.name + ' EVENT is LIVE — defeat it now to claim the limited ' + ev.setName + ' set!', 'gold');
@@ -1043,13 +1044,21 @@ class Game {
     const name = this.normalizeWorldName(rawName);
     if (!name) { this.toast('Type a world name to travel there.', 'warn'); return false; }
     if (name === 'home') { this.enterWorld('home'); return true; }
-    // special: world bosses (endgame — each gated behind N sector-boss clears)
+    // special: world bosses (endgame — each gated behind N sector-boss clears, or all world bosses for OMEGA)
     if (WORLD_BOSSES[name]) {
       const wb = WORLD_BOSSES[name];
-      const sectorKills = Object.keys(this.progress.beaten).filter(b => !WORLD_BOSSES[b]).length;
-      if (sectorKills < wb.need) {
-        this.toast('You are not ready for ' + name.toUpperCase() + '. Purge at least ' + wb.need + ' corrupted processes first.', 'warn');
-        return false;
+      if (wb.needWorld) {
+        const others = Object.keys(WORLD_BOSSES).filter(b => b !== name && !WORLD_BOSSES[b].needWorld);
+        if (!others.every(b => this.progress.beaten[b])) {
+          this.toast('OMEGA.EXE is sealed. Defeat the OVERSEER, ARCHIVIST and NULL SOVEREIGN first.', 'warn');
+          return false;
+        }
+      } else {
+        const sectorKills = Object.keys(this.progress.beaten).filter(b => !WORLD_BOSSES[b]).length;
+        if (sectorKills < wb.need) {
+          this.toast('You are not ready for ' + name.toUpperCase() + '. Purge at least ' + wb.need + ' corrupted processes first.', 'warn');
+          return false;
+        }
       }
       this.enterWorld(name); return true;
     }
@@ -1717,8 +1726,26 @@ class Game {
     this.fx.draw(ctx, cam);
     this.postProcess(ctx, cam);   // bloom over the world + effects (before HUD overlays)
     this.drawMinimap(ctx);
+    this.drawBuffBadge(ctx);
     this.drawCursor(ctx, cam);
     this.drawScreenFx(ctx, cam);
+  }
+
+  // active-buff HUD badge (consumable food/drink timers), under the HP bar
+  drawBuffBadge(ctx) {
+    if (!this.buffActive()) return;
+    const b = this.buff, rem = Math.max(0, b.until - this.time);
+    const label = b.gem ? '☘ +50% gems' : (b.speed >= 2 ? '⚡ ADRENALINE' : '⚡ +' + Math.round((b.dmg - 1) * 100) + '% dmg/spd');
+    const col = b.gem ? '#3ddc84' : (b.speed >= 2 ? '#ff4d6d' : '#ff9e6d');
+    ctx.save();
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
+    const txt = label + '  ' + rem.toFixed(0) + 's';
+    const w = ctx.measureText(txt).width + 16, x = 16, y = 44;
+    ctx.fillStyle = 'rgba(8,12,24,0.78)';
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, 20, 6) : ctx.rect(x, y, w, 20); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = col; ctx.fillText(txt, x + 8, y + 14);
+    ctx.restore();
   }
 
   // additive bloom: bright-pass the frame at half-res, blur it, add it back so

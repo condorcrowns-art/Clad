@@ -1713,6 +1713,7 @@ class World {
   static genOverseer() { return World.genWorldBoss('overseer', 'THE OVERSEER', ['#050110', '#1a0533'], 'rgba(14,4,30,0.92)', 'obsidian'); }
   static genArchivist() { return World.genWorldBoss('archivist', 'THE ARCHIVIST', ['#02120e', '#0a3d33'], 'rgba(6,30,24,0.92)', 'marble'); }
   static genSovereign() { return World.genWorldBoss('sovereign', 'NULL SOVEREIGN', ['#04010a', '#150a33'], 'rgba(10,4,26,0.94)', 'obsidian'); }
+  static genOmega() { return World.genWorldBoss('omega', 'OMEGA.EXE', ['#00110c', '#053d2c'], 'rgba(4,26,18,0.94)', 'obsidian'); }
 
   static genRush() {
     const w = new World('rush', 'BOSS RUSH', 74, 36, { sky: ['#14020a', '#4a1024'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.4 });

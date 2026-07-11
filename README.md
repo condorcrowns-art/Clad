@@ -91,6 +91,8 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Daily quests** — a rotating trio of daily objectives (Demolition, Purge, Splicer, Builder,
   Angler, Gardener, Harvester) that reset each real day, each paying shards, with a bonus for
   clearing all three — shown above the story quests in the Quests panel `[Q]`.
+- **Active-buff HUD badge** — when a consumable food/drink buff is running (Overclock Cola, Lucky
+  Soda, Adrenaline Shot…), a small badge under the HP bar shows the buff and its remaining seconds.
 - **Login reward calendar** — a **7-day streak track** that pops on your first login each day:
   claim escalating rewards (gems → shards → medkits → a big day-7 payout), with a streak counter
   that resets if you skip a day — the classic live-service login calendar.
@@ -112,6 +114,9 @@ sectors** wait behind portals, each ending in a boss fight.
   - **THE OVERSEER** (unlock: 3 bosses, 4,200 HP) — radial rings, aimed volleys, pillars → **Overseer set**
   - **THE ARCHIVIST** (5 bosses, 5,200 HP) — spiralling pages + homing ink → **Archivist set**
   - **NULL SOVEREIGN** (7 bosses, 6,400 HP) — counter-rotating void rings + gravity wells → **Sovereign set**
+  - **OMEGA.EXE** (all 3 world bosses, 9,000 HP) — the final boss: **three escalating phases** with
+    denser bullet rings, **minion swarms**, and phase-3 pillars → the **mythic Omega set** (the
+    strongest cosmetics in the game, +50% boss damage / +20% resist as a set)
 - **Seasonal / limited events** — real-calendar windows that rotate all year: **Bloomfall** (spring),
   **Solstice Surge** (summer), **Hallow's End** (autumn), **Winterburn** (winter). While an event is
   live, defeating **any** world boss also drops that event's **limited set** (Bloomfall petals,

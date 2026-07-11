@@ -1268,6 +1268,31 @@ const COSMETICS = [
     x.fillStyle = '#1a0533'; x.beginPath(); x.arc(0, -18, 4, 0, 7); x.fill(); x.strokeStyle = '#6ee7ff'; x.lineWidth = 1.4; x.beginPath(); x.arc(0, -18, 4, 0, 7); x.stroke(); x.restore();
   } },
 
+  // ===== FINAL WORLD-BOSS LOOT — the "Omega" mythic set (strongest in the game) =====
+  { id: 'omega_crown', slot: 'hat', name: 'Omega Crown', src: 'world', set: 'omega', pw: 18, desc: 'The crown of the final process. Dropped by OMEGA.EXE.', draw: (x, f, t) => {
+    const tt = (t || 0), g = 0.6 + 0.4 * Math.sin(tt * 4);
+    x.save(); x.shadowColor = '#2de2a3'; x.shadowBlur = 12 * g;
+    x.strokeStyle = '#2de2a3'; x.lineWidth = 2.5; x.beginPath(); x.arc(0, -34, 8, Math.PI * 0.7, Math.PI * 2.3); x.stroke();
+    x.fillStyle = '#ffd166'; for (let i = -1; i <= 1; i++) { x.beginPath(); x.arc(i * 6, -42, 1.6, 0, 7); x.fill(); }
+    x.fillStyle = '#ff2e63'; x.beginPath(); x.arc(0, -34, 1.6, 0, 7); x.fill(); x.restore();
+  } },
+  { id: 'omega_wings', slot: 'back', name: 'Omega Wings', src: 'world', set: 'omega', pw: 18, desc: 'Wings of pure runtime. Dropped by OMEGA.EXE.', draw: (x, f, t) => {
+    const tt = (t || 0), fl = 1 + 0.12 * Math.sin(tt * 4);
+    for (const s of [-1, 1]) {
+      x.save(); x.scale(s * fl, 1); x.shadowColor = '#2de2a3'; x.shadowBlur = 8;
+      const g = x.createLinearGradient(6, -18, 24, 6); g.addColorStop(0, '#6effc0'); g.addColorStop(1, '#0d2a22');
+      x.fillStyle = g; x.beginPath(); x.moveTo(7, -10); x.lineTo(26, -20); x.lineTo(22, -6); x.lineTo(28, -2); x.lineTo(20, 2); x.lineTo(24, 9); x.lineTo(7, 2); x.closePath(); x.fill();
+      x.restore();
+    }
+  } },
+  { id: 'omega_blade', slot: 'hand', name: 'Omega Edge', src: 'world', set: 'omega', pw: 18, desc: 'A blade that ends processes. Dropped by OMEGA.EXE.', draw: (x, f, t) => {
+    x.save(); x.rotate(-0.12);
+    x.fillStyle = '#20242e'; x.fillRect(-2, 2, 4, 9); x.fillStyle = '#ffd166'; x.fillRect(-5, 0, 10, 2.5);
+    const g = 0.5 + 0.5 * Math.sin((t || 0) * 5); x.save(); x.shadowColor = '#2de2a3'; x.shadowBlur = 11 * g;
+    const bg = x.createLinearGradient(0, -28, 0, 0); bg.addColorStop(0, '#eafff6'); bg.addColorStop(1, '#2de2a3');
+    x.fillStyle = bg; x.beginPath(); x.moveTo(-2.5, 0); x.lineTo(2.5, 0); x.lineTo(1.5, -28); x.lineTo(0, -32); x.lineTo(-1.5, -28); x.closePath(); x.fill(); x.restore(); x.restore();
+  } },
+
   // ===== EVENT — HALLOW'S END (October only), set 'hallow' =====
   { id: 'pumpkin_hat', slot: 'hat', name: "Jack-o'-Topper", src: 'event', set: 'hallow', desc: "LIMITED — a grinning pumpkin. Hallow's End event.", draw: (x, f, t) => {
     const g = 0.6 + 0.4 * Math.sin((t || 0) * 3); x.save(); x.shadowColor = '#ff8a00'; x.shadowBlur = 7 * g;
@@ -1335,6 +1360,7 @@ const COSMO_SETS = {
   overseer:  { name: 'Overseer', need: 3, dmg: 0.30, reduce: 0.12, desc: '+30% boss damage · +12% resist' },
   archivist: { name: 'Archivist', need: 3, dmg: 0.34, reduce: 0.14, desc: '+34% boss damage · +14% resist' },
   sovereign: { name: 'Null Sovereign', need: 3, dmg: 0.40, reduce: 0.16, desc: '+40% boss damage · +16% resist' },
+  omega: { name: 'Omega', need: 3, dmg: 0.50, reduce: 0.20, desc: '+50% boss damage · +20% resist' },
   frostfire: { name: 'Frostfire', need: 3, dmg: 0.35, reduce: 0.08, desc: '+35% boss damage · +8% resist' },
   hallow:    { name: "Hallow's End", need: 3, dmg: 0.38, reduce: 0.10, desc: '+38% boss damage · +10% resist' },
   bloom:     { name: 'Bloomfall', need: 3, dmg: 0.32, reduce: 0.14, desc: '+32% boss damage · +14% resist' },

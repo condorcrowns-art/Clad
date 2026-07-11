@@ -15,6 +15,7 @@ const BOSS_META = {
   overseer:        { name: 'THE OVERSEER', hp: 4200, gems: [900, 1400], drops: [] },
   archivist:       { name: 'THE ARCHIVIST', hp: 5200, gems: [1100, 1700], drops: [] },
   sovereign:       { name: 'NULL SOVEREIGN', hp: 6400, gems: [1400, 2100], drops: [] },
+  omega:           { name: 'OMEGA.EXE', hp: 9000, gems: [2200, 3200], drops: [] },
 };
 
 class Boss extends Entity {
@@ -941,11 +942,97 @@ class NullSovereign extends Boss {
   }
 }
 
+/* ============ FINAL WORLD BOSS — OMEGA.EXE (three phases + minion swarms) ============ */
+class OmegaBoss extends Boss {
+  constructor(x, y) {
+    super('omega', x, y, 140, 140);
+    this.homeX = x; this.homeY = y; this.contactDmg = 44;
+    this.phase = 1; this.ringT = 2; this.aimT = 1.4; this.summonT = 6; this.pillarT = 5; this.spin = 0;
+  }
+  update(dt, world, game) {
+    this.baseUpdate(dt);
+    const p = game.player;
+    // phase gates at 66% / 33%
+    const wantPhase = this.hp > this.maxHp * 0.66 ? 1 : this.hp > this.maxHp * 0.33 ? 2 : 3;
+    if (wantPhase > this.phase) {
+      this.phase = wantPhase; this.contactDmg = 40 + this.phase * 8;
+      game.sfx.play('bossroar'); game.shake = 0.7;
+      game.toast('OMEGA.EXE escalates to PHASE ' + this.phase + '!', 'warn');
+    }
+    const spd = 1 + this.phase * 0.25;
+    this.spin += dt * (0.8 + this.phase * 0.5);
+    this.homeX += Math.sign(p.x - this.homeX) * 26 * spd * dt;
+    this.x = this.homeX + Math.sin(this.t * 0.8) * 110;
+    this.y = this.homeY + Math.sin(this.t * 1.5) * 34;
+    // A) radial rings (denser each phase)
+    this.ringT -= dt;
+    if (this.ringT <= 0) {
+      this.ringT = Math.max(1.2, 3 - this.phase * 0.5);
+      const n = 8 + this.phase * 5;
+      for (let i = 0; i < n; i++) { const a = this.spin + i * 2 * Math.PI / n; game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 240, Math.sin(a) * 240, 16, false, '#2de2a3', { r: 8, life: 4.2 })); }
+      game.sfx.play('eshoot');
+    }
+    // B) aimed volleys
+    this.aimT -= dt;
+    if (this.aimT <= 0) {
+      this.aimT = Math.max(0.8, 1.8 - this.phase * 0.3);
+      const spread = this.phase + 1;
+      for (let i = 0; i < spread; i++) { const a = Math.atan2(p.y - this.y, p.x - this.x) + (i - (spread - 1) / 2) * 0.22; game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 400, Math.sin(a) * 400, 18, false, '#ff2e63', { r: 7, life: 3 })); }
+    }
+    // C) summon minions (phase 2+), capped
+    this.summonT -= dt;
+    if (this.summonT <= 0 && this.phase >= 2) {
+      this.summonT = this.phase >= 3 ? 5 : 8;
+      const live = game.enemies.filter(e => !e.dead).length;
+      if (live < 10) {
+        const types = ['glitchling', 'drone', 'zapper'];
+        for (let i = 0; i < this.phase; i++) { const tp = types[Math.floor(Math.random() * types.length)]; game.enemies.push(new Enemy(tp, this.x + (Math.random() - 0.5) * 120, this.y + 40, 6)); }
+        game.toast('OMEGA.EXE spawns corrupted processes!', 'warn');
+      }
+    }
+    // D) pillars (phase 3)
+    this.pillarT -= dt;
+    if (this.pillarT <= 0 && this.phase >= 3) {
+      this.pillarT = 3.2;
+      for (const px of [p.x - TS * 5, p.x, p.x + TS * 5]) game.hazards.push(new FirePillar(px, 0.85));
+    }
+    this.contact(game, dt);
+  }
+  draw(ctx, cam, time) {
+    const sx = this.x - cam.x, sy = this.y - cam.y;
+    ctx.save(); ctx.translate(sx, sy);
+    if (this.hitFlash > 0) ctx.filter = 'brightness(2.2)';
+    const cols = ['#2de2a3', '#ffd166', '#ff2e63'];
+    const col = cols[this.phase - 1] || '#2de2a3';
+    // multi-ring halo
+    const gl = ctx.createRadialGradient(0, 0, 10, 0, 0, 100); gl.addColorStop(0, 'rgba(45,226,163,0.4)'); gl.addColorStop(1, 'rgba(45,226,163,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 100, 0, 7); ctx.fill();
+    for (let r = 0; r < this.phase; r++) {
+      ctx.save(); ctx.rotate(this.spin * (r % 2 ? -1 : 1) + r);
+      ctx.strokeStyle = cols[r]; ctx.lineWidth = 3; ctx.globalAlpha = 0.85;
+      for (let i = 0; i < 10; i++) { const a = i * 2 * Math.PI / 10; ctx.beginPath(); ctx.arc(0, 0, 58 + r * 10, a, a + 0.3); ctx.stroke(); }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    // core — a glowing omega glyph
+    const bg = ctx.createRadialGradient(0, -6, 6, 0, 0, 50); bg.addColorStop(0, '#0d2a22'); bg.addColorStop(1, '#02100b');
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(0, 0, 48, 0, 7); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 48, 0, 7); ctx.stroke();
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 12 + 5 * Math.sin(time * 4);
+    ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0, -4, 20, Math.PI * 0.75, Math.PI * 2.25); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-14, 20); ctx.lineTo(-6, 12); ctx.moveTo(14, 20); ctx.lineTo(6, 12); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+  }
+}
+
 function spawnBoss(id, x, y) {
   switch (id) {
     case 'overseer': return new Overseer(x, y);
     case 'archivist': return new Archivist(x, y);
     case 'sovereign': return new NullSovereign(x, y);
+    case 'omega': return new OmegaBoss(x, y);
     case 'firewall_daemon': return new FirewallDaemon(x, y);
     case 'null_wurm': return new NullWurm(x, y);
     case 'kraken': return new KrakenBoss(x, y);
