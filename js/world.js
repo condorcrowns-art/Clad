@@ -1402,6 +1402,41 @@ class World {
         x.fillStyle = '#6b7688'; x.fillRect(cx - 5, sy + TS - 4, 10, 4); // stand
         break;
       }
+      case 'jukebox': {
+        x.fillStyle = '#7a1020'; x.fillRect(sx + 5, sy + 3, TS - 10, TS - 4);
+        x.fillStyle = '#e63946'; x.fillRect(sx + 6, sy + 3, TS - 12, 8);
+        const b = 0.5 + 0.5 * Math.sin(t * 4);
+        x.fillStyle = 'rgba(255,209,102,' + b + ')'; x.fillRect(sx + 8, sy + 5, TS - 16, 4); // display
+        for (let i = 0; i < 4; i++) { x.fillStyle = ['#ff4d6d', '#ffd166', '#3ddc84', '#6ee7ff'][i]; const h = 3 + Math.abs(Math.sin(t * 6 + i)) * 6; x.fillRect(sx + 9 + i * 4, sy + TS - 4 - h, 2.5, h); }
+        break;
+      }
+      case 'aquarium': {
+        x.fillStyle = '#0a3d52'; x.fillRect(sx + 4, sy + 4, TS - 8, TS - 8);
+        x.fillStyle = 'rgba(120,200,240,0.55)'; x.fillRect(sx + 5, sy + 5, TS - 10, TS - 10);
+        const fx = cx + Math.sin(t * 1.5) * 7, dir = Math.cos(t * 1.5) > 0 ? 1 : -1;
+        x.fillStyle = '#ff9e40'; x.beginPath(); x.ellipse(fx, sy + 15, 3.5, 2.4, 0, 0, 7); x.fill();
+        x.beginPath(); x.moveTo(fx - dir * 3.5, sy + 15); x.lineTo(fx - dir * 6, sy + 13); x.lineTo(fx - dir * 6, sy + 17); x.fill();
+        for (let i = 0; i < 3; i++) { const by = sy + TS - 6 - ((t * 14 + i * 9) % (TS - 10)); x.fillStyle = 'rgba(255,255,255,0.5)'; x.beginPath(); x.arc(sx + 9 + i * 5, by, 1.2, 0, 7); x.fill(); }
+        x.strokeStyle = '#3a5a6a'; x.lineWidth = 2; x.strokeRect(sx + 4, sy + 4, TS - 8, TS - 8);
+        break;
+      }
+      case 'arcade_cab': {
+        x.fillStyle = '#2a1e55'; x.fillRect(sx + 5, sy + 2, TS - 10, TS - 2);
+        x.fillStyle = '#0d1526'; x.fillRect(sx + 7, sy + 5, TS - 14, 10); // screen
+        const s = Math.floor(t * 4) % 2;
+        x.fillStyle = s ? '#6ee7ff' : '#c77dff'; for (let i = 0; i < 3; i++) x.fillRect(sx + 9 + i * 5, sy + 7 + ((i + s) % 2) * 4, 3, 3);
+        x.fillStyle = '#ff4d6d'; x.beginPath(); x.arc(sx + 11, sy + TS - 6, 2, 0, 7); x.fill();
+        x.fillStyle = '#3ddc84'; x.beginPath(); x.arc(sx + 17, sy + TS - 6, 2, 0, 7); x.fill();
+        break;
+      }
+      case 'disco_ball': {
+        x.save(); x.translate(cx, sy + 13);
+        x.fillStyle = '#9aa7bd'; x.beginPath(); x.arc(0, 0, 8, 0, 7); x.fill();
+        for (let i = 0; i < 8; i++) { const a = t * 3 + i * 0.8; x.fillStyle = 'hsl(' + ((t * 90 + i * 45) % 360) + ',85%,65%)'; x.globalAlpha = 0.4 + 0.4 * Math.sin(t * 5 + i); x.fillRect(Math.cos(a) * 6 - 1.5, Math.sin(a) * 6 - 1.5, 3, 3); }
+        x.globalAlpha = 1; x.restore();
+        x.strokeStyle = '#6b7688'; x.lineWidth = 1; x.beginPath(); x.moveTo(cx, sy + 2); x.lineTo(cx, sy + 5); x.stroke();
+        break;
+      }
       case 'painting':
         x.fillStyle = '#3a6ea5'; x.fillRect(sx + 6, sy + 6, TS - 12, TS - 12);
         x.fillStyle = '#57904a'; x.fillRect(sx + 6, sy + TS - 14, TS - 12, 8);

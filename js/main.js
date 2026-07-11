@@ -102,6 +102,7 @@ const STORE = [
   { id: 'gems_big', name: 'Chest of Gems', desc: '+2,500 gems', cost: 20, give: (g) => g.addGems(2500) },
   { id: 'lock_bundle', name: 'World Lock ×3', desc: 'found 3 worlds', cost: 30, give: (g) => g.player.give('world_lock', 3) },
   { id: 'buy_mannequin', name: 'Outfit Mannequin ×2', desc: 'DECOR: place a mannequin that wears your current outfit', cost: 6, give: (g) => g.player.give('mannequin', 2) },
+  { id: 'buy_gamehaus', name: 'Game Room Pack', desc: 'DECOR: Jukebox + Arcade Cabinet + Aquarium + Disco Ball', cost: 12, give: (g) => { g.player.give('jukebox', 1); g.player.give('arcade_cab', 1); g.player.give('aquarium', 1); g.player.give('disco_ball', 1); } },
   { id: 'xp_boost', name: 'XP Surge', desc: '+2000 XP instantly', cost: 8, give: (g) => g.addXp(2000) },
   { id: 'ally_pass', name: 'Hire a Comrade', desc: 'summon an AI ally that fights beside you', cost: 25, give: (g) => g.summonCompanion() },
   { id: 'starter', name: 'Starter Pack', desc: 'jetpack + sword + 3 medkits + 300 gems', cost: 15, once: true, give: (g) => { g.player.give('jetpack', 1); g.player.give('sword', 1); g.player.give('medkit', 3); g.addGems(300); } },
@@ -145,6 +146,14 @@ const EMOTES = [
   { id: 'cry', name: 'Cry', emoji: '😢', dur: 1.8 },
   { id: 'angry', name: 'Angry', emoji: '😡', dur: 1.6 },
   { id: 'sit', name: 'Sit', emoji: '🪑', dur: 3.5 },
+  { id: 'flex', name: 'Flex', emoji: '💪', dur: 1.8 },
+  { id: 'salute', name: 'Salute', emoji: '🫡', dur: 1.6 },
+  { id: 'think', name: 'Think', emoji: '🤔', dur: 2.0 },
+  { id: 'sleep', name: 'Sleep', emoji: '😴', dur: 3.5 },
+  { id: 'facepalm', name: 'Facepalm', emoji: '🤦', dur: 1.8 },
+  { id: 'cool', name: 'Cool', emoji: '😎', dur: 1.8 },
+  { id: 'shrug', name: 'Shrug', emoji: '🤷', dur: 1.6 },
+  { id: 'spin', name: 'Spin', emoji: '🌀', dur: 1.8 },
 ];
 const EMOTES_MAP = {}; for (const e of EMOTES) EMOTES_MAP[e.id] = e;
 // earnable player titles shown on the nameplate (Growtopia titles)

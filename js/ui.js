@@ -67,6 +67,11 @@ const ui = {
       b.addEventListener('mousedown', e => e.stopPropagation());
       b.addEventListener('click', () => { if (game.player) game.doAction(b.dataset.act); });
     });
+    // tactile click blip on panel action buttons (close/dock have their own open/close blips)
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest && e.target.closest('.panel button');
+      if (b && !b.classList.contains('panelClose') && game.sfx) game.sfx.play('uiTick');
+    });
     // close (✕) button on every closable panel header
     document.querySelectorAll('.panel:not(#defragPanel) .panelTitle').forEach(t => {
       const x = document.createElement('button'); x.className = 'panelClose'; x.textContent = '✕'; x.title = 'close';

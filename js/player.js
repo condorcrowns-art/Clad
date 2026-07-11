@@ -796,11 +796,12 @@ class Player extends Entity {
     // emote pose — animate the whole avatar
     if (this.emote) {
       const et = this.emote.t;
-      if (this.emote.id === 'dance') { ctx.rotate(Math.sin(et * 9) * 0.16); ctx.translate(0, -Math.abs(Math.sin(et * 9)) * 3); }
-      else if (this.emote.id === 'cheer' || this.emote.id === 'wave' || this.emote.id === 'love') ctx.translate(0, -Math.abs(Math.sin(et * 8)) * 4);
-      else if (this.emote.id === 'sit') ctx.translate(0, 9);
-      else if (this.emote.id === 'angry') ctx.translate(Math.sin(et * 32) * 1.6, 0);
-      else if (this.emote.id === 'cry' || this.emote.id === 'laugh') ctx.translate(Math.sin(et * 22) * 1.2, 0);
+      const eid = this.emote.id;
+      if (eid === 'dance' || eid === 'spin') { ctx.rotate(Math.sin(et * 9) * 0.16); ctx.translate(0, -Math.abs(Math.sin(et * 9)) * 3); }
+      else if (eid === 'cheer' || eid === 'wave' || eid === 'love' || eid === 'flex' || eid === 'salute') ctx.translate(0, -Math.abs(Math.sin(et * 8)) * 4);
+      else if (eid === 'sit' || eid === 'sleep') ctx.translate(0, 9);
+      else if (eid === 'angry' || eid === 'facepalm') ctx.translate(Math.sin(et * 32) * 1.6, 0);
+      else if (eid === 'cry' || eid === 'laugh') ctx.translate(Math.sin(et * 22) * 1.2, 0);
     }
     const _cw = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || null;
     const _dyes = (typeof game !== 'undefined' && game.progress && game.progress.dyes) || {};

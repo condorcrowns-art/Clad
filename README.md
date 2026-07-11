@@ -77,9 +77,9 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Event calendar** — the wardrobe shows the full rotating event schedule (Bloomfall · Solstice ·
   Hallow's End · Winterburn) with the currently-live event highlighted, so you always know which
   limited set is dropping.
-- **Emotes `[O]`** — a Growtopia/Pixel-Worlds-style gesture wheel: **Wave, Dance, Cheer, Laugh,
-  Love, Cry, Angry, Sit**. Your avatar animates (hops, sways, sits, shakes) with an emoji speech
-  bubble floating above your head.
+- **Emotes `[O]`** — a Growtopia/Pixel-Worlds-style gesture wheel with **16 emotes** (Wave, Dance,
+  Cheer, Laugh, Love, Cry, Angry, Sit, Flex, Salute, Think, Sleep, Facepalm, Cool, Shrug, Spin).
+  Your avatar animates (hops, sways, sits, shakes, spins) with an emoji speech bubble above your head.
 - **Player titles** — earn titles by playing (**Boss Slayer, Master Splicer, Fashionista, the
   Tycoon, Guild Master, the Purifier, World-Ender, Founder**) and wear one on your **nameplate**;
   pick your active title in the Character sheet `[J]`.
@@ -346,6 +346,9 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **Titles** — earnable nameplate titles (Boss Slayer, Fashionista, the Tycoon, World-Ender…),
   chosen in the Character sheet.
 - **Outfit mannequins** — display blocks that wear your current dyed outfit, for showing off builds.
+- **Animated "game room" décor** — a Jukebox with dancing equalizer bars, an Arcade Cabinet with a
+  flickering screen, a bubbling Aquarium with a swimming fish, and a spinning Disco Ball that
+  scatters colour (Game Room Pack in the Shard Store).
 
 **Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
 trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side
@@ -355,7 +358,7 @@ have. Everything that *can* work single-player from the Growtopia/Pixel Worlds f
 ### Presentation & building feel
 - **Clean HUD split & UI sounds**: the top HUD reads as two clusters — vitals (level + XP + HP) on
   the left, currency chips (◆ gems · ◈ shards) and the world name on the right — and every panel
-  open/close plays a soft UI blip for tactile feedback.
+  open/close plays a soft UI blip, with a tactile click tick on panel buttons.
 - **On-screen nav dock**: a right-side column of labelled icon buttons opens every panel — Bag,
   Wear, Emote, Splice, Quests, Shop, Store, Trade, Guild, Skills, Hero, Worlds, Awards, Menu — so
   nothing needs a memorized hotkey. The button for the open panel highlights, and you can jump
