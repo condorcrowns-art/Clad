@@ -410,6 +410,23 @@ const ui = {
   renderQuests() {
     const list = this.el.questList;
     list.innerHTML = '';
+    // daily quests — a rotating set that resets each real day
+    if (typeof DAILY_MAP !== 'undefined' && game.progress.daily && game.progress.daily.tasks) {
+      const dh = document.createElement('div'); dh.className = 'questDaily';
+      dh.textContent = '☀ DAILY QUESTS — reset tomorrow' + (game.progress.daily.allDone ? ' · ALL DONE ✔' : '');
+      list.appendChild(dh);
+      for (const task of game.progress.daily.tasks) {
+        const t = DAILY_MAP[task.tid]; if (!t) continue;
+        const prog = game.dailyProgress(task);
+        const d = document.createElement('div');
+        d.className = 'questRow' + (task.done ? ' claimed' : (prog >= t.goal ? ' done' : ''));
+        d.innerHTML = '<div class="questInfo"><div class="questName">' + t.name + '</div><div class="questDesc">Daily · reward: ◈ ' + (t.reward.shards || 0) + ' shards</div></div>' +
+          '<div class="questProg">' + prog + '/' + t.goal + '</div>' + (task.done ? '<span class="questGot">✔</span>' : '');
+        list.appendChild(d);
+      }
+      const sep = document.createElement('div'); sep.className = 'questDaily'; sep.style.marginTop = '10px'; sep.textContent = '◆ STORY QUESTS';
+      list.appendChild(sep);
+    }
     for (const q of QUESTS) {
       const claimed = game.progress.quests[q.id];
       const prog = game.questProgress(q);
@@ -663,11 +680,12 @@ const ui = {
       '<div class="wrWornList">' + (worn.length ? worn.join(' · ') : 'Nothing equipped') + '</div>' +
       statLine + evLine +
       '<div class="wrCollect">Collection: ' + ownedCount + ' / ' + COSMETICS.length + ' cosmetics</div>' +
-      '<div class="wrTools"><button class="wrTool" id="wrRandom">🎲 Randomize</button><button class="wrTool" id="wrClear">✖ Clear all</button></div>';
+      '<div class="wrTools"><button class="wrTool" id="wrRandom">🎲 Randomize</button><button class="wrTool" id="wrClear">✖ Clear all</button><button class="wrTool wrChest" id="wrChest">🎁 Mystery Chest ◈' + game.mysteryChestCost() + '</button></div>';
     preview.appendChild(cap);
     b.appendChild(preview);
     cap.querySelector('#wrRandom').addEventListener('click', () => game.randomizeWardrobe());
     cap.querySelector('#wrClear').addEventListener('click', () => game.clearWardrobe());
+    cap.querySelector('#wrChest').addEventListener('click', () => { game.openMysteryChest(); this.updateHUD(); });
 
     // 🎨 Dye studio — recolour any worn piece via a per-slot hue shift
     const dyes = game.progress.dyes || {};
@@ -748,7 +766,7 @@ const ui = {
         const owned = game.ownsCosmetic(c.id);
         const worn = wr[s.k] === c.id;
         const cell = document.createElement('div');
-        cell.className = 'wrCell' + (worn ? ' worn' : '') + (owned ? '' : ' locked');
+        cell.className = 'wrCell' + (worn ? ' worn' : '') + (owned ? '' : ' locked') + (game._chestReveal === c.id ? ' reveal' : '');
         // rarity tint on the cell border (worn cells keep the gold highlight from CSS)
         if (!worn) cell.style.borderColor = (TIER_COLORS[cosTier(c)] || TIER_COLORS[0]) + (owned ? 'cc' : '55');
         const cv = document.createElement('canvas'); cv.width = 52; cv.height = 52;
@@ -780,6 +798,7 @@ const ui = {
       sect.appendChild(grid);
       b.appendChild(sect);
     }
+    game._chestReveal = null; // one-shot reveal pulse consumed
     // start the live preview animation loop (idempotent — guarded by a token)
     this._wrAnimTok = (this._wrAnimTok || 0) + 1;
     const tok = this._wrAnimTok;

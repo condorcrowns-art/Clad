@@ -38,6 +38,18 @@ const QUESTS = [
   { id: 'rush1', name: 'OVERCLOCKED', desc: 'Clear the BOSS RUSH', goal: 1, val: (s, g) => g.progress.rushDone ? 1 : 0, reward: { gems: 500 } },
 ];
 
+/* ---------------- daily quests (rotate every real day, tracked by stat delta) ---------------- */
+const DAILY_POOL = [
+  { id: 'd_break', name: 'Demolition', stat: 'broken', goal: 40, reward: { shards: 2 } },
+  { id: 'd_kill', name: 'Purge', stat: 'kills', goal: 15, reward: { shards: 2 } },
+  { id: 'd_splice', name: 'Splicer', stat: 'splices', goal: 5, reward: { shards: 2 } },
+  { id: 'd_place', name: 'Builder', stat: 'placed', goal: 40, reward: { shards: 2 } },
+  { id: 'd_fish', name: 'Angler', stat: 'fish', goal: 4, reward: { shards: 2 } },
+  { id: 'd_plant', name: 'Gardener', stat: 'planted', goal: 10, reward: { shards: 2 } },
+  { id: 'd_harvest', name: 'Harvester', stat: 'harvests', goal: 8, reward: { shards: 2 } },
+];
+const DAILY_MAP = {}; for (const d of DAILY_POOL) DAILY_MAP[d.id] = d;
+
 /* ---------------- achievements (permanent milestones, gem rewards) ---------------- */
 const ACHIEVEMENTS = [
   { id: 'first_blood', name: 'First Blood', desc: 'Destroy your first enemy', icon: '⚔', val: (s) => s.kills >= 1, gems: 20 },
@@ -659,6 +671,28 @@ class Game {
       this.sfx && this.sfx.play('victory');
     }
   }
+  /* ---------------- mystery cosmetic chest (gacha) ---------------- */
+  mysteryChestCost() { return 10; }
+  openMysteryChest() {
+    const cost = this.mysteryChestCost();
+    if (this.shards < cost) { this.toast('Not enough Shards (◈' + cost + ') for a Mystery Chest.', 'warn'); return; }
+    // pool: buyable (store/starter) cosmetics you don't already own, weighted so commons are likelier
+    const pool = (typeof COSMETICS !== 'undefined') ? COSMETICS.filter(c => (c.src === 'store' || c.src === 'start') && !this.ownsCosmetic(c.id)) : [];
+    this.addShards(-cost);
+    if (!pool.length) { this.addGems(500); this.toast('🎁 You already own every chest cosmetic — 500 ◆ gems instead!', 'gold'); this.sfx && this.sfx.play('buy'); this.save(); return; }
+    const weighted = [];
+    for (const c of pool) { const w = Math.max(1, 6 - (typeof cosTier === 'function' ? cosTier(c) : 1)); for (let i = 0; i < w; i++) weighted.push(c); }
+    const pick = weighted[Math.floor(Math.random() * weighted.length)];
+    this.grantCosmetic(pick.id, true);
+    this._chestReveal = pick.id;
+    const tc = (typeof TIER_COLORS !== 'undefined') ? (TIER_COLORS[cosTier(pick)] || '#ffd166') : '#ffd166';
+    const tn = (typeof TIER_NAMES !== 'undefined') ? (TIER_NAMES[cosTier(pick)] || 'COMMON') : 'COMMON';
+    this.fx.explode(this.player.x, this.player.y - 16, tc, 34);
+    this.sfx && this.sfx.play('victory');
+    this.toast('🎁 Mystery Chest → ' + pick.name + ' · ' + tn + '!', 'gold');
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
   buyCosmetic(id) {
     const c = (typeof COSMO !== 'undefined') ? COSMO[id] : null;
     if (!c) return;
@@ -1119,6 +1153,39 @@ class Game {
     }
   }
 
+  /* ---------------- daily quests ---------------- */
+  rollDailyQuests() {
+    const today = new Date().toDateString();
+    if (this.progress.daily && this.progress.daily.date === today) return;
+    const pool = DAILY_POOL.slice(), pick = [];
+    for (let i = 0; i < 3 && pool.length; i++) pick.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    const s = this.progress.stats;
+    this.progress.daily = { date: today, allDone: false, tasks: pick.map(t => ({ tid: t.id, base: (s[t.stat] || 0), done: false })) };
+    this.save();
+  }
+  dailyProgress(task) { const t = DAILY_MAP[task.tid]; if (!t) return 0; return Math.max(0, Math.min(t.goal, (this.progress.stats[t.stat] || 0) - task.base)); }
+  checkDailies() {
+    const d = this.progress.daily; if (!d || !d.tasks) return;
+    let all = true;
+    for (const task of d.tasks) {
+      const t = DAILY_MAP[task.tid]; if (!t) continue;
+      if (!task.done && this.dailyProgress(task) >= t.goal) {
+        task.done = true;
+        if (t.reward.shards) this.addShards(t.reward.shards);
+        if (t.reward.gems) this.addGems(t.reward.gems);
+        this.addXp(30);
+        this.toast('✅ Daily done: ' + t.name + ' (+◈' + (t.reward.shards || 0) + ')', 'gold');
+        this.sfx && this.sfx.play('victory');
+      }
+      if (!task.done) all = false;
+    }
+    if (all && !d.allDone) {
+      d.allDone = true; this.addShards(5); this.addGems(300);
+      this.toast('★ All daily quests complete! +5 ◈ +300 ◆. Fresh set tomorrow.', 'gold');
+    }
+    this.save();
+  }
+
   /* ---------------- quests ---------------- */
   questProgress(q) { return Math.min(q.goal, q.val(this.progress.stats, this)); }
   claimQuest(id) {
@@ -1334,6 +1401,7 @@ class Game {
     ui.dirty = true;
     ui.updateHUD();
     setTimeout(() => this.grantFounderReward(), 1800); // one-time founding cosmetic
+    this.rollDailyQuests(); // refresh the daily quest set if it's a new day
     if (this.progress.tutorial !== 0) setTimeout(() => this.toast('Welcome back, ' + this.playerName() + '.', 'gold'), 400);
     // daily login bonus (streaks, like a proper live-service sandbox)
     const today = new Date().toDateString();
@@ -1518,7 +1586,7 @@ class Game {
     this.zaps = this.zaps.filter(z => z.life > 0);
 
     this._questT += dt;
-    if (this._questT > 1.5) { this._questT = 0; this.checkQuests(); }
+    if (this._questT > 1.5) { this._questT = 0; this.checkQuests(); this.checkDailies(); }
     this._miniT += dt;
     if (this._miniT > 2.5) { this._miniT = 0; w.buildMini(this); }
 

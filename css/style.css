@@ -255,6 +255,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 .wrTools { display: flex; gap: 8px; margin-top: 10px; }
 .wrTool { background: #16233c; border: 1px solid #34435f; color: #9fd8ff; font-family: var(--font); font-size: 11px; padding: 5px 10px; cursor: pointer; border-radius: 6px; transition: border-color 0.1s, filter 0.1s; }
 .wrTool:hover { border-color: var(--ui-accent); filter: brightness(1.2); }
+.wrTool.wrChest { background: linear-gradient(#3a2a10, #241705); border-color: var(--ui-gold); color: var(--ui-gold); }
+.wrTool.wrChest:hover { box-shadow: 0 0 10px rgba(255,209,102,0.5); }
+@keyframes wrReveal { 0% { transform: scale(0.6); box-shadow: 0 0 0 rgba(255,209,102,0); } 50% { transform: scale(1.15); box-shadow: 0 0 18px rgba(255,209,102,0.9); } 100% { transform: scale(1); box-shadow: 0 0 8px rgba(255,209,102,0.4); } }
+.wrCell.reveal { animation: wrReveal 0.7s ease-out; border-color: var(--ui-gold) !important; }
+.questDaily { color: #6ee7ff; font-size: 12px; letter-spacing: 1px; margin: 2px 0 6px; font-weight: bold; }
+.questGot { color: #3ddc84; font-weight: bold; margin-left: 8px; }
 .wrSection { margin-bottom: 14px; }
 .wrHead { color: #6ee7ff; font-size: 12px; letter-spacing: 2px; margin-bottom: 7px; border-bottom: 1px solid #24354f; padding-bottom: 3px; }
 .wrGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
