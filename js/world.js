@@ -1374,6 +1374,34 @@ class World {
         x.fillStyle = '#b8b0a0'; x.fillRect(sx + 6, sy + TS - 5, TS - 12, 5);
         x.fillStyle = '#e0dace'; x.beginPath(); x.arc(cx, sy + 10, 5, 0, 7); x.fill();
         x.fillRect(cx - 5, sy + 14, 10, 12); x.fillRect(cx - 8, sy + 15, 3, 9); x.fillRect(cx + 5, sy + 15, 3, 9); break;
+      case 'mannequin': {
+        // a mannequin wearing the player's current outfit (wardrobe + dyes)
+        const wr = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || {};
+        const dyes = (typeof game !== 'undefined' && game.progress && game.progress.dyes) || {};
+        const col = (typeof game !== 'undefined' && game.progress && game.progress.avatarColor) || '#8b98ac';
+        const dh = (v) => v === 'rainbow' ? ((t * 90) % 360) : v;
+        const d = (slot) => {
+          if (wr[slot] && typeof COSMO !== 'undefined' && COSMO[wr[slot]]) {
+            x.save(); if (dyes[slot]) x.filter = 'hue-rotate(' + dh(dyes[slot]) + 'deg)';
+            if (slot === 'hand') x.translate(13, -6);
+            try { COSMO[wr[slot]].draw(x, 1, t); } catch (e) {}
+            x.restore();
+          }
+        };
+        x.save(); x.translate(cx, sy + TS - 3); x.scale(0.42, 0.42);
+        d('aura'); d('back');
+        x.fillStyle = col; x.fillRect(-10, -12, 20, 22);
+        x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(-10, -12, 20, 4);
+        d('shirt');
+        x.fillStyle = '#d7dbe2'; x.fillRect(-8, -30, 16, 18);  // mannequin head (blank)
+        d('hair');
+        x.fillStyle = '#0b1220'; x.fillRect(-3, -27, 12, 8); x.fillStyle = '#6ee7ff'; x.fillRect(-1.5, -25.5, 8.5, 4);
+        x.fillStyle = '#8b98ac'; x.fillRect(-8, 10, 6, 9); x.fillRect(2, 10, 6, 9);
+        d('face'); d('hat'); d('hand');
+        x.restore();
+        x.fillStyle = '#6b7688'; x.fillRect(cx - 5, sy + TS - 4, 10, 4); // stand
+        break;
+      }
       case 'painting':
         x.fillStyle = '#3a6ea5'; x.fillRect(sx + 6, sy + 6, TS - 12, TS - 12);
         x.fillStyle = '#57904a'; x.fillRect(sx + 6, sy + TS - 14, TS - 12, 8);

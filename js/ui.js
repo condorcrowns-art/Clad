@@ -26,6 +26,7 @@ const ui = {
       tradePanel: $('tradePanel'),
       sheetPanel: $('sheetPanel'), sheetBody: $('sheetBody'),
       wardrobePanel: $('wardrobePanel'), wardrobeBody: $('wardrobeBody'),
+      emotePanel: $('emotePanel'), emoteGrid: $('emoteGrid'),
       invSearch: $('invSearch'), invSort: $('invSort'),
       shardText: $('shardText'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
@@ -462,7 +463,7 @@ const ui = {
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // release any focused text field
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -478,14 +479,15 @@ const ui = {
       if (name === 'trade') this.renderTrade();
       if (name === 'sheet') this.renderSheet();
       if (name === 'wardrobe') this.renderWardrobe();
+      if (name === 'emote') this.renderEmotes();
     }
     if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';
@@ -621,7 +623,20 @@ const ui = {
     html += '</div></div>';
     html += '<div class="sheetHead" style="margin-top:12px">SKILL BONUSES</div>';
     html += '<div class="sheetBonus">' + (bonuses.length ? bonuses.join(' · ') : 'Spend skill points [' + (game.progress.keys.skills || 't').toUpperCase() + '] to gain bonuses.') + '</div>';
+    // titles — earn them by playing, then wear one on your nameplate
+    if (typeof TITLES !== 'undefined') {
+      html += '<div class="sheetHead" style="margin-top:12px">TITLE <span style="color:#5b7395;text-transform:none;letter-spacing:0">— shown on your nameplate</span></div>';
+      html += '<div id="titleList">';
+      const cur = pr.title || 'novice';
+      for (const t of TITLES) {
+        const on = game.titleUnlocked(t.id), sel = cur === t.id;
+        html += '<button class="titleBtn' + (sel ? ' sel' : '') + (on ? '' : ' locked') + '" data-id="' + t.id + '" title="' + t.desc + '"' + (on ? '' : ' disabled') + '>' + t.name + '</button>';
+      }
+      html += '<button class="titleBtn' + (!cur || cur === 'none' ? ' sel' : '') + '" data-id="none">(none)</button>';
+      html += '</div>';
+    }
     b.innerHTML = html;
+    b.querySelectorAll('.titleBtn').forEach(btn => btn.addEventListener('click', () => { game.setTitle(btn.dataset.id === 'none' ? null : btn.dataset.id); }));
   },
 
   renderWardrobe() {
@@ -775,6 +790,16 @@ const ui = {
       requestAnimationFrame(anim);
     };
     anim();
+  },
+  renderEmotes() {
+    const g = this.el.emoteGrid; if (!g || typeof EMOTES === 'undefined') return;
+    g.innerHTML = '';
+    for (const e of EMOTES) {
+      const d = document.createElement('div'); d.className = 'emoteCell';
+      d.innerHTML = '<div class="emoteBig">' + e.emoji + '</div><div class="emoteName">' + e.name + '</div>';
+      d.addEventListener('click', () => { game.playEmote(e.id); });
+      g.appendChild(d);
+    }
   },
   _wardrobeTip(e, c, owned) {
     const t = this.el.tooltip;

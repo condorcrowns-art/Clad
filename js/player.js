@@ -141,6 +141,11 @@ class Player extends Entity {
     this.iframes = Math.max(0, this.iframes - dt);
     this.actionCd = Math.max(0, this.actionCd - dt);
     this.swingT = Math.max(0, this.swingT - dt);
+    // emote timer — cancel if the player starts moving fast (except sit/dance)
+    if (this.emote) {
+      this.emote.t += dt;
+      if (this.emote.t > this.emote.dur || (Math.abs(this.vx) > 60 && this.emote.id !== 'dance' && this.emote.id !== 'sit')) this.emote = null;
+    }
     this.dashCd = Math.max(0, this.dashCd - dt);
 
     // passive regen from admin crown
@@ -788,6 +793,15 @@ class Player extends Entity {
     else if (!this.onGround) { legSpread = Math.max(-1, Math.min(1, this.vy / 500)); }
     else { bob = Math.sin(time * 2.2) * 1.1; } // idle breathing
     ctx.translate(0, bob);
+    // emote pose — animate the whole avatar
+    if (this.emote) {
+      const et = this.emote.t;
+      if (this.emote.id === 'dance') { ctx.rotate(Math.sin(et * 9) * 0.16); ctx.translate(0, -Math.abs(Math.sin(et * 9)) * 3); }
+      else if (this.emote.id === 'cheer' || this.emote.id === 'wave' || this.emote.id === 'love') ctx.translate(0, -Math.abs(Math.sin(et * 8)) * 4);
+      else if (this.emote.id === 'sit') ctx.translate(0, 9);
+      else if (this.emote.id === 'angry') ctx.translate(Math.sin(et * 32) * 1.6, 0);
+      else if (this.emote.id === 'cry' || this.emote.id === 'laugh') ctx.translate(Math.sin(et * 22) * 1.2, 0);
+    }
     const _cw = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || null;
     const _dyes = (typeof game !== 'undefined' && game.progress && game.progress.dyes) || {};
     const _dyeHue = (v) => v === 'rainbow' ? ((time * 90) % 360) : v;
@@ -930,16 +944,32 @@ class Player extends Entity {
       ctx.beginPath(); ctx.arc(0, -6, 34, 0, 7); ctx.stroke();
     }
     ctx.restore();
-    // floating nameplate (Growtopia-style) — drawn in screen space above the head
+    // emote speech bubble — floats above the head (drawn in screen space)
+    if (this.emote && typeof EMOTES_MAP !== 'undefined' && EMOTES_MAP[this.emote.id]) {
+      const em = EMOTES_MAP[this.emote.id];
+      const by = sy - 66 - Math.abs(Math.sin(this.emote.t * 4)) * 4;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.94)';
+      if (typeof _rrPath === 'function') { _rrPath(ctx, sx - 15, by - 15, 30, 26, 8); ctx.fill(); } else ctx.fillRect(sx - 15, by - 15, 30, 26);
+      ctx.beginPath(); ctx.moveTo(sx - 5, by + 10); ctx.lineTo(sx, by + 17); ctx.lineTo(sx + 5, by + 10); ctx.closePath(); ctx.fill();
+      ctx.font = '18px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(em.emoji, sx, by - 1);
+      ctx.restore();
+      ctx.textBaseline = 'alphabetic';
+    }
+    // floating nameplate (Growtopia-style) — name + optional earned title, in screen space
     if (typeof game !== 'undefined' && game.progress && game.progress.playerName) {
       const nm = game.progress.playerName;
-      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-      const tw = ctx.measureText(nm).width + 12;
+      const title = game.titleName ? game.titleName() : '';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 11px monospace';
+      const tw = Math.max(ctx.measureText(nm).width, title ? ctx.measureText(title).width : 0) + 14;
       const ny = sy - 48;
-      ctx.fillStyle = 'rgba(8,12,24,0.7)';
-      ctx.fillRect(sx - tw / 2, ny - 10, tw, 15);
-      ctx.fillStyle = '#ffd166';
-      ctx.fillText(nm, sx, ny + 1);
+      const h = title ? 26 : 15;
+      ctx.fillStyle = 'rgba(8,12,24,0.72)';
+      if (typeof _rrPath === 'function') { _rrPath(ctx, sx - tw / 2, ny - 10, tw, h, 4); ctx.fill(); } else ctx.fillRect(sx - tw / 2, ny - 10, tw, h);
+      ctx.fillStyle = '#ffd166'; ctx.fillText(nm, sx, ny + 1);
+      if (title) { ctx.font = '9px monospace'; ctx.fillStyle = '#6ee7ff'; ctx.fillText(title, sx, ny + 12); }
     }
   }
 }

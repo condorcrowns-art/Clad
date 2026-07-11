@@ -564,6 +564,7 @@ defItem('bookshelf',   { name: 'Bookshelf', kind: 'block', tier: 2, hp: 6, solid
 defItem('stained_glass',{ name: 'Stained Glass', kind: 'block', tier: 3, hp: 5, solid: true, deco: true, transparent: true, color: '#c77dff', color2: '#6ee7ff', desc: 'DECOR: a jewel-toned cathedral window. Light pours through it.' });
 defItem('grand_clock', { name: 'Grand Clock', kind: 'block', tier: 3, hp: 6, solid: true, deco: true, animated: true, color: '#7a4a1e', color2: '#ffd166', desc: 'DECOR: a stately grandfather clock, hands sweeping. Tells no time, all vibe.' });
 defItem('trophy_deco', { name: 'Trophy', kind: 'block', tier: 2, hp: 5, solid: false, deco: true, color: '#ffd166', color2: '#c9a227', desc: 'DECOR: a gleaming golden trophy. You earned this. (Or crafted it.)' });
+defItem('mannequin',   { name: 'Outfit Mannequin', kind: 'block', tier: 3, hp: 8, solid: false, deco: true, animated: true, color: '#cfd8e6', color2: '#8b98ac', desc: 'DECOR: a mannequin that wears YOUR current outfit — show off your drip at home.' });
 // second decorative wave — the network keeps branching, still purely for looks
 defItem('throne',      { name: 'Royal Throne', kind: 'block', tier: 4, hp: 14, solid: true, deco: true, color: '#c9a227', color2: '#8a3049', desc: 'DECOR: a gilded throne draped in velvet. Sit atop your empire.' });
 defItem('fountain_deco',{ name: 'Ornate Fountain', kind: 'block', tier: 3, hp: 8, solid: true, deco: true, animated: true, color: '#a8d8f0', color2: '#c9c2b4', desc: 'DECOR: a marble fountain with trickling water. Pure ambiance.' });

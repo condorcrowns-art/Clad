@@ -77,6 +77,14 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Event calendar** — the wardrobe shows the full rotating event schedule (Bloomfall · Solstice ·
   Hallow's End · Winterburn) with the currently-live event highlighted, so you always know which
   limited set is dropping.
+- **Emotes `[O]`** — a Growtopia/Pixel-Worlds-style gesture wheel: **Wave, Dance, Cheer, Laugh,
+  Love, Cry, Angry, Sit**. Your avatar animates (hops, sways, sits, shakes) with an emoji speech
+  bubble floating above your head.
+- **Player titles** — earn titles by playing (**Boss Slayer, Master Splicer, Fashionista, the
+  Tycoon, Guild Master, the Purifier, World-Ender, Founder**) and wear one on your **nameplate**;
+  pick your active title in the Character sheet `[J]`.
+- **Outfit mannequins** — a decorative block (Shard Store) that **wears your current outfit** (with
+  its dyes) so you can show off your drip in your home world — just like Growtopia mannequins.
 - **Cosmetics that fight** — cosmetics aren't just for looks: each has a **combat power** (shown as
   a ⚔ badge) that grants **bonus damage vs bosses** and **damage resistance**. Crucially, **the
   harder a piece is to obtain, the stronger it is** — easy-to-buy store clothes give ~1 power, boss
@@ -318,6 +326,16 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **Vendor Bots** — stock up to 10 of an item; the bot sells one every 25 s and pops the gems out.
 - **Fireworks** — celebration rockets that also nuke anything near the burst.
 - **Secret vaults** — every sector hides a sealed treasure room. Dig.
+- **Emotes `[O]`** — the gesture wheel (Wave/Dance/Cheer/Laugh/Love/Cry/Angry/Sit) with animated
+  poses and an emoji speech bubble, straight out of both games.
+- **Titles** — earnable nameplate titles (Boss Slayer, Fashionista, the Tycoon, World-Ender…),
+  chosen in the Character sheet.
+- **Outfit mannequins** — display blocks that wear your current dyed outfit, for showing off builds.
+
+**Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
+trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side
+moderation — these need a live multiplayer backend, which this zero-dependency offline game doesn't
+have. Everything that *can* work single-player from the Growtopia/Pixel Worlds feature set is in.
 
 ### Presentation & building feel
 - **Bloom post-processing**: a real screen-space glow pipeline — the frame is bright-passed at

@@ -238,6 +238,18 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 .loSave { display: flex; gap: 6px; }
 .loSave input { flex: 1; background: #0d1524; border: 1px solid #2c3a55; border-radius: 6px; color: #eaf4ef; font-family: var(--font); font-size: 12px; padding: 6px 9px; min-width: 0; }
 .loSave input:focus { outline: none; border-color: var(--ui-accent); }
+/* emotes */
+#emoteGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; min-width: 320px; }
+.emoteCell { background: linear-gradient(#1b2740, #0c1322); border: 2px solid #34435f; border-radius: 10px; padding: 10px 4px 6px; text-align: center; cursor: pointer; transition: transform 0.07s, border-color 0.1s; }
+.emoteCell:hover { transform: translateY(-2px); border-color: var(--ui-accent); filter: brightness(1.15); }
+.emoteBig { font-size: 30px; line-height: 1; }
+.emoteName { color: #cfe0f2; font-size: 11px; margin-top: 5px; }
+/* titles */
+#titleList { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.titleBtn { background: #16233c; border: 1px solid #34435f; color: #cfe0f2; font-family: var(--font); font-size: 11px; padding: 5px 9px; border-radius: 7px; cursor: pointer; transition: border-color 0.1s; }
+.titleBtn:hover:not(:disabled) { border-color: var(--ui-accent); }
+.titleBtn.sel { border-color: #6ee7ff; color: #6ee7ff; box-shadow: 0 0 8px rgba(110,231,255,0.3); }
+.titleBtn.locked { opacity: 0.4; cursor: default; }
 #worldBossHint { color: #ff8fae; font-size: 11px; margin: 8px 0; padding: 7px 10px; background: rgba(255,46,99,0.08); border: 1px solid rgba(255,46,99,0.3); border-radius: 8px; line-height: 1.5; }
 #worldBossHint b { color: #ff2e63; }
 .wrTools { display: flex; gap: 8px; margin-top: 10px; }

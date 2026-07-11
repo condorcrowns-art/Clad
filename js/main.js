@@ -78,6 +78,7 @@ const STORE = [
   { id: 'gems_small', name: 'Pouch of Gems', desc: '+500 gems', cost: 5, give: (g) => g.addGems(500) },
   { id: 'gems_big', name: 'Chest of Gems', desc: '+2,500 gems', cost: 20, give: (g) => g.addGems(2500) },
   { id: 'lock_bundle', name: 'World Lock ×3', desc: 'found 3 worlds', cost: 30, give: (g) => g.player.give('world_lock', 3) },
+  { id: 'buy_mannequin', name: 'Outfit Mannequin ×2', desc: 'DECOR: place a mannequin that wears your current outfit', cost: 6, give: (g) => g.player.give('mannequin', 2) },
   { id: 'xp_boost', name: 'XP Surge', desc: '+2000 XP instantly', cost: 8, give: (g) => g.addXp(2000) },
   { id: 'ally_pass', name: 'Hire a Comrade', desc: 'summon an AI ally that fights beside you', cost: 25, give: (g) => g.summonCompanion() },
   { id: 'starter', name: 'Starter Pack', desc: 'jetpack + sword + 3 medkits + 300 gems', cost: 15, once: true, give: (g) => { g.player.give('jetpack', 1); g.player.give('sword', 1); g.player.give('medkit', 3); g.addGems(300); } },
@@ -108,9 +109,34 @@ const DIFFICULTIES = {
 
 /* ---------------- REMAPPABLE ACTION KEYS ---------------- */
 // panel/action keys the player can rebind (movement stays fixed with arrow aliases)
-const DEFAULT_KEYS = { inv: 'e', shop: 'b', codex: 'c', quest: 'q', worlds: 'v', ach: 'g', guild: 'h', store: 'k', skills: 't', trade: 'y', sheet: 'j', wardrobe: 'u', pause: 'p' };
-const KEY_LABELS = { inv: 'Inventory', shop: 'Shop', codex: 'Splice codex', quest: 'Quests', worlds: 'Worlds', ach: 'Achievements', guild: 'Guild', store: 'Shard store', skills: 'Skill tree', trade: 'Trade', sheet: 'Character sheet', wardrobe: 'Wardrobe', pause: 'Pause / settings' };
+const DEFAULT_KEYS = { inv: 'e', shop: 'b', codex: 'c', quest: 'q', worlds: 'v', ach: 'g', guild: 'h', store: 'k', skills: 't', trade: 'y', sheet: 'j', wardrobe: 'u', emote: 'o', pause: 'p' };
+const KEY_LABELS = { inv: 'Inventory', shop: 'Shop', codex: 'Splice codex', quest: 'Quests', worlds: 'Worlds', ach: 'Achievements', guild: 'Guild', store: 'Shard store', skills: 'Skill tree', trade: 'Trade', sheet: 'Character sheet', wardrobe: 'Wardrobe', emote: 'Emotes', pause: 'Pause / settings' };
 const RESERVED_KEYS = { a: 1, d: 1, w: 1, s: 1, ' ': 1, shift: 1, escape: 1, arrowleft: 1, arrowright: 1, arrowup: 1, arrowdown: 1, '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1 };
+// emotes — Growtopia/Pixel-Worlds-style animated gestures
+const EMOTES = [
+  { id: 'wave', name: 'Wave', emoji: '👋', dur: 1.4 },
+  { id: 'dance', name: 'Dance', emoji: '🕺', dur: 3.2 },
+  { id: 'cheer', name: 'Cheer', emoji: '🎉', dur: 1.8 },
+  { id: 'laugh', name: 'Laugh', emoji: '😂', dur: 1.6 },
+  { id: 'love', name: 'Love', emoji: '❤️', dur: 1.8 },
+  { id: 'cry', name: 'Cry', emoji: '😢', dur: 1.8 },
+  { id: 'angry', name: 'Angry', emoji: '😡', dur: 1.6 },
+  { id: 'sit', name: 'Sit', emoji: '🪑', dur: 3.5 },
+];
+const EMOTES_MAP = {}; for (const e of EMOTES) EMOTES_MAP[e.id] = e;
+// earnable player titles shown on the nameplate (Growtopia titles)
+const TITLES = [
+  { id: 'novice', name: 'Novice', desc: 'Everyone starts here.', cond: () => true },
+  { id: 'slayer', name: 'Boss Slayer', desc: 'Purge any corrupted process.', cond: g => Object.keys(g.progress.beaten).filter(b => !WORLD_BOSSES[b]).length >= 1 },
+  { id: 'splicer', name: 'Master Splicer', desc: 'Discover 100 splice recipes.', cond: g => Object.keys(g.progress.discovered || {}).length >= 100 },
+  { id: 'fashionista', name: 'Fashionista', desc: 'Own 30 cosmetics.', cond: g => Object.keys(g.progress.ownedCosmetics || {}).length >= 30 },
+  { id: 'tycoon', name: 'the Tycoon', desc: 'Hold 5,000 gems.', cond: g => g.gems >= 5000 },
+  { id: 'guildmaster', name: 'Guild Master', desc: 'Belong to a guild.', cond: g => !!g.progress.guild },
+  { id: 'purifier', name: 'the Purifier', desc: 'Purge all seven sector bosses.', cond: g => ['firewall_daemon', 'null_wurm', 'kraken', 'storm_kernel', 'rootkit', 'admin', 'swarm_queen'].every(b => g.progress.beaten[b]) },
+  { id: 'worldender', name: 'World-Ender', desc: 'Defeat a world boss.', cond: g => Object.keys(WORLD_BOSSES).some(b => g.progress.beaten[b]) },
+  { id: 'founder', name: 'Founder', desc: 'A founding player.', cond: g => !!g.progress.founder },
+];
+const TITLES_MAP = {}; for (const t of TITLES) TITLES_MAP[t.id] = t;
 // world bosses — endgame arenas gated behind N sector-boss clears; each drops a strong set
 const WORLD_BOSSES = {
   overseer:  { need: 3, setName: 'Overseer', pieces: ['overseer_halo', 'overseer_cape', 'overseer_blade'] },
@@ -154,7 +180,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, dyes: {}, ownedCosmetics: { cap: 1, round_glasses: 1 } };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, dyes: {}, loadouts: [], title: 'novice', ownedCosmetics: { cap: 1, round_glasses: 1 } };
     this._rebinding = null;
     this.paused = false;
     this._questNotified = {};
@@ -705,6 +731,24 @@ class Game {
     this.progress.loadouts.splice(i, 1);
     this.save();
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
+  /* ---------------- emotes ---------------- */
+  playEmote(id) {
+    const e = EMOTES_MAP[id]; if (!e || !this.player) return;
+    this.player.emote = { id, t: 0, dur: e.dur };
+    this.sfx && this.sfx.play('place');
+  }
+  /* ---------------- titles ---------------- */
+  titleUnlocked(id) { const t = TITLES_MAP[id]; return t ? !!t.cond(this) : false; }
+  titleName() {
+    const id = this.progress.title || 'novice';
+    return (TITLES_MAP[id] && this.titleUnlocked(id)) ? TITLES_MAP[id].name : '';
+  }
+  setTitle(id) {
+    if (id && !this.titleUnlocked(id)) { this.toast('That title is still locked.', 'warn'); return; }
+    this.progress.title = id || null;
+    this.save();
+    if (typeof ui !== 'undefined') { ui.renderSheet && ui.renderSheet(); ui.dirty = true; }
   }
   clearWardrobe() {
     this.progress.wardrobe = { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null };
