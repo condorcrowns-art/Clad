@@ -154,7 +154,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, ownedCosmetics: { cap: 1, round_glasses: 1 } };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, dyes: {}, ownedCosmetics: { cap: 1, round_glasses: 1 } };
     this._rebinding = null;
     this.paused = false;
     this._questNotified = {};
@@ -661,6 +661,14 @@ class Game {
   unequipSlot(slot) {
     this.progress.wardrobe = this.progress.wardrobe || { hat: null, face: null, back: null };
     this.progress.wardrobe[slot] = null;
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
+  // dyes: a per-slot hue-rotation (degrees) recolours whatever is worn in that slot
+  setDye(slot, hue) {
+    this.progress.dyes = this.progress.dyes || {};
+    if (hue == null) delete this.progress.dyes[slot]; else this.progress.dyes[slot] = hue;
+    this.fx.explode(this.player.x, this.player.y, 'hsl(' + (hue || 0) + ',80%,60%)', 10);
     this.save();
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
   }
@@ -1216,6 +1224,7 @@ class Game {
       this.progress.keys = Object.assign({}, DEFAULT_KEYS, this.progress.keys || {});
       if (typeof this.progress.bloom !== 'boolean') this.progress.bloom = true;
       this.progress.wardrobe = Object.assign({ hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, this.progress.wardrobe || {});
+      this.progress.dyes = this.progress.dyes || {};
       this.progress.ownedCosmetics = Object.assign({ cap: 1, round_glasses: 1 }, this.progress.ownedCosmetics || {});
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;

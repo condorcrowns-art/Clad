@@ -654,6 +654,47 @@ const ui = {
     cap.querySelector('#wrRandom').addEventListener('click', () => game.randomizeWardrobe());
     cap.querySelector('#wrClear').addEventListener('click', () => game.clearWardrobe());
 
+    // 🎨 Dye studio — recolour any worn piece via a per-slot hue shift
+    const dyes = game.progress.dyes || {};
+    const dyeSlots = ['hat', 'hair', 'face', 'shirt', 'back', 'hand', 'aura'].filter(s => wr[s] && COSMO[wr[s]]);
+    if (dyeSlots.length) {
+      const ds = document.createElement('div'); ds.className = 'wrSection';
+      ds.innerHTML = '<div class="wrHead">🎨 Dye studio — recolour worn pieces</div>';
+      const HUES = [null, 20, 45, 80, 130, 170, 200, 240, 290, 320];
+      for (const slot of dyeSlots) {
+        const row = document.createElement('div'); row.className = 'dyeRow';
+        const lbl = document.createElement('span'); lbl.className = 'dyeLbl'; lbl.textContent = COSMO[wr[slot]].name;
+        row.appendChild(lbl);
+        const cur = dyes[slot] != null ? dyes[slot] : null;
+        for (const hue of HUES) {
+          const sw = document.createElement('button');
+          sw.className = 'dyeSw' + (cur === hue ? ' on' : '');
+          if (hue == null) { sw.textContent = '∅'; sw.title = 'original colour'; }
+          else { sw.style.background = 'hsl(' + hue + ',75%,55%)'; sw.title = 'dye'; }
+          sw.addEventListener('click', () => game.setDye(slot, hue));
+          row.appendChild(sw);
+        }
+        ds.appendChild(row);
+      }
+      b.appendChild(ds);
+    }
+
+    // 📅 Event calendar — which limited events run when
+    if (typeof EVENTS !== 'undefined') {
+      const live = game.activeEvent ? game.activeEvent() : null;
+      const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const ec = document.createElement('div'); ec.className = 'wrSection';
+      ec.innerHTML = '<div class="wrHead">📅 Event calendar — limited sets drop from world bosses while live</div>';
+      const cal = document.createElement('div'); cal.className = 'evCal';
+      for (const ev of EVENTS) {
+        const on = live && live.id === ev.id;
+        const chip = document.createElement('div'); chip.className = 'evChip' + (on ? ' live' : '');
+        chip.innerHTML = '<b>' + ev.name + '</b><span>' + MON[ev.from[0]] + '–' + MON[ev.to[0]] + ' · ' + ev.setName + (on ? ' · ✦LIVE' : '') + '</span>';
+        cal.appendChild(chip);
+      }
+      ec.appendChild(cal); b.appendChild(ec);
+    }
+
     const SLOTS = [
       { k: 'hat', label: '🎩 Hats' }, { k: 'hair', label: '💇 Hair' }, { k: 'face', label: '🕶 Face' },
       { k: 'shirt', label: '👕 Shirts' }, { k: 'back', label: '🪽 Back' }, { k: 'hand', label: '✋ Held' }, { k: 'aura', label: '✨ Auras' },
@@ -734,7 +775,8 @@ const ui = {
     x.translate(60, 118); x.scale(2, 2);
     const wr = game.progress.wardrobe || {};
     const t = performance.now() / 1000;
-    const d = (slot) => { if (wr[slot] && COSMO[wr[slot]]) try { COSMO[wr[slot]].draw(x, 1, t); } catch (e) {} };
+    const dyes = game.progress.dyes || {};
+    const d = (slot) => { if (wr[slot] && COSMO[wr[slot]]) { x.save(); if (dyes[slot]) x.filter = 'hue-rotate(' + dyes[slot] + 'deg)'; try { COSMO[wr[slot]].draw(x, 1, t); } catch (e) {} x.restore(); } };
     const rr = (typeof _rrPath === 'function') ? _rrPath : (c, X, Y, w, h) => c.rect(X, Y, w, h);
     const sh = (typeof _shade === 'function') ? _shade : (c) => c;
     const col = game.progress.avatarColor || '#4361ee';
@@ -766,7 +808,7 @@ const ui = {
     d('face');
     d('hat');
     // held item — anchored at the front hand
-    if (wr.hand && COSMO[wr.hand]) { x.save(); x.translate(13, -6); try { COSMO[wr.hand].draw(x, 1, t); } catch (e) {} x.restore(); }
+    if (wr.hand && COSMO[wr.hand]) { x.save(); x.translate(13, -6); if (dyes.hand) x.filter = 'hue-rotate(' + dyes.hand + 'deg)'; try { COSMO[wr.hand].draw(x, 1, t); } catch (e) {} x.restore(); }
     x.restore();
   },
 

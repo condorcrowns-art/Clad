@@ -68,6 +68,12 @@ sectors** wait behind portals, each ending in a boss fight.
   glows, the cape billows, torches flicker, auras orbit and cycle. **Held items are gripped in the
   hand** and follow the swing. Every piece has a **rarity tier** (common → legendary) that colours
   its cell border, plus **🎲 Randomize**, **✖ Clear all**, and a collection counter.
+- **Dye studio** — recolour any worn piece with a **per-slot hue dye** (a row of swatches per
+  equipped slot, applied live to the avatar and preview and saved with your character) — so the same
+  cosmetic can be tinted a dozen different ways.
+- **Event calendar** — the wardrobe shows the full rotating event schedule (Bloomfall · Solstice ·
+  Hallow's End · Winterburn) with the currently-live event highlighted, so you always know which
+  limited set is dropping.
 - **Cosmetics that fight** — cosmetics aren't just for looks: each has a **combat power** (shown as
   a ⚔ badge) that grants **bonus damage vs bosses** and **damage resistance**. Crucially, **the
   harder a piece is to obtain, the stronger it is** — easy-to-buy store clothes give ~1 power, boss

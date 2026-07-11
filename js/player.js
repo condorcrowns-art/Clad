@@ -789,7 +789,15 @@ class Player extends Entity {
     else { bob = Math.sin(time * 2.2) * 1.1; } // idle breathing
     ctx.translate(0, bob);
     const _cw = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || null;
-    const _cd = (slot) => { if (_cw && _cw[slot] && typeof COSMO !== 'undefined' && COSMO[_cw[slot]]) { try { COSMO[_cw[slot]].draw(ctx, this.facing, time, this); } catch (e) {} } };
+    const _dyes = (typeof game !== 'undefined' && game.progress && game.progress.dyes) || {};
+    const _cd = (slot) => {
+      if (_cw && _cw[slot] && typeof COSMO !== 'undefined' && COSMO[_cw[slot]]) {
+        ctx.save();
+        if (_dyes[slot]) ctx.filter = 'hue-rotate(' + _dyes[slot] + 'deg)';
+        try { COSMO[_cw[slot]].draw(ctx, this.facing, time, this); } catch (e) {}
+        ctx.restore();
+      }
+    };
     // aura cosmetic — radiates behind everything
     _cd('aura');
 
@@ -886,6 +894,7 @@ class Player extends Entity {
       ctx.save();
       ctx.translate(faw, 0);
       ctx.rotate(-this.facing * (0.3 + swing) * 0.82);
+      if (_dyes.hand) ctx.filter = 'hue-rotate(' + _dyes.hand + 'deg)';
       try { COSMO[_cw.hand].draw(ctx, this.facing, time, this); } catch (e) {}
       ctx.restore();
     }
