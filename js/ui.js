@@ -496,6 +496,7 @@ const ui = {
     ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
+      if (game.sfx) game.sfx.play('uiOpen');
       if (name === 'inv') this.renderInv();
       if (name === 'shop') { this.shopMode = 'shop'; this.renderShop(); }
       if (name === 'codex') this.renderCodex();
@@ -511,7 +512,7 @@ const ui = {
       if (name === 'wardrobe') this.renderWardrobe();
       if (name === 'emote') this.renderEmotes();
       if (name === 'login') this.renderLogin();
-    }
+    } else if (game.sfx) { game.sfx.play('uiClose'); }
     if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
     this.syncDock();
@@ -526,7 +527,7 @@ const ui = {
   anyPanelOpen() {
     return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); if (this.syncDock) this.syncDock(); },
+  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel'].forEach(p => { if (this.el[p] && !this.el[p].classList.contains('hidden')) { this.el[p].classList.add('hidden'); if (game.sfx) game.sfx.play('uiClose'); } }); this.hideTip(); if (this.syncDock) this.syncDock(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';

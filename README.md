@@ -353,6 +353,9 @@ moderation — these need a live multiplayer backend, which this zero-dependency
 have. Everything that *can* work single-player from the Growtopia/Pixel Worlds feature set is in.
 
 ### Presentation & building feel
+- **Clean HUD split & UI sounds**: the top HUD reads as two clusters — vitals (level + XP + HP) on
+  the left, currency chips (◆ gems · ◈ shards) and the world name on the right — and every panel
+  open/close plays a soft UI blip for tactile feedback.
 - **On-screen nav dock**: a right-side column of labelled icon buttons opens every panel — Bag,
   Wear, Emote, Splice, Quests, Shop, Store, Trade, Guild, Skills, Hero, Worlds, Awards, Menu — so
   nothing needs a memorized hotkey. The button for the open panel highlights, and you can jump

@@ -851,6 +851,9 @@ class SFX {
       jet:    [{ f: 120, f2: 140, dur: 0.08, type: 'sawtooth', vol: 0.04 }],
       death:  [{ f: 400, f2: 40, dur: 1.0, type: 'sawtooth', vol: 0.2 }],
       error:  [{ f: 220, f2: 180, dur: 0.15, type: 'square', vol: 0.1 }],
+      uiOpen: [{ f: 480, f2: 760, dur: 0.08, type: 'sine', vol: 0.07 }],
+      uiClose:[{ f: 640, f2: 360, dur: 0.07, type: 'sine', vol: 0.06 }],
+      uiTick: [{ f: 900, f2: 1150, dur: 0.03, type: 'square', vol: 0.05 }],
     };
     const seq = defs[name];
     if (!seq) return;
