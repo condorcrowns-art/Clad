@@ -27,6 +27,7 @@ const ui = {
       sheetPanel: $('sheetPanel'), sheetBody: $('sheetBody'),
       wardrobePanel: $('wardrobePanel'), wardrobeBody: $('wardrobeBody'),
       emotePanel: $('emotePanel'), emoteGrid: $('emoteGrid'),
+      loginPanel: $('loginPanel'), loginGrid: $('loginGrid'),
       invSearch: $('invSearch'), invSort: $('invSort'),
       shardText: $('shardText'),
       defragPanel: $('defragPanel'), defragStep: $('defragStep'), defragSymbol: $('defragSymbol'), defragTimer: $('defragTimer'), defragFaults: $('defragFaults'),
@@ -480,7 +481,7 @@ const ui = {
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // release any focused text field
     const el = this.el[name + 'Panel'];
     const wasHidden = el.classList.contains('hidden');
-    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
+    ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden'));
     if (wasHidden) {
       el.classList.remove('hidden');
       if (name === 'inv') this.renderInv();
@@ -497,14 +498,15 @@ const ui = {
       if (name === 'sheet') this.renderSheet();
       if (name === 'wardrobe') this.renderWardrobe();
       if (name === 'emote') this.renderEmotes();
+      if (name === 'login') this.renderLogin();
     }
     if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
   },
   anyPanelOpen() {
-    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
+    return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';
@@ -809,6 +811,34 @@ const ui = {
       requestAnimationFrame(anim);
     };
     anim();
+  },
+  renderLogin() {
+    const g = this.el.loginGrid; if (!g || typeof LOGIN_REWARDS === 'undefined') return;
+    const lg = game.progress.login || { day: 1, streak: 0 };
+    const claimable = !!game._loginPending;
+    g.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className = 'loginRow';
+    for (let i = 0; i < LOGIN_REWARDS.length; i++) {
+      const day = i + 1;
+      const isToday = day === lg.day;
+      const claimedToday = isToday && !claimable;
+      const past = day < lg.day || claimedToday;
+      const cell = document.createElement('div');
+      cell.className = 'loginCell' + (isToday && claimable ? ' active' : '') + (past ? ' claimed' : '');
+      cell.innerHTML = '<div class="loginDay">Day ' + day + '</div><div class="loginReward">' + LOGIN_REWARDS[i].label + '</div>' + (past ? '<div class="loginTick">✔</div>' : '');
+      wrap.appendChild(cell);
+    }
+    g.appendChild(wrap);
+    const foot = document.createElement('div'); foot.className = 'loginFoot';
+    if (claimable) {
+      foot.innerHTML = '<span>Streak: ' + (lg.streak || 0) + ' days</span><button id="loginClaim">🎁 CLAIM DAY ' + lg.day + '</button>';
+      g.appendChild(foot);
+      g.querySelector('#loginClaim').addEventListener('click', () => { game.claimLoginReward(); this.updateHUD(); this.renderLogin(); });
+    } else {
+      foot.innerHTML = '<span>✔ Claimed today — come back tomorrow! Streak: ' + (lg.streak || 0) + ' days</span><button id="loginClose">CLOSE</button>';
+      g.appendChild(foot);
+      g.querySelector('#loginClose').addEventListener('click', () => this.closeAll());
+    }
   },
   renderEmotes() {
     const g = this.el.emoteGrid; if (!g || typeof EMOTES === 'undefined') return;

@@ -91,6 +91,9 @@ sectors** wait behind portals, each ending in a boss fight.
 - **Daily quests** — a rotating trio of daily objectives (Demolition, Purge, Splicer, Builder,
   Angler, Gardener, Harvester) that reset each real day, each paying shards, with a bonus for
   clearing all three — shown above the story quests in the Quests panel `[Q]`.
+- **Login reward calendar** — a **7-day streak track** that pops on your first login each day:
+  claim escalating rewards (gems → shards → medkits → a big day-7 payout), with a streak counter
+  that resets if you skip a day — the classic live-service login calendar.
 - **Cosmetics that fight** — cosmetics aren't just for looks: each has a **combat power** (shown as
   a ⚔ badge) that grants **bonus damage vs bosses** and **damage resistance**. Crucially, **the
   harder a piece is to obtain, the stronger it is** — easy-to-buy store clothes give ~1 power, boss

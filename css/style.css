@@ -261,6 +261,20 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; f
 .wrCell.reveal { animation: wrReveal 0.7s ease-out; border-color: var(--ui-gold) !important; }
 .questDaily { color: #6ee7ff; font-size: 12px; letter-spacing: 1px; margin: 2px 0 6px; font-weight: bold; }
 .questGot { color: #3ddc84; font-weight: bold; margin-left: 8px; }
+/* login calendar */
+#loginPanel { min-width: 560px; }
+.loginRow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 7px; }
+.loginCell { position: relative; background: linear-gradient(#141d30, #0c1322); border: 2px solid #2c3a55; border-radius: 10px; padding: 10px 4px; text-align: center; min-height: 72px; }
+.loginDay { color: #8ba0c0; font-size: 11px; letter-spacing: 0.5px; }
+.loginReward { color: #ffd166; font-size: 12px; font-weight: bold; margin-top: 8px; line-height: 1.3; }
+.loginCell.claimed { opacity: 0.55; }
+.loginCell.claimed .loginReward { color: #7d93b3; }
+.loginTick { position: absolute; top: 3px; right: 5px; color: #3ddc84; font-weight: bold; font-size: 12px; }
+.loginCell.active { border-color: var(--ui-gold); box-shadow: 0 0 14px rgba(255,209,102,0.5); animation: wrReveal 0.8s ease-out; }
+.loginFoot { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; color: #8ecae6; font-size: 13px; }
+.loginFoot button { background: linear-gradient(#3ff0b0, #1cae7d); color: #05231a; border: none; border-radius: 10px; font-family: var(--font); font-size: 14px; font-weight: bold; padding: 9px 18px; cursor: pointer; letter-spacing: 1px; box-shadow: 0 4px 0 #12795a; }
+.loginFoot button:hover { box-shadow: 0 4px 0 #12795a, 0 0 16px rgba(45,226,163,0.6); }
+#loginClose { background: #16233c !important; color: #9fd8ff !important; box-shadow: none !important; }
 .wrSection { margin-bottom: 14px; }
 .wrHead { color: #6ee7ff; font-size: 12px; letter-spacing: 2px; margin-bottom: 7px; border-bottom: 1px solid #24354f; padding-bottom: 3px; }
 .wrGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }

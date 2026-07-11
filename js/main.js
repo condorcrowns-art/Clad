@@ -50,6 +50,17 @@ const DAILY_POOL = [
 ];
 const DAILY_MAP = {}; for (const d of DAILY_POOL) DAILY_MAP[d.id] = d;
 
+/* ---------------- 7-day login reward calendar ---------------- */
+const LOGIN_REWARDS = [
+  { label: '75 ◆', gems: 75 },
+  { label: '150 ◆', gems: 150 },
+  { label: '2 ◈', shards: 2 },
+  { label: '250 ◆', gems: 250 },
+  { label: '3× Medkit', items: [['medkit', 3]] },
+  { label: '3 ◈', shards: 3 },
+  { label: '400 ◆ + Cola', gems: 400, items: [['overclock_cola', 2]] },
+];
+
 /* ---------------- achievements (permanent milestones, gem rewards) ---------------- */
 const ACHIEVEMENTS = [
   { id: 'first_blood', name: 'First Blood', desc: 'Destroy your first enemy', icon: '⚔', val: (s) => s.kills >= 1, gems: 20 },
@@ -1153,6 +1164,34 @@ class Game {
     }
   }
 
+  /* ---------------- login reward calendar ---------------- */
+  checkLoginReward() {
+    const today = new Date().toDateString();
+    this.progress.login = this.progress.login || { day: 0, last: '', streak: 0 };
+    const lg = this.progress.login;
+    if (lg.last === today) { this._loginPending = false; return; }
+    const yesterday = new Date(Date.now() - 864e5).toDateString();
+    lg.day = (lg.last === yesterday) ? (lg.day % 7) + 1 : 1; // continue the cycle or restart
+    this._loginPending = true;
+    this.save();
+  }
+  claimLoginReward() {
+    if (!this._loginPending) return;
+    const lg = this.progress.login;
+    const r = LOGIN_REWARDS[(lg.day - 1) % 7];
+    if (r.gems) this.addGems(r.gems);
+    if (r.shards) this.addShards(r.shards);
+    if (r.items) for (const [id, n] of r.items) this.player.give(id, n);
+    lg.last = new Date().toDateString();
+    lg.streak = (lg.streak || 0) + 1;
+    this._loginPending = false;
+    this.toast('🎁 Login day ' + lg.day + ' claimed: ' + r.label + '! (streak ' + lg.streak + ')', 'gold');
+    this.sfx && this.sfx.play('victory');
+    this.fx.explode(this.player.x, this.player.y, '#ffd166', 24);
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderLogin) ui.renderLogin();
+  }
+
   /* ---------------- daily quests ---------------- */
   rollDailyQuests() {
     const today = new Date().toDateString();
@@ -1402,6 +1441,8 @@ class Game {
     ui.updateHUD();
     setTimeout(() => this.grantFounderReward(), 1800); // one-time founding cosmetic
     this.rollDailyQuests(); // refresh the daily quest set if it's a new day
+    this.checkLoginReward();
+    if (this._loginPending) setTimeout(() => { ui.togglePanel('login'); }, 1400); // pop the login calendar
     if (this.progress.tutorial !== 0) setTimeout(() => this.toast('Welcome back, ' + this.playerName() + '.', 'gold'), 400);
     // daily login bonus (streaks, like a proper live-service sandbox)
     const today = new Date().toDateString();
