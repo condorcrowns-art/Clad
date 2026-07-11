@@ -352,6 +352,9 @@ moderation — these need a live multiplayer backend, which this zero-dependency
 have. Everything that *can* work single-player from the Growtopia/Pixel Worlds feature set is in.
 
 ### Presentation & building feel
+- **Polished modal UI**: every panel is a chunky Growtopia-style modal — a gradient **header band**
+  with an accent underline, a **pop-in animation**, a full-screen **focus dim** behind it, glossy
+  item slots with a top sheen, and a satisfying press on every button.
 - **Bloom post-processing**: a real screen-space glow pipeline — the frame is bright-passed at
   half-res, blurred, and additively composited back, so every light source, lava tile, crystal,
   projectile, sun/moon and boss effect blooms cinematically. Toggle it in the pause menu.
