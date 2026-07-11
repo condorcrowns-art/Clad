@@ -1328,6 +1328,21 @@ const COSMETICS = [
   { id: 'bloom_aura', slot: 'aura', name: 'Petalfall Aura', src: 'event', set: 'bloom', desc: 'LIMITED — a gentle rain of petals. Bloomfall event.', draw: (x, f, t) => {
     const tt = (t || 0); const cols = ['#ff6392', '#ffd166', '#ff8fbf']; for (let i = 0; i < 6; i++) { const ph = (tt * 0.5 + i / 6) % 1; const py = -22 + ph * 40, px = Math.sin(tt * 1.5 + i * 2) * 20; x.save(); x.globalAlpha = 0.8 * (1 - ph * 0.5); x.translate(px, py); x.rotate(tt * 3 + i); x.fillStyle = cols[i % 3]; x.beginPath(); x.ellipse(0, 0, 2.6, 1.4, 0, 0, 7); x.fill(); x.restore(); }
   } },
+
+  // ===== EVENT — NEW YEAR BASH (late Dec – early Jan), set 'newyear' =====
+  { id: 'ny_crown', slot: 'hat', name: 'Countdown Crown', src: 'event', set: 'newyear', desc: 'LIMITED — a sparkling "20XX" party crown. New Year Bash event.', draw: (x, f, t) => {
+    const tt = (t || 0), g = 0.6 + 0.4 * Math.sin(tt * 5); x.save(); x.shadowColor = '#ffd700'; x.shadowBlur = 9 * g;
+    x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(-9, -30); x.lineTo(-6, -40); x.lineTo(-3, -32); x.lineTo(0, -42); x.lineTo(3, -32); x.lineTo(6, -40); x.lineTo(9, -30); x.closePath(); x.fill();
+    const cols = ['#ff4d6d', '#6ee7ff', '#3ddc84']; for (let i = 0; i < 3; i++) { x.fillStyle = cols[i]; x.beginPath(); x.arc(-6 + i * 6, i % 2 ? -40 : -42, 1.4, 0, 7); x.fill(); } x.restore();
+  } },
+  { id: 'ny_wings', slot: 'back', name: 'Firework Wings', src: 'event', set: 'newyear', desc: 'LIMITED — wings that burst like fireworks. New Year Bash event.', draw: (x, f, t) => {
+    const tt = (t || 0); for (const s of [-1, 1]) { x.save(); x.scale(s, 1); x.shadowColor = '#ffd166'; x.shadowBlur = 8;
+      for (let k = 0; k < 6; k++) { const a = -0.9 + k * 0.28, r = 12 + (k % 2) * 6 + Math.sin(tt * 6 + k) * 2; x.strokeStyle = ['#ff4d6d', '#ffd166', '#6ee7ff', '#3ddc84', '#c77dff', '#ff8fbf'][k]; x.lineWidth = 1.6; x.beginPath(); x.moveTo(7, -4); x.lineTo(7 + Math.cos(a) * r, -4 + Math.sin(a) * r); x.stroke(); x.fillStyle = x.strokeStyle; x.beginPath(); x.arc(7 + Math.cos(a) * r, -4 + Math.sin(a) * r, 1.6, 0, 7); x.fill(); }
+      x.restore(); }
+  } },
+  { id: 'ny_aura', slot: 'aura', name: 'Confetti Aura', src: 'event', set: 'newyear', desc: 'LIMITED — a shower of celebration confetti. New Year Bash event.', draw: (x, f, t) => {
+    const tt = (t || 0); const cols = ['#ff4d6d', '#ffd166', '#6ee7ff', '#3ddc84', '#c77dff']; for (let i = 0; i < 9; i++) { const ph = (tt * 0.7 + i / 9) % 1; const py = -24 + ph * 44, px = Math.sin(tt * 2 + i * 1.7) * 22; x.save(); x.globalAlpha = 1 - ph * 0.6; x.translate(px, py); x.rotate(tt * 5 + i); x.fillStyle = cols[i % 5]; x.fillRect(-1.4, -1.4, 2.8, 2.8); x.restore(); }
+  } },
 ];
 const COSMO = {}; for (const c of COSMETICS) COSMO[c.id] = c;
 // rarity tier for a cosmetic (drives the wardrobe cell border colour, Growtopia-style)
@@ -1364,6 +1379,7 @@ const COSMO_SETS = {
   frostfire: { name: 'Frostfire', need: 3, dmg: 0.35, reduce: 0.08, desc: '+35% boss damage · +8% resist' },
   hallow:    { name: "Hallow's End", need: 3, dmg: 0.38, reduce: 0.10, desc: '+38% boss damage · +10% resist' },
   bloom:     { name: 'Bloomfall', need: 3, dmg: 0.32, reduce: 0.14, desc: '+32% boss damage · +14% resist' },
+  newyear:   { name: 'New Year', need: 3, dmg: 0.40, reduce: 0.10, desc: '+40% boss damage · +10% resist' },
 };
 // small mini-avatar swatch showing a cosmetic, for the wardrobe UI
 function cosmeticIcon(id) {

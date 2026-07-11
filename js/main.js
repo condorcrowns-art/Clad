@@ -172,6 +172,7 @@ const EVENTS = [
   { id: 'bloomfall', name: 'BLOOMFALL', from: [2, 1], to: [4, 31], set: 'bloom', setName: 'Bloomfall', pieces: ['petal_crown', 'petal_wings', 'bloom_aura'] }, // Mar 1 – May 31
   { id: 'solstice', name: 'SOLSTICE SURGE', from: [5, 1], to: [8, 30], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Jun 1 – Sep 30
   { id: 'hallow', name: "HALLOW'S END", from: [9, 1], to: [10, 15], set: 'hallow', setName: "Hallow's End", pieces: ['pumpkin_hat', 'spectre_cloak', 'pumpkin_lantern'] }, // Oct 1 – Nov 15
+  { id: 'newyear', name: 'NEW YEAR BASH', from: [11, 28], to: [0, 3], set: 'newyear', setName: 'New Year', pieces: ['ny_crown', 'ny_wings', 'ny_aura'] }, // Dec 28 – Jan 3 (wraps, wins over Winterburn)
   { id: 'winterburn', name: 'WINTERBURN', from: [10, 16], to: [1, 29], set: 'frostfire', setName: 'Frostfire', pieces: ['frostfire_crown', 'frostfire_wings', 'frostfire_aura'] }, // Nov 16 – Feb 29 (wraps)
 ];
 

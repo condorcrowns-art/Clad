@@ -118,7 +118,8 @@ sectors** wait behind portals, each ending in a boss fight.
     denser bullet rings, **minion swarms**, and phase-3 pillars → the **mythic Omega set** (the
     strongest cosmetics in the game, +50% boss damage / +20% resist as a set)
 - **Seasonal / limited events** — real-calendar windows that rotate all year: **Bloomfall** (spring),
-  **Solstice Surge** (summer), **Hallow's End** (autumn), **Winterburn** (winter). While an event is
+  **Solstice Surge** (summer), **Hallow's End** (autumn), **New Year Bash** (late Dec–early Jan),
+  **Winterburn** (winter). While an event is
   live, defeating **any** world boss also drops that event's **limited set** (Bloomfall petals,
   Frostfire ice-and-fire, Hallow's End pumpkins) — unobtainable once the window closes, so event loot
   is genuinely rare and among the strongest in the game. Plus a permanent **one-time Founder's Aureole**.
@@ -352,9 +353,13 @@ moderation — these need a live multiplayer backend, which this zero-dependency
 have. Everything that *can* work single-player from the Growtopia/Pixel Worlds feature set is in.
 
 ### Presentation & building feel
+- **On-screen nav dock**: a right-side column of labelled icon buttons opens every panel — Bag,
+  Wear, Emote, Splice, Quests, Shop, Store, Trade, Guild, Skills, Hero, Worlds, Awards, Menu — so
+  nothing needs a memorized hotkey. The button for the open panel highlights, and you can jump
+  straight between panels without closing first (keys still work too).
 - **Polished modal UI**: every panel is a chunky Growtopia-style modal — a gradient **header band**
-  with an accent underline, a **pop-in animation**, a full-screen **focus dim** behind it, glossy
-  item slots with a top sheen, and a satisfying press on every button.
+  with an accent underline and a **✕ close button**, a **pop-in animation**, a full-screen **focus
+  dim** behind it, glossy item slots with a top sheen, and a satisfying press on every button.
 - **Bloom post-processing**: a real screen-space glow pipeline — the frame is bright-passed at
   half-res, blurred, and additively composited back, so every light source, lava tile, crystal,
   projectile, sun/moon and boss effect blooms cinematically. Toggle it in the pause menu.

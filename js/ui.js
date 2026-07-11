@@ -62,6 +62,18 @@ const ui = {
     document.querySelectorAll('.panel').forEach(p => {
       p.addEventListener('mousedown', e => e.stopPropagation());
     });
+    // on-screen nav dock — a button per panel so nothing needs a memorized key
+    document.querySelectorAll('#navDock button').forEach(b => {
+      b.addEventListener('mousedown', e => e.stopPropagation());
+      b.addEventListener('click', () => { if (game.player) game.doAction(b.dataset.act); });
+    });
+    // close (✕) button on every closable panel header
+    document.querySelectorAll('.panel:not(#defragPanel) .panelTitle').forEach(t => {
+      const x = document.createElement('button'); x.className = 'panelClose'; x.textContent = '✕'; x.title = 'close';
+      x.addEventListener('mousedown', e => e.stopPropagation());
+      x.addEventListener('click', () => this.closeAll());
+      t.appendChild(x);
+    });
     document.getElementById('worldCreateBtn').addEventListener('click', () => {
       if (game.foundWorld(this.el.worldNameInput.value)) { this.el.worldNameInput.value = ''; this.closeAll(); }
     });
@@ -502,11 +514,19 @@ const ui = {
     }
     if (name !== 'settings') game.paused = false; // opening any other panel unpauses
     this.hideTip();
+    this.syncDock();
+  },
+  syncDock() {
+    document.querySelectorAll('#navDock button').forEach(b => {
+      const panelName = b.dataset.act === 'pause' ? 'settings' : b.dataset.act;
+      const el = this.el[panelName + 'Panel'];
+      b.classList.toggle('active', !!(el && !el.classList.contains('hidden')));
+    });
   },
   anyPanelOpen() {
     return ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel', 'defragPanel'].some(p => this.el[p] && !this.el[p].classList.contains('hidden'));
   },
-  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); },
+  closeAll() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); ['invPanel', 'shopPanel', 'codexPanel', 'questPanel', 'worldsPanel', 'achPanel', 'guildPanel', 'storePanel', 'skillsPanel', 'settingsPanel', 'tradePanel', 'sheetPanel', 'wardrobePanel', 'emotePanel', 'loginPanel'].forEach(p => this.el[p] && this.el[p].classList.add('hidden')); this.hideTip(); if (this.syncDock) this.syncDock(); },
 
   renderGuild() {
     const b = this.el.guildBody; b.innerHTML = '';
