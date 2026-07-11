@@ -660,7 +660,7 @@ const ui = {
     if (dyeSlots.length) {
       const ds = document.createElement('div'); ds.className = 'wrSection';
       ds.innerHTML = '<div class="wrHead">🎨 Dye studio — recolour worn pieces</div>';
-      const HUES = [null, 20, 45, 80, 130, 170, 200, 240, 290, 320];
+      const HUES = [null, 20, 45, 80, 130, 170, 200, 240, 290, 320, 'rainbow'];
       for (const slot of dyeSlots) {
         const row = document.createElement('div'); row.className = 'dyeRow';
         const lbl = document.createElement('span'); lbl.className = 'dyeLbl'; lbl.textContent = COSMO[wr[slot]].name;
@@ -670,6 +670,7 @@ const ui = {
           const sw = document.createElement('button');
           sw.className = 'dyeSw' + (cur === hue ? ' on' : '');
           if (hue == null) { sw.textContent = '∅'; sw.title = 'original colour'; }
+          else if (hue === 'rainbow') { sw.className += ' rainbow'; sw.title = 'rainbow (cycles)'; }
           else { sw.style.background = 'hsl(' + hue + ',75%,55%)'; sw.title = 'dye'; }
           sw.addEventListener('click', () => game.setDye(slot, hue));
           row.appendChild(sw);
@@ -693,6 +694,30 @@ const ui = {
         cal.appendChild(chip);
       }
       ec.appendChild(cal); b.appendChild(ec);
+    }
+
+    // 💾 Outfit loadouts — save/name/swap whole looks (wardrobe + dyes)
+    {
+      const ls = document.createElement('div'); ls.className = 'wrSection';
+      ls.innerHTML = '<div class="wrHead">💾 Outfit loadouts — save &amp; swap whole looks</div>';
+      const grid = document.createElement('div'); grid.className = 'loGrid';
+      const loadouts = game.progress.loadouts || [];
+      loadouts.forEach((lo, i) => {
+        const chip = document.createElement('div'); chip.className = 'loChip';
+        const nm = document.createElement('span'); nm.className = 'loName'; nm.textContent = lo.name;
+        nm.title = 'wear this outfit'; nm.addEventListener('click', () => game.applyLoadout(i));
+        const del = document.createElement('button'); del.className = 'loDel'; del.textContent = '✕'; del.title = 'delete';
+        del.addEventListener('click', (e) => { e.stopPropagation(); game.deleteLoadout(i); });
+        chip.appendChild(nm); chip.appendChild(del); grid.appendChild(chip);
+      });
+      ls.appendChild(grid);
+      const save = document.createElement('div'); save.className = 'loSave';
+      save.innerHTML = '<input id="loNameInput" maxlength="18" placeholder="name this outfit…"><button class="wrTool" id="loSaveBtn">💾 save current</button>';
+      ls.appendChild(save);
+      b.appendChild(ls);
+      const inp = save.querySelector('#loNameInput');
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { game.saveLoadout(inp.value); } else if (e.key !== 'Escape') e.stopPropagation(); });
+      save.querySelector('#loSaveBtn').addEventListener('click', () => game.saveLoadout(inp.value));
     }
 
     const SLOTS = [
@@ -776,7 +801,8 @@ const ui = {
     const wr = game.progress.wardrobe || {};
     const t = performance.now() / 1000;
     const dyes = game.progress.dyes || {};
-    const d = (slot) => { if (wr[slot] && COSMO[wr[slot]]) { x.save(); if (dyes[slot]) x.filter = 'hue-rotate(' + dyes[slot] + 'deg)'; try { COSMO[wr[slot]].draw(x, 1, t); } catch (e) {} x.restore(); } };
+    const dh = (v) => v === 'rainbow' ? ((t * 90) % 360) : v;
+    const d = (slot) => { if (wr[slot] && COSMO[wr[slot]]) { x.save(); if (dyes[slot]) x.filter = 'hue-rotate(' + dh(dyes[slot]) + 'deg)'; try { COSMO[wr[slot]].draw(x, 1, t); } catch (e) {} x.restore(); } };
     const rr = (typeof _rrPath === 'function') ? _rrPath : (c, X, Y, w, h) => c.rect(X, Y, w, h);
     const sh = (typeof _shade === 'function') ? _shade : (c) => c;
     const col = game.progress.avatarColor || '#4361ee';
@@ -808,7 +834,7 @@ const ui = {
     d('face');
     d('hat');
     // held item — anchored at the front hand
-    if (wr.hand && COSMO[wr.hand]) { x.save(); x.translate(13, -6); if (dyes.hand) x.filter = 'hue-rotate(' + dyes.hand + 'deg)'; try { COSMO[wr.hand].draw(x, 1, t); } catch (e) {} x.restore(); }
+    if (wr.hand && COSMO[wr.hand]) { x.save(); x.translate(13, -6); if (dyes.hand) x.filter = 'hue-rotate(' + dh(dyes.hand) + 'deg)'; try { COSMO[wr.hand].draw(x, 1, t); } catch (e) {} x.restore(); }
     x.restore();
   },
 

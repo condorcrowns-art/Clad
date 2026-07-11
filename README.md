@@ -70,7 +70,10 @@ sectors** wait behind portals, each ending in a boss fight.
   its cell border, plus **🎲 Randomize**, **✖ Clear all**, and a collection counter.
 - **Dye studio** — recolour any worn piece with a **per-slot hue dye** (a row of swatches per
   equipped slot, applied live to the avatar and preview and saved with your character) — so the same
-  cosmetic can be tinted a dozen different ways.
+  cosmetic can be tinted a dozen different ways, including a **🌈 rainbow dye** that cycles hue in
+  real time.
+- **Outfit loadouts** — save your whole look (every slot **plus** its dyes) as a named preset and
+  swap between up to 8 with one click — e.g. a "Mage" and a "Pirate" outfit ready to switch instantly.
 - **Event calendar** — the wardrobe shows the full rotating event schedule (Bloomfall · Solstice ·
   Hallow's End · Winterburn) with the currently-live event highlighted, so you always know which
   limited set is dropping.

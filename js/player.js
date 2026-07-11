@@ -790,10 +790,11 @@ class Player extends Entity {
     ctx.translate(0, bob);
     const _cw = (typeof game !== 'undefined' && game.progress && game.progress.wardrobe) || null;
     const _dyes = (typeof game !== 'undefined' && game.progress && game.progress.dyes) || {};
+    const _dyeHue = (v) => v === 'rainbow' ? ((time * 90) % 360) : v;
     const _cd = (slot) => {
       if (_cw && _cw[slot] && typeof COSMO !== 'undefined' && COSMO[_cw[slot]]) {
         ctx.save();
-        if (_dyes[slot]) ctx.filter = 'hue-rotate(' + _dyes[slot] + 'deg)';
+        if (_dyes[slot]) ctx.filter = 'hue-rotate(' + _dyeHue(_dyes[slot]) + 'deg)';
         try { COSMO[_cw[slot]].draw(ctx, this.facing, time, this); } catch (e) {}
         ctx.restore();
       }
@@ -894,7 +895,7 @@ class Player extends Entity {
       ctx.save();
       ctx.translate(faw, 0);
       ctx.rotate(-this.facing * (0.3 + swing) * 0.82);
-      if (_dyes.hand) ctx.filter = 'hue-rotate(' + _dyes.hand + 'deg)';
+      if (_dyes.hand) ctx.filter = 'hue-rotate(' + _dyeHue(_dyes.hand) + 'deg)';
       try { COSMO[_cw.hand].draw(ctx, this.facing, time, this); } catch (e) {}
       ctx.restore();
     }

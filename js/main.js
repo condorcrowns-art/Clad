@@ -664,11 +664,45 @@ class Game {
     this.save();
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
   }
-  // dyes: a per-slot hue-rotation (degrees) recolours whatever is worn in that slot
+  // dyes: a per-slot hue-rotation (degrees, or 'rainbow' to cycle) recolours whatever is worn
   setDye(slot, hue) {
     this.progress.dyes = this.progress.dyes || {};
     if (hue == null) delete this.progress.dyes[slot]; else this.progress.dyes[slot] = hue;
-    this.fx.explode(this.player.x, this.player.y, 'hsl(' + (hue || 0) + ',80%,60%)', 10);
+    this.fx.explode(this.player.x, this.player.y, hue === 'rainbow' ? '#c77dff' : 'hsl(' + (hue || 0) + ',80%,60%)', 10);
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
+  /* ---------------- outfit loadout presets ---------------- */
+  saveLoadout(name) {
+    name = (name || '').trim().slice(0, 18) || ('Outfit ' + ((this.progress.loadouts || []).length + 1));
+    this.progress.loadouts = this.progress.loadouts || [];
+    if (this.progress.loadouts.length >= 8) { this.toast('Loadout slots full (8). Delete one first.', 'warn'); return false; }
+    this.progress.loadouts.push({
+      name,
+      wardrobe: Object.assign({}, this.progress.wardrobe),
+      dyes: Object.assign({}, this.progress.dyes),
+    });
+    this.toast('💾 Outfit saved: ' + name, 'gold');
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+    return true;
+  }
+  applyLoadout(i) {
+    const lo = (this.progress.loadouts || [])[i]; if (!lo) return;
+    // only equip cosmetics the player actually owns
+    const wr = { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null };
+    for (const slot in wr) { const id = lo.wardrobe[slot]; if (id && this.ownsCosmetic(id)) wr[slot] = id; }
+    this.progress.wardrobe = wr;
+    this.progress.dyes = Object.assign({}, lo.dyes || {});
+    this.fx.explode(this.player.x, this.player.y, '#8ecae6', 16);
+    this.sfx && this.sfx.play('place');
+    this.toast('Wearing: ' + lo.name, 'gold');
+    this.save();
+    if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
+  }
+  deleteLoadout(i) {
+    if (!this.progress.loadouts) return;
+    this.progress.loadouts.splice(i, 1);
     this.save();
     if (typeof ui !== 'undefined' && ui.renderWardrobe) ui.renderWardrobe();
   }
@@ -1225,6 +1259,7 @@ class Game {
       if (typeof this.progress.bloom !== 'boolean') this.progress.bloom = true;
       this.progress.wardrobe = Object.assign({ hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, this.progress.wardrobe || {});
       this.progress.dyes = this.progress.dyes || {};
+      this.progress.loadouts = this.progress.loadouts || [];
       this.progress.ownedCosmetics = Object.assign({ cap: 1, round_glasses: 1 }, this.progress.ownedCosmetics || {});
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;
