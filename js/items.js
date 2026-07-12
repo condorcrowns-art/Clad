@@ -80,6 +80,9 @@ defItem('drone_pet', { name: 'Pocket Drone', kind: 'gear', slot: 'pet', tier: 3,
 defItem('core_sprite', { name: 'Core Sprite', kind: 'gear', slot: 'pet', tier: 9, unspliceable: true,
   fx: { pet: { dmg: 16, rate: 0.9, range: 8, color: '#ffd166', heal: 2 } },
   desc: 'BOSS TECH: a fragment of the liberated Core. Fights harder than a drone and slowly mends your HP.' });
+defItem('scrap_pet', { name: 'Scrap Sprite', kind: 'gear', slot: 'pet', tier: 9, unspliceable: true,
+  fx: { pet: { dmg: 22, rate: 0.8, range: 8, color: '#c9a227' } },
+  desc: 'BOSS TECH: a whirring junk-golem familiar salvaged from the SCRAP TITAN. Hits like a hammer.' });
 defItem('overclock_chip', { name: 'Overclock Chip', kind: 'gear', slot: 'chip', tier: 9, unspliceable: true,
   fx: { speed: 1.2, dmgMult: 1.35, magnet: 5 },
   desc: 'BOSS TECH: BOSS RUSH exclusive. Runs your whole rig hot: +20% speed, +35% damage, loot magnet.' });

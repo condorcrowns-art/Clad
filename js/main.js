@@ -1007,13 +1007,14 @@ class Game {
       for (const s of this.world.keySpots) this.keyPickups.push(new KeyPickup(s.x, s.y));
       this.toast('Entering ' + this.world.name + ' — find ' + this.keysNeed + ' cipher keys to unseal the boss gate.', 'warn');
       this.toast('Careful: dying in a sector costs 20% of your gems.', 'warn');
-      // the WARDEN sometimes stalks a sector (nether miniboss)
+      // a roaming miniboss sometimes stalks a sector — WARDEN, or the SCRAP TITAN in deeper sectors
       if (Math.random() < 0.28) {
         const far = this.world.spawnPoints.filter(s => s.x > this.world.w * 0.35 && s.x < this.world.gateCol - 2);
         if (far.length) {
           const s = far[Math.floor(Math.random() * far.length)];
-          this.enemies.push(new Enemy('warden', s.x * TS + TS / 2, s.y * TS - 8, n));
-          this.toast('⚠ Something heavy is patrolling this sector…', 'warn');
+          const type = (n >= 4 && Math.random() < 0.5) ? 'scrap_titan' : 'warden';
+          this.enemies.push(new Enemy(type, s.x * TS + TS / 2, s.y * TS - 8, n));
+          this.toast(type === 'scrap_titan' ? '⚠ The ground trembles — a SCRAP TITAN roams here…' : '⚠ Something heavy is patrolling this sector…', 'warn');
         }
       }
     }

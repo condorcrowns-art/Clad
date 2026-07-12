@@ -353,6 +353,11 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **New enemies** — the **Charger** winds up and dashes at you across the ground, and the **Bomber**
   drifts in and **detonates in an AoE blast on death** (catching you *and* other enemies). Both use
   the smooth rounded/shaded rendering and join the sector spawn pools.
+- **SCRAP TITAN mini-boss** — a hulking 900-HP crowned wrecker that stalks the deeper sectors
+  (n ≥ 4, replacing the WARDEN roll half the time). It **leaps into the air and slams down**, sending
+  a screen-shaking **ground shockwave** that hammers anyone standing near the impact. Topple it for a
+  pile of gems, a couple of Mystery Seeds, and a shot at the **Scrap Sprite** — a salvage-golem pet
+  familiar that fights at your side.
 
 **Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
 trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side

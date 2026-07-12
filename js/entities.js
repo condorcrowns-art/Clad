@@ -97,6 +97,7 @@ const ENEMY_DEFS = {
   phantom:    { hp: 28, dmg: 15, speed: 185, color: '#7048c0', color2: '#c77dff', w: 24, h: 24, ai: 'flyer', shoots: true, gems: [5, 11] },
   charger:    { hp: 74, dmg: 20, speed: 60, color: '#ff6b35', color2: '#7a2e0a', w: 30, h: 26, ai: 'walker', charges: true, gems: [5, 12] },
   bomber:     { hp: 30, dmg: 8, speed: 120, color: '#3ddc84', color2: '#14532d', w: 24, h: 22, ai: 'flyer', boomOnDeath: true, gems: [4, 10] },
+  scrap_titan:{ hp: 900, dmg: 30, speed: 42, color: '#a08a5a', color2: '#4a3f2a', w: 58, h: 54, ai: 'walker', slams: true, miniboss: true, gems: [90, 140] },
 };
 
 class Enemy extends Entity {
@@ -150,11 +151,17 @@ class Enemy extends Entity {
       if (Math.random() < 0.06) game.spawnDrop(this.x, this.y, 'medkit', 1);
       if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'bomb', 1);
       if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'corrupted_drive', 1);
-      if (this.def.miniboss) { // WARDEN treasure (Pixel Worlds nether miniboss homage)
-        game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
+      if (this.def.miniboss) { // roaming miniboss treasure (Pixel Worlds nether homage)
         game.spawnDrop(this.x, this.y, 'medkit', 2);
-        if (Math.random() < 0.35) game.spawnDrop(this.x, this.y, 'golden_fish', 1);
-        game.toast('★ WARDEN destroyed — treasure secured!', 'gold');
+        if (this.type === 'scrap_titan') {
+          game.spawnDrop(this.x, this.y, 'mystery_seed', 2);
+          if (!game.player.count('scrap_pet') && Math.random() < 0.5) game.spawnDrop(this.x, this.y, 'scrap_pet', 1);
+          game.toast('★ SCRAP TITAN toppled — salvage secured!', 'gold');
+        } else {
+          game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
+          if (Math.random() < 0.35) game.spawnDrop(this.x, this.y, 'golden_fish', 1);
+          game.toast('★ WARDEN destroyed — treasure secured!', 'gold');
+        }
       }
     }
   }
@@ -202,6 +209,15 @@ class Enemy extends Entity {
         this._chgCd = (this._chgCd == null ? 2.5 : this._chgCd) - dt;
         if ((this._chgT || 0) > 0) { this._chgT -= dt; this.vx = this.dir * this.def.speed * 5 * spdM; if (Math.random() < 0.4) game.fx.add(this.x, this.y, -this.dir * 120, 0, '#ffd166', 0.3, 2.5, 0); }
         else if (this._chgCd <= 0 && !repelled && distP < 8 * TS && Math.abs(p.y - this.y) < 2.2 * TS) { this._chgT = 0.5; this._chgCd = 3.2; this.dir = Math.sign(p.x - this.x) || this.dir; game.fx.spark(this.x, this.y - this.h / 2, '#ffd166', 8); }
+      }
+      // scrap titan: leap and slam, sending a shockwave on landing
+      if (this.def.slams) {
+        this._slamCd = (this._slamCd == null ? 3 : this._slamCd) - dt;
+        if (this._slamState !== 'air' && this._slamCd <= 0 && this.onGround && distP < 7 * TS) {
+          this._slamCd = 4.5; this._slamState = 'air'; this.vy = -640; this.vx *= 0.3;
+          game.fx.spark(this.x, this.y, '#ffd166', 10);
+        }
+        if (this._slamState === 'air') this.vx *= 0.4; // hang over the player
       }
       if (this.def.lobs && distP < 10 * TS) {
         this.shootT -= dt;
@@ -280,6 +296,15 @@ class Enemy extends Entity {
       }
     }
     this.moveAndCollide(dt, world);
+    // scrap titan lands from a slam → ground shockwave
+    if (this.def && this.def.slams && this._slamState === 'air' && this.onGround) {
+      this._slamState = null;
+      game.shake = Math.max(game.shake || 0, 0.7); game.sfx.play('boom');
+      game.fx.explode(this.x, this.y + this.h / 2, '#ffd166', 30);
+      for (let k = 0; k < 12; k++) game.fx.add(this.x, this.y + this.h / 2, (k - 6) * 70, -90, '#c9a227', 0.5, 3, 420);
+      const pp = game.player;
+      if (Math.abs(pp.x - this.x) < 5.5 * TS && pp.y > this.y - 2.5 * TS && pp.onGround) pp.hurt(this.dmg, game, Math.sign(pp.x - this.x || 1) * 420);
+    }
     if (this.vx !== 0 && ai === 'walker' && this.onGround && Math.abs(this.vx) < 5) this.dir *= -1;
     // hazard tiles hurt enemies too (firewall blocks, grinders, barbed wire, mines!)
     this.tilesTouching(world, (it, ttx, tty) => {
