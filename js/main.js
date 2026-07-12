@@ -1529,11 +1529,14 @@ class Game {
           let lvl = w.sectorN || 1;
           if (w.isMine) lvl = 1 + Math.floor(Math.max(0, s.y - 10) / 45);
           if (this.progress.overdrive) lvl += 3;
-          // rare wild Champion — an affixed elite that drops elite loot
-          const champ = Math.random() < 0.08;
-          const e = new Enemy(type, s.x * TS + TS / 2, s.y * TS + TS / 2 - 4, lvl, champ ? { elite: true } : undefined);
+          // rare Bit Goblin (loot piñata) or wild Champion (affixed elite)
+          const goblin = !w.isMine && !this.enemies.some(en => en.type === 'bit_goblin' && !en.dead) && Math.random() < 0.04;
+          const champ = !goblin && Math.random() < 0.08;
+          const spawnType = goblin ? 'bit_goblin' : type;
+          const e = new Enemy(spawnType, s.x * TS + TS / 2, s.y * TS + TS / 2 - 4, goblin ? Math.max(2, lvl) : lvl, champ ? { elite: true } : undefined);
           this.enemies.push(e);
-          if (champ && typeof AFFIXES !== 'undefined' && AFFIXES[e.affix]) this.toast('★ A ' + AFFIXES[e.affix].name + ' Champion has appeared!', 'warn');
+          if (goblin) this.toast('✦ A Bit Goblin appeared — catch it before it escapes!', 'gold');
+          else if (champ && typeof AFFIXES !== 'undefined' && AFFIXES[e.affix]) this.toast('★ A ' + AFFIXES[e.affix].name + ' Champion has appeared!', 'warn');
         }
       }
     }

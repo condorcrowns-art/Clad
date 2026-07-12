@@ -98,6 +98,7 @@ const ENEMY_DEFS = {
   charger:    { hp: 74, dmg: 20, speed: 60, color: '#ff6b35', color2: '#7a2e0a', w: 30, h: 26, ai: 'walker', charges: true, gems: [5, 12] },
   bomber:     { hp: 30, dmg: 8, speed: 120, color: '#3ddc84', color2: '#14532d', w: 24, h: 22, ai: 'flyer', boomOnDeath: true, gems: [4, 10] },
   scrap_titan:{ hp: 900, dmg: 30, speed: 42, color: '#a08a5a', color2: '#4a3f2a', w: 58, h: 54, ai: 'walker', slams: true, miniboss: true, gems: [90, 140] },
+  bit_goblin: { hp: 120, dmg: 4, speed: 150, color: '#ffd54a', color2: '#8a6d1a', w: 26, h: 24, ai: 'walker', flees: true, gems: [40, 70] },
 };
 
 // Champion affixes — elites (and wild champions) roll one of these for varied
@@ -156,6 +157,15 @@ class Enemy extends Entity {
         if (Math.random() < 0.3) game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
         game.fx.explode(this.x, this.y, '#ffd166', 26);
         game.toast('★ Elite purged — extra loot dropped!', 'gold');
+      }
+      // Bit Goblin cracked open — a jackpot burst (gems already scaled via def.gems)
+      if (this.type === 'bit_goblin') {
+        game.fx.explode(this.x, this.y, '#ffe27a', 40);
+        game.spawnDrop(this.x, this.y, 'mystery_seed', 1 + Math.floor(Math.random() * 2));
+        game.spawnDrop(this.x, this.y, 'medkit', 2);
+        if (Math.random() < 0.4) game.spawnDrop(this.x, this.y, 'corrupted_drive', 2);
+        if (Math.random() < 0.25) game.spawnDrop(this.x, this.y, 'golden_fish', 1);
+        game.toast('★ Bit Goblin cracked open — jackpot!', 'gold');
       }
       // VOLATILE champions detonate in a big AoE burst on death
       if (this.affix === 'volatile') {
@@ -237,8 +247,22 @@ class Enemy extends Entity {
       if (ai === 'flyer') { this.vx += repelled * 700 * dt; }
     }
     if (ai === 'walker') {
-      if (distP < 9 * TS && !repelled) this.dir = Math.sign(p.x - this.x) || this.dir;
-      this.vx = this.dir * this.def.speed * spdM;
+      if (this.def.flees) {
+        // Bit Goblin: sprint AWAY from the player and escape if it survives long enough
+        this._escT = (this._escT == null ? 13 : this._escT) - dt;
+        if (distP < 12 * TS) this.dir = Math.sign(this.x - p.x) || this.dir;
+        const panic = distP < 7 * TS ? 1.5 : 1;
+        this.vx = this.dir * this.def.speed * spdM * panic;
+        if (Math.random() < 0.3) game.fx.add(this.x, this.y - this.h / 2, (Math.random() - 0.5) * 40, -30, '#ffe27a', 0.5, 2.5, 0);
+        if (this._escT <= 0 && !this.dead) { // it got away clean — no loot
+          this.dead = true;
+          game.fx.puff(this.x, this.y - this.h / 2, '#ffe27a');
+          game.toast('The Bit Goblin slipped away with its loot!', 'warn');
+        }
+      } else {
+        if (distP < 9 * TS && !repelled) this.dir = Math.sign(p.x - this.x) || this.dir;
+        this.vx = this.dir * this.def.speed * spdM;
+      }
       // chargers wind up, then dash at the player
       if (this.def.charges) {
         this._chgCd = (this._chgCd == null ? 2.5 : this._chgCd) - dt;
@@ -392,6 +416,13 @@ class Enemy extends Entity {
       ctx.fillStyle = '#ffd166';
       ctx.beginPath(); ctx.moveTo(-8, -this.h / 2 - 2); ctx.lineTo(-8, -this.h / 2 - 10); ctx.lineTo(-3, -this.h / 2 - 5); ctx.lineTo(0, -this.h / 2 - 11); ctx.lineTo(3, -this.h / 2 - 5); ctx.lineTo(8, -this.h / 2 - 10); ctx.lineTo(8, -this.h / 2 - 2); ctx.closePath(); ctx.fill();
     }
+    if (this.type === 'bit_goblin') { // shimmering treasure glow
+      const pr = this.w * 0.85 + Math.sin(time * 6) * 3;
+      ctx.save(); ctx.globalAlpha = 0.28 + Math.sin(time * 6) * 0.06;
+      const g = ctx.createRadialGradient(0, 0, 2, 0, 0, pr);
+      g.addColorStop(0, '#ffe27a'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, pr, 0, 7); ctx.fill(); ctx.restore();
+    }
     if (this.hitFlash > 0) ctx.filter = 'brightness(2.5)';
     const wob = Math.sin(this.t * 8) * 2;
     if (d.ai === 'flyer') {
@@ -435,6 +466,12 @@ class Enemy extends Entity {
     if (d.mender) { // green cross
       ctx.fillStyle = '#fff';
       ctx.fillRect(-2, -this.h / 2 - 6, 4, 8); ctx.fillRect(-4, -this.h / 2 - 4, 8, 4);
+    }
+    if (this.type === 'bit_goblin') { // floating coin + sparkles
+      ctx.fillStyle = '#ffe27a'; ctx.beginPath(); ctx.arc(0, -this.h / 2 - 7, 4.5, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#8a6d1a'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = '#8a6d1a'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'; ctx.fillText('$', 0, -this.h / 2 - 4.5);
+      for (let s = 0; s < 3; s++) { const a = time * 3 + s * 2.1; ctx.fillStyle = 'rgba(255,229,122,0.9)'; ctx.beginPath(); ctx.arc(Math.cos(a) * this.w * 0.6, Math.sin(a) * this.w * 0.5 - 4, 1.5, 0, 7); ctx.fill(); }
     }
     if (this.type === 'hornet') { // stinger + buzz wings
       ctx.fillStyle = '#3d2e00';

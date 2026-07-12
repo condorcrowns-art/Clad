@@ -363,6 +363,11 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   **⚡ Swift** (much faster), **🛡 Armored** (takes half damage), **💥 Volatile** (detonates in a big
   AoE on death), **🩸 Vampiric** (regenerates health mid-fight), and **✦ Frenzied** (attacks far more
   often). Champions and dungeon elites both roll affixes and drop the elite loot bundle when purged.
+- **Bit Goblin** — a rare golden loot piñata (the treasure-goblin homage). It **sprints away** from
+  you the instant it notices you and **escapes for good if it survives ~13 seconds**, so you have to
+  chase it down. Crack it open in time and it **bursts into a jackpot** — a shower of gems plus Mystery
+  Seeds, medkits, and a chance at a Golden Fish. Look for the shimmering gold aura and the floating
+  **$** coin.
 
 **Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
 trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side
