@@ -1763,8 +1763,8 @@ class World {
 
   static genSector(n) {
     const defs = {
-      1: { name: 'FIREWALL SECTOR', sky: ['#1a0505', '#5c1a0a'], bgWall: 'rgba(40,10,5,0.85)', dark: 0.5, ground: 'stone', hazard: 'magma', enemies: ['ember', 'drone', 'brute'], cap: 6, boss: 'firewall_daemon' },
-      2: { name: 'DATA MINES', sky: ['#0a0514', '#241448'], bgWall: 'rgba(18,8,30,0.9)', dark: 0.8, ground: 'stone', hazard: null, enemies: ['glitchling', 'ember', 'spitter'], cap: 7, boss: 'null_wurm' },
+      1: { name: 'FIREWALL SECTOR', sky: ['#1a0505', '#5c1a0a'], bgWall: 'rgba(40,10,5,0.85)', dark: 0.5, ground: 'stone', hazard: 'magma', enemies: ['ember', 'drone', 'brute', 'charger'], cap: 6, boss: 'firewall_daemon' },
+      2: { name: 'DATA MINES', sky: ['#0a0514', '#241448'], bgWall: 'rgba(18,8,30,0.9)', dark: 0.8, ground: 'stone', hazard: null, enemies: ['glitchling', 'ember', 'spitter', 'bomber'], cap: 7, boss: 'null_wurm' },
       3: { name: 'THE CLOUD', sky: ['#4a6ea8', '#a8c8e8'], bgWall: 'rgba(120,140,180,0.4)', dark: 0, ground: 'cloudb', hazard: null, enemies: ['drone', 'zapper'], cap: 7, boss: 'storm_kernel' },
       4: { name: 'THE CORE', sky: ['#14020a', '#3d0a1e'], bgWall: 'rgba(30,5,15,0.9)', dark: 0.6, ground: 'corrupt', hazard: 'magma', enemies: ['glitchling', 'zapper', 'spitter', 'brute'], cap: 9, boss: 'admin' },
       5: { name: 'FLOODED ARCHIVE', sky: ['#02131f', '#0a3d52'], bgWall: 'rgba(6,30,42,0.9)', dark: 0.3, ground: 'stone', hazard: null, enemies: ['drone', 'spitter', 'glitchling'], cap: 7, boss: 'kraken', flood: 24 },

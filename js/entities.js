@@ -95,6 +95,8 @@ const ENEMY_DEFS = {
   mender:     { hp: 34, dmg: 6, speed: 90, color: '#95d5b2', color2: '#2d6a4f', w: 24, h: 22, ai: 'flyer', mender: true, gems: [5, 12] },
   golem:      { hp: 210, dmg: 24, speed: 34, color: '#6b7280', color2: '#374151', w: 44, h: 42, ai: 'walker', gems: [10, 18] },
   phantom:    { hp: 28, dmg: 15, speed: 185, color: '#7048c0', color2: '#c77dff', w: 24, h: 24, ai: 'flyer', shoots: true, gems: [5, 11] },
+  charger:    { hp: 74, dmg: 20, speed: 60, color: '#ff6b35', color2: '#7a2e0a', w: 30, h: 26, ai: 'walker', charges: true, gems: [5, 12] },
+  bomber:     { hp: 30, dmg: 8, speed: 120, color: '#3ddc84', color2: '#14532d', w: 24, h: 22, ai: 'flyer', boomOnDeath: true, gems: [4, 10] },
 };
 
 class Enemy extends Entity {
@@ -136,6 +138,14 @@ class Enemy extends Entity {
         if (Math.random() < 0.3) game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
         game.fx.explode(this.x, this.y, '#ffd166', 26);
         game.toast('★ Elite purged — extra loot dropped!', 'gold');
+      }
+      // bombers detonate on death — an AoE burst (no terrain damage)
+      if (this.def.boomOnDeath) {
+        game.sfx.play('boom'); game.shake = Math.max(game.shake || 0, 0.4);
+        game.fx.explode(this.x, this.y, '#3ddc84', 30);
+        const R = 2.6 * TS, pp = game.player;
+        if (Math.hypot(pp.x - this.x, pp.y - this.y) < R) pp.hurt(this.dmg + 12, game, Math.sign(pp.x - this.x) * 320);
+        for (const e of game.enemies) { if (e !== this && !e.dead && Math.hypot(e.x - this.x, e.y - this.y) < R) e.hurt(20, game); }
       }
       if (Math.random() < 0.06) game.spawnDrop(this.x, this.y, 'medkit', 1);
       if (Math.random() < 0.05) game.spawnDrop(this.x, this.y, 'bomb', 1);
@@ -187,6 +197,12 @@ class Enemy extends Entity {
     if (ai === 'walker') {
       if (distP < 9 * TS && !repelled) this.dir = Math.sign(p.x - this.x) || this.dir;
       this.vx = this.dir * this.def.speed * spdM;
+      // chargers wind up, then dash at the player
+      if (this.def.charges) {
+        this._chgCd = (this._chgCd == null ? 2.5 : this._chgCd) - dt;
+        if ((this._chgT || 0) > 0) { this._chgT -= dt; this.vx = this.dir * this.def.speed * 5 * spdM; if (Math.random() < 0.4) game.fx.add(this.x, this.y, -this.dir * 120, 0, '#ffd166', 0.3, 2.5, 0); }
+        else if (this._chgCd <= 0 && !repelled && distP < 8 * TS && Math.abs(p.y - this.y) < 2.2 * TS) { this._chgT = 0.5; this._chgCd = 3.2; this.dir = Math.sign(p.x - this.x) || this.dir; game.fx.spark(this.x, this.y - this.h / 2, '#ffd166', 8); }
+      }
       if (this.def.lobs && distP < 10 * TS) {
         this.shootT -= dt;
         if (this.shootT <= 0) {

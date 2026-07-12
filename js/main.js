@@ -1647,6 +1647,15 @@ class Game {
 
     this._questT += dt;
     if (this._questT > 1.5) { this._questT = 0; this.checkQuests(); this.checkDailies(); }
+    // jukebox: a looping chiptune plays while you stand near a placed one
+    this._jukeT = (this._jukeT || 0) - dt;
+    if (this._jukeT <= 0) {
+      this._jukeT = 0.3;
+      const px = Math.floor(this.player.x / TS), py = Math.floor(this.player.y / TS);
+      let near = false;
+      for (let dy = -3; dy <= 3 && !near; dy++) for (let dx = -4; dx <= 4; dx++) { if (w.get(px + dx, py + dy) === 'jukebox') { near = true; break; } }
+      if (near && this.sfx) { const mel = [0, 3, 5, 7, 5, 3, 7, 10, 7, 5, 3, 5, 0, 7]; this._jukeI = ((this._jukeI || 0) + 1) % mel.length; this.sfx.note(mel[this._jukeI]); }
+    }
     this._miniT += dt;
     if (this._miniT > 2.5) { this._miniT = 0; w.buildMini(this); }
 

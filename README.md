@@ -346,9 +346,13 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
 - **Titles** — earnable nameplate titles (Boss Slayer, Fashionista, the Tycoon, World-Ender…),
   chosen in the Character sheet.
 - **Outfit mannequins** — display blocks that wear your current dyed outfit, for showing off builds.
-- **Animated "game room" décor** — a Jukebox with dancing equalizer bars, an Arcade Cabinet with a
-  flickering screen, a bubbling Aquarium with a swimming fish, and a spinning Disco Ball that
-  scatters colour (Game Room Pack in the Shard Store).
+- **Animated "game room" décor** — a Jukebox with dancing equalizer bars (it **plays a looping
+  chiptune** while you stand near it!), an Arcade Cabinet with a flickering screen, a bubbling
+  Aquarium with a swimming fish, and a spinning Disco Ball that scatters colour (Game Room Pack in
+  the Shard Store).
+- **New enemies** — the **Charger** winds up and dashes at you across the ground, and the **Bomber**
+  drifts in and **detonates in an AoE blast on death** (catching you *and* other enemies). Both use
+  the smooth rounded/shaded rendering and join the sector spawn pools.
 
 **Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
 trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side
