@@ -368,6 +368,10 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   chase it down. Crack it open in time and it **bursts into a jackpot** — a shower of gems plus Mystery
   Seeds, medkits, and a chance at a Golden Fish. Look for the shimmering gold aura and the floating
   **$** coin.
+- **New buff potions** — two craftable consumables with brand-new effects, each shown on the buff-timer
+  HUD badge. **🛡 Aegis Brew** (`Nano Shield + Crystal Cluster`) raises a ward that halves *all* incoming
+  damage for 45s — drink it before a boss. **🧲 Magnet Tonic** (`Magnet Chip + Glass`) magnetises you so
+  gems and loot come flying from 9 tiles away for 40s.
 
 **Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
 trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side

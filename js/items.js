@@ -531,6 +531,10 @@ defItem('prospector_beetle', { name: 'Prospector Beetle', kind: 'gear', slot: 'p
 /* consumables wave 4 */
 defItem('adrenaline_shot', { name: 'Adrenaline Shot', kind: 'consumable', tier: 3, buff: { dur: 15, speed: 2, dmg: 1 },
   desc: 'FUNCTION: DOUBLE movement speed for 15 seconds. Outrun everything.' });
+defItem('aegis_brew', { name: 'Aegis Brew', kind: 'consumable', tier: 4, buff: { dur: 45, shield: 0.5 },
+  desc: 'FUNCTION: raise a shimmering ward — take HALF damage from every source for 45 seconds. Drink before a boss.' });
+defItem('magnet_tonic', { name: 'Magnet Tonic', kind: 'consumable', tier: 3, buff: { dur: 40, magnet: 9 },
+  desc: 'FUNCTION: magnetise yourself — gems and loot come flying to you from 9 tiles away for 40 seconds.' });
 
 /* --- THE HIVE tech --- */
 defItem('honeycomb', { name: 'Honeycomb Block', kind: 'block', tier: 2, hp: 6, solid: true, animated: true, color: '#f4a800', color2: '#b87f00',
@@ -844,6 +848,8 @@ defRecipe('honeycomb', 'sentry', 'hive_turret');
 defRecipe('honeycomb', 'spring_pad', 'honey_pot');
 defRecipe('honeycomb', 'repair_node', 'royal_jelly');
 defRecipe('honeycomb', 'glass', 'nectar');
+defRecipe('nano_shield', 'crystal_cluster', 'aegis_brew');   // shield potion
+defRecipe('magnet_chip', 'glass', 'magnet_tonic');           // loot-magnet potion
 // ---- decorative branch (cosmetic-only, Growtopia decor) ----
 defRecipe('stone', 'snow', 'marble');
 defRecipe('wood', 'snow', 'fabric');
@@ -1771,12 +1777,13 @@ function drawConsumableIcon(x, it, id) {
     x.strokeStyle = '#ffd166'; x.lineWidth = 2; x.beginPath(); x.moveTo(24, 14); x.quadraticCurveTo(30, 6, 34, 8); x.stroke();
     x.fillStyle = '#ff5714'; x.fillRect(32, 5, 4, 4);
   } else if (it.buff) {
-    const col = it.buff.gem ? '#3ddc84' : it.buff.speed >= 2 ? '#ff4d6d' : '#ff9e6d';
+    const col = it.buff.shield ? '#6ee7ff' : it.buff.magnet ? '#c77dff' : it.buff.gem ? '#3ddc84' : it.buff.speed >= 2 ? '#ff4d6d' : '#ff9e6d';
     x.fillStyle = col; x.fillRect(12, 10, 16, 26);
     x.fillStyle = 'rgba(255,255,255,0.35)'; x.fillRect(14, 12, 4, 22);
     x.fillStyle = '#e8ecf4'; x.fillRect(14, 6, 12, 4);
     x.fillStyle = '#0d1526'; x.font = 'bold 10px monospace';
-    x.fillText(it.buff.gem ? '$' : it.buff.speed >= 2 ? '>>' : 'OC', it.buff.gem ? 17 : 13, 26);
+    const glyph = it.buff.shield ? 'SH' : it.buff.magnet ? 'M' : it.buff.gem ? '$' : it.buff.speed >= 2 ? '>>' : 'OC';
+    x.fillText(glyph, glyph.length > 1 ? 13 : 17, 26);
   } else {
     x.fillStyle = '#2a1c3a'; x.fillRect(8, 14, 24, 22);
     x.fillStyle = '#c77dff'; x.font = 'bold 20px monospace'; x.fillText('?', 14, 32);

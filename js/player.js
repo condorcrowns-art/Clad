@@ -59,7 +59,8 @@ class Player extends Entity {
   }
   magnetRange() {
     const held = this.heldItem();
-    return Math.max(this.gearFx('magnet') || 1.2, held.magnet || 0);
+    const buffMag = (game.buffActive() && game.buff.magnet) ? game.buff.magnet : 0; // Magnet Tonic
+    return Math.max(this.gearFx('magnet') || 1.2, held.magnet || 0, buffMag);
   }
   dmgMult() {
     let m = (this.gearFx('dmgMult') || 1) * (game.buffActive() ? game.buff.dmg : 1) * (game.skillMult ? game.skillMult('power') : 1);
@@ -116,7 +117,8 @@ class Player extends Entity {
     const armor = this.gearFx('armor') || 0;
     const cosR = game.cosmeticReduce ? game.cosmeticReduce() : 0; // cosmetic power softens hits
     const diff = game.diffMult ? game.diffMult() : 1; // difficulty scales incoming damage
-    dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - cosR) * (1 - (this.shieldNear || 0)) * diff));
+    const buffShield = (game.buffActive() && game.buff.shield) ? game.buff.shield : 0; // Aegis Brew
+    dmg = Math.max(1, Math.round(dmg * (1 - armor) * (1 - cosR) * (1 - (this.shieldNear || 0)) * (1 - buffShield) * diff));
     this.hp -= dmg;
     this.iframes = 0.7;
     if (kx) { this.vx = kx; this.vy = -220; }
@@ -522,7 +524,7 @@ class Player extends Entity {
         this.take(held.id, 1);
         this.hp = Math.min(this.maxHp, this.hp + held.heal);
         if (held.buff) { // royal jelly & friends: heal + buff
-          game.buff = { until: game.time + held.buff.dur, speed: held.buff.speed, dmg: held.buff.dmg, gem: held.buff.gem };
+          game.buff = { until: game.time + held.buff.dur, speed: held.buff.speed || 1, dmg: held.buff.dmg || 1, gem: held.buff.gem, shield: held.buff.shield, magnet: held.buff.magnet };
           game.toast('Restored & empowered!', 'gold');
         }
         game.fx.harvest(this.x, this.y, '#ff4d6d'); game.sfx.play('harvest'); ui.updateHUD();
@@ -532,9 +534,14 @@ class Player extends Entity {
         game.detonate(wx, wy, held.bomb.radius, held.bomb.dmg);
       } else if (held.buff) {
         this.take(held.id, 1);
-        game.buff = { until: game.time + held.buff.dur, speed: held.buff.speed, dmg: held.buff.dmg, gem: held.buff.gem };
-        game.toast(held.buff.gem ? '☘ LUCKY! +50% gem drops for ' + held.buff.dur + 's' : 'OVERCLOCKED! +40% speed & damage for ' + held.buff.dur + 's', 'gold');
-        game.fx.explode(this.x, this.y, '#ffd166', 16);
+        const bf = held.buff;
+        game.buff = { until: game.time + bf.dur, speed: bf.speed || 1, dmg: bf.dmg || 1, gem: bf.gem, shield: bf.shield, magnet: bf.magnet };
+        const msg = bf.shield ? '🛡 WARDED! +' + Math.round(bf.shield * 100) + '% damage guard for ' + bf.dur + 's'
+          : bf.magnet ? '🧲 LOOT MAGNET! Everything comes to you for ' + bf.dur + 's'
+          : bf.gem ? '☘ LUCKY! +50% gem drops for ' + bf.dur + 's'
+          : 'OVERCLOCKED! +40% speed & damage for ' + bf.dur + 's';
+        game.toast(msg, 'gold');
+        game.fx.explode(this.x, this.y, bf.shield ? '#6ee7ff' : bf.magnet ? '#c77dff' : '#ffd166', 16);
         game.sfx.play('victory');
       } else if (held.cluster) {
         if (!inReach) { game.toast('Too far to throw.', 'warn'); return; }

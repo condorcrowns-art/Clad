@@ -1762,8 +1762,11 @@ class Game {
   drawBuffBadge(ctx) {
     if (!this.buffActive()) return;
     const b = this.buff, rem = Math.max(0, b.until - this.time);
-    const label = b.gem ? '☘ +50% gems' : (b.speed >= 2 ? '⚡ ADRENALINE' : '⚡ +' + Math.round((b.dmg - 1) * 100) + '% dmg/spd');
-    const col = b.gem ? '#3ddc84' : (b.speed >= 2 ? '#ff4d6d' : '#ff9e6d');
+    const label = b.shield ? '🛡 +' + Math.round(b.shield * 100) + '% guard'
+      : b.magnet ? '🧲 LOOT MAGNET'
+      : b.gem ? '☘ +50% gems'
+      : (b.speed >= 2 ? '⚡ ADRENALINE' : '⚡ +' + Math.round((b.dmg - 1) * 100) + '% dmg/spd');
+    const col = b.shield ? '#6ee7ff' : b.magnet ? '#c77dff' : b.gem ? '#3ddc84' : (b.speed >= 2 ? '#ff4d6d' : '#ff9e6d');
     ctx.save();
     ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
     const txt = label + '  ' + rem.toFixed(0) + 's';
