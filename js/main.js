@@ -1529,7 +1529,11 @@ class Game {
           let lvl = w.sectorN || 1;
           if (w.isMine) lvl = 1 + Math.floor(Math.max(0, s.y - 10) / 45);
           if (this.progress.overdrive) lvl += 3;
-          this.enemies.push(new Enemy(type, s.x * TS + TS / 2, s.y * TS + TS / 2 - 4, lvl));
+          // rare wild Champion — an affixed elite that drops elite loot
+          const champ = Math.random() < 0.08;
+          const e = new Enemy(type, s.x * TS + TS / 2, s.y * TS + TS / 2 - 4, lvl, champ ? { elite: true } : undefined);
+          this.enemies.push(e);
+          if (champ && typeof AFFIXES !== 'undefined' && AFFIXES[e.affix]) this.toast('★ A ' + AFFIXES[e.affix].name + ' Champion has appeared!', 'warn');
         }
       }
     }

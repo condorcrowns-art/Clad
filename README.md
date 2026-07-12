@@ -358,6 +358,11 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   a screen-shaking **ground shockwave** that hammers anyone standing near the impact. Topple it for a
   pile of gems, a couple of Mystery Seeds, and a shot at the **Scrap Sprite** — a salvage-golem pet
   familiar that fights at your side.
+- **Champion enemies** — any wild spawn can roll into a crowned **Champion**: bigger, tougher, and
+  wrapped in a coloured aura with a floating affix banner. Five affixes change how a fight plays out —
+  **⚡ Swift** (much faster), **🛡 Armored** (takes half damage), **💥 Volatile** (detonates in a big
+  AoE on death), **🩸 Vampiric** (regenerates health mid-fight), and **✦ Frenzied** (attacks far more
+  often). Champions and dungeon elites both roll affixes and drop the elite loot bundle when purged.
 
 **Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
 trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side

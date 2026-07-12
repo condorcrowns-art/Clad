@@ -100,6 +100,17 @@ const ENEMY_DEFS = {
   scrap_titan:{ hp: 900, dmg: 30, speed: 42, color: '#a08a5a', color2: '#4a3f2a', w: 58, h: 54, ai: 'walker', slams: true, miniboss: true, gems: [90, 140] },
 };
 
+// Champion affixes — elites (and wild champions) roll one of these for varied
+// behaviour, a coloured aura, and a floating banner name.
+const AFFIXES = {
+  swift:    { name: 'SWIFT',    color: '#4dd2ff', spd: 1.7 },
+  armored:  { name: 'ARMORED',  color: '#9aa7bd', dr: 0.5 },
+  volatile: { name: 'VOLATILE', color: '#ff7b39', boom: true },
+  vampiric: { name: 'VAMPIRIC', color: '#ff4d6d', regen: 0.05 },
+  frenzied: { name: 'FRENZIED', color: '#ff6df0', spd: 1.25, atk: true },
+};
+const AFFIX_KEYS = Object.keys(AFFIXES);
+
 class Enemy extends Entity {
   constructor(type, x, y, lvl, opts) {
     const d = ENEMY_DEFS[type];
@@ -108,6 +119,11 @@ class Enemy extends Entity {
     this.type = type; this.def = d;
     this.lvl = lvl || 1;
     this.elite = elite;
+    // pick a champion affix (respecting an explicit opts.affix)
+    this.affix = elite ? ((opts && opts.affix && AFFIXES[opts.affix]) ? opts.affix : AFFIX_KEYS[Math.floor(Math.random() * AFFIX_KEYS.length)]) : null;
+    const af = this.affix ? AFFIXES[this.affix] : null;
+    this.spdMult = (af && af.spd) ? af.spd : 1;
+    this.dmgTakenMult = (af && af.dr) ? af.dr : 1;
     const mult = (1 + (this.lvl - 1) * 0.55) * (elite ? 3 : 1);
     this.maxHp = Math.round(d.hp * mult); this.hp = this.maxHp;
     this.dmg = Math.round(d.dmg * (1 + (this.lvl - 1) * 0.3) * (elite ? 1.5 : 1));
@@ -119,6 +135,7 @@ class Enemy extends Entity {
     if (d.ai === 'flyer') this.gravity = 0;
   }
   hurt(dmg, game, kx) {
+    if (this.dmgTakenMult !== 1) dmg = Math.max(1, Math.round(dmg * this.dmgTakenMult)); // ARMORED
     this.hp -= dmg;
     this.hitFlash = 0.12;
     this.vx += (kx || 0);
@@ -139,6 +156,14 @@ class Enemy extends Entity {
         if (Math.random() < 0.3) game.spawnDrop(this.x, this.y, 'mystery_seed', 1);
         game.fx.explode(this.x, this.y, '#ffd166', 26);
         game.toast('★ Elite purged — extra loot dropped!', 'gold');
+      }
+      // VOLATILE champions detonate in a big AoE burst on death
+      if (this.affix === 'volatile') {
+        game.sfx.play('boom'); game.shake = Math.max(game.shake || 0, 0.45);
+        game.fx.explode(this.x, this.y, '#ff7b39', 34);
+        const R = 3 * TS, pp = game.player;
+        if (Math.hypot(pp.x - this.x, pp.y - this.y) < R) pp.hurt(this.dmg + 16, game, Math.sign(pp.x - this.x || 1) * 340);
+        for (const e of game.enemies) { if (e !== this && !e.dead && Math.hypot(e.x - this.x, e.y - this.y) < R) e.hurt(24, game); }
       }
       // bombers detonate on death — an AoE burst (no terrain damage)
       if (this.def.boomOnDeath) {
@@ -168,6 +193,16 @@ class Enemy extends Entity {
   update(dt, world, game) {
     this.t += dt;
     this.hitFlash = Math.max(0, this.hitFlash - dt);
+    // FRENZIED champions cool down their attacks faster; VAMPIRIC ones regenerate
+    if (this.affix === 'frenzied') {
+      this.shootT -= dt * 0.9;
+      if (this._chgCd != null) this._chgCd -= dt * 0.9;
+      if (this._slamCd != null) this._slamCd -= dt * 0.9;
+    }
+    if (this.affix === 'vampiric' && !this.dead && this.hp < this.maxHp) {
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.05 * dt);
+      if (Math.random() < 0.05) game.fx.add(this.x, this.y - this.h / 2, 0, -30, '#ff4d6d', 0.5, 3, 0);
+    }
     if (this.burnT > 0) {
       this.burnT -= dt;
       this._burnTick = (this._burnTick || 0) - dt;
@@ -180,7 +215,7 @@ class Enemy extends Entity {
     if (world._coils) for (const c of world._coils) {
       if (Math.hypot(c.x - this.x, c.y - this.y) < 7 * TS) { this.chillT = 0.4; break; }
     }
-    const spdM = this.chillT > 0 ? 0.5 : 1;
+    const spdM = (this.chillT > 0 ? 0.5 : 1) * this.spdMult;
     if (this.chillT > 0 && Math.random() < 0.08) game.fx.add(this.x, this.y - this.h / 2, 0, -20, '#a8d8f0', 0.4, 2.5, 0);
     // scare totems: enemies flee the aura; bait totems: they can't resist
     let repelled = 0;
@@ -345,11 +380,15 @@ class Enemy extends Entity {
       ctx.fillStyle = gs; ctx.beginPath(); ctx.arc(0, 0, this.w * 0.7, 0, 7); ctx.fill(); ctx.restore();
     }
     ctx.save(); ctx.translate(sx, sy);
-    if (this.elite) { // pulsing golden aura + crown
+    if (this.elite) { // pulsing affix-coloured aura + crown
+      const af = AFFIXES[this.affix] || { color: '#ffd166' };
       const pr = this.w * 0.7 + Math.sin(time * 4) * 3;
+      ctx.save();
+      ctx.globalAlpha = 0.32 + Math.sin(time * 4) * 0.07;
       const g = ctx.createRadialGradient(0, 0, 2, 0, 0, pr);
-      g.addColorStop(0, 'rgba(255,209,102,0.35)'); g.addColorStop(1, 'rgba(255,209,102,0)');
+      g.addColorStop(0, af.color); g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, pr, 0, 7); ctx.fill();
+      ctx.restore();
       ctx.fillStyle = '#ffd166';
       ctx.beginPath(); ctx.moveTo(-8, -this.h / 2 - 2); ctx.lineTo(-8, -this.h / 2 - 10); ctx.lineTo(-3, -this.h / 2 - 5); ctx.lineTo(0, -this.h / 2 - 11); ctx.lineTo(3, -this.h / 2 - 5); ctx.lineTo(8, -this.h / 2 - 10); ctx.lineTo(8, -this.h / 2 - 2); ctx.closePath(); ctx.fill();
     }
@@ -417,6 +456,12 @@ class Enemy extends Entity {
       ctx.fillStyle = this.def.miniboss ? '#ffd166' : '#ff4d6d';
       ctx.fillRect(sx - bw / 2, sy - this.h / 2 - 12, bw * Math.max(0, this.hp / this.maxHp), 5);
       if (this.def.miniboss) { ctx.fillStyle = '#ffd166'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.fillText('WARDEN', sx, sy - this.h / 2 - 16); }
+    }
+    // champion affix banner
+    if (this.elite && this.affix && AFFIXES[this.affix]) {
+      const af = AFFIXES[this.affix];
+      ctx.fillStyle = af.color; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('★ ' + af.name, sx, sy - this.h / 2 - (this.hp < this.maxHp || this.def.miniboss ? 20 : 8));
     }
   }
 }
