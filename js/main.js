@@ -214,7 +214,7 @@ class Game {
     this.boss = null; this.bossDefeatedThisVisit = false;
     this.fx = new FXSystem();
     this.sfx = new SFX();
-    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, dyes: {}, loadouts: [], title: 'novice', ownedCosmetics: { cap: 1, round_glasses: 1 } };
+    this.progress = { beaten: {}, discovered: {}, tutorial: 0, quests: {}, achievements: {}, stats: Object.assign({}, STATS_DEFAULT), rushDone: false, streak: 0, lastLogin: '', skills: {}, skillPoints: 0, difficulty: 'normal', sfxVol: 0.8, sfxMuted: false, playerName: '', avatarColor: '#4361ee', keys: Object.assign({}, DEFAULT_KEYS), bloom: true, wardrobe: { hat: null, face: null, hair: null, back: null, shirt: null, hand: null, aura: null }, dyes: {}, loadouts: [], title: 'novice', ownedCosmetics: { cap: 1, round_glasses: 1 }, pets: {} };
     this._rebinding = null;
     this.paused = false;
     this._questNotified = {};
@@ -1431,6 +1431,7 @@ class Game {
       this.progress.dyes = this.progress.dyes || {};
       this.progress.loadouts = this.progress.loadouts || [];
       this.progress.ownedCosmetics = Object.assign({ cap: 1, round_glasses: 1 }, this.progress.ownedCosmetics || {});
+      this.progress.pets = this.progress.pets || {};
       // apply saved audio settings
       this.sfx.vol = typeof this.progress.sfxVol === 'number' ? this.progress.sfxVol : 0.8;
       this.sfx.muted = !!this.progress.sfxMuted;
@@ -1639,7 +1640,7 @@ class Game {
     // pet familiar
     const wantPet = p.equip.pet;
     if ((this.pet && this.pet.itemId !== wantPet) || (!this.pet && wantPet)) {
-      this.pet = wantPet ? new Pet(wantPet) : null;
+      this.pet = wantPet ? new Pet(wantPet, this) : null;
       if (this.pet) { this.pet.x = p.x; this.pet.y = p.y - 40; }
     }
     if (this.pet && !wantPet) this.pet = null;

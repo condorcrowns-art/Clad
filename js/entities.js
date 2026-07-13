@@ -690,14 +690,41 @@ class Drop extends Entity {
 
 /* ===================== PET FAMILIAR ===================== */
 class Pet {
-  constructor(itemId) {
+  constructor(itemId, game) {
     this.itemId = itemId;
     this.fx = ITEMS[itemId].fx.pet;
     this.x = 0; this.y = 0; this.t = Math.random() * 10;
     this.shootT = 0; this.healT = 0;
+    // persistent training progress (Growtopia-style pet levelling)
+    const rec = (game && game.progress && game.progress.pets && game.progress.pets[itemId]) || null;
+    this.xp = rec ? (rec.xp || 0) : 0;
+    this.level = Pet.levelFor(this.xp);
+    this.levelFlash = 0;
+  }
+  static MAX_LEVEL = 10;
+  static xpForNext(level) { return level * 100; } // L1→2 needs 100, L2→3 needs 200, …
+  static levelFor(xp) {
+    let lv = 1, need = Pet.xpForNext(1), acc = 0;
+    while (lv < Pet.MAX_LEVEL && xp >= acc + need) { acc += need; lv++; need = Pet.xpForNext(lv); }
+    return lv;
+  }
+  dmgScale() { return 1 + (this.level - 1) * 0.12; } // up to +108% at L10
+  gainXp(n, game) {
+    if (this.level >= Pet.MAX_LEVEL) return;
+    this.xp += n;
+    const nl = Pet.levelFor(this.xp);
+    if (nl > this.level) {
+      this.level = nl; this.levelFlash = 1.2;
+      game.fx.explode(this.x, this.y, '#ffd166', 20);
+      game.sfx.play('victory');
+      game.toast('🐾 ' + ITEMS[this.itemId].name + ' reached Lv.' + this.level + '!', 'gold');
+    }
+    const rec = game.progress.pets[this.itemId] || (game.progress.pets[this.itemId] = { xp: 0 });
+    rec.xp = this.xp; rec.level = this.level;
   }
   update(dt, game) {
     this.t += dt;
+    this.levelFlash = Math.max(0, this.levelFlash - dt);
     const p = game.player;
     const tx = p.x - p.facing * 34, ty = p.y - 44 + Math.sin(this.t * 3) * 5;
     this.x += (tx - this.x) * Math.min(1, 6 * dt);
@@ -715,8 +742,10 @@ class Pet {
       if (best) {
         this.shootT = this.fx.rate;
         const a = Math.atan2(best.y - this.y, best.x - this.x);
-        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 620, Math.sin(a) * 620, this.fx.dmg, true, this.fx.color, { burn: this.fx.burn, chill: this.fx.chill }));
+        const dmg = Math.round(this.fx.dmg * this.dmgScale());
+        game.projectiles.push(new Projectile(this.x, this.y, Math.cos(a) * 620, Math.sin(a) * 620, dmg, true, this.fx.color, { burn: this.fx.burn, chill: this.fx.chill }));
         game.sfx.play('sentry');
+        this.gainXp(8, game); // trains by fighting
       }
     }
     // core sprite heals its owner
@@ -742,6 +771,16 @@ class Pet {
     const rw = Math.abs(Math.sin(time * 18)) * 18;
     ctx.fillRect(-rw / 2, -10, rw, 2);
     if (this.fx.heal) { ctx.strokeStyle = 'rgba(255,209,102,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 13 + Math.sin(time * 4) * 2, 0, 7); ctx.stroke(); }
+    // level-up burst ring
+    if (this.levelFlash > 0) {
+      ctx.strokeStyle = 'rgba(255,209,102,' + this.levelFlash.toFixed(2) + ')'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 14 + (1.2 - this.levelFlash) * 26, 0, 7); ctx.stroke();
+    }
+    // little level tag
+    ctx.fillStyle = 'rgba(8,12,24,0.8)'; ctx.fillRect(-11, -20, 22, 9);
+    ctx.fillStyle = this.level >= Pet.MAX_LEVEL ? '#ffd166' : '#8be9fd';
+    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Lv.' + this.level, 0, -13);
     ctx.restore();
   }
 }

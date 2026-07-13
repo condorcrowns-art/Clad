@@ -372,6 +372,10 @@ Beating bosses unlocks further portals. Bosses are re-fightable for gems.
   HUD badge. **🛡 Aegis Brew** (`Nano Shield + Crystal Cluster`) raises a ward that halves *all* incoming
   damage for 45s — drink it before a boss. **🧲 Magnet Tonic** (`Magnet Chip + Glass`) magnetises you so
   gems and loot come flying from 9 tiles away for 40s.
+- **Pet training & levels** — your equipped pet familiar now **earns XP by fighting** and levels up from
+  **Lv.1 to Lv.10**, gaining up to **+108% damage** as it grows. Each pet's progress is **saved per-item**
+  (so swapping pets never loses training) and its current level shows on a little floating tag above it,
+  with a golden burst and a toast on every level-up. The Growtopia pet-bonding loop, offline.
 
 **Honestly out of scope (single-player, no server):** live global/world chat, real player-to-player
 trading (there's a value-matched **Data Broker** stand-in), friends lists, and server-side
