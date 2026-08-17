@@ -393,3 +393,69 @@ every automatic action enabled, download guard to fortress, firewall to default-
 optionally ad blocking on. The firewall lockdown still auto-reverts unless confirmed,
 because a panic button that strands you offline with no way to undo it is a trap, not a
 feature.
+
+---
+
+## 12. The kernel question, answered properly
+
+**Can Candy run its own code in the kernel for free? No.** That has not changed and will
+not: a driver needs Microsoft attestation signing, which needs a paid EV certificate.
+
+**Can Candy get kernel-level *enforcement* for free? Yes — and it now does.** The
+distinction matters. You cannot put your code in ring 0, but Windows ships kernel
+components that take their policy from an administrator, and Candy can author that policy.
+
+| Mechanism | Enforced by | What it blocks | Cost |
+|---|---|---|---|
+| **Process mitigations** (IFEO `MitigationOptions`) | The Windows loader, at process creation | `BlockLowLabelImageLoads` stops a browser-downloaded DLL being mapped into the game. `DisableExtensionPoints` kills AppInit/hook injection. `MicrosoftSignedOnly` (CIG) refuses every non-Microsoft DLL. | £0 |
+| **Defender ASR rules** | Defender's kernel driver | Credential theft from LSASS, executables from email, JS/VBS droppers, obfuscated scripts, PSExec/WMI process creation, unsigned USB payloads, WMI persistence, **abuse of vulnerable signed drivers (BYOVD)** | £0 |
+| **WDAC** | Kernel code integrity | Application allowlisting — only signed or hash-listed binaries may execute, on every Win10/11 edition | £0 |
+
+These are the same enforcement points an anti-cheat driver installs. The difference is that
+Microsoft wrote, signed and tests the code doing the blocking, so a bug in Candy cannot
+bluescreen the machine. `candy kernel asr --mode audit` starts in report-only mode;
+`candy kernel harden RobloxPlayerBeta.exe` applies the anti-injection profile.
+
+**The one path that is free but should not be taken:** `bcdedit /set testsigning on` lets
+you load your own unsigned driver, on your own machine only. It requires Secure Boot off,
+watermarks the desktop, cannot be distributed to anyone else, and is itself a critical
+malware indicator — Candy flags it. It trades a large, permanent weakening of the machine
+for a driver you could write. Not worth it.
+
+**If you ever have a small budget** (for the "sell it later" plan): Azure Trusted Signing
+is roughly $10/month and is currently the cheapest route to legitimate signing, versus
+$200–400/year for a standalone EV certificate. Both require verified identity. That is the
+only wall that money removes.
+
+### Admin
+
+There is no workaround for needing administrator — that is the point of the boundary. What
+there *is*: `candy autostart install` registers Candy as a scheduled task running as
+**SYSTEM** at boot. Admin is then needed once, not every launch, and a standard user
+account cannot stop it.
+
+---
+
+## 13. Layered network defence — why these layers and not seven firewalls
+
+Stacking three packet filters on one host buys almost nothing: they share the same bypass.
+These layers fail *differently*, so defeating one does not defeat the next.
+
+| # | Layer | Defeated by | Caught by the next layer? |
+|---|---|---|---|
+| 1 | Windows Firewall, default-deny outbound, per-app hash-pinned | A hijacked allowlisted process | Yes — 3, 7 |
+| 2 | Hosts sinkhole + ad/tracker lists | Browser DNS-over-HTTPS | Yes — 4, 5 |
+| 3 | Filtering resolver (Quad9 / Cloudflare / AdGuard) | Hard-coded IPs, in-browser DoH | Yes — 1, 4 |
+| 4 | **Forced browser DoH to that same resolver** | A browser with no policy template | Yes — 1, 5 |
+| 5 | **Browser URL blocklist policy** | Non-policy-aware browser | Yes — 1, 2 |
+| 6 | **Protocol hardening** — LLMNR/mDNS/NetBIOS/WPAD off, SMB egress blocked | Nothing local; this removes attack surface rather than filtering it | — |
+| 7 | Behavioural — beacon and fan-out detection | Very slow, very jittered C2 | Alerts regardless of encryption |
+
+Layer 4 is the interesting one: it closes the DNS-over-HTTPS hole that every hosts-based
+blocker has. Rather than fighting the browser's own resolver, Candy points it — via the
+browsers' own enterprise policy, which works on Windows Home too — at a resolver that
+filters. Layer 5 then blocks URL patterns inside the browser itself, which works even when
+DNS is out of the picture entirely.
+
+Everything in layers 3–6 is recorded in a ledger and reversed by `candy netharden revert`,
+because network settings you cannot undo are how a security tool ruins somebody's week.

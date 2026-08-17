@@ -667,6 +667,139 @@ def cmd_panic(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_kernel(args: argparse.Namespace) -> int:
+    """Policy that Windows' own kernel enforces."""
+    from .kernelpolicy import ASR_RULES, MITIGATION_PROFILES, KernelPolicy
+
+    config = Config.load(args.config)
+    policy = KernelPolicy(config)
+
+    if args.action == "status":
+        print(json.dumps(policy.status(), indent=2))
+        return 0
+    if args.action == "profiles":
+        for name, spec in MITIGATION_PROFILES.items():
+            print(f"{name:10} risk={spec['risk']:6} {spec['description']}")
+            print(f"           {', '.join(spec['enable'])}\n")
+        return 0
+    if args.action == "asr":
+        result = policy.apply_asr(mode=args.mode, aggressive=args.aggressive)
+        print(result)
+        for rule in result.applied:
+            print(f"  ON   {ASR_RULES[rule][0]}")
+        for rule in result.failed:
+            print(f"  --   {ASR_RULES[rule][0]} (not accepted by this Defender build)")
+        return 0 if result.ok else 1
+    if args.action == "asr-off":
+        print(policy.disable_asr())
+        return 0
+    if args.action == "harden":
+        if not args.target:
+            print("'kernel harden' needs an image name", file=sys.stderr)
+            return 2
+        result = policy.harden_process(args.target, args.profile)
+        print(result)
+        if args.profile in ("game", "paranoid") and result.ok:
+            print("\nIf the game misbehaves, undo with: "
+                  f"candy kernel unharden {args.target}")
+        return 0 if result.ok else 1
+    if args.action == "unharden":
+        if not args.target:
+            print("'kernel unharden' needs an image name", file=sys.stderr)
+            return 2
+        print(policy.unharden_process(args.target))
+        return 0
+    if args.action == "wdac":
+        out = Path(args.out or (config.data_dir() / "wdac-policy.xml"))
+        result = policy.generate_wdac_policy([], out, audit=not args.enforce)
+        print(result)
+        return 0 if result.ok else 1
+    return 0
+
+
+def cmd_netharden(args: argparse.Namespace) -> int:
+    """Layered network hardening."""
+    from .netharden import RESOLVERS, NetworkHardener
+
+    config = Config.load(args.config)
+    hardener = NetworkHardener(config)
+
+    if args.action == "status":
+        print(json.dumps(hardener.status(), indent=2))
+        return 0
+    if args.action == "resolvers":
+        for key, value in RESOLVERS.items():
+            print(f"{key:22} {value['name']}")
+            print(f"{'':22} {', '.join(value['v4'])}   DoH: {value['doh']}")
+        return 0
+    if args.action == "apply":
+        for result in hardener.apply_all(resolver=args.resolver):
+            print(result)
+            for item in result.changed:
+                print(f"    + {item}")
+            for item in result.skipped:
+                print(f"    ! {item}")
+        return 0
+    if args.action == "revert":
+        for result in hardener.revert_all():
+            print(result)
+        return 0
+    if args.action == "dns":
+        print(hardener.set_resolver(args.resolver))
+        return 0
+    if args.action == "browser":
+        print(hardener.apply_browser_policy(resolver=args.resolver))
+        return 0
+    if args.action == "protocols":
+        result = hardener.harden_protocols()
+        print(result)
+        for item in result.changed:
+            print(f"    + {item}")
+        return 0
+    return 0
+
+
+def cmd_autostart(args: argparse.Namespace) -> int:
+    """Run Candy at boot as SYSTEM, so admin is needed once rather than always."""
+    import subprocess as sp
+
+    from .util import app_dir
+
+    task = "CandyProtection"
+    if args.action == "status":
+        done = sp.run(["schtasks", "/query", "/tn", task, "/fo", "list"],
+                      capture_output=True, text=True, check=False)
+        print(done.stdout.strip() or "Candy is not registered to start at boot.")
+        return 0
+    if args.action == "remove":
+        done = sp.run(["schtasks", "/delete", "/tn", task, "/f"],
+                      capture_output=True, text=True, check=False)
+        print("Removed." if done.returncode == 0 else done.stderr.strip())
+        return 0
+
+    if not IS_WINDOWS:
+        print("Boot autostart is Windows-only.", file=sys.stderr)
+        return 2
+    if not is_admin():
+        print("Run this from an administrator prompt.", file=sys.stderr)
+        return 2
+
+    frozen = getattr(sys, "frozen", False)
+    command = (f'"{sys.executable}" run' if frozen
+               else f'"{sys.executable}" "{app_dir() / "run.py"}" run')
+    done = sp.run(["schtasks", "/create", "/tn", task, "/tr", command,
+                   "/sc", "onstart", "/ru", "SYSTEM", "/rl", "HIGHEST", "/f"],
+                  capture_output=True, text=True, check=False)
+    if done.returncode != 0:
+        print(done.stderr.strip() or "schtasks refused the task", file=sys.stderr)
+        return 1
+    print(f"Candy will start at boot as SYSTEM.\n  command: {command}\n"
+          f"Remove with: candy autostart remove")
+    print("\nRunning as SYSTEM means a standard user cannot stop it, and admin is "
+          "only needed for this one command rather than every launch.")
+    return 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -952,6 +1085,30 @@ def build_parser() -> argparse.ArgumentParser:
     panic.add_argument("--confirm-seconds", type=int, default=180)
     panic.add_argument("--adblock", action="store_true", help="also enable ad/tracker blocking")
     panic.set_defaults(func=cmd_panic)
+
+    kernel = sub.add_parser("kernel", help="policy enforced by Windows' own kernel")
+    kernel.add_argument("action", choices=["status", "asr", "asr-off", "harden",
+                                           "unharden", "profiles", "wdac"])
+    kernel.add_argument("target", nargs="?", help="image name for harden/unharden")
+    kernel.add_argument("--profile", default="game",
+                        choices=["self", "game", "paranoid", "audit"])
+    kernel.add_argument("--mode", default="block", choices=["block", "audit", "off"])
+    kernel.add_argument("--aggressive", action="store_true",
+                        help="include rules that block unknown/new executables outright")
+    kernel.add_argument("--enforce", action="store_true", help="WDAC: enforced, not audit")
+    kernel.add_argument("--out", help="WDAC policy output path")
+    kernel.set_defaults(func=cmd_kernel)
+
+    netharden = sub.add_parser("netharden", help="layered network hardening")
+    netharden.add_argument("action", choices=["status", "apply", "revert", "dns",
+                                              "browser", "protocols", "resolvers"])
+    netharden.add_argument("--resolver", default="quad9",
+                           choices=["quad9", "cloudflare-security", "cloudflare-family", "adguard"])
+    netharden.set_defaults(func=cmd_netharden)
+
+    autostart = sub.add_parser("autostart", help="start Candy at boot as SYSTEM")
+    autostart.add_argument("action", choices=["install", "remove", "status"])
+    autostart.set_defaults(func=cmd_autostart)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,

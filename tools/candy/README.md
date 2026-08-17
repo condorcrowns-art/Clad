@@ -163,6 +163,11 @@ Candy.exe check-url https://roblox.com.claim-robux.xyz/login   # phishing analys
 Candy.exe adblock on                             # ad / tracker / malvertising blocking
 Candy.exe adblock import https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
 Candy.exe panic                                  # break glass: maximum lockdown
+Candy.exe kernel asr --mode audit                # kernel-enforced ASR rules, report-only first
+Candy.exe kernel harden RobloxPlayerBeta.exe     # kernel anti-injection mitigations
+Candy.exe netharden apply --resolver quad9       # DNS + browser policy + protocol hardening
+Candy.exe netharden revert                       # undo all of it
+Candy.exe autostart install                      # run at boot as SYSTEM
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
@@ -353,7 +358,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 245 tests, no pytest required
+python -m unittest discover -s tests -v     # 266 tests, no pytest required
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -378,6 +383,8 @@ candy/
   guard.py       download rejection: Mark-of-the-Web, archives, fortress policy
   adblock.py     ad / tracker / malvertising hosts blocking, importable lists
   phishing.py    homograph, typosquat and bait analysis with no feed
+  kernelpolicy.py  ASR rules, process mitigations, WDAC — enforced by Windows' kernel
+  netharden.py   filtering DNS, forced browser DoH, URL policy, protocol hardening
   pe.py          PE version-resource + entropy inspection
   persistence.py Run keys, tasks, services, Winlogon, IFEO
   notify.py      tray icon and toasts, pure ctypes
