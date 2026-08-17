@@ -210,6 +210,76 @@ def cmd_submit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_site(args: argparse.Namespace) -> int:
+    """Block, unblock or list sinkholed domains."""
+    from .responder import Responder
+
+    config = Config.load(args.config)
+    responder = Responder(config)
+    if args.action == "list":
+        blocked = responder.blocked_domains()
+        if not blocked:
+            print("No domains are blocked by Candy.")
+            return 0
+        print(f"{len(blocked)} domain(s) blocked in the hosts file:")
+        for domain in blocked:
+            print(f"  {domain}")
+        return 0
+    if not args.domain:
+        print(f"'site {args.action}' needs a domain", file=sys.stderr)
+        return 2
+    result = (responder.block_domain(args.domain, forced=True) if args.action == "block"
+              else responder.unblock_domain(args.domain))
+    print(result)
+    if args.action == "block" and result.ok:
+        print("\nNote: a browser using DNS-over-HTTPS ignores the hosts file. The firewall "
+              "rules added alongside it are what hold in that case.")
+    return 0 if result.ok else 1
+
+
+def cmd_scan_url(args: argparse.Namespace) -> int:
+    """Check a URL or domain against the local database and, if enabled, VirusTotal."""
+    config = Config.load(args.config)
+    engine = Engine(config)
+    from .netblock import normalize_domain
+
+    domain = normalize_domain(args.url)
+    if domain is None:
+        print(f"Could not read a domain out of {args.url!r}", file=sys.stderr)
+        return 2
+
+    print(f"Domain    : {domain}")
+    local = engine.analyzer.analyze_domain(domain, source="scan")
+    if local:
+        for detection in local:
+            _print_detection(detection)
+    else:
+        print("Local     : no match in the threat database or your blacklist")
+
+    verdicts = []
+    if engine.intel.enabled:
+        for label, verdict in (("URL", engine.intel.check_url(args.url)),
+                               ("domain", engine.intel.check_domain(domain))):
+            if verdict is None:
+                print(f"VirusTotal: no {label} result (no key, rate limited, or offline)")
+                continue
+            verdicts.append(verdict)
+            print(f"VirusTotal: {label} — {verdict.get('summary')}"
+                  f"{'  ** MALICIOUS **' if verdict.get('malicious') else ''}")
+    else:
+        print("VirusTotal: disabled. Set intel.enable_lookups and intel.virustotal_api_key "
+              "in config.json to use it (free key, no card).")
+
+    dangerous = bool(local) or any(v.get("malicious") for v in verdicts)
+    if dangerous and args.block:
+        from .responder import Responder
+
+        print(Responder(config).block_domain(domain, forced=True))
+    elif dangerous:
+        print(f"\nTo block it:  candy site block {domain}")
+    return 1 if dangerous else 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -299,6 +369,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if not sysmon_installed() and IS_WINDOWS:
         lines.append("                install it free from Microsoft Sysinternals for "
                      "kernel-level injection and driver-load detection")
+
+    section("blocking")
+    from .netblock import HostsBlocker, hosts_path_for_platform
+    from .responder import Responder
+
+    hosts = HostsBlocker(hosts_path_for_platform(config.get("web.hosts_file") or None))
+    writable, reason = hosts.available()
+    lines.append(f"hosts file    : {hosts.path} ({reason})")
+    lines.append(f"blocked sites : {hosts.blocked() or 'none'}")
+    lines.append(f"firewall      : {'available' if IS_WINDOWS else 'Windows only'}"
+                 f"{'' if is_admin() else ' — needs administrator to add rules'}")
 
     section("configuration")
     lines.append(f"config file   : {config.path}")
@@ -397,6 +478,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     selftest = sub.add_parser("selftest", help="verify the detection pipeline works")
     selftest.set_defaults(func=cmd_selftest)
+
+    site = sub.add_parser("site", help="block or unblock a website (hosts file + firewall)")
+    site.add_argument("action", choices=["block", "unblock", "list"])
+    site.add_argument("domain", nargs="?", help="domain or URL")
+    site.set_defaults(func=cmd_site)
+
+    scan_url = sub.add_parser("scan-url", help="check a URL or domain for known threats")
+    scan_url.add_argument("url", help="URL or domain to check")
+    scan_url.add_argument("--block", action="store_true",
+                          help="block it immediately if the verdict is malicious")
+    scan_url.set_defaults(func=cmd_scan_url)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,

@@ -111,7 +111,7 @@ class App(ttk.Frame):
         actions.pack(fill="x")
         ttk.Button(actions, text="Kill process", command=self.action_kill).pack(side="left")
         ttk.Button(actions, text="Quarantine file", command=self.action_quarantine).pack(side="left", padx=6)
-        ttk.Button(actions, text="Block IP", command=self.action_block_ip).pack(side="left")
+        ttk.Button(actions, text="Block site / IP", command=self.action_block_ip).pack(side="left")
         ttk.Button(actions, text="Trust this (whitelist)", command=self.action_whitelist).pack(side="left", padx=6)
         ttk.Button(actions, text="Clear list", command=self.clear_threats).pack(side="right")
 
@@ -196,12 +196,16 @@ class App(ttk.Frame):
         self.auto_kill = tk.BooleanVar(value=bool(self.config_obj.get("response.auto_kill")))
         self.auto_quarantine = tk.BooleanVar(value=bool(self.config_obj.get("response.auto_quarantine")))
         self.auto_firewall = tk.BooleanVar(value=bool(self.config_obj.get("response.auto_firewall")))
+        self.auto_block_domains = tk.BooleanVar(
+            value=bool(self.config_obj.get("response.auto_block_domains")))
         ttk.Checkbutton(auto_box, text="Terminate the process", variable=self.auto_kill,
                         command=self.save_settings).pack(anchor="w")
         ttk.Checkbutton(auto_box, text="Quarantine the file", variable=self.auto_quarantine,
                         command=self.save_settings).pack(anchor="w")
         ttk.Checkbutton(auto_box, text="Block the IP in Windows Firewall (needs administrator)",
                         variable=self.auto_firewall, command=self.save_settings).pack(anchor="w")
+        ttk.Checkbutton(auto_box, text="Block the website in the hosts file (needs administrator)",
+                        variable=self.auto_block_domains, command=self.save_settings).pack(anchor="w")
 
         threshold_row = ttk.Frame(auto_box)
         threshold_row.pack(anchor="w", pady=(6, 0))
@@ -362,12 +366,24 @@ class App(ttk.Frame):
     def action_block_ip(self) -> None:
         detection = self._selected()
         if not detection or not detection.remote:
-            messagebox.showinfo("Candy", "Select a network detection.")
+            messagebox.showinfo("Candy", "Select a network or DNS detection.")
             return
-        ip = detection.remote.rsplit(":", 1)[0]
-        if not messagebox.askyesno("Block IP", f"Add Windows Firewall rules blocking {ip}?"):
-            return
-        result = self.engine.responder.block_ip(ip, forced=True, detection=detection)
+        from .netblock import normalize_domain
+
+        target = detection.remote.rsplit(":", 1)[0]
+        domain = normalize_domain(target)
+        if domain:
+            if not messagebox.askyesno(
+                    "Block site",
+                    f"Block {domain}?\n\nCandy will sinkhole it in the Windows hosts file "
+                    f"and add firewall rules for its current addresses. Both are reversible "
+                    f"from this window."):
+                return
+            result = self.engine.responder.block_domain(domain, forced=True, detection=detection)
+        else:
+            if not messagebox.askyesno("Block IP", f"Add Windows Firewall rules blocking {target}?"):
+                return
+            result = self.engine.responder.block_ip(target, forced=True, detection=detection)
         self.set_status(str(result))
 
     def action_whitelist(self) -> None:
@@ -511,6 +527,7 @@ class App(ttk.Frame):
         self.config_obj.set("response.auto_kill", bool(self.auto_kill.get()))
         self.config_obj.set("response.auto_quarantine", bool(self.auto_quarantine.get()))
         self.config_obj.set("response.auto_firewall", bool(self.auto_firewall.get()))
+        self.config_obj.set("response.auto_block_domains", bool(self.auto_block_domains.get()))
         self.config_obj.set("response.action_threshold", int(self.threshold.get()))
         for key, var in self.monitor_vars.items():
             self.config_obj.set(f"protection.{key}", bool(var.get()))

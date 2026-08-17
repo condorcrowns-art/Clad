@@ -1,0 +1,199 @@
+# Candy — exact capability specification
+
+What Candy blocks, what it only detects, and what it cannot see at all. Written to be
+argued with: every row says which mechanism does the work and how it is escaped.
+
+**The one-line summary:** Candy is a **reactive blocker**, not a preventive one. It cannot
+stop something from starting; it stops it from *continuing*, typically within 1–10 seconds
+of the event. It is **not a firewall** — it writes rules into the Windows Firewall, which
+is a different thing.
+
+---
+
+## 1. Blocking — what Candy can actually stop
+
+"Enforce" mode plus the matching `auto_*` switch must be on for any of this to happen
+automatically. All of it is available on demand from the GUI or CLI at any time.
+
+| # | Capability | Mechanism | Timing | Reversible |
+|---|---|---|---|---|
+| 1 | **Terminate a process** | `TerminateProcess` via psutil, escalating from terminate to kill, children first | 1–10 s after the triggering event | No — the process is gone |
+| 2 | **Quarantine a file** | Move to `quarantine/`, XOR-defang, write a metadata sidecar | Immediate once detected | Yes — `candy quarantine restore` |
+| 3 | **Block an IP address** | `netsh advfirewall` inbound + outbound rules | Immediate | Yes — `candy` removes the rule |
+| 4 | **Block a website** | Hosts-file sinkhole to `0.0.0.0` **plus** firewall rules for its resolved IPs | Immediate for new connections | Yes — `candy site unblock <domain>` |
+| 5 | **Delete a quarantined file** | Permanent removal, user-initiated only | Immediate | No |
+
+### What each block does *not* do
+
+1. **Terminate** — cannot stop the process from having already run. If a stealer executed
+   for two seconds before detection, it has already read what it wanted. Terminating an
+   elevated process from an unelevated Candy fails with access denied.
+2. **Quarantine** — cannot move a file that is currently running or otherwise locked; the
+   kill has to land first. Files over 128 MB are not hashed by default (configurable), so a
+   large sample may be detected by name or path only.
+3. **Block an IP** — needs administrator. Blocks the address, not the service: a threat
+   behind Cloudflare shares an address with a lot of legitimate traffic, which is exactly
+   why the shipped endpoint list is empty and blocking is opt-in.
+4. **Block a website** — three documented escapes:
+   - a browser with **DNS-over-HTTPS** enabled (Chrome and Firefox default to it on many
+     networks) never consults the hosts file. The firewall rules Candy adds alongside it
+     are what hold in that case.
+   - the site moves to a **new IP** after Candy resolved it. The hosts entry still holds;
+     the firewall rule goes stale.
+   - a **VPN or proxy** carries the traffic past both.
+
+### What Candy refuses to block, always
+
+- Processes on `response.protected_processes` — `explorer.exe`, `lsass.exe`, `csrss.exe`,
+  `svchost.exe`, Defender's `MsMpEng.exe`, and the rest of the OS core.
+- Domains on the protected list — `microsoft.com`, `windowsupdate.com`, **`roblox.com`**,
+  `rbxcdn.com`, certificate authorities, and similar.
+- Anything on your whitelist. Whitelist beats every blacklist, signature and heuristic.
+
+---
+
+## 2. Prevention — what Candy cannot do at all
+
+These need a kernel driver, and a kernel driver needs an EV certificate plus Microsoft
+attestation signing. There is no free path to one, so none of this exists in Candy:
+
+| Not possible | Why |
+|---|---|
+| Stop a process from **starting** | Needs a kernel process-creation callback that can deny |
+| Stop a file from **being written or read** | Needs a filesystem minifilter |
+| Stop code from **being injected** mid-flight | Needs `ObRegisterCallbacks` to strip handle rights |
+| Stop a **driver from loading** | Needs a kernel load-image callback |
+| **Filter packets** | Needs a WFP callout driver |
+| Make Candy **unkillable** | Needs Protected Process Light, which needs an ELAM certificate |
+
+Candy *sees* every one of those events (see §4) and reacts afterwards. Seeing and reacting
+in a second is worth a great deal; it is not the same as preventing, and this document will
+never claim it is.
+
+---
+
+## 3. Is it a firewall?
+
+**No.** Precisely:
+
+| Question | Answer |
+|---|---|
+| Does Candy inspect packets? | No. It has no driver and no WFP callout. |
+| Does Candy see traffic contents? | No. No TLS interception, no proxy, no content filtering. |
+| Does Candy control connections? | Indirectly — it writes rules into the **Windows Firewall**, which does the enforcing. |
+| Granularity of a block? | Whole IP address, both directions. Not per-port, per-process, or per-URL. |
+| What does Candy see about traffic? | The connection table (which process, which remote address, which state) via psutil, and DNS queries via Sysmon event 22. |
+| Does it work without administrator? | Firewall rules: no. Hosts-file blocks: no. Detection: yes, degraded. |
+
+If you want real packet filtering, Windows Firewall is already on the machine and is free.
+Candy's contribution is deciding *what* to tell it to block.
+
+---
+
+## 4. Detection — what Candy sees but cannot stop
+
+This is the largest and most useful category. Everything here raises an alert, a toast and
+a log entry, and can trigger the §1 actions afterwards.
+
+### Kernel-sourced (needs Sysmon — free from Microsoft, and worth installing)
+
+| Event | What it catches | Severity |
+|---|---|---|
+| Sysmon 8 — `CreateRemoteThread` into Roblox | Textbook DLL injection by an executor | critical |
+| Sysmon 10 — handle with `PROCESS_VM_WRITE` / `VM_OPERATION` / `CREATE_THREAD` | The handle an injector needs, before it injects | high |
+| Sysmon 10 — same, targeting **Candy** | Something attacking the monitor | critical |
+| Sysmon 7 — unsigned module loaded into Roblox | The executor's DLL, after injection | critical |
+| **Sysmon 6 — unsigned driver load** | **A kernel-mode cheat or rootkit arriving** | critical |
+| Sysmon 25 — process tampering | Hollowing, herpaderping, replaced image | critical |
+| Sysmon 1 / 11 / 22 | Process creation with hashes, file creation, DNS queries | varies |
+| Defender 5001 | Real-time protection switched **off** | critical |
+| Defender 1116 / 1006 | Defender's own malware detections | critical |
+| Defender 5007 | An exclusion path was added | high |
+| Security 4688 | Process creation (needs audit policy enabled) | varies |
+
+### User-mode (always available)
+
+| Check | What it catches |
+|---|---|
+| Name / path / command-line signatures | 48 shipped signatures: known executors, anti-cheat bypass tooling, Defender-disabling commands, encoded PowerShell, `bcdedit` driver-signature tampering |
+| SHA-256 matching | Any hash you or your feed have verified |
+| **PE version resource** | A renamed executor — `krnl.exe` renamed to `homework.exe` still declares its original name inside the binary |
+| Section entropy | Packed or crypted payloads |
+| Module audit | Foreign DLLs inside Roblox, with Authenticode status — the Sysmon-free fallback for injection |
+| Roblox masquerade | A process named `RobloxPlayerBeta.exe` running from outside a Roblox install |
+| Parent-child | Anything the Roblox client launches; executables in `%TEMP%` launched by a script host |
+| Persistence audit | Run keys, Startup folder, scheduled tasks, services, Winlogon shell/userinit, IFEO debugger hijacks |
+| Security-product watch | An antivirus service that *was* running has disappeared |
+| Connection table | Blacklisted addresses, loader-style listening ports (6969, 13337, …) |
+| DNS queries | Lookups of blacklisted or threat-listed domains, suffix-matched across subdomains |
+| Anti-debug | A debugger attached to Candy itself |
+| Resource abuse | Sustained CPU, excessive handle counts |
+
+---
+
+## 5. Website and file scanning
+
+| Question | Answer |
+|---|---|
+| Can it scan a URL for malware? | **Yes** — `candy scan-url <url>` checks the local threat database, your blacklist, and (opt-in) VirusTotal's URL and domain reports. |
+| Does that need money? | No. VirusTotal's free tier needs an email address, no card. Without a key, the local checks still run. |
+| Can it scan the *contents* of a web page? | **No.** Candy has no browser extension, no proxy, no HTML or script analysis. It judges the destination, not the page. |
+| Can it block a site it judges bad? | Yes — `candy scan-url <url> --block`, or automatically in enforce mode when a DNS query matches. |
+| Can it remove a virus *from a website*? | **No, and nothing running on your PC can.** The files are on someone else's server. Candy can stop your machine reaching it and quarantine anything already downloaded. |
+| Can it scan downloaded files? | Yes — automatically in the watched folders, or on demand with `candy scan <path>`. |
+| Does it upload my files anywhere? | **No.** Only a hash or a URL string is sent, and only if you enable reputation lookups. Never file contents. |
+
+---
+
+## 6. Latency — how fast it reacts
+
+| Path | Typical delay from event to alert |
+|---|---|
+| Sysmon event (injection, driver load) | 0–8 s (channel poll interval, configurable) |
+| Process start with WMI installed | under 1 s |
+| Process start, polling fallback | 0–4 s |
+| File created, with watchdog | under 1 s + settle time while the file finishes writing |
+| File created, polling fallback | 0–4 s |
+| Network connection | 0–5 s |
+| Persistence change | 0–15 min (audit interval, configurable) |
+
+A loader that runs for 200 ms and exits can finish before any user-mode monitor sees it.
+Sysmon narrows that window to near zero for the *record* of what happened; it does not let
+Candy intervene in time.
+
+---
+
+## 7. Requirements for each capability
+
+| Capability | Needs administrator | Needs Sysmon | Windows only |
+|---|---|---|---|
+| Process/file/name detection | No (limited without) | No | Yes for most signatures |
+| Injection detection via module audit | Helps | No | Yes |
+| Injection detection via Sysmon 8/10 | **Yes** | **Yes** | Yes |
+| Driver-load detection | **Yes** | **Yes** | Yes |
+| Defender tamper detection | **Yes** | No | Yes |
+| Terminate a process | Only for elevated targets | No | No |
+| Quarantine a file | Depends on the file's location | No | No |
+| Firewall IP block | **Yes** | No | **Yes** |
+| Website block (hosts file) | **Yes** | No | **Yes** |
+| URL reputation scan | No | No | No |
+
+---
+
+## 8. Honest bottom line
+
+Candy is a **very good tripwire with a reactive kill switch**. On a machine where the user
+voluntarily downloads an executor — which is the actual threat model here — it will:
+
+- notice the download, often before it is run,
+- identify it even if renamed,
+- see it inject into Roblox,
+- see the stealer's persistence go in,
+- see Defender being switched off,
+- kill it, quarantine it, and cut off the site it came from,
+
+all within seconds, with a tamper-evident record of every step.
+
+What it will not do is stop a competent attacker who already has administrator rights, or
+one running in the kernel. For that you need a signed driver, and that needs money. This
+document exists so nobody has to guess which side of that line a given feature falls on.

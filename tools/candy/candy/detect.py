@@ -361,6 +361,53 @@ class Analyzer:
                 signature_id="pe.no_version_info",
             )
 
+    # -------------------------------------------------------------- domain
+    def analyze_domain(self, domain: str, *, pid: int | None = None,
+                       process_name: str | None = None,
+                       source: str = "dns") -> list[Detection]:
+        """Judge a hostname — from a DNS query, a URL scan, or a connection.
+
+        Matching is suffix-based so one entry covers every subdomain: a
+        blacklist entry for ``bad.gg`` also catches ``dl.cdn.bad.gg``.
+        """
+        domain = (domain or "").strip().lower().rstrip(".")
+        if not domain or self.config.is_domain_whitelisted(domain):
+            return []
+
+        out: list[Detection] = []
+
+        def emit(kind: str, message: str, severity: str, **extra: Any) -> None:
+            out.append(Detection(
+                source=source, kind=kind, subject=domain, message=message,
+                severity=severity, remote=domain, pid=pid,
+                process_name=process_name, **extra,
+            ))
+
+        if self.config.domain_blacklisted(domain):
+            emit("user_blacklist", f"Lookup of {domain} — blocked by your own domain list.",
+                 "critical", signature_id="domain.user_blacklist")
+
+        listed = self.db.endpoint_info(domain)
+        if not listed:
+            # Try parent domains, so a threat entry for the site covers its CDN
+            # subdomains without needing one row per host.
+            parts = domain.split(".")
+            for index in range(1, len(parts) - 1):
+                listed = self.db.endpoint_info(".".join(parts[index:]))
+                if listed:
+                    break
+        if listed:
+            emit("known_domain",
+                 f"Connection to known malicious domain {domain}: "
+                 f"{listed.get('note', 'listed in the threat database')}.",
+                 str(listed.get("severity", "high")), signature_id=f"domain:{domain}")
+
+        for sig in self.db.match("remote_host", domain):
+            emit("signature:remote_host",
+                 f"Domain {domain} matches known threat infrastructure '{sig.name}'.",
+                 sig.severity, signature_id=sig.id)
+        return out
+
     # ------------------------------------------------------------- network
     def analyze_connection(self, conn: dict[str, Any]) -> list[Detection]:
         remote_ip = conn.get("remote_ip") or ""

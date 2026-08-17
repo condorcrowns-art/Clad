@@ -34,7 +34,8 @@ useful than a longer feature list:
 | **See an unsigned kernel driver load** — how kernel-mode cheats arrive | Block that driver. Seeing it is user-mode; stopping it needs a driver Candy cannot legally ship |
 | Identify a renamed executor from the version resource inside the binary | Identify a *rebuilt* executor with all metadata stripped and no known behaviour |
 | Catch Defender being switched off, and exclusions being added | Prevent an executor that starts *before* Candy does |
-| Terminate a process, quarantine a file, block an IP — on your say-so | Resist a process running with higher privileges than itself |
+| Terminate a process, quarantine a file, block an IP or a whole website — on your say-so | Resist a process running with higher privileges than itself |
+| Check a URL or domain against the threat database and VirusTotal | Filter web page *content* — there is no browser extension or proxy |
 | Keep a tamper-evident forensic log | Detect *other players* cheating in a game you are playing |
 
 ### Why there is no Candy driver
@@ -67,7 +68,13 @@ Two further things are **deliberately not implemented**, with reasons:
   survives renaming the executor's exe, which name signatures do not.
 
 What Candy *does* provide is fast, legible, local notification with a full audit
-trail — enough time to close the game, change your password, and look at what happened.
+trail — enough time to close the game, change your password, and look at what happened —
+plus a reactive kill switch: terminate, quarantine, firewall-block, site-block.
+
+**For the precise capability matrix — every block, its mechanism, its timing and how it is
+escaped — read [docs/CAPABILITIES.md](docs/CAPABILITIES.md).** Candy is a *reactive*
+blocker, not a preventive one, and it is not itself a firewall: it writes rules into the
+Windows Firewall.
 
 ---
 
@@ -135,6 +142,10 @@ Candy.exe quarantine list
 Candy.exe quarantine restore "quarantine\<file>.quarantined"
 Candy.exe list add whitelist names "MyGameLauncher.exe"
 Candy.exe list add blacklist ips 203.0.113.5
+Candy.exe site block bad-executor.gg     # hosts-file sinkhole + firewall rules
+Candy.exe site unblock bad-executor.gg
+Candy.exe site list
+Candy.exe scan-url https://bad-executor.gg/download --block
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
@@ -262,6 +273,9 @@ is created for you on first run. The blocks you are most likely to touch:
 | `persistence.interval_minutes` | `15` | How often autostart locations are re-audited |
 | `pe.inspect` | `true` | Read version resources and entropy from binaries |
 | `notifications.min_severity` | `high` | Severity that raises a desktop toast |
+| `response.auto_block_domains` | `false` | Let enforce mode sinkhole malicious domains |
+| `web.resolve_and_block_ips` | `true` | Also firewall a blocked domain's addresses (DoH ignores the hosts file) |
+| `whitelist.domains` / `blacklist.domains` | empty | Domain lists, suffix-matched across subdomains |
 | `intel.enable_lookups` | `false` | Turn on VirusTotal/AbuseIPDB (needs your own free key) |
 | `updates.threat_feed_url` | empty | HTTPS URL of a community threat feed |
 | `scan.on_schedule` / `interval_minutes` | `false` / `120` | Periodic background scans |
@@ -317,7 +331,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 94 tests, no pytest required
+python -m unittest discover -s tests -v     # 122 tests, no pytest required
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -331,6 +345,7 @@ mean something.
 candy/
   config.py      configuration, whitelist/blacklist model
   winevents.py   Sysmon/Defender/Security channel consumer  ← kernel-sourced detection
+  netblock.py    hosts-file site blocking, reversible and backed up
   pe.py          PE version-resource + entropy inspection
   persistence.py Run keys, tasks, services, Winlogon, IFEO
   notify.py      tray icon and toasts, pure ctypes

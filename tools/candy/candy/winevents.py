@@ -304,19 +304,17 @@ class WindowsEventAnalyzer:
         return self.analyzer.analyze_file(path, event="sysmon_create")
 
     def _sysmon_dns(self, data: dict[str, str]) -> list[Detection]:
+        """Event 22: a process asked for a name. This is where a download page
+        or a C2 domain shows up before any traffic flows."""
         query = data.get("QueryName")
         if not query:
             return []
-        out = []
-        for sig in self.analyzer.db.match("remote_host", query):
-            out.append(Detection(
-                source="kernel", kind="dns_query", subject=query,
-                message=f"Lookup of known threat infrastructure '{sig.name}': {query}",
-                severity=sig.severity, remote=query,
-                process_name=basename(data.get("Image")),
-                signature_id=sig.id, evidence={"image": data.get("Image")},
-            ))
-        return out
+        return self.analyzer.analyze_domain(
+            query,
+            pid=_int_or_none(data.get("ProcessId")),
+            process_name=basename(data.get("Image")),
+            source="kernel",
+        )
 
     def _sysmon_tampering(self, data: dict[str, str]) -> list[Detection]:
         """Event 25: the image on disk no longer matches the running process —

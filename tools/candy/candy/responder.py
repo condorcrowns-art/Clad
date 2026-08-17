@@ -240,6 +240,65 @@ class Responder:
         self.config.remove_list_entry("blacklist", "ips", ip)
         return self._record(ActionResult("firewall", ok, f"removed block rules for {ip}"))
 
+    # --------------------------------------------------------------- domain
+    def block_domain(self, domain: str, *, forced: bool = False,
+                     detection: Detection | None = None) -> ActionResult:
+        """Sinkhole a domain in the hosts file, and firewall its addresses.
+
+        Two mechanisms because either alone is escapable: the hosts entry is
+        ignored by a browser resolving over DNS-over-HTTPS, and the firewall
+        rule misses addresses the domain has not resolved to yet.
+        """
+        from .netblock import HostsBlocker, hosts_path_for_platform, is_protected, normalize_domain, resolve
+
+        if not forced and not self.allowed("block_domains"):
+            return self._record(ActionResult("block_domain", False,
+                                             "skipped: auto domain blocking is off"), detection)
+        clean = normalize_domain(domain)
+        if clean is None:
+            return self._record(ActionResult("block_domain", False,
+                                             f"{domain!r} is not a valid domain"), detection)
+        if is_protected(clean):
+            return self._record(ActionResult("block_domain", False,
+                                             f"refused: {clean} is on the protected-domain list"), detection)
+
+        blocker = HostsBlocker(hosts_path_for_platform(self.config.get("web.hosts_file") or None))
+        writable, reason = blocker.available()
+        if not writable:
+            return self._record(ActionResult("block_domain", False, reason), detection)
+
+        result = blocker.block(clean)
+        detail = result.detail
+        if result.ok and self.config.get("web.resolve_and_block_ips", True):
+            addresses = resolve(clean)
+            blocked_ips = [ip for ip in addresses if self.block_ip(ip, forced=True).ok]
+            if blocked_ips:
+                detail += f"; firewall-blocked {', '.join(blocked_ips)}"
+            elif addresses:
+                detail += "; could not add firewall rules (administrator rights needed)"
+        if result.ok:
+            self.config.add_list_entry("blacklist", "domains", clean)
+        return self._record(ActionResult("block_domain", result.ok, detail), detection)
+
+    def unblock_domain(self, domain: str) -> ActionResult:
+        from .netblock import HostsBlocker, hosts_path_for_platform, normalize_domain, resolve
+
+        clean = normalize_domain(domain)
+        if clean is None:
+            return self._record(ActionResult("unblock_domain", False, f"{domain!r} is not a valid domain"))
+        blocker = HostsBlocker(hosts_path_for_platform(self.config.get("web.hosts_file") or None))
+        result = blocker.unblock(clean)
+        for ip in resolve(clean):
+            self.unblock_ip(ip)
+        self.config.remove_list_entry("blacklist", "domains", clean)
+        return self._record(ActionResult("unblock_domain", result.ok, result.detail))
+
+    def blocked_domains(self) -> list[str]:
+        from .netblock import HostsBlocker, hosts_path_for_platform
+
+        return HostsBlocker(
+            hosts_path_for_platform(self.config.get("web.hosts_file") or None)).blocked()
+
     # ------------------------------------------------------------ dispatcher
     def respond(self, detection: Detection, *, verdict_score: int) -> list[ActionResult]:
         """Apply the configured automatic response to a detection."""
@@ -255,9 +314,16 @@ class Responder:
         if detection.path and self.allowed("quarantine"):
             # Quarantining an image only works once the process is gone.
             results.append(self.quarantine(detection.path, detection=detection))
-        if detection.remote and self.allowed("firewall"):
-            ip = detection.remote.rsplit(":", 1)[0]
-            results.append(self.block_ip(ip, detection=detection))
+        if detection.remote:
+            target = detection.remote.rsplit(":", 1)[0]
+            # A remote that is a hostname gets sinkholed; an address gets a
+            # firewall rule. Which one it is decides which action applies.
+            from .netblock import normalize_domain
+
+            if normalize_domain(target) and self.allowed("block_domains"):
+                results.append(self.block_domain(target, detection=detection))
+            elif self.allowed("firewall"):
+                results.append(self.block_ip(target, detection=detection))
 
         detection.actions.extend(str(r) for r in results)
         return results

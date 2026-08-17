@@ -299,6 +299,7 @@ class Engine:
             "intel": self.intel.status(),
             "log": str(self.log.path),
             "quarantine": str(self.config.quarantine_dir()),
+            "blocked_domains": self.responder.blocked_domains(),
             "degraded": [msg for msg in [self.net_monitor.degraded_reason,
                                         self.kernel_events.degraded_reason] if msg],
         }

@@ -24,6 +24,8 @@ from .config import Config
 from .util import ensure_dir, utc_stamp
 
 VT_FILE_URL = "https://www.virustotal.com/api/v3/files/{}"
+VT_URL_URL = "https://www.virustotal.com/api/v3/urls/{}"
+VT_DOMAIN_URL = "https://www.virustotal.com/api/v3/domains/{}"
 ABUSEIPDB_URL = "https://api.abuseipdb.com/api/v2/check"
 
 # VirusTotal's free tier allows 4 requests/minute. We self-throttle so a busy
@@ -141,6 +143,74 @@ class IntelClient:
             "total": sum(int(v) for v in stats.values() if isinstance(v, (int, float))),
             "severity": "critical" if malicious_count >= 10 else "high" if malicious_count >= threshold else "info",
             "summary": f"{malicious_count} engines flag this file",
+        })
+
+    def check_url(self, url: str) -> dict[str, Any] | None:
+        """VirusTotal report for a URL.
+
+        Uses the *lookup* endpoint keyed by the URL's base64 id rather than the
+        submit endpoint: it reads an existing report instead of uploading the
+        URL for analysis, which is faster, cheaper against the free quota, and
+        does not hand VirusTotal a new URL to publish.
+        """
+        import base64
+
+        key_material = self.config.get("intel.virustotal_api_key", "")
+        if not self.enabled or not key_material or not url:
+            return None
+        url_id = base64.urlsafe_b64encode(url.strip().encode("utf-8")).decode("ascii").rstrip("=")
+        return self._vt_lookup(VT_URL_URL.format(url_id), f"vt-url:{url.strip().lower()}",
+                               subject=url, kind="URL")
+
+    def check_domain(self, domain: str) -> dict[str, Any] | None:
+        """VirusTotal report for a domain."""
+        key_material = self.config.get("intel.virustotal_api_key", "")
+        if not self.enabled or not key_material or not domain:
+            return None
+        domain = domain.strip().lower().rstrip(".")
+        return self._vt_lookup(VT_DOMAIN_URL.format(domain), f"vt-domain:{domain}",
+                               subject=domain, kind="domain")
+
+    def _vt_lookup(self, endpoint: str, cache_key: str, *, subject: str,
+                   kind: str) -> dict[str, Any] | None:
+        """Shared VirusTotal GET + verdict shaping for URLs and domains."""
+        cached = self._cached(cache_key)
+        if cached is not None:
+            return cached
+        if not self._throttle("virustotal", VT_MIN_INTERVAL):
+            return None
+
+        request = urllib.request.Request(endpoint, headers={
+            "x-apikey": self.config.get("intel.virustotal_api_key", ""),
+            "Accept": "application/json", "User-Agent": "Candy/1.0",
+        })
+        try:
+            timeout = int(self.config.get("intel.request_timeout_seconds", 10))
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return self._store(cache_key, {
+                    "provider": "virustotal", "subject": subject, "known": False,
+                    "malicious": False, "summary": f"VirusTotal has no report for this {kind}",
+                })
+            return None
+        except Exception:  # noqa: BLE001 - offline, quota, DNS: all non-fatal
+            return None
+
+        stats = (payload.get("data", {}).get("attributes", {}).get("last_analysis_stats", {}) or {})
+        malicious_count = int(stats.get("malicious", 0)) + int(stats.get("suspicious", 0))
+        threshold = int(self.config.get("intel.min_vt_detections", 3))
+        return self._store(cache_key, {
+            "provider": "virustotal",
+            "subject": subject,
+            "known": True,
+            "malicious": malicious_count >= threshold,
+            "detections": malicious_count,
+            "total": sum(int(v) for v in stats.values() if isinstance(v, (int, float))),
+            "severity": ("critical" if malicious_count >= 10
+                         else "high" if malicious_count >= threshold else "info"),
+            "summary": f"{malicious_count} security vendors flag this {kind}",
         })
 
     def check_ip(self, ip: str) -> dict[str, Any] | None:

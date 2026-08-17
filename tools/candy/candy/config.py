@@ -43,6 +43,7 @@ DEFAULTS: dict[str, Any] = {
         "auto_kill": False,
         "auto_quarantine": False,
         "auto_firewall": False,
+        "auto_block_domains": False,
         # Aggregated score at which enforcement acts on a subject. 75 means a
         # single high-confidence signal (a named executor, an injected module)
         # is enough, and so are two medium ones.
@@ -95,6 +96,14 @@ DEFAULTS: dict[str, Any] = {
         "interval_minutes": 15,
         "audit_on_start": True,
     },
+    "web": {
+        # Domain blocking writes a marked, backed-up block into the hosts file.
+        # Leave hosts_file empty to use the platform default.
+        "hosts_file": "",
+        # Also add firewall rules for the domain's IPs, because a browser doing
+        # its own DNS-over-HTTPS ignores the hosts file.
+        "resolve_and_block_ips": True,
+    },
     "pe": {
         # Read version resources and section entropy from Windows binaries.
         "inspect": True,
@@ -131,6 +140,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "whitelist": {
         "names": [],
+        "domains": [],
         "paths": [
             r"%SystemRoot%",
             r"%ProgramFiles%",
@@ -144,6 +154,7 @@ DEFAULTS: dict[str, Any] = {
         "names": [],
         "hashes": [],
         "ips": [],
+        "domains": [],
         "patterns": [],
     },
     "ui": {
@@ -236,6 +247,8 @@ class Config:
         self._whitelist_names = {str(n).lower() for n in self.get("whitelist.names", [])}
         self._whitelist_hashes = {str(h).lower() for h in self.get("whitelist.hashes", [])}
         self._whitelist_ips = {str(i) for i in self.get("whitelist.ips", [])}
+        self._whitelist_domains = {str(d).lower().lstrip("*.") for d in self.get("whitelist.domains", [])}
+        self._blacklist_domains = {str(d).lower().lstrip("*.") for d in self.get("blacklist.domains", [])}
         self._protected = {str(n).lower() for n in self.get("response.protected_processes", [])}
         self._blacklist_names = {str(n).lower() for n in self.get("blacklist.names", [])}
         self._blacklist_hashes = {str(h).lower() for h in self.get("blacklist.hashes", [])}
@@ -276,6 +289,21 @@ class Config:
 
     def is_ip_whitelisted(self, ip: str) -> bool:
         return ip in self._whitelist_ips
+
+    def is_domain_whitelisted(self, domain: str) -> bool:
+        """A whitelisted domain covers its subdomains too."""
+        return self._domain_matches(domain, self._whitelist_domains)
+
+    def domain_blacklisted(self, domain: str) -> bool:
+        return self._domain_matches(domain, self._blacklist_domains)
+
+    @staticmethod
+    def _domain_matches(domain: str, listed: set[str]) -> bool:
+        domain = (domain or "").lower().rstrip(".")
+        if not domain or not listed:
+            return False
+        parts = domain.split(".")
+        return any(".".join(parts[i:]) in listed for i in range(len(parts)))
 
     def is_protected_process(self, name: str | None) -> bool:
         """Critical OS processes we refuse to terminate, whatever the score."""
