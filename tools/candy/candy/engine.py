@@ -55,8 +55,14 @@ class Engine:
         from .winapi import verify_signature
 
         self.analyzer = Analyzer(self.config, self.db, signature_checker=verify_signature)
+
+        from .guard import DownloadGuard
+
+        self.guard = DownloadGuard(self.config, self.analyzer, self.responder,
+                                   signature_checker=verify_signature)
         self.proc_monitor = ProcessMonitor(self.config, self.analyzer, self.handle_detection)
-        self.file_watcher = FileWatcher(self.config, self.analyzer, self.handle_detection)
+        self.file_watcher = FileWatcher(self.config, self.analyzer, self.handle_detection,
+                                        guard=self.guard)
         self.net_monitor = NetworkMonitor(self.config, self.analyzer, self.handle_detection,
                                           intel=self.intel if self.intel.enabled else None)
         self.behavior = BehaviorEngine(self.config, self.handle_detection)
@@ -298,6 +304,11 @@ class Engine:
                 "persistence": self.persistence.mode,
                 "anomaly": self.anomaly.snapshot(),
                 "tray": bool(self.tray and self.tray.available),
+            },
+            "download_guard": {
+                "policy": self.guard.policy,
+                "assessed": self.guard.assessed,
+                "rejected": self.guard.rejected,
             },
             "counters": {
                 "processes_analyzed": self.proc_monitor.scanned,

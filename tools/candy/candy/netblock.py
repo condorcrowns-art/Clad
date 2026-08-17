@@ -28,6 +28,19 @@ from .util import IS_WINDOWS, utc_stamp
 BLOCK_START = "# === CANDY BLOCK START — do not edit inside this block ==="
 BLOCK_END = "# === CANDY BLOCK END ==="
 
+
+def markers(label: str = "BLOCK") -> tuple[str, str]:
+    """Marker pair for a named managed section.
+
+    Manual blocks and the ad/tracker list live in separate sections so that
+    importing a 50,000-entry list never disturbs the handful of domains the
+    user blocked deliberately.
+    """
+    if label == "BLOCK":
+        return BLOCK_START, BLOCK_END
+    return (f"# === CANDY {label} START — do not edit inside this block ===",
+            f"# === CANDY {label} END ===")
+
 # Null route. 0.0.0.0 fails faster than 127.0.0.1 because nothing is listening.
 SINKHOLE = "0.0.0.0"
 
@@ -93,16 +106,17 @@ def is_protected(domain: str) -> bool:
     return False
 
 
-def parse_managed_block(text: str) -> list[str]:
-    """Domains currently inside Candy's managed section of a hosts file."""
+def parse_managed_block(text: str, label: str = "BLOCK") -> list[str]:
+    """Domains currently inside one of Candy's managed sections."""
+    start, end = markers(label)
     domains: list[str] = []
     inside = False
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped == BLOCK_START:
+        if stripped == start:
             inside = True
             continue
-        if stripped == BLOCK_END:
+        if stripped == end:
             inside = False
             continue
         if inside and stripped and not stripped.startswith("#"):
@@ -120,21 +134,22 @@ def parse_managed_block(text: str) -> list[str]:
     return unique
 
 
-def render_hosts(text: str, domains: list[str]) -> str:
-    """Return the hosts file with Candy's managed block set to ``domains``.
+def render_hosts(text: str, domains: list[str], label: str = "BLOCK", *,
+                 with_www: bool = True) -> str:
+    """Return the hosts file with one managed section set to ``domains``.
 
-    Everything outside the markers is preserved byte-for-byte. An empty list
-    removes the block entirely, leaving the file as Candy found it.
+    Everything outside the markers — including Candy's *other* sections — is
+    preserved byte-for-byte. An empty list removes the section entirely.
     """
-    lines = text.splitlines()
+    start, end = markers(label)
     output: list[str] = []
     inside = False
-    for line in lines:
+    for line in text.splitlines():
         stripped = line.strip()
-        if stripped == BLOCK_START:
+        if stripped == start:
             inside = True
             continue
-        if stripped == BLOCK_END:
+        if stripped == end:
             inside = False
             continue
         if not inside:
@@ -145,20 +160,26 @@ def render_hosts(text: str, domains: list[str]) -> str:
 
     if domains:
         output.append("")
-        output.append(BLOCK_START)
-        output.append(f"# Managed by Candy. Updated {utc_stamp()}.")
-        output.append("# Remove entries with: candy unblock-site <domain>")
+        output.append(start)
+        output.append(f"# Managed by Candy ({label.lower()}). Updated {utc_stamp()}.")
+        output.append(f"# {len(set(domains))} domain(s). Remove with: candy site unblock <domain>")
         for domain in sorted(set(domains)):
-            output.append(f"{SINKHOLE} {domain} www.{domain}")
-        output.append(BLOCK_END)
+            # www. mirrors double the file size; worth it for hand-blocked
+            # domains, not for a 50,000-entry ad list.
+            output.append(f"{SINKHOLE} {domain} www.{domain}" if with_www
+                          else f"{SINKHOLE} {domain}")
+        output.append(end)
     return "\n".join(output) + "\n"
 
 
 class HostsBlocker:
     """Reads and writes the managed section of the hosts file."""
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(self, path: str | Path | None = None, label: str = "BLOCK", *,
+                 with_www: bool = True) -> None:
         self.path = Path(path) if path else Path(WINDOWS_HOSTS)
+        self.label = label
+        self.with_www = with_www
         self._lock = threading.Lock()
 
     # ----------------------------------------------------------------- read
@@ -177,7 +198,8 @@ class HostsBlocker:
 
     def blocked(self) -> list[str]:
         try:
-            return parse_managed_block(self.path.read_text(encoding="utf-8", errors="replace"))
+            return parse_managed_block(
+                self.path.read_text(encoding="utf-8", errors="replace"), self.label)
         except OSError:
             return []
 
@@ -196,7 +218,7 @@ class HostsBlocker:
             except OSError:
                 pass
 
-        updated = render_hosts(original, domains)
+        updated = render_hosts(original, domains, self.label, with_www=self.with_www)
         try:
             # Written in place rather than replaced: the hosts file has ACLs and
             # an ownership that a temp-file swap would silently discard.

@@ -158,6 +158,11 @@ Candy.exe prevent block krnl.exe                 # stop it launching at all (IFE
 Candy.exe prevent contain "C:\path\thing.exe"    # cut it off the network, keep it running
 Candy.exe integrity seal / verify                # measured start, signed baseline
 Candy.exe integrity platform                     # Secure Boot / TPM / HVCI state
+Candy.exe guard downloaded.exe --policy fortress  # would this download be rejected?
+Candy.exe check-url https://roblox.com.claim-robux.xyz/login   # phishing analysis, no feed
+Candy.exe adblock on                             # ad / tracker / malvertising blocking
+Candy.exe adblock import https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+Candy.exe panic                                  # break glass: maximum lockdown
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
@@ -290,6 +295,9 @@ is created for you on first run. The blocks you are most likely to touch:
 | `whitelist.domains` / `blacklist.domains` | empty | Domain lists, suffix-matched across subdomains |
 | `updates.trusted_public_key` | empty | LMS public key the threat feed must be signed with |
 | `updates.require_signature` | `false` | Refuse any feed that is not post-quantum signed |
+| `download_guard.policy` | `balanced` | `off` / `balanced` / `fortress` — fortress rejects every unsigned internet executable |
+| `adblock.enabled` / `categories` | `false` | Ad, tracker and malvertising blocking |
+| `phishing.block_score` | `70` | Score at which a link is treated as phishing |
 | `intel.enable_lookups` | `false` | Turn on VirusTotal/AbuseIPDB (needs your own free key) |
 | `updates.threat_feed_url` | empty | HTTPS URL of a community threat feed |
 | `scan.on_schedule` / `interval_minutes` | `false` / `120` | Periodic background scans |
@@ -345,7 +353,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 203 tests, no pytest required
+python -m unittest discover -s tests -v     # 245 tests, no pytest required
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -367,6 +375,9 @@ candy/
   anomaly.py     beacon / fan-out timing analysis
   triage.py      static payload analysis: imports, strings, exfil sinks
   integrity.py   signed self-measurement, platform trust reporting
+  guard.py       download rejection: Mark-of-the-Web, archives, fortress policy
+  adblock.py     ad / tracker / malvertising hosts blocking, importable lists
+  phishing.py    homograph, typosquat and bait analysis with no feed
   pe.py          PE version-resource + entropy inspection
   persistence.py Run keys, tasks, services, Winlogon, IFEO
   notify.py      tray icon and toasts, pure ctypes

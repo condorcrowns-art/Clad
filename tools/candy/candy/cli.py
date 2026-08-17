@@ -528,6 +528,145 @@ def cmd_integrity(args: argparse.Namespace) -> int:
     return 0 if result.get("status") == "intact" else 1
 
 
+def cmd_adblock(args: argparse.Namespace) -> int:
+    """Ad, tracker and malvertising blocking."""
+    from .adblock import SEED_LISTS, AdBlocker
+
+    config = Config.load(args.config)
+    blocker = AdBlocker(config)
+
+    if args.action == "status":
+        print(json.dumps(blocker.status(), indent=2))
+        print("\nAvailable categories:")
+        for name, domains in SEED_LISTS.items():
+            active = name in config.get("adblock.categories", [])
+            print(f"  [{'x' if active else ' '}] {name:14} {len(domains)} seed domain(s)")
+        return 0
+    if args.action == "on":
+        config.set("adblock.enabled", True)
+        if args.categories:
+            config.set("adblock.categories", args.categories.split(","))
+        config.save()
+        result = blocker.apply()
+        print(result)
+        print(f"{result.total} domain(s) blocked. Import a public list for full coverage:\n"
+              f"  candy adblock import https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts")
+        return 0 if result.ok else 1
+    if args.action == "off":
+        config.set("adblock.enabled", False)
+        config.save()
+        print(blocker.clear())
+        return 0
+    if args.action == "import":
+        if not args.source:
+            print("'adblock import' needs a URL or file path", file=sys.stderr)
+            return 2
+        result = blocker.import_list(args.source)
+        print(result)
+        return 0 if result.ok else 1
+    if args.action == "allow":
+        if not args.source:
+            print("'adblock allow' needs a domain", file=sys.stderr)
+            return 2
+        print(blocker.allow(args.source))
+        return 0
+    if args.action == "list":
+        blocked = blocker.blocked()
+        print(f"{len(blocked)} domain(s) blocked:")
+        for domain in blocked[:200]:
+            print(f"  {domain}")
+        if len(blocked) > 200:
+            print(f"  … and {len(blocked) - 200} more")
+        return 0
+    return 0
+
+
+def cmd_check_url(args: argparse.Namespace) -> int:
+    """Phishing analysis of a link, with no feed and no network needed."""
+    from .phishing import analyze_url
+
+    verdict = analyze_url(args.url)
+    print(f"Host      : {verdict.host}")
+    print(f"Verdict   : {verdict.verdict.upper()} (score {verdict.score})")
+    if verdict.impersonates:
+        print(f"Impersonat: {verdict.impersonates}")
+    if verdict.findings:
+        print("\nWhy:")
+        for finding in verdict.findings:
+            print(f"  +{finding['points']:<3} {finding['detail']}")
+    else:
+        print("\nNothing unusual about the shape of this link.")
+    if verdict.score >= int(Config.load(args.config).get("phishing.block_score", 70)) and args.block:
+        from .responder import Responder
+
+        print()
+        print(Responder(Config.load(args.config)).block_domain(verdict.host, forced=True))
+    return 1 if verdict.verdict in ("phishing", "suspicious") else 0
+
+
+def cmd_guard(args: argparse.Namespace) -> int:
+    """Assess a downloaded file the way the guard would."""
+    from .engine import Engine
+
+    config = Config.load(args.config)
+    if args.policy:
+        config.set("download_guard.policy", args.policy)
+    engine = Engine(config)
+
+    verdict = engine.guard.assess(args.file)
+    print(f"File      : {verdict.path}")
+    print(f"Origin    : {verdict.origin.zone_name}"
+          + (f"  from {verdict.origin.source}" if verdict.origin.source else ""))
+    print(f"SHA-256   : {verdict.sha256}")
+    print(f"Score     : {verdict.score}   Severity: {verdict.severity}")
+    for clearance in verdict.clearances:
+        print(f"  CLEAR   {clearance}")
+    for reason in verdict.reasons:
+        print(f"  FLAG    {reason}")
+    if verdict.archive:
+        print(f"Archive   : {verdict.archive.entries} entries, "
+              f"{len(verdict.archive.executables)} executable(s)"
+              + (", ENCRYPTED" if verdict.archive.encrypted else ""))
+    print(f"\nDECISION  : {verdict.action.upper()}  (policy: {engine.guard.policy})")
+    if args.apply and verdict.action == "quarantine":
+        print(engine.responder.quarantine(verdict.path, forced=True,
+                                          detection=engine.guard.to_detection(verdict)))
+    return 1 if verdict.action != "allow" else 0
+
+
+def cmd_panic(args: argparse.Namespace) -> int:
+    """Break glass: lock the machine down as hard as Candy can from user mode."""
+    from .adblock import AdBlocker
+    from .firewall import FirewallController
+
+    config = Config.load(args.config)
+    print("BREAK GLASS — maximum lockdown\n")
+
+    steps: list[tuple[str, str]] = []
+
+    config.set("response.mode", "enforce")
+    for switch in ("auto_kill", "auto_quarantine", "auto_firewall", "auto_block_domains"):
+        config.set(f"response.{switch}", True)
+    config.set("download_guard.policy", "fortress")
+    config.save()
+    steps.append(("enforcement", "every automatic action enabled, download guard set to fortress"))
+
+    controller = FirewallController(config)
+    ok, detail = controller.lockdown(confirm_seconds=args.confirm_seconds)
+    steps.append(("firewall", detail))
+
+    if args.adblock:
+        config.set("adblock.enabled", True)
+        config.save()
+        steps.append(("adblock", str(AdBlocker(config).apply())))
+
+    for name, detail in steps:
+        print(f"  {name:12}: {detail}")
+    print(f"\nRun 'candy firewall confirm' within {args.confirm_seconds}s to keep the "
+          f"lockdown, or 'candy firewall unlock' to undo it now.")
+    return 0 if ok else 1
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -791,6 +930,28 @@ def build_parser() -> argparse.ArgumentParser:
     integrity = sub.add_parser("integrity", help="Candy's own integrity and platform trust state")
     integrity.add_argument("action", choices=["seal", "verify", "platform"])
     integrity.set_defaults(func=cmd_integrity)
+
+    adblock = sub.add_parser("adblock", help="ad, tracker and malvertising blocking")
+    adblock.add_argument("action", choices=["status", "on", "off", "import", "allow", "list"])
+    adblock.add_argument("source", nargs="?", help="list URL/path (import) or domain (allow)")
+    adblock.add_argument("--categories", help="comma-separated category list")
+    adblock.set_defaults(func=cmd_adblock)
+
+    check_url = sub.add_parser("check-url", help="phishing analysis of a link (no feed needed)")
+    check_url.add_argument("url")
+    check_url.add_argument("--block", action="store_true", help="block it if it looks like phishing")
+    check_url.set_defaults(func=cmd_check_url)
+
+    guard = sub.add_parser("guard", help="assess a downloaded file the way the guard would")
+    guard.add_argument("file")
+    guard.add_argument("--policy", choices=["off", "balanced", "fortress"])
+    guard.add_argument("--apply", action="store_true", help="quarantine it if the verdict says so")
+    guard.set_defaults(func=cmd_guard)
+
+    panic = sub.add_parser("panic", help="break glass — maximum lockdown in one command")
+    panic.add_argument("--confirm-seconds", type=int, default=180)
+    panic.add_argument("--adblock", action="store_true", help="also enable ad/tracker blocking")
+    panic.set_defaults(func=cmd_panic)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,

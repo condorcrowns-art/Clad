@@ -30,10 +30,14 @@ MAX_SCAN_DEPTH = 6
 
 
 class FileWatcher:
-    def __init__(self, config: Config, analyzer: Analyzer, sink: Sink) -> None:
+    def __init__(self, config: Config, analyzer: Analyzer, sink: Sink,
+                 guard: Any = None) -> None:
         self.config = config
         self.analyzer = analyzer
         self.sink = sink
+        # When a download guard is attached it gets first refusal on every new
+        # file: it can reject outright, where the analyzer only reports.
+        self.guard = guard
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._observer: Any = None
@@ -163,8 +167,18 @@ class FileWatcher:
             return []
         # A file that is still downloading would hash to something meaningless.
         wait_until_stable(target, timeout=8.0)
-        digest = sha256_file(target, max_bytes=int(self.config.get("filewatch.max_hash_bytes", 134217728)))
         self.files_seen += 1
+
+        if self.guard is not None and event in ("created", "moved", "sysmon_create"):
+            verdict, _actions = self.guard.handle(target)
+            if verdict.action != "allow":
+                detection = self.guard.to_detection(verdict)
+                self.sink(detection)
+                return [detection]
+            if verdict.clearances:
+                return []
+
+        digest = sha256_file(target, max_bytes=int(self.config.get("filewatch.max_hash_bytes", 134217728)))
         detections = self.analyzer.analyze_file(str(target), sha256=digest, event=event)
         for detection in detections:
             self.sink(detection)

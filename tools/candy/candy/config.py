@@ -113,6 +113,25 @@ DEFAULTS: dict[str, Any] = {
         "max_beacon_jitter": 0.20,
         "fanout_hosts": 25,
     },
+    "download_guard": {
+        # off       - no gating
+        # balanced  - reject known-bad and high-risk downloads
+        # fortress  - reject every unsigned internet-downloaded executable
+        "policy": "balanced",
+        "reject_score": 60,
+        "triage": True,
+    },
+    "adblock": {
+        "enabled": False,
+        "categories": ["ads", "trackers", "malvertising", "fake_download"],
+        "allow": [],
+        "max_entries": 60000,
+        "lists": [],
+    },
+    "phishing": {
+        "enabled": True,
+        "block_score": 70,
+    },
     "web": {
         # Domain blocking writes a marked, backed-up block into the hosts file.
         # Leave hosts_file empty to use the platform default.
@@ -350,7 +369,7 @@ class Config:
     # --------------------------------------------------------------- lists
     def add_list_entry(self, list_name: str, field: str, value: str) -> bool:
         """Add to whitelist/blacklist and persist. Returns False on duplicate."""
-        if list_name not in ("whitelist", "blacklist"):
+        if list_name not in ("whitelist", "blacklist", "adblock"):
             raise ValueError(f"unknown list: {list_name}")
         with self._lock:
             bucket = self.data.setdefault(list_name, {}).setdefault(field, [])

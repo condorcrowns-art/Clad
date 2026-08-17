@@ -308,3 +308,88 @@ And the ceiling remains exactly where it was: **an attacker already running as
 administrator, or running in the kernel, wins.** No amount of user-mode engineering changes
 that — only a signed driver would, and that costs money. Everything above is the strongest
 posture reachable for zero.
+
+---
+
+## 11. Download rejection, ad blocking and phishing defence
+
+### "Anything I download that even sniffs of danger gets rejected" — now accurate, with limits
+
+Before this layer, downloads were *detected*, and anything unknown scored low and passed.
+`candy/guard.py` inverts that. Every new file in a watched folder is judged before the
+rest of the pipeline sees it, and the policy decides what "unknown" means:
+
+| Policy | Behaviour |
+|---|---|
+| `off` | No gating. Detection still runs. |
+| `balanced` (default) | Rejects known threats, renamed executors, stealer capabilities, archives containing known executors, and anything scoring ≥ 60. |
+| `fortress` | **Rejects every unsigned executable that came from the internet**, whatever it appears to do. A valid Authenticode signature is the only thing that clears it. |
+
+The judgement uses three inputs that need no network and no execution:
+
+* **Mark-of-the-Web** — Windows records which *page* a file was downloaded from in a
+  `Zone.Identifier` stream. Candy reads it, and runs that source URL through the phishing
+  analyser, so a file from a fake-robux site is condemned by its own origin.
+* **Authenticode** — a validly signed binary is the only positive clearance in fortress mode.
+* **Static triage** — capability scoring from the binary's own strings and imports.
+* **Archive inspection** — `roblox_mod.zip` containing `krnl.exe` is rejected on the
+  contents, not the wrapper. Password-protected archives score for being unreadable,
+  because that is the point of them.
+
+**The honest limit, restated:** this fires when the file *lands*, typically within a
+second, not before the write finishes. Blocking the write itself needs a filesystem
+minifilter, which needs a signed driver. A payload that executes itself within that first
+second is not stopped. A file sitting in Downloads waiting to be double-clicked — which is
+every executor — is.
+
+### Ad, tracker and malvertising blocking
+
+`candy/adblock.py` sinkholes ad and tracker domains in their own hosts-file section, so a
+50,000-entry list never disturbs the handful of domains blocked by hand.
+
+| | |
+|---|---|
+| Categories | `ads`, `trackers`, `malvertising`, `fake_download`, `telemetry` |
+| Seed list | Small and high-confidence — every entry exists only to serve ads, track, or distribute malvertising |
+| Public lists | `candy adblock import <https url>` reads hosts, AdBlock-Plus (`\|\|domain^`) and plain-domain formats — StevenBlack, OISD, AdGuard and Hagezi all work, all free |
+| Cap | 60,000 entries by default; a huge hosts file measurably slows Windows DNS |
+| Protected | Never blocks `roblox.com`, `microsoft.com`, `windowsupdate.com` or CAs, even if a list contains them |
+| Broke a site? | `candy adblock allow <domain>` removes it permanently |
+
+**Malvertising is the point.** The `malvertising` category covers the pop-under and
+forced-redirect networks that deliver "free robux" landing pages — blocking the delivery
+route is more reliable than catching the payload afterwards.
+
+**What it cannot do:** it never sees the page, so it cannot strip ads from inside one the
+way a browser extension does — blocking the network usually leaves a blank space. And a
+browser using DNS-over-HTTPS ignores the hosts file entirely.
+
+### Phishing detection with no feed at all
+
+Blocklists only know about phishing sites somebody already reported; the sites that take
+Roblox accounts are registered hours before use. `candy/phishing.py` judges a hostname on
+its *shape* instead:
+
+| Pattern | Example | Score |
+|---|---|---|
+| Brand in a subdomain of another domain | `roblox.com.login-verify.xyz` | 50 |
+| Homoglyph substitution | `rob1ox.com` | 55 |
+| Typosquat (edit distance ≤ 2) | `robloxx.com`, `discrod.com` | 45 |
+| Brand on a TLD it does not own | `roblox.tk` | 45 |
+| Punycode / IDN | `xn--roblx-8ta.com` | 45 |
+| Raw IP address as the host | `http://203.0.113.9/login` | 35 |
+| `@` in the authority | `https://roblox.com@evil.xyz` | 35 |
+| Direct executable link | `…/verify.exe` | 30 |
+| Credential bait wording | `claim`, `verify`, `free-robux` | 15–25 |
+| Free TLD | `.tk`, `.xyz`, `.click` | 15 |
+
+Verified against real shapes: `roblox.com` → clean; `github.com` → clean;
+`cdn.jsdelivr.net` → clean; `roblox.com.claim-robux.xyz/login/verify.exe` → **PHISHING (150)**.
+
+### Break glass
+
+`candy panic` puts everything into its strictest state in one command: enforcement on,
+every automatic action enabled, download guard to fortress, firewall to default-deny, and
+optionally ad blocking on. The firewall lockdown still auto-reverts unless confirmed,
+because a panic button that strands you offline with no way to undo it is a trap, not a
+feature.
