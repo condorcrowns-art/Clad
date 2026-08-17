@@ -1,4 +1,4 @@
-"""Thin ctypes wrappers over the Windows APIs ExecGuard needs.
+"""Thin ctypes wrappers over the Windows APIs Candy needs.
 
 Only the standard Windows SDK surface is used — no third-party or paid
 libraries. Every function is safe to call on non-Windows platforms, where it
@@ -231,9 +231,9 @@ def set_critical_error_mode() -> None:
 
 
 class SingleInstance:
-    """Named-mutex guard so two copies of ExecGuard do not fight each other."""
+    """Named-mutex guard so two copies of Candy do not fight each other."""
 
-    def __init__(self, name: str = "Global\\ExecGuardSingleInstance") -> None:
+    def __init__(self, name: str = "Global\\CandySingleInstance") -> None:
         self.name = name
         self._handle: Any = None
         self.already_running = False

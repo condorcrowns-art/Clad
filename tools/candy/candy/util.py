@@ -1,4 +1,4 @@
-"""Small helpers shared by every ExecGuard component.
+"""Small helpers shared by every Candy component.
 
 Everything in here must import and run on non-Windows platforms so the core
 logic stays unit-testable off Windows.

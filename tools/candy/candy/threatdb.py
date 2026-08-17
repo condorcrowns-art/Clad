@@ -201,14 +201,14 @@ class ThreatDB:
         if not url.lower().startswith("https://"):
             raise ValueError("threat feed URL must use https://")
         context = ssl.create_default_context()
-        request = urllib.request.Request(url, headers={"User-Agent": "ExecGuard/1.0"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Candy/1.0"})
         with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
             raw = response.read(MAX_FEED_BYTES + 1)
         if len(raw) > MAX_FEED_BYTES:
             raise ValueError("threat feed is larger than the 8 MB limit")
         payload = json.loads(raw.decode("utf-8"))
         if int(payload.get("meta", {}).get("schema", SCHEMA_VERSION)) > SCHEMA_VERSION:
-            raise ValueError("threat feed uses a newer schema; update ExecGuard first")
+            raise ValueError("threat feed uses a newer schema; update Candy first")
         result = self.ingest(payload)
         self.meta["updated"] = utc_stamp()
         self.meta["source"] = url

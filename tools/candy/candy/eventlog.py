@@ -20,7 +20,7 @@ GENESIS = "0" * 64
 
 
 class EventLog:
-    def __init__(self, directory: Path, name: str = "execguard.jsonl", *,
+    def __init__(self, directory: Path, name: str = "candy.jsonl", *,
                  max_bytes: int = 10 * 1024 * 1024, keep: int = 5, hash_chain: bool = True) -> None:
         self.dir = ensure_dir(Path(directory))
         self.path = self.dir / name
@@ -74,7 +74,7 @@ class EventLog:
             return
         if size + incoming <= self.max_bytes:
             return
-        # Shift execguard.jsonl.N -> N+1, dropping the oldest.
+        # Shift candy.jsonl.N -> N+1, dropping the oldest.
         for index in range(self.keep - 1, 0, -1):
             src = self.path.with_suffix(self.path.suffix + f".{index}")
             dst = self.path.with_suffix(self.path.suffix + f".{index + 1}")

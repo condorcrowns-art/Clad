@@ -41,7 +41,7 @@ class App(ttk.Frame):
         self.queue = self.engine.bus.subscribe_queue()
         self.detections: list[Detection] = []
 
-        master.title(f"ExecGuard {VERSION} — Roblox executor tripwire")
+        master.title(f"Candy {VERSION} — Roblox executor tripwire")
         master.geometry("1020x660")
         master.minsize(860, 560)
         master.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -237,7 +237,7 @@ class App(ttk.Frame):
         footer = ttk.Frame(frame)
         footer.pack(fill="x", pady=(10, 0))
         ttk.Button(footer, text="Open config file", command=self.open_config).pack(side="left")
-        ttk.Label(footer, text="ExecGuard is user-mode only: it is a tripwire, not a kernel "
+        ttk.Label(footer, text="Candy is user-mode only: it is a tripwire, not a kernel "
                                "anti-cheat. See the README for what it cannot do.",
                   wraplength=700, foreground="#666").pack(side="left", padx=10)
 
@@ -333,7 +333,7 @@ class App(ttk.Frame):
     def action_kill(self) -> None:
         detection = self._selected()
         if not detection or not detection.pid:
-            messagebox.showinfo("ExecGuard", "Select a detection that has a process ID.")
+            messagebox.showinfo("Candy", "Select a detection that has a process ID.")
             return
         if not messagebox.askyesno("Terminate process",
                                    f"Terminate {detection.process_name} (pid {detection.pid})?\n\n"
@@ -346,7 +346,7 @@ class App(ttk.Frame):
     def action_quarantine(self) -> None:
         detection = self._selected()
         if not detection or not detection.path:
-            messagebox.showinfo("ExecGuard", "Select a detection that refers to a file.")
+            messagebox.showinfo("Candy", "Select a detection that refers to a file.")
             return
         if not messagebox.askyesno("Quarantine file",
                                    f"Move this file to quarantine?\n\n{detection.path}\n\n"
@@ -359,7 +359,7 @@ class App(ttk.Frame):
     def action_block_ip(self) -> None:
         detection = self._selected()
         if not detection or not detection.remote:
-            messagebox.showinfo("ExecGuard", "Select a network detection.")
+            messagebox.showinfo("Candy", "Select a network detection.")
             return
         ip = detection.remote.rsplit(":", 1)[0]
         if not messagebox.askyesno("Block IP", f"Add Windows Firewall rules blocking {ip}?"):
@@ -382,7 +382,7 @@ class App(ttk.Frame):
         if not messagebox.askyesno(
                 "Whitelist",
                 f"Always trust this?\n\n{field}: {value}\n\n"
-                f"ExecGuard will stop reporting it. Only do this for software you installed "
+                f"Candy will stop reporting it. Only do this for software you installed "
                 f"yourself and recognise."):
             return
         self.config_obj.add_list_entry("whitelist", field, value)
@@ -522,7 +522,7 @@ class App(ttk.Frame):
 
     def on_close(self) -> None:
         if self.engine.started_at and not messagebox.askyesno(
-                "Quit ExecGuard", "Protection is running. Stop it and quit?"):
+                "Quit Candy", "Protection is running. Stop it and quit?"):
             return
         try:
             self.engine.stop()

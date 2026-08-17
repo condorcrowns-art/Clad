@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Sets ExecGuard up on this machine — portable, no system changes required.
+    Sets Candy up on this machine — portable, no system changes required.
 
 .DESCRIPTION
     Installs the free dependencies, verifies the install with the built-in
@@ -13,13 +13,13 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1
-    powershell -ExecutionPolicy Bypass -File install.ps1 -InstallPath "D:\Tools\ExecGuard" -AutoStart
+    powershell -ExecutionPolicy Bypass -File install.ps1 -InstallPath "D:\Tools\Candy" -AutoStart
 #>
 [CmdletBinding()]
 param(
     # Where to install. Default: keep the files where they already are.
     [string]$InstallPath,
-    # Create a shortcut that starts ExecGuard when you log in.
+    # Create a shortcut that starts Candy when you log in.
     [switch]$AutoStart,
     # Create a desktop shortcut.
     [switch]$DesktopShortcut,
@@ -31,16 +31,16 @@ $ErrorActionPreference = 'Stop'
 $source = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host ""
-Write-Host "  ExecGuard installer" -ForegroundColor Cyan
+Write-Host "  Candy installer" -ForegroundColor Cyan
 Write-Host "  a user-mode tripwire for Roblox executors"
 Write-Host ""
 
 # --- 1. Copy files if a destination was given ------------------------------
 $target = $source
 if ($InstallPath) {
-    Write-Host "Copying ExecGuard to $InstallPath…"
+    Write-Host "Copying Candy to $InstallPath…"
     New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
-    foreach ($item in @('execguard', 'config', 'data', 'docs', 'tests', 'run.py',
+    foreach ($item in @('candy', 'config', 'data', 'docs', 'tests', 'run.py',
                         'requirements.txt', 'README.md', 'LICENSE', 'build.ps1', 'install.ps1')) {
         $path = Join-Path $source $item
         if (Test-Path $path) { Copy-Item $path -Destination $InstallPath -Recurse -Force }
@@ -50,13 +50,13 @@ if ($InstallPath) {
 Set-Location $target
 
 # --- 2. Locate Python or a prebuilt exe -------------------------------------
-$exe = Join-Path $target "ExecGuard.exe"
+$exe = Join-Path $target "Candy.exe"
 $usingExe = Test-Path $exe
 
 if (-not $usingExe) {
     $python = Get-Command python -ErrorAction SilentlyContinue
     if (-not $python) {
-        Write-Host "Python was not found and there is no ExecGuard.exe here." -ForegroundColor Red
+        Write-Host "Python was not found and there is no Candy.exe here." -ForegroundColor Red
         Write-Host "Install Python 3.10+ from https://python.org (tick 'Add python.exe to PATH'),"
         Write-Host "or build the portable exe first with:  powershell -File build.ps1"
         exit 1
@@ -68,7 +68,7 @@ if (-not $usingExe) {
         & python -m pip install --user --quiet --upgrade psutil watchdog
         & python -m pip install --user --quiet WMI pywin32 2>$null
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "WMI/pywin32 unavailable — ExecGuard will poll for new processes instead of getting instant notifications."
+            Write-Warning "WMI/pywin32 unavailable — Candy will poll for new processes instead of getting instant notifications."
             $global:LASTEXITCODE = 0
         }
     }
@@ -98,12 +98,12 @@ function New-Shortcut([string]$linkPath, [string]$description) {
 }
 
 if ($DesktopShortcut) {
-    New-Shortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'ExecGuard.lnk') 'ExecGuard'
+    New-Shortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Candy.lnk') 'Candy'
 }
 if ($AutoStart) {
     $startup = [Environment]::GetFolderPath('Startup')
-    New-Shortcut (Join-Path $startup 'ExecGuard.lnk') 'ExecGuard (start at login)'
-    Write-Host "ExecGuard will start when you log in. Remove the shortcut from"
+    New-Shortcut (Join-Path $startup 'Candy.lnk') 'Candy (start at login)'
+    Write-Host "Candy will start when you log in. Remove the shortcut from"
     Write-Host "  $startup"
     Write-Host "to undo that."
 }
@@ -114,16 +114,16 @@ Write-Host "Installed to $target" -ForegroundColor Green
 Write-Host ""
 Write-Host "Start it with:"
 if ($usingExe) {
-    Write-Host "    .\ExecGuard.exe            (graphical interface)"
-    Write-Host "    .\ExecGuard.exe run        (console monitor)"
-    Write-Host "    .\ExecGuard.exe scan       (one-off scan)"
+    Write-Host "    .\Candy.exe            (graphical interface)"
+    Write-Host "    .\Candy.exe run        (console monitor)"
+    Write-Host "    .\Candy.exe scan       (one-off scan)"
 } else {
     Write-Host "    python run.py              (graphical interface)"
     Write-Host "    python run.py run          (console monitor)"
     Write-Host "    python run.py scan         (one-off scan)"
 }
 Write-Host ""
-Write-Host "ExecGuard starts in OBSERVE mode: it detects and logs, but changes nothing."
+Write-Host "Candy starts in OBSERVE mode: it detects and logs, but changes nothing."
 Write-Host "Switch to Enforce in the Settings tab once you trust what it is reporting."
 Write-Host ""
 Write-Host "For the full picture — including what a user-mode tool cannot do — read"

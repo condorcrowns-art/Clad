@@ -1,4 +1,4 @@
-"""ExecGuard — a free, open-source, user-mode tripwire for Roblox executors.
+"""Candy — a free, open-source, user-mode tripwire for Roblox executors.
 
 No kernel driver. No paid dependencies. It watches processes, files, network
 connections and in-process modules, and tells you the moment something that

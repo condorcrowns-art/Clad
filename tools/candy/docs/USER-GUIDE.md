@@ -1,4 +1,4 @@
-# ExecGuard — plain-English user guide
+# Candy — plain-English user guide
 
 This guide assumes no security background. If you can install a game, you can run this.
 
@@ -11,7 +11,7 @@ It watches your PC for the kind of programs people use to cheat in Roblox — "e
 are the most common way Roblox accounts get stolen: many of them are bundled with
 password stealers, and even the honest ones ask you to turn off your antivirus.
 
-ExecGuard tells you. It does not automatically nuke things unless you ask it to.
+Candy tells you. It does not automatically nuke things unless you ask it to.
 
 **Important:** it watches *your* computer. It cannot tell you whether another player in
 a game is cheating.
@@ -20,7 +20,7 @@ a game is cheating.
 
 ## 2. Getting it running
 
-1. Put `ExecGuard.exe` in a folder you like — Desktop is fine. There is no installer and
+1. Put `Candy.exe` in a folder you like — Desktop is fine. There is no installer and
    nothing is added to Windows.
 2. **Right-click it → Run as administrator.** It works without this, but it can see less.
 3. Windows may show a blue "Windows protected your PC" box. That appears for any program
@@ -66,7 +66,7 @@ scan.
 ## 4. "It flagged something I installed on purpose"
 
 That happens — cheat tools and ordinary tools sometimes look alike from the outside.
-Select the detection and click **Trust this (whitelist)**. ExecGuard stops reporting it,
+Select the detection and click **Trust this (whitelist)**. Candy stops reporting it,
 permanently, and records the choice in `config/config.json`.
 
 Only do this for software **you** installed and recognise. "A YouTube video told me to
@@ -76,7 +76,7 @@ whitelist it" is exactly how the bad case starts.
 
 ## 5. Letting it act on its own
 
-Out of the box ExecGuard only watches and warns. To let it act:
+Out of the box Candy only watches and warns. To let it act:
 
 1. Go to **Settings**.
 2. Choose **Enforce**.
@@ -92,9 +92,9 @@ never terminated regardless of settings.
 
 * **Status** — a live report of what is running. Useful when asking for help: copy the
   whole thing into your question.
-* **Log** — everything that has happened, saved to `logs/execguard.jsonl`. **Verify
+* **Log** — everything that has happened, saved to `logs/candy.jsonl`. **Verify
   integrity** checks that nothing has quietly edited or deleted entries.
-* **Quarantine** — everything ExecGuard moved out of harm's way. **Restore** puts a file
+* **Quarantine** — everything Candy moved out of harm's way. **Restore** puts a file
   back exactly as it was; **Delete permanently** is final.
 * **Whitelist / Blacklist** — everything you have trusted or banned, editable by hand.
 
@@ -107,7 +107,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -AutoStart
 ```
 
 That adds a shortcut to your Startup folder. To undo: press `Win+R`, type `shell:startup`,
-delete the ExecGuard shortcut.
+delete the Candy shortcut.
 
 ---
 
@@ -116,12 +116,12 @@ delete the ExecGuard shortcut.
 Delete the folder. That is the whole uninstall — no services, no registry keys, no
 scheduled tasks. Remove the Startup shortcut too if you created one.
 
-If ExecGuard added Windows Firewall rules (only if you asked it to block an IP), remove
-them with `ExecGuard.exe list show` to find the IPs, then, as administrator:
+If Candy added Windows Firewall rules (only if you asked it to block an IP), remove
+them with `Candy.exe list show` to find the IPs, then, as administrator:
 
 ```powershell
-netsh advfirewall firewall delete rule name="ExecGuard Block <ip> (out)"
-netsh advfirewall firewall delete rule name="ExecGuard Block <ip> (in)"
+netsh advfirewall firewall delete rule name="Candy Block <ip> (out)"
+netsh advfirewall firewall delete rule name="Candy Block <ip> (in)"
 ```
 
 ---
@@ -148,8 +148,8 @@ with a record you can go back to.
 Include this when you ask:
 
 ```powershell
-ExecGuard.exe status > status.txt
-ExecGuard.exe log --detections-only --limit 50 > detections.txt
+Candy.exe status > status.txt
+Candy.exe log --detections-only --limit 50 > detections.txt
 ```
 
 Both files are plain text, contain no passwords, and are safe to share — check the file

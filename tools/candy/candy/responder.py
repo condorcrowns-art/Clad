@@ -198,7 +198,7 @@ class Responder:
             return self._record(ActionResult("firewall", False,
                                              "administrator rights are required to add firewall rules"), detection)
 
-        rule_name = f"ExecGuard Block {ip}"
+        rule_name = f"Candy Block {ip}"
         results = []
         for direction in ("out", "in"):
             command = [
@@ -225,7 +225,7 @@ class Responder:
     def unblock_ip(self, ip: str) -> ActionResult:
         if not IS_WINDOWS:
             return self._record(ActionResult("firewall", False, "Windows only"))
-        rule_name = f"ExecGuard Block {ip}"
+        rule_name = f"Candy Block {ip}"
         ok = True
         for direction in ("out", "in"):
             try:

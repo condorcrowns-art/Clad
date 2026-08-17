@@ -16,7 +16,7 @@ from .threatdb import ThreatDB, VALID_TARGETS, make_submission
 from .util import IS_WINDOWS, app_dir
 
 BANNER = rf"""
-  ExecGuard {VERSION} — Roblox executor tripwire
+  Candy {VERSION} — Roblox executor tripwire
   user-mode only · no kernel driver · MIT licensed
 """
 
@@ -82,7 +82,7 @@ def cmd_gui(args: argparse.Namespace) -> int:
     except ImportError as exc:
         print(f"Could not start the GUI: {exc}", file=sys.stderr)
         print("Tkinter is part of the standard Windows Python installer; on Linux install "
-              "python3-tk. Use 'execguard run' for the console version.", file=sys.stderr)
+              "python3-tk. Use 'candy run' for the console version.", file=sys.stderr)
         return 2
     return gui_main(args.config)
 
@@ -129,7 +129,7 @@ def cmd_update(args: argparse.Namespace) -> int:
 
 def cmd_verify_log(args: argparse.Namespace) -> int:
     config = Config.load(args.config)
-    path = Path(args.path) if args.path else config.log_dir() / "execguard.jsonl"
+    path = Path(args.path) if args.path else config.log_dir() / "candy.jsonl"
     ok, line, message = verify_chain(path)
     print(f"{'OK  ' if ok else 'FAIL'} {path}")
     print(f"     {message}" + ("" if ok else f" (record #{line})"))
@@ -138,7 +138,7 @@ def cmd_verify_log(args: argparse.Namespace) -> int:
 
 def cmd_log(args: argparse.Namespace) -> int:
     config = Config.load(args.config)
-    path = Path(args.path) if args.path else config.log_dir() / "execguard.jsonl"
+    path = Path(args.path) if args.path else config.log_dir() / "candy.jsonl"
     records = [r for r in iter_records(path) if not args.detections_only or r.get("event") == "detection"]
     for record in records[-args.limit:]:
         if args.json:
@@ -257,12 +257,12 @@ def cmd_selftest(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="execguard",
-        description="ExecGuard — a user-mode tripwire that detects Roblox executors and "
+        prog="candy",
+        description="Candy — a user-mode tripwire that detects Roblox executors and "
                     "other injection tooling, and tells you the moment it sees one.",
     )
     parser.add_argument("--config", help="path to config.json (default: ./config/config.json)")
-    parser.add_argument("--version", action="version", version=f"ExecGuard {VERSION}")
+    parser.add_argument("--version", action="version", version=f"Candy {VERSION}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     run = sub.add_parser("run", help="start monitoring in the console")
@@ -286,7 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
     update.set_defaults(func=cmd_update)
 
     verify = sub.add_parser("verify-log", help="check the forensic log's hash chain")
-    verify.add_argument("path", nargs="?", help="log file (default: logs/execguard.jsonl)")
+    verify.add_argument("path", nargs="?", help="log file (default: logs/candy.jsonl)")
     verify.set_defaults(func=cmd_verify_log)
 
     log = sub.add_parser("log", help="show recent log records")

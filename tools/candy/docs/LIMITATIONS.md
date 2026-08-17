@@ -7,14 +7,14 @@ does not do. This is that statement.
 
 ## 1. Attacker model
 
-ExecGuard is designed against **one specific adversary**: a Roblox executor and its
+Candy is designed against **one specific adversary**: a Roblox executor and its
 loader, running as the logged-in user, distributed to people who install it voluntarily
 and often ship it bundled with an infostealer.
 
 It assumes the attacker:
 
-* runs at the same integrity level as ExecGuard (medium, or high if you elevate both),
-* is not specifically targeting ExecGuard by name,
+* runs at the same integrity level as Candy (medium, or high if you elevate both),
+* is not specifically targeting Candy by name,
 * is packaged and named recognisably, or behaves recognisably (DLL injection into
   Roblox, disabling Defender, running from `%TEMP%`).
 
@@ -22,8 +22,8 @@ It explicitly does **not** defend against:
 
 * a kernel-mode driver — including the "manual mapper" drivers some paid cheats use,
 * an attacker with SYSTEM or administrator rights hunting for security tools,
-* a supply-chain compromise of ExecGuard itself or its threat feed,
-* anything that runs before ExecGuard starts and cleans up after itself.
+* a supply-chain compromise of Candy itself or its threat feed,
+* anything that runs before Candy starts and cleans up after itself.
 
 Any user-mode tool that claims otherwise is overstating its reach.
 
@@ -33,7 +33,7 @@ Any user-mode tool that claims otherwise is overstating its reach.
 
 ### Protected Process Light (PPL)
 
-**Requested:** register ExecGuard as a Protected Process Light so it cannot be
+**Requested:** register Candy as a Protected Process Light so it cannot be
 terminated.
 
 **Reality:** Windows grants the `PsProtectedSignerAntimalware` level only to binaries
@@ -51,10 +51,10 @@ does not protect the process, it bluescreens the machine when the process dies. 
 to "self-protect" by opening a handle to yourself and stripping permissions are trivially
 defeated by any caller with `SeDebugPrivilege`.
 
-**What ExecGuard does instead:**
+**What Candy does instead:**
 
 * `SetProcessMitigationPolicy(ProcessExtensionPointDisablePolicy)` — blocks legacy
-  AppInit_DLLs and `SetWindowsHookEx` injection into ExecGuard itself. This is the one
+  AppInit_DLLs and `SetWindowsHookEx` injection into Candy itself. This is the one
   mitigation policy that is safe for a Python-hosted process; `MicrosoftSignedOnly`
   binary-signature policy and dynamic-code prohibition would terminate the interpreter.
 * Anti-debug checks (`IsDebuggerPresent`, `CheckRemoteDebuggerPresent`, and
@@ -64,7 +64,7 @@ defeated by any caller with `SeDebugPrivilege`.
   attempt to edit it out fails verification.
 * A named mutex to keep two instances from fighting.
 
-That is genuinely all that is available without money. The honest summary: **ExecGuard
+That is genuinely all that is available without money. The honest summary: **Candy
 can be killed by anything running at your privilege level. It is built so that killing it
 is noisy, not impossible.**
 
@@ -73,15 +73,15 @@ is noisy, not impossible.**
 **Requested:** use Microsoft Detours or similar for API hooking.
 
 **Reality:** hooking another process's API calls requires injecting a DLL into it. That
-means ExecGuard would perform the exact operation it exists to detect — and:
+means Candy would perform the exact operation it exists to detect — and:
 
 * Roblox's Hyperion anti-cheat would treat it as an attack on the client,
-* third-party antivirus would flag ExecGuard as an injector (correctly),
+* third-party antivirus would flag Candy as an injector (correctly),
 * any executor resolving syscalls directly, or unhooking `ntdll` from a fresh mapping,
   walks straight past the hook,
 * a crash in an injected hook crashes the host process, i.e. the user's game.
 
-The cost is high, the benefit is low, and the technique is a liability. ExecGuard audits
+The cost is high, the benefit is low, and the technique is a liability. Candy audits
 the *outcome* instead: it enumerates modules loaded inside Roblox processes and reports
 foreign ones, with Authenticode status. That check does not care what the executor is
 called or how it injected.
@@ -95,7 +95,7 @@ called or how it injected.
 | Very short-lived processes | A loader that runs for 200 ms can exit between poll cycles | WMI `Win32_ProcessStartTrace` narrows the window to near-zero when `wmi`/`pywin32` are installed; it does not close it |
 | Renamed executables | Name signatures miss `notavirus.exe` | Module audit, masquerade check, unsigned-in-`%TEMP%` heuristic, hash matching |
 | Packed or freshly compiled samples | No hash match, no name match | Behavioural signals only — this is the real limit of signature-based detection |
-| Access-denied processes | Elevated processes are opaque to an unelevated ExecGuard | Status reports the degradation; run as administrator |
+| Access-denied processes | Elevated processes are opaque to an unelevated Candy | Status reports the degradation; run as administrator |
 | Memory-only payloads | Nothing lands on disk for the file watcher | Module audit may still see the loaded DLL; reflectively loaded modules that unlink themselves from the PEB will not appear |
 | Encrypted C2 over CDNs | IP blocking hits shared infrastructure | Endpoint list ships empty; blocking is opt-in and reversible |
 
@@ -146,4 +146,4 @@ For an actual security boundary rather than a tripwire, the options are:
 * **Roblox 2-Step Verification**, so a stolen session or password is not enough on its
   own.
 
-ExecGuard is complementary to all four. It is not a substitute for any of them.
+Candy is complementary to all four. It is not a substitute for any of them.

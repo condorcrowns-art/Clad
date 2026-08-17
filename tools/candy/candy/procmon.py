@@ -273,7 +273,7 @@ def terminate_process(pid: int, timeout: float = 3.0) -> tuple[bool, str]:
         return True, f"process {pid} had already exited"
     except psutil.AccessDenied:
         return False, (f"access denied terminating pid {pid} — the process is elevated "
-                       f"or protected; run ExecGuard as administrator")
+                       f"or protected; run Candy as administrator")
     except Exception as exc:  # noqa: BLE001
         return False, f"failed to terminate pid {pid}: {exc}"
 

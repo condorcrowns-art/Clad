@@ -36,7 +36,7 @@ catches an executor both when it is downloaded and when it runs.
 ## Writing a pattern that will not hurt anyone
 
 A signature that fires on innocent software is worse than no signature, because
-ExecGuard can be configured to quarantine and kill on the strength of it.
+Candy can be configured to quarantine and kill on the strength of it.
 
 **Anchor short or ambiguous names.** `wave` matches `WaveEditor.exe` and half the audio
 software on Windows. `re:^wave[ _-]?(executor|exploit|launcher)\.exe$` does not.
@@ -90,7 +90,7 @@ A good name or behaviour signature is worth more than fifty hashes.
 Generate a well-formed entry:
 
 ```powershell
-ExecGuard.exe submit --name "Nova Executor" --target process_name \
+Candy.exe submit --name "Nova Executor" --target process_name \
   --pattern "re:^nova\.exe$" --severity high \
   --description "Confirmed sample; injects nova.dll into RobloxPlayerBeta" \
   --sha256 <hash, only if you verified it yourself> --out nova.json
@@ -114,13 +114,13 @@ There is no central server, and none is needed. A feed is one JSON file served o
 HTTPS — a raw GitHub file works:
 
 ```powershell
-ExecGuard.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
+Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 ```
 
 The URL is saved to `config.json`; set `updates.auto_update` to `true` and
 `updates.interval_hours` to refresh on a schedule.
 
-On import, ExecGuard:
+On import, Candy:
 
 * refuses plain HTTP (a MITM could otherwise blacklist `explorer.exe`),
 * refuses feeds over 8 MB,
@@ -129,5 +129,5 @@ On import, ExecGuard:
   instead of aborting the whole update,
 * merges rather than replaces, so entries you added by hand survive.
 
-Since a feed can direct ExecGuard to kill processes and quarantine files, **subscribe
+Since a feed can direct Candy to kill processes and quarantine files, **subscribe
 only to a feed you would trust with that power**, and read the diffs.

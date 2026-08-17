@@ -7,7 +7,7 @@
       "Signatures below match PUBLICLY KNOWN executor product names and generic loader patterns.",
       "The 'hashes' map ships EMPTY on purpose. A hash list is only useful if every entry was",
       "verified against a real sample; inventing or copying unverified hashes produces false",
-      "positives that quarantine innocent files. Add your own with 'execguard submit', or point",
+      "positives that quarantine innocent files. Add your own with 'candy submit', or point",
       "updates.threat_feed_url at a community feed you trust.",
       "The 'endpoints' map ships empty for the same reason: blocking an IP you have not verified",
       "can cut off unrelated services that share the host."
@@ -59,7 +59,7 @@
     {"id": "tamper.defender.ps", "name": "Defender disabled via PowerShell", "target": "cmdline", "pattern": "re:set-mppreference\\s+.*disable(realtimemonitoring|behaviormonitoring|ioavprotection|scriptscanning)\\s+\\$?true", "severity": "critical", "description": "Command line disables Microsoft Defender real-time protection.", "category": "tamper"},
     {"id": "tamper.defender.exclusion", "name": "Defender exclusion added", "target": "cmdline", "pattern": "re:add-mppreference\\s+-exclusionpath", "severity": "high", "description": "Command line adds a Microsoft Defender exclusion path.", "category": "tamper"},
     {"id": "tamper.service.stop", "name": "Security service stopped", "target": "cmdline", "pattern": "re:(sc(\\.exe)?\\s+(stop|config|delete)|net\\s+stop)\\s+.*(windefend|wdnissvc|sense|wscsvc|securityhealthservice|mpssvc)", "severity": "critical", "description": "Command line stops or disables a Windows security service.", "category": "tamper"},
-    {"id": "tamper.taskkill.av", "name": "Antivirus process killed", "target": "cmdline", "pattern": "re:taskkill.*(msmpeng|securityhealth|avastui|avgui|mbam|bdagent|ekrn|nortonsecurity|execguard)", "severity": "critical", "description": "Command line terminates an antivirus or security process.", "category": "tamper"},
+    {"id": "tamper.taskkill.av", "name": "Antivirus process killed", "target": "cmdline", "pattern": "re:taskkill.*(msmpeng|securityhealth|avastui|avgui|mbam|bdagent|ekrn|nortonsecurity|candy)", "severity": "critical", "description": "Command line terminates an antivirus or security process.", "category": "tamper"},
     {"id": "tamper.firewall.off", "name": "Windows Firewall disabled", "target": "cmdline", "pattern": "re:netsh\\s+advfirewall\\s+set\\s+.*state\\s+off", "severity": "critical", "description": "Command line turns the Windows Firewall off.", "category": "tamper"},
     {"id": "tamper.bcdedit", "name": "Boot integrity weakened", "target": "cmdline", "pattern": "re:bcdedit.*(testsigning\\s+on|nointegritychecks\\s+on|disable(dynamicticktick)?integritychecks)", "severity": "critical", "description": "Command line disables driver signature enforcement — used to load unsigned executor drivers.", "category": "tamper"},
     {"id": "tamper.amsi", "name": "AMSI bypass", "target": "cmdline", "pattern": "re:(amsiinitfailed|amsiscanbuffer|amsi\\.dll.*patch)", "severity": "critical", "description": "Command line contains a well-known AMSI bypass string.", "category": "tamper"},

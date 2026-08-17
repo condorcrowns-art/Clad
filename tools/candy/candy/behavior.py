@@ -237,7 +237,7 @@ class BehaviorEngine:
         for missing in self._security_baseline - current:
             self._emit_once(f"av_gone:{missing}", Detection(
                 source="behavior", kind="security_disabled", subject=missing,
-                message=(f"{SECURITY_PROCESSES.get(missing, missing)} was running when ExecGuard "
+                message=(f"{SECURITY_PROCESSES.get(missing, missing)} was running when Candy "
                          f"started and is no longer running. Something may have disabled it."),
                 severity="critical", process_name=missing,
                 signature_id="heuristic.security_disabled",
@@ -247,14 +247,14 @@ class BehaviorEngine:
 
     # ---------------------------------------------------- self-protection
     def check_self_integrity(self) -> None:
-        """Anti-debug / anti-tamper checks on ExecGuard itself."""
+        """Anti-debug / anti-tamper checks on Candy itself."""
         if not self.config.get("protection.self_protection", True):
             return
         signals = debugger_signals()
         if signals:
             self._emit_once("self:debugger", Detection(
-                source="behavior", kind="self_tamper", subject="ExecGuard",
-                message=f"A debugger is attached to ExecGuard ({', '.join(signals)}). "
+                source="behavior", kind="self_tamper", subject="Candy",
+                message=f"A debugger is attached to Candy ({', '.join(signals)}). "
                         f"Something is trying to inspect or patch the monitor.",
                 severity="critical", signature_id="selfprotect.debugger",
                 evidence={"signals": signals},

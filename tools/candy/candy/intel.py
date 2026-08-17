@@ -116,7 +116,7 @@ class IntelClient:
         request = urllib.request.Request(
             VT_FILE_URL.format(sha256),
             headers={"x-apikey": key_material, "Accept": "application/json",
-                     "User-Agent": "ExecGuard/1.0"},
+                     "User-Agent": "Candy/1.0"},
         )
         try:
             timeout = int(self.config.get("intel.request_timeout_seconds", 10))
@@ -159,7 +159,7 @@ class IntelClient:
         request = urllib.request.Request(
             f"{ABUSEIPDB_URL}?{query}",
             headers={"Key": key_material, "Accept": "application/json",
-                     "User-Agent": "ExecGuard/1.0"},
+                     "User-Agent": "Candy/1.0"},
         )
         try:
             timeout = int(self.config.get("intel.request_timeout_seconds", 10))

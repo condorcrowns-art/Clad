@@ -1,4 +1,4 @@
-# ExecGuard dependencies — all free and open source.
+# Candy dependencies — all free and open source.
 #
 # Required for real monitoring (the detection core itself is pure stdlib):
 psutil>=5.9            # BSD-3 — process, module and connection enumeration

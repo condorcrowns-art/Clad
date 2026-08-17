@@ -1,4 +1,4 @@
-"""Entry point: ``python -m execguard`` and the frozen ExecGuard.exe.
+"""Entry point: ``python -m candy`` and the frozen Candy.exe.
 
 With no arguments the GUI starts (what a double-click should do); with
 arguments the CLI takes over.

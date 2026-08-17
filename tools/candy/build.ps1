@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Builds ExecGuard into a single portable ExecGuard.exe.
+    Builds Candy into a single portable Candy.exe.
 
 .DESCRIPTION
     Creates a virtual environment, installs the (free) dependencies, and runs
-    PyInstaller in one-file mode. The result is dist\ExecGuard.exe, which runs
+    PyInstaller in one-file mode. The result is dist\Candy.exe, which runs
     on Windows 10/11 without Python installed.
 
 .EXAMPLE
@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
-Write-Host "ExecGuard build" -ForegroundColor Cyan
+Write-Host "Candy build" -ForegroundColor Cyan
 Write-Host "---------------"
 
 # --- 1. Python -------------------------------------------------------------
@@ -48,7 +48,7 @@ Write-Host "Installing dependencies…"
 # notifications, so it must not fail the build.
 & $venvPython -m pip install --quiet WMI pywin32 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Warning "WMI/pywin32 did not install — ExecGuard will poll for new processes instead."
+    Write-Warning "WMI/pywin32 did not install — Candy will poll for new processes instead."
     $global:LASTEXITCODE = 0
 }
 
@@ -66,7 +66,7 @@ Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 $pyiArgs = @(
     "-m", "PyInstaller",
     "--onefile",
-    "--name", "ExecGuard",
+    "--name", "Candy",
     "--clean",
     "--noconfirm",
     # Ship the seed threat database and default config inside the exe; they are
@@ -74,7 +74,7 @@ $pyiArgs = @(
     "--add-data", "data\threats.json;data",
     "--add-data", "config\config.json;config",
     "--hidden-import", "tkinter",
-    "--collect-submodules", "execguard",
+    "--collect-submodules", "candy",
     "run.py"
 )
 if (-not $Console) { $pyiArgs += "--windowed" }
@@ -82,13 +82,13 @@ if (-not $Console) { $pyiArgs += "--windowed" }
 & $venvPython @pyiArgs
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 
-$exe = Join-Path $root "dist\ExecGuard.exe"
+$exe = Join-Path $root "dist\Candy.exe"
 $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host ""
 Write-Host "Built $exe ($size MB)" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "  1. Copy ExecGuard.exe to a folder of your choice (it is portable)."
+Write-Host "  1. Copy Candy.exe to a folder of your choice (it is portable)."
 Write-Host "  2. Run it once — it creates config\, logs\, data\ and quarantine\ beside itself."
 Write-Host "  3. Right-click -> 'Run as administrator' for full visibility."
 Write-Host ""

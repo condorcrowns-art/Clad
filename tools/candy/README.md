@@ -1,4 +1,4 @@
-# ExecGuard
+# Candy
 
 A free, open-source, **user-mode** tripwire that spots Roblox executors (Synapse-style
 injectors, KRNL, Fluxus, Potassium and friends) and the tooling that ships with them —
@@ -19,14 +19,14 @@ python run.py selftest   # prove the detection pipeline works
 
 ## Read this before you install it
 
-ExecGuard is a **tripwire, not an anti-cheat**. Being honest about the boundary is more
+Candy is a **tripwire, not an anti-cheat**. Being honest about the boundary is more
 useful than a longer feature list:
 
 | It can | It cannot |
 |---|---|
 | Notice a known executor being downloaded, extracted, or launched | Stop a determined attacker who is already running as administrator |
 | Spot a foreign DLL loaded inside `RobloxPlayerBeta.exe` | See a kernel-mode (driver-based) cheat — those live below anything user-mode code can observe |
-| Catch command lines that disable Defender, the firewall, or driver signing | Prevent an executor that starts *before* ExecGuard does |
+| Catch command lines that disable Defender, the firewall, or driver signing | Prevent an executor that starts *before* Candy does |
 | Terminate a process, quarantine a file, block an IP — on your say-so | Resist a process running with higher privileges than itself |
 | Keep a tamper-evident forensic log | Detect *other players* cheating in a game you are playing |
 
@@ -39,13 +39,13 @@ not implemented**, with reasons:
   Microsoft Virus Initiative. There is no free path to it, and any tool claiming
   otherwise is not actually running as PPL. See [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 * **Detours-style API hooking of other processes.** To hook another process's API calls
-  you must inject a DLL into it — the exact technique ExecGuard exists to detect. It
+  you must inject a DLL into it — the exact technique Candy exists to detect. It
   would trip Roblox's own anti-cheat, trip third-party antivirus, and be bypassed by any
-  executor that resolves syscalls directly. Instead ExecGuard **audits the result**:
+  executor that resolves syscalls directly. Instead Candy **audits the result**:
   it enumerates the modules loaded inside Roblox and flags the foreign ones. That check
   survives renaming the executor's exe, which name signatures do not.
 
-What ExecGuard *does* provide is fast, legible, local notification with a full audit
+What Candy *does* provide is fast, legible, local notification with a full audit
 trail — enough time to close the game, change your password, and look at what happened.
 
 ---
@@ -55,10 +55,10 @@ trail — enough time to close the game, change your password, and look at what 
 ### Option A — portable exe (nothing to install)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1     # produces dist\ExecGuard.exe
+powershell -ExecutionPolicy Bypass -File build.ps1     # produces dist\Candy.exe
 ```
 
-Copy `dist\ExecGuard.exe` anywhere. On first run it creates `config\`, `data\`, `logs\`
+Copy `dist\Candy.exe` anywhere. On first run it creates `config\`, `data\`, `logs\`
 and `quarantine\` beside itself. Deleting the folder uninstalls it completely.
 
 ### Option B — from source
@@ -73,16 +73,16 @@ shortcut:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1 -DesktopShortcut
-powershell -ExecutionPolicy Bypass -File install.ps1 -InstallPath "D:\Tools\ExecGuard" -AutoStart
+powershell -ExecutionPolicy Bypass -File install.ps1 -InstallPath "D:\Tools\Candy" -AutoStart
 ```
 
 **Requirements:** Python 3.10+ (only for source runs) and `psutil`. `watchdog`, `WMI` and
-`pywin32` are optional — without them ExecGuard polls instead of receiving instant
+`pywin32` are optional — without them Candy polls instead of receiving instant
 events, which is slower but fully functional.
 
 **Run as administrator** for full visibility: without elevation Windows hides other
 users' processes, the system-wide connection table, and firewall rule creation.
-ExecGuard runs unelevated too, and says so in its status when it is limited.
+Candy runs unelevated too, and says so in its status when it is limited.
 
 ---
 
@@ -102,19 +102,19 @@ ExecGuard runs unelevated too, and says so in its status when it is limited.
 ### The command line
 
 ```powershell
-ExecGuard.exe run                     # monitor in the console until Ctrl+C
-ExecGuard.exe run --enforce           # ...and act on detections this run
-ExecGuard.exe scan                    # scan processes + the watched folders
-ExecGuard.exe scan "C:\Users\me\Downloads"
-ExecGuard.exe status                  # JSON status
-ExecGuard.exe log --detections-only   # recent detections from the log
-ExecGuard.exe verify-log              # is the log intact?
-ExecGuard.exe quarantine list
-ExecGuard.exe quarantine restore "quarantine\<file>.quarantined"
-ExecGuard.exe list add whitelist names "MyGameLauncher.exe"
-ExecGuard.exe list add blacklist ips 203.0.113.5
-ExecGuard.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
-ExecGuard.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
+Candy.exe run                     # monitor in the console until Ctrl+C
+Candy.exe run --enforce           # ...and act on detections this run
+Candy.exe scan                    # scan processes + the watched folders
+Candy.exe scan "C:\Users\me\Downloads"
+Candy.exe status                  # JSON status
+Candy.exe log --detections-only   # recent detections from the log
+Candy.exe verify-log              # is the log intact?
+Candy.exe quarantine list
+Candy.exe quarantine restore "quarantine\<file>.quarantined"
+Candy.exe list add whitelist names "MyGameLauncher.exe"
+Candy.exe list add blacklist ips 203.0.113.5
+Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
+Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
 
 `scan` exits with status 1 when it finds something, so it drops straight into a
@@ -122,7 +122,7 @@ scheduled task or CI check.
 
 ### Response modes
 
-ExecGuard starts in **observe** mode: it detects, logs and alerts, and changes nothing.
+Candy starts in **observe** mode: it detects, logs and alerts, and changes nothing.
 That is the right default — a fresh signature set on an unfamiliar machine will produce
 false positives, and you want to see them before anything gets killed.
 
@@ -159,7 +159,7 @@ Five collectors feed one scoring engine:
   key, off by default).
 * **Behaviour engine** — audits modules loaded inside Roblox processes (the injection
   check), watches sustained CPU and handle counts, notices when an antivirus service
-  that *was* running disappears, and runs anti-debug checks on ExecGuard itself.
+  that *was* running disappears, and runs anti-debug checks on Candy itself.
 * **Aggregator** — scores per subject: info 5, low 20, medium 45, high 75, critical 100.
   Repeat hits from the same signature count once, so three *different* weak signals are
   what escalate, not one signal firing every poll.
@@ -199,7 +199,7 @@ verified entries, or point `updates.threat_feed_url` at a community feed you tru
 Contribute a new executor:
 
 ```powershell
-ExecGuard.exe submit --name "Nova Executor" --target process_name \
+Candy.exe submit --name "Nova Executor" --target process_name \
   --pattern "re:^nova\.exe$" --severity high \
   --description "Confirmed sample, injects nova.dll into RobloxPlayerBeta" --out nova.json
 ```
@@ -228,9 +228,9 @@ is created for you on first run. The blocks you are most likely to touch:
 | `updates.threat_feed_url` | empty | HTTPS URL of a community threat feed |
 | `scan.on_schedule` / `interval_minutes` | `false` / `120` | Periodic background scans |
 
-Whitelisting always wins. If ExecGuard flags a tool you installed on purpose, select the
+Whitelisting always wins. If Candy flags a tool you installed on purpose, select the
 detection and click **Trust this** — or run
-`ExecGuard.exe list add whitelist paths "C:\Program Files\MyTool"`.
+`Candy.exe list add whitelist paths "C:\Program Files\MyTool"`.
 
 Environment variables (`%USERPROFILE%`, `%APPDATA%`, …) are expanded at load time, and
 relative paths resolve next to the executable, so a portable copy works on any machine
@@ -240,12 +240,12 @@ without editing anything.
 
 ## The forensic log
 
-`logs/execguard.jsonl` is append-only JSON Lines. Every record embeds the SHA-256 of the
+`logs/candy.jsonl` is append-only JSON Lines. Every record embeds the SHA-256 of the
 record before it, so deleting or editing any line breaks the chain from that point on:
 
 ```
-> ExecGuard.exe verify-log
-FAIL logs\execguard.jsonl
+> Candy.exe verify-log
+FAIL logs\candy.jsonl
      chain broken: record claims prev=3f9a1c… but previous record hashes to 88b0e2… (record #147)
 ```
 
@@ -290,7 +290,7 @@ work behind that boundary — which is why the tests above run on Linux in CI an
 mean something.
 
 ```
-execguard/
+candy/
   config.py      configuration, whitelist/blacklist model
   detect.py      analyzer + scoring aggregator      ← the core, fully unit-tested
   threatdb.py    signature database, feed updates
@@ -316,7 +316,7 @@ the pipeline is alive on the machine you are actually on.
 
 ## Legal and ethical use
 
-ExecGuard is a defensive tool for **your own machine**, or one you administer with
+Candy is a defensive tool for **your own machine**, or one you administer with
 permission. It reports what it sees locally and takes only the actions you enable. It
 does not phone home, upload files, or send anything anywhere unless you explicitly
 enable the optional reputation lookups — and those send a hash or an IP, nothing else.

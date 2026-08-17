@@ -17,14 +17,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from execguard.config import Config, deep_merge  # noqa: E402
-from execguard.detect import Aggregator, Analyzer  # noqa: E402
-from execguard.eventlog import EventLog, verify_chain  # noqa: E402
-from execguard.events import Detection, severity_for  # noqa: E402
-from execguard.netmon import is_private  # noqa: E402
-from execguard.responder import Responder  # noqa: E402
-from execguard.threatdb import ThreatDB, make_submission  # noqa: E402
-from execguard.util import compile_pattern, is_within, normalize_path  # noqa: E402
+from candy.config import Config, deep_merge  # noqa: E402
+from candy.detect import Aggregator, Analyzer  # noqa: E402
+from candy.eventlog import EventLog, verify_chain  # noqa: E402
+from candy.events import Detection, severity_for  # noqa: E402
+from candy.netmon import is_private  # noqa: E402
+from candy.responder import Responder  # noqa: E402
+from candy.threatdb import ThreatDB, make_submission  # noqa: E402
+from candy.util import compile_pattern, is_within, normalize_path  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 SEED_DB = REPO / "data" / "threats.json"
@@ -346,7 +346,7 @@ class EventLogTests(unittest.TestCase):
             log = EventLog(Path(tmp), max_bytes=512, keep=3)
             for index in range(100):
                 log.write({"event": "detection", "n": index, "pad": "x" * 40})
-            self.assertTrue((Path(tmp) / "execguard.jsonl.1").exists())
+            self.assertTrue((Path(tmp) / "candy.jsonl.1").exists())
             self.assertTrue(verify_chain(log.path)[0])
 
 
