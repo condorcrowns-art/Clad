@@ -168,6 +168,11 @@ Candy.exe kernel harden RobloxPlayerBeta.exe     # kernel anti-injection mitigat
 Candy.exe netharden apply --resolver quad9       # DNS + browser policy + protocol hardening
 Candy.exe netharden revert                       # undo all of it
 Candy.exe autostart install                      # run at boot as SYSTEM
+Candy.exe dns on                                 # local filtering resolver (wildcards + live phishing)
+Candy.exe dns run --port 5354                    # run it in the foreground to watch queries
+Candy.exe dns test roblox.com.free-robux.tk      # would this be blocked?
+Candy.exe coverage --matrix                      # all 54 techniques and Candy's coverage of each
+Candy.exe coverage                               # prove it: run the self-test
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
@@ -358,7 +363,8 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 266 tests, no pytest required
+python -m unittest discover -s tests -v     # 292 tests, no pytest required
+python run.py coverage                     # technique self-test: 24/24 detected
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -385,6 +391,8 @@ candy/
   phishing.py    homograph, typosquat and bait analysis with no feed
   kernelpolicy.py  ASR rules, process mitigations, WDAC — enforced by Windows' kernel
   netharden.py   filtering DNS, forced browser DoH, URL policy, protocol hardening
+  dnsproxy.py    local DNS filtering resolver with live phishing analysis
+  coverage.py    54-technique coverage matrix and the self-test harness
   pe.py          PE version-resource + entropy inspection
   persistence.py Run keys, tasks, services, Winlogon, IFEO
   notify.py      tray icon and toasts, pure ctypes

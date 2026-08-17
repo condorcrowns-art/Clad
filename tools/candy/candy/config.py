@@ -121,6 +121,20 @@ DEFAULTS: dict[str, Any] = {
         "reject_score": 60,
         "triage": True,
     },
+    "dns": {
+        # A local filtering resolver: wildcard blocking, live phishing analysis
+        # on every lookup, and a complete query log. Needs port 53, so admin.
+        "enabled": False,
+        "listen": "127.0.0.1",
+        "port": 53,
+        "upstream_resolver": "quad9",
+        "upstream": [],
+        "upstream_timeout_seconds": 3.0,
+        "cache_seconds": 300,
+        "phishing_analysis": True,
+        "phishing_block_score": 70,
+        "set_system_dns": True,
+    },
     "adblock": {
         "enabled": False,
         "categories": ["ads", "trackers", "malvertising", "fake_download"],

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .anomaly import AnomalyEngine
+from .dnsproxy import DnsFilter, DnsProxy
 from .behavior import BehaviorEngine
 from .config import Config
 from .detect import Aggregator, Analyzer
@@ -70,6 +71,9 @@ class Engine:
         self.persistence = PersistenceAuditor(self.config, self.analyzer, self.handle_detection)
         self.anomaly = AnomalyEngine(self.config, self.handle_detection)
 
+        self.dns_filter = DnsFilter(self.config, self.db, self.analyzer)
+        self.dns_proxy = DnsProxy(self.config, self.dns_filter, self.handle_detection)
+
         self.tray: TrayIcon | None = None
         self.notifier: Notifier | None = None
 
@@ -123,6 +127,7 @@ class Engine:
 
         if self.kernel_events.degraded_reason:
             report["skipped"].append(f"kernel_events: {self.kernel_events.degraded_reason}")
+        self._start_dns(report)
         self._start_notifications(report)
 
         self.started_at = time.time()
@@ -141,6 +146,35 @@ class Engine:
         if self.config.get("scan.on_start", False):
             threading.Thread(target=self.scan_now, name="startup-scan", daemon=True).start()
         return report
+
+    def _start_dns(self, report: dict[str, Any]) -> None:
+        """Bring up the local filtering resolver, if it is switched on.
+
+        Never fatal and never partial: if the port cannot be bound, the system
+        DNS setting is left exactly as it was rather than pointed at a resolver
+        that is not listening.
+        """
+        if not self.config.get("dns.enabled", False):
+            return
+        from .adblock import AdBlocker
+
+        blocklist = AdBlocker(self.config).seed_domains()
+        blocklist += [str(d) for d in self.config.get("blacklist.domains", [])]
+        self.dns_filter.load(blocklist)
+
+        ok, detail = self.dns_proxy.start(str(self.config.get("dns.listen", "127.0.0.1")),
+                                          int(self.config.get("dns.port", 53)))
+        if not ok:
+            report["errors"].append(f"dns resolver: {detail}")
+            return
+        report["started"].append(f"dns resolver ({self.dns_filter.size} domains)")
+
+        if self.config.get("dns.set_system_dns", True):
+            from .netharden import NetworkHardener
+
+            hardener = NetworkHardener(self.config, self.log)
+            result = hardener.point_system_at_local_resolver()
+            report["started" if result.ok else "skipped"].append(f"system DNS: {result.detail}")
 
     def _start_notifications(self, report: dict[str, Any]) -> None:
         """Tray icon and toasts. Never fatal: a missing tray costs alerts, not
@@ -166,6 +200,14 @@ class Engine:
         if self.tray is not None:
             self.tray.stop()
             self.tray = None
+        if self.dns_proxy.mode != "idle":
+            # Restore DNS *before* the listener dies, or the machine has no
+            # resolver for however long shutdown takes.
+            if self.config.get("dns.set_system_dns", True):
+                from .netharden import NetworkHardener
+
+                NetworkHardener(self.config, self.log).restore_resolver()
+            self.dns_proxy.stop()
         for component in (self.proc_monitor, self.file_watcher, self.net_monitor,
                           self.behavior, self.kernel_events, self.persistence, self.anomaly):
             try:
@@ -303,6 +345,7 @@ class Engine:
                 "kernel_events": self.kernel_events.status(),
                 "persistence": self.persistence.mode,
                 "anomaly": self.anomaly.snapshot(),
+                "dns": self.dns_proxy.status(),
                 "tray": bool(self.tray and self.tray.available),
             },
             "download_guard": {

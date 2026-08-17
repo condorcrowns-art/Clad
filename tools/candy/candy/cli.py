@@ -800,6 +800,92 @@ def cmd_autostart(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_coverage(args: argparse.Namespace) -> int:
+    """Show the technique coverage matrix, and prove it with a self-test."""
+    from . import coverage as cov
+
+    if args.matrix:
+        if args.json:
+            print(cov.matrix_json())
+            return 0
+        current = ""
+        for technique in cov.TECHNIQUES:
+            if technique.category != current:
+                current = technique.category
+                print(f"\n=== {current.upper()} " + "=" * (60 - len(current)))
+            needs = f" [needs {technique.requires}]" if technique.requires else ""
+            print(f"  {technique.coverage.upper():8} {technique.id:28} {technique.name}{needs}")
+            print(f"           {technique.mechanism}")
+            if technique.note:
+                print(f"           note: {technique.note}")
+        stats = cov.summary()
+        print(f"\n{stats['total']} techniques: "
+              + ", ".join(f"{count} {level}" for level, count in sorted(stats['by_coverage'].items())))
+        return 0
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+    outcomes = cov.run_selftest(engine, live=args.live,
+                                progress=(lambda line: print(f"  {line}")) if args.verbose else None)
+    print(cov.format_report(outcomes))
+    missed = [o for o in outcomes if not o.detected]
+    return 1 if missed else 0
+
+
+def cmd_dns(args: argparse.Namespace) -> int:
+    """The local DNS filtering resolver."""
+    from .adblock import AdBlocker
+    from .dnsproxy import DnsFilter, DnsProxy
+
+    config = Config.load(args.config)
+
+    if args.action == "test":
+        engine = Engine(config)
+        dns_filter = DnsFilter(config, engine.db, engine.analyzer)
+        dns_filter.load(AdBlocker(config).seed_domains())
+        verdict = dns_filter.decide(args.domain or "example.com")
+        print(f"{args.domain}: {'BLOCKED' if verdict.blocked else 'allowed'}"
+              + (f" — {verdict.reason}" if verdict.reason else ""))
+        return 1 if verdict.blocked else 0
+
+    if args.action == "status":
+        engine = Engine(config)
+        print(json.dumps(engine.dns_proxy.status(), indent=2))
+        return 0
+
+    if args.action in ("on", "off"):
+        config.set("dns.enabled", args.action == "on")
+        config.save()
+        print(f"DNS filtering resolver {'enabled' if args.action == 'on' else 'disabled'}. "
+              f"Restart protection to apply.")
+        if args.action == "on":
+            print("It binds port 53 and points the system at itself, so run Candy as "
+                  "administrator. Stopping Candy restores your previous DNS settings.")
+        return 0
+
+    if args.action == "run":
+        engine = Engine(config)
+        dns_filter = DnsFilter(config, engine.db, engine.analyzer)
+        count = dns_filter.load(AdBlocker(config).seed_domains()
+                                + [str(d) for d in config.get("blacklist.domains", [])])
+        proxy = DnsProxy(config, dns_filter, _print_detection)
+        ok, detail = proxy.start(args.listen, args.port)
+        print(detail)
+        if not ok:
+            return 1
+        print(f"{count} domains blocked, upstream {proxy._upstream_servers()}. Ctrl+C to stop.\n")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            proxy.stop()
+            print(f"\n{json.dumps(proxy.status(), indent=2)}")
+        return 0
+    return 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -1109,6 +1195,22 @@ def build_parser() -> argparse.ArgumentParser:
     autostart = sub.add_parser("autostart", help="start Candy at boot as SYSTEM")
     autostart.add_argument("action", choices=["install", "remove", "status"])
     autostart.set_defaults(func=cmd_autostart)
+
+    coverage_cmd = sub.add_parser("coverage",
+                                  help="technique coverage matrix and self-test")
+    coverage_cmd.add_argument("--matrix", action="store_true", help="print the matrix, run nothing")
+    coverage_cmd.add_argument("--live", action="store_true",
+                              help="also create and remove real benign autostart entries")
+    coverage_cmd.add_argument("--json", action="store_true")
+    coverage_cmd.add_argument("--verbose", action="store_true")
+    coverage_cmd.set_defaults(func=cmd_coverage)
+
+    dns = sub.add_parser("dns", help="local DNS filtering resolver")
+    dns.add_argument("action", choices=["on", "off", "status", "run", "test"])
+    dns.add_argument("domain", nargs="?", help="domain to test")
+    dns.add_argument("--listen", default="127.0.0.1")
+    dns.add_argument("--port", type=int, default=53)
+    dns.set_defaults(func=cmd_dns)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,

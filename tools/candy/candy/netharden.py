@@ -201,6 +201,32 @@ class NetworkHardener:
                             f"{resolver['name']} set on {len(changed)} interface(s)",
                             changed=changed, skipped=skipped)
 
+    def point_system_at_local_resolver(self, address: str = "127.0.0.1") -> HardenResult:
+        """Point every interface at Candy's own resolver.
+
+        Separate from set_resolver because the failure mode matters more here:
+        if the local proxy is not actually listening, this would leave the
+        machine with no working DNS at all.
+        """
+        if not IS_WINDOWS:
+            return HardenResult(False, "Windows only")
+        if not is_admin():
+            return HardenResult(False, "administrator rights are required to change DNS")
+
+        ledger = self._ledger()
+        changed, skipped = [], []
+        for interface in list_interfaces():
+            ok, previous = _netsh(["interface", "ipv4", "show", "dnsservers", f"name={interface}"])
+            ledger.setdefault("dns", {}).setdefault(interface, previous if ok else "")
+            ok, output = _netsh(["interface", "ipv4", "set", "dnsservers",
+                                 f"name={interface}", "static", address, "primary"])
+            (changed if ok else skipped).append(interface if ok else f"{interface}: {output[:80]}")
+        ledger["resolver"] = f"local ({address})"
+        self._save(ledger)
+        return HardenResult(bool(changed),
+                            f"{len(changed)} interface(s) now resolve through Candy",
+                            changed=changed, skipped=skipped)
+
     def restore_resolver(self) -> HardenResult:
         ledger = self._ledger()
         changed = []

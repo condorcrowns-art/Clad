@@ -48,6 +48,47 @@ STARTUP_DIRS = [
     r"%ProgramData%\Microsoft\Windows\Start Menu\Programs\Startup",
 ]
 
+# Autostart and code-load locations beyond the Run keys. Every one of these is
+# a documented persistence technique that survives a reboot and that a Run-key
+# audit alone would miss.
+EXTRA_LOCATIONS: list[tuple[str, str, str, str]] = [
+    # (hive, key, value name or "*" for all values, description)
+    ("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows", "AppInit_DLLs",
+     "AppInit_DLLs — loaded into every process that links user32"),
+    ("HKLM", r"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows",
+     "AppInit_DLLs", "AppInit_DLLs (32-bit)"),
+    ("HKLM", r"SYSTEM\CurrentControlSet\Control\Session Manager", "AppCertDlls",
+     "AppCertDlls — loaded on every process creation API call"),
+    ("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", "Notify",
+     "Winlogon notification package"),
+    ("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", "Taskman",
+     "Winlogon task manager replacement"),
+    ("HKLM", r"SYSTEM\CurrentControlSet\Control\Lsa", "Notification Packages",
+     "LSA notification package — runs inside lsass"),
+    ("HKLM", r"SYSTEM\CurrentControlSet\Control\Lsa", "Security Packages",
+     "LSA security package — runs inside lsass"),
+    ("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Monitors", "*",
+     "print monitor DLL — loaded by the spooler as SYSTEM"),
+    ("HKLM", r"SYSTEM\CurrentControlSet\Control\Print\Monitors", "*",
+     "print monitor DLL"),
+    ("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Providers", "*",
+     "time provider DLL — loaded by w32time as SYSTEM"),
+    ("HKLM", r"SOFTWARE\Microsoft\Netsh", "*",
+     "netsh helper DLL — loaded whenever netsh runs"),
+    ("HKCU", r"Environment", "UserInitMprLogonScript",
+     "logon script — runs at every sign-in"),
+    ("HKCU", r"Control Panel\Desktop", "SCRNSAVE.EXE",
+     "screensaver executable"),
+    ("HKLM", r"SOFTWARE\Microsoft\Active Setup\Installed Components", "*",
+     "Active Setup — runs once per user at logon"),
+    ("HKCU", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders", "Startup",
+     "redirected Startup folder"),
+]
+
+# COM hijacking: a CLSID under HKCU shadows the HKLM one, so a hijacked
+# InprocServer32 loads an attacker DLL into whatever host resolves that CLSID.
+COM_HIJACK_ROOT = r"SOFTWARE\Classes\CLSID"
+
 # Security tooling that malware likes to neuter with an IFEO "debugger" value.
 IFEO_SENSITIVE = {
     "taskmgr.exe", "regedit.exe", "msconfig.exe", "procexp.exe", "procexp64.exe",
@@ -125,6 +166,27 @@ def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection
             signature_id=f"persistence:{sig.id}",
         )
 
+    if entry.source == "com_hijack":
+        emit("com_hijack",
+             (f"A per-user COM server is registered for {entry.extra.get('clsid', '?')} "
+              f"pointing at {image or entry.command}. This shadows the system-wide "
+              f"registration and loads that file into whatever process resolves the CLSID."),
+             "high", signature_id="persistence.com_hijack")
+    elif entry.source == "registry_autostart" and "AppInit" in entry.name:
+        emit("appinit_dll",
+             (f"AppInit_DLLs is set to '{entry.command}'. Every process that loads user32 "
+              f"will load that DLL — this is machine-wide injection by configuration."),
+             "critical", signature_id="persistence.appinit")
+    elif entry.source == "registry_autostart" and "lsass" in entry.name.lower():
+        emit("lsa_package",
+             (f"An LSA package is registered: '{entry.command}'. Code registered here runs "
+              f"inside lsass, where credentials live."),
+             "critical", signature_id="persistence.lsa")
+    elif entry.source == "registry_autostart":
+        emit("registry_autostart",
+             f"{entry.name} is set to run '{entry.command}'.",
+             "medium", signature_id="persistence.registry_autostart")
+
     if entry.source == "winlogon":
         emit(
             "winlogon_hijack",
@@ -175,6 +237,83 @@ def enumerate_all(config: Config) -> list[PersistenceEntry]:
     entries.extend(_enumerate_startup_folders())
     entries.extend(_enumerate_scheduled_tasks())
     entries.extend(_enumerate_services())
+    entries.extend(_enumerate_extra_locations())
+    entries.extend(_enumerate_com_hijacks())
+    return entries
+
+
+def _enumerate_extra_locations() -> list[PersistenceEntry]:  # pragma: no cover - Windows only
+    """AppInit, LSA, print monitors, netsh helpers, logon scripts and friends."""
+    import winreg
+
+    roots = {"HKCU": winreg.HKEY_CURRENT_USER, "HKLM": winreg.HKEY_LOCAL_MACHINE}
+    entries: list[PersistenceEntry] = []
+    for hive, subkey, value_name, description in EXTRA_LOCATIONS:
+        try:
+            with winreg.OpenKey(roots[hive], subkey) as key:
+                if value_name == "*":
+                    index = 0
+                    while True:
+                        try:
+                            name, value, _ = winreg.EnumValue(key, index)
+                        except OSError:
+                            break
+                        index += 1
+                        if value:
+                            entries.append(PersistenceEntry(
+                                source="registry_autostart", name=f"{description}: {name}",
+                                command=str(value), location=f"{hive}\\{subkey}",
+                                extra={"technique": description}))
+                else:
+                    try:
+                        value, _ = winreg.QueryValueEx(key, value_name)
+                    except OSError:
+                        continue
+                    if value and str(value).strip():
+                        entries.append(PersistenceEntry(
+                            source="registry_autostart", name=description,
+                            command=str(value), location=f"{hive}\\{subkey}\\{value_name}",
+                            extra={"technique": description}))
+        except OSError:
+            continue
+    return entries
+
+
+def _enumerate_com_hijacks() -> list[PersistenceEntry]:  # pragma: no cover - Windows only
+    """Per-user CLSID entries that shadow a machine-wide COM server.
+
+    A CLSID registered under HKCU takes precedence over HKLM, so this is how a
+    DLL gets loaded into a trusted host process without touching any autostart
+    key at all.
+    """
+    import winreg
+
+    entries: list[PersistenceEntry] = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, COM_HIJACK_ROOT) as root:
+            index = 0
+            while index < 2000:
+                try:
+                    clsid = winreg.EnumKey(root, index)
+                except OSError:
+                    break
+                index += 1
+                for server in ("InprocServer32", "LocalServer32"):
+                    try:
+                        with winreg.OpenKey(root, f"{clsid}\\{server}") as key:
+                            value, _ = winreg.QueryValueEx(key, "")
+                    except OSError:
+                        continue
+                    if not value:
+                        continue
+                    entries.append(PersistenceEntry(
+                        source="com_hijack", name=f"COM {clsid} ({server})",
+                        command=str(value),
+                        location=f"HKCU\\{COM_HIJACK_ROOT}\\{clsid}\\{server}",
+                        extra={"technique": "per-user COM server shadows the machine-wide one",
+                               "clsid": clsid}))
+    except OSError:
+        pass
     return entries
 
 

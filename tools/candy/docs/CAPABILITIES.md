@@ -459,3 +459,76 @@ DNS is out of the picture entirely.
 
 Everything in layers 3–6 is recorded in a ledger and reversed by `candy netharden revert`,
 because network settings you cannot undo are how a security tool ruins somebody's week.
+
+---
+
+## 14. The local DNS filtering resolver — layer 8, and the strongest one
+
+The hosts file has three hard limits: exact-match only, it slows Windows once it holds
+tens of thousands of entries, and it can only block what somebody already listed. Candy
+now runs its own resolver on 127.0.0.1:53 and points the system at it, which removes all
+three.
+
+| Capability | Why it matters |
+|---|---|
+| **Wildcard / suffix blocking** | One rule covers `*.bad-executor.gg`, including subdomains that did not exist when the rule was written |
+| **Live phishing analysis on every lookup** | `roblox.com.claim-robux.xyz` is scored by shape *at resolution time* and refused — no feed, no report, no prior knowledge |
+| **Complete query log** | The earliest possible signal that something is trying to reach somewhere it should not, before a single packet of payload |
+| **No size limit** | Blocklists live in memory, not in a file Windows parses on every lookup |
+| **Upstream to a filtering resolver** | What Candy allows still gets Quad9's malware filtering on top |
+
+Verified end to end over a real socket: subdomain wildcards, personal blacklist, threat-DB
+endpoints and phishing heuristics all return a sinkholed answer; ordinary domains forward
+upstream and resolve normally; malformed packets do not disturb the listener.
+
+**Failure modes, because they matter more in a resolver than anywhere else:**
+
+- If port 53 cannot be bound, Candy says so and **leaves system DNS alone** rather than
+  pointing it at something that is not listening.
+- Upstream failures return SERVFAIL rather than hanging.
+- Stopping Candy restores the previous DNS settings *before* the listener closes.
+- Protected domains are never blocked, whatever any imported list says.
+
+That makes eight network layers, each failing differently: default-deny firewall, hosts
+sinkhole, **local filtering resolver**, upstream filtering resolver, forced browser DoH,
+browser URL policy, protocol hardening, behavioural beacon detection.
+
+---
+
+## 15. Technique coverage — the complete matrix
+
+`candy coverage --matrix` prints all 54 techniques; `candy coverage` runs the self-test.
+Current state:
+
+| Coverage | Count | Meaning |
+|---|---|---|
+| **prevent** | 12 | It cannot happen while the policy is applied |
+| **detect** | 27 | It happens and Candy reports it, usually within seconds |
+| **partial** | 12 | Caught in common cases, escapable in specific ways |
+| **none** | 3 | Blind spot, named deliberately |
+
+**The three blind spots, stated rather than hidden:**
+
+- `inj.atom_bombing` — no user-mode signal exists. Needs a kernel driver.
+- `per.bits_job` — BITS transfer jobs are not enumerated. Closable with `bitsadmin`.
+- `per.browser_extension` — malicious extensions are not enumerated. The browser URL
+  policy limits what one can reach, but it is not detection.
+
+**The self-test.** `candy coverage` exercises the detection path for 24 techniques and
+reports PASS/MISS per technique. It creates only benign artefacts — a file named
+`krnl.exe` containing a self-test string, a zip containing the same, a Run key pointing at
+a harmless path — and removes them. It **never injects into another process**: doing the
+bad thing to prove you can detect the bad thing is how security tools become the incident.
+
+Techniques that can only occur live (a real remote thread, a real driver load) are tested
+by feeding the engine the exact Sysmon event a real attempt produces. That verifies the
+mapping, not the kernel, and the report labels each one with what was simulated so the
+distinction is never blurred.
+
+Current result: **24/24 simulated techniques detected**, including CreateRemoteThread into
+Roblox, handle acquisition with write rights, unsigned module load, process hollowing,
+unsigned driver load, Defender being disabled, Defender exclusions, `bcdedit` testsigning,
+AMSI bypass strings, certutil downloads, Run keys, Winlogon hijack, IFEO debugger,
+AppInit_DLLs, COM hijacking, LSA packages, direct executor download, renamed executor,
+double extension, executor in a zip, password-protected archive, phishing page,
+malvertising domain, and log tampering.
