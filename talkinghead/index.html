@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Talking Head — live mic &amp; playback lip-sync</title>
+<meta name="description" content="A single-page 3D talking avatar that lip-syncs to your microphone, to an audio file, or to typed text.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%236fa8ff'/%3E%3Cellipse cx='11' cy='13' rx='2' ry='3' fill='%23081020'/%3E%3Cellipse cx='21' cy='13' rx='2' ry='3' fill='%23081020'/%3E%3Cpath d='M10 20c2 3 10 3 12 0' stroke='%23081020' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+
+<!-- TalkingHead and three.js are loaded straight from the CDN, exactly as
+     documented in met4citizen/TalkingHead. Bump the versions in one place here. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "talkinghead": "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs"
+  }
+}
+</script>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ── Stage ─────────────────────────────────────────────────────────── -->
+  <main id="stage">
+    <div id="avatar" aria-label="3D avatar"></div>
+
+    <div id="loader" class="overlay">
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="loader-text">Loading avatar…</p>
+      <div class="progress"><div id="loader-bar"></div></div>
+    </div>
+
+    <div id="fatal" class="overlay hidden">
+      <h2>Could not start</h2>
+      <p id="fatal-text"></p>
+    </div>
+
+    <div id="stage-top">
+      <span id="state-chip" class="chip">idle</span>
+      <div id="meter" title="Input level"><div id="meter-fill"></div></div>
+    </div>
+
+    <p id="subtitles" aria-live="polite"></p>
+
+    <div id="stage-bottom">
+      <div class="seg" role="group" aria-label="Camera view">
+        <button data-view="full">full</button>
+        <button data-view="mid">mid</button>
+        <button data-view="upper" class="on">upper</button>
+        <button data-view="head">head</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Controls ──────────────────────────────────────────────────────── -->
+  <aside id="panel">
+    <header>
+      <h1>Talking Head</h1>
+      <p class="sub">Live mic &middot; audio playback &middot; text-to-speech</p>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="mic" class="on" aria-selected="true">Microphone</button>
+      <button role="tab" data-tab="file" aria-selected="false">Playback</button>
+      <button role="tab" data-tab="text" aria-selected="false">Text</button>
+    </nav>
+
+    <!-- Microphone -->
+    <section class="tabpanel" data-tab="mic">
+      <p class="hint">The avatar lip-syncs to whatever your microphone hears, in
+        real time. Your audio is analysed locally and is never played back
+        through the speakers, so there is no feedback loop.</p>
+      <button id="mic-toggle" class="primary">Start microphone</button>
+
+      <label class="field">
+        <span>Sensitivity <output id="sens-out">1.0</output></span>
+        <input id="sens" type="range" min="0.3" max="3" step="0.1" value="1">
+      </label>
+      <label class="field">
+        <span>Smoothing <output id="smooth-out">0.5</output></span>
+        <input id="smooth" type="range" min="0" max="0.9" step="0.05" value="0.5">
+      </label>
+      <label class="check">
+        <input id="mic-eyecontact" type="checkbox" checked>
+        <span>Look at the camera while I speak</span>
+      </label>
+    </section>
+
+    <!-- Playback -->
+    <section class="tabpanel hidden" data-tab="file">
+      <p class="hint">Play an audio file, or record a clip from the microphone
+        and play it back. The avatar lip-syncs to the audio as it plays.</p>
+
+      <label class="filebtn">
+        <input id="file-input" type="file" accept="audio/*">
+        <span>Choose audio file…</span>
+      </label>
+      <p id="file-name" class="muted">No file chosen</p>
+
+      <div class="row">
+        <button id="file-play" class="primary" disabled>Play</button>
+        <button id="file-stop" disabled>Stop</button>
+      </div>
+
+      <hr>
+
+      <div class="row">
+        <button id="rec-toggle">Record from mic</button>
+        <button id="rec-play" disabled>Play recording</button>
+      </div>
+      <p id="rec-status" class="muted">Nothing recorded yet</p>
+    </section>
+
+    <!-- Text -->
+    <section class="tabpanel hidden" data-tab="text">
+      <p class="hint">Uses the browser's built-in speech synthesis for the voice
+        and TalkingHead's own viseme generation for the mouth — no API keys.</p>
+
+      <textarea id="text-input" rows="4" spellcheck="false">Hi! I'm a 3D talking head running entirely in your browser. Give me a microphone, an audio file, or just some text, and I'll lip-sync to it.</textarea>
+
+      <label class="field">
+        <span>Voice</span>
+        <select id="voice-select"></select>
+      </label>
+      <label class="field">
+        <span>Rate <output id="rate-out">1.0</output></span>
+        <input id="rate" type="range" min="0.6" max="1.6" step="0.05" value="1">
+      </label>
+
+      <div class="row">
+        <button id="text-speak" class="primary">Speak</button>
+        <button id="text-stop">Stop</button>
+      </div>
+    </section>
+
+    <!-- Avatar controls, shared by every mode -->
+    <section class="always">
+      <label class="field">
+        <span>Mood</span>
+        <select id="mood-select"></select>
+      </label>
+
+      <span class="label">Gestures</span>
+      <div id="gestures" class="chips">
+        <button data-gesture="handup">wave</button>
+        <button data-gesture="thumbup">thumbs up</button>
+        <button data-gesture="ok">ok</button>
+        <button data-gesture="index">point</button>
+        <button data-gesture="shrug">shrug</button>
+        <button data-gesture="🙂">🙂</button>
+        <button data-gesture="😮">😮</button>
+        <button data-gesture="😉">😉</button>
+      </div>
+    </section>
+
+    <footer>
+      3D avatar and lip-sync engine by
+      <a href="https://github.com/met4citizen/TalkingHead" target="_blank" rel="noopener">met4citizen/TalkingHead</a>.
+      The <em>brunette</em> avatar was made with Ready Player Me and is free for
+      non-commercial use under CC&nbsp;BY-NC&nbsp;4.0.
+    </footer>
+  </aside>
+
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
