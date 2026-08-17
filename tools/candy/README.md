@@ -153,6 +153,11 @@ Candy.exe firewall verify                        # revoke any binary that change
 Candy.exe key generate                           # post-quantum (LMS) signing key
 Candy.exe sign threats.json                      # sign a threat feed
 Candy.exe verify-file threats.signed.json
+Candy.exe triage suspicious.exe                  # read a payload without running it
+Candy.exe prevent block krnl.exe                 # stop it launching at all (IFEO)
+Candy.exe prevent contain "C:\path\thing.exe"    # cut it off the network, keep it running
+Candy.exe integrity seal / verify                # measured start, signed baseline
+Candy.exe integrity platform                     # Secure Boot / TPM / HVCI state
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
@@ -340,7 +345,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 157 tests, no pytest required
+python -m unittest discover -s tests -v     # 203 tests, no pytest required
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -357,6 +362,11 @@ candy/
   netblock.py    hosts-file site blocking, reversible and backed up
   firewall.py    default-deny outbound, hash-bound allowlist, panic rollback
   pqsign.py      RFC 8554 LMS post-quantum signatures, pure stdlib
+  vault.py       AES-256-GCM (FIPS 197 / SP 800-38D) + DPAPI machine binding
+  prevent.py     IFEO execution blocking, per-program network containment
+  anomaly.py     beacon / fan-out timing analysis
+  triage.py      static payload analysis: imports, strings, exfil sinks
+  integrity.py   signed self-measurement, platform trust reporting
   pe.py          PE version-resource + entropy inspection
   persistence.py Run keys, tasks, services, Winlogon, IFEO
   notify.py      tray icon and toasts, pure ctypes

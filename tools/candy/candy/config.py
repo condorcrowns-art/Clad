@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
         # Kernel-sourced telemetry read from Sysmon/Defender/Security channels.
         "kernel_events": True,
         "persistence_auditor": True,
+        "anomaly_engine": True,
     },
     "response": {
         # observe  - detect and log only (safe default)
@@ -95,6 +96,22 @@ DEFAULTS: dict[str, Any] = {
     "persistence": {
         "interval_minutes": 15,
         "audit_on_start": True,
+    },
+    "quarantine": {
+        # AES-256-GCM at rest. Pure-Python AES is ~1 MB/s, so larger files fall
+        # back to XOR defanging rather than stalling the pipeline.
+        "encrypt": True,
+        "encrypt_max_bytes": 33554432,
+    },
+    "prevent": {
+        "stub_program": r"%SystemRoot%\System32\systray.exe",
+        "auto_block_execution": False,
+        "auto_contain_network": False,
+    },
+    "anomaly": {
+        "sample_interval_seconds": 15,
+        "max_beacon_jitter": 0.20,
+        "fanout_hosts": 25,
     },
     "web": {
         # Domain blocking writes a marked, backed-up block into the hosts file.

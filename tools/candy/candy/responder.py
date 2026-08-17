@@ -121,11 +121,26 @@ class Responder:
                 f"could not move {source}: {exc}. The file is probably still running or locked."
             ), detection)
 
+        # Authenticated encryption where the size allows it, XOR defang where it
+        # does not. Either way the file cannot be executed by a double-click;
+        # only the encrypted form is also unreadable.
+        protection = "xor"
         try:
-            _xor_file(target, QUARANTINE_XOR_KEY)
-        except OSError as exc:
-            # The file is already isolated; failing to defang it is not fatal.
-            pass
+            limit = int(self.config.get("quarantine.encrypt_max_bytes", 33554432))
+            if self.config.get("quarantine.encrypt", True) and target.stat().st_size <= limit:
+                from .vault import Vault
+
+                vault = Vault(self.config.data_dir() / "vault.key")
+                vault.encrypt_file(target, associated=digest.encode())
+                protection = f"aes-256-gcm ({vault.protection})"
+            else:
+                _xor_file(target, QUARANTINE_XOR_KEY)
+        except Exception as exc:  # noqa: BLE001 - isolation already succeeded
+            try:
+                _xor_file(target, QUARANTINE_XOR_KEY)
+            except OSError:
+                pass
+            protection = f"xor (encryption unavailable: {exc})"
 
         meta = {
             "quarantined_at": utc_stamp(),
@@ -133,6 +148,7 @@ class Responder:
             "sha256": digest,
             "size": target.stat().st_size,
             "xor_key": QUARANTINE_XOR_KEY,
+            "protection": protection,
             "reason": detection.message if detection else "manual quarantine",
             "signature_id": detection.signature_id if detection else None,
         }
@@ -164,7 +180,13 @@ class Responder:
         target = Path(destination) if destination else Path(meta["original_path"])
         try:
             ensure_dir(target.parent)
-            _xor_file(quarantined, int(meta.get("xor_key", QUARANTINE_XOR_KEY)))
+            from .vault import Vault, is_encrypted
+
+            if is_encrypted(quarantined):
+                Vault(self.config.data_dir() / "vault.key").decrypt_file(
+                    quarantined, associated=str(meta.get("sha256", "")).encode())
+            else:
+                _xor_file(quarantined, int(meta.get("xor_key", QUARANTINE_XOR_KEY)))
             shutil.move(str(quarantined), str(target))
             meta_path.unlink(missing_ok=True)
         except (OSError, shutil.Error) as exc:

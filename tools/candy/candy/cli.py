@@ -450,6 +450,84 @@ def cmd_firewall(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_triage(args: argparse.Namespace) -> int:
+    """Static triage: read what a payload can do without running it."""
+    from .triage import format_report, triage
+    from .winapi import verify_signature
+
+    report = triage(args.file, signature_checker=verify_signature)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(format_report(report))
+    return 1 if report.verdict in ("malicious", "suspicious") else 0
+
+
+def cmd_prevent(args: argparse.Namespace) -> int:
+    """Execution blocking and network containment."""
+    from .prevent import ExecutionBlocker, NetworkContainer
+
+    config = Config.load(args.config)
+    blocker = ExecutionBlocker(config)
+    container = NetworkContainer(config)
+
+    if args.action == "list":
+        blocked = blocker.blocked_images()
+        contained = container.contained()
+        print(f"Execution-blocked images ({len(blocked)}):")
+        for name in blocked:
+            print(f"  {name}")
+        print(f"\nNetwork-contained programs ({len(contained)}):")
+        for name in contained:
+            print(f"  {name}")
+        return 0
+    if not args.target:
+        print(f"'prevent {args.action}' needs a target", file=sys.stderr)
+        return 2
+
+    result = {
+        "block": lambda: blocker.block(args.target, reason=args.reason or "manual"),
+        "unblock": lambda: blocker.unblock(args.target),
+        "contain": lambda: container.contain(args.target, reason=args.reason or "manual"),
+        "release": lambda: container.release(args.target),
+    }[args.action]()
+    print(result)
+    if args.action == "block" and result.ok:
+        print("\nNote: this blocks by image NAME, so any file called that is stopped — "
+              "and renaming the file escapes it. Quarantine the file as well.")
+    return 0 if result.ok else 1
+
+
+def cmd_integrity(args: argparse.Namespace) -> int:
+    """Measured application start and platform trust reporting."""
+    from .integrity import IntegrityMonitor, platform_trust
+    from .util import app_dir
+
+    config = Config.load(args.config)
+    monitor = IntegrityMonitor(config, app_dir())
+
+    if args.action == "seal":
+        result = monitor.seal()
+        print(f"Sealed {result['files']} file(s) into {result['path']}")
+        print(f"Signed with the post-quantum key: {'yes' if result['signed'] else 'no key found'}")
+        return 0
+    if args.action == "platform":
+        print(json.dumps(platform_trust(), indent=2))
+        return 0
+
+    result = monitor.verify()
+    print(f"Status    : {result['status']}")
+    if "signature" in result:
+        print(f"Baseline  : {result['signature']}")
+    for finding in result.get("findings", []):
+        print(f"  {finding['problem'].upper()}: {finding['file']}"
+              + (f" (expected {finding['expected']}…, found {finding['found']}…)"
+                 if "expected" in finding else ""))
+    if result.get("status") == "no baseline":
+        print(f"  {result['detail']}")
+    return 0 if result.get("status") == "intact" else 1
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -550,6 +628,16 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     lines.append(f"blocked sites : {hosts.blocked() or 'none'}")
     lines.append(f"firewall      : {'available' if IS_WINDOWS else 'Windows only'}"
                  f"{'' if is_admin() else ' — needs administrator to add rules'}")
+
+    section("platform trust")
+    from .integrity import platform_trust
+
+    trust = platform_trust()
+    lines.append(f"secure boot   : {trust['secure_boot']}")
+    lines.append(f"tpm           : {trust['tpm'].get('present')} {trust['tpm'].get('version', '')}")
+    lines.append(f"vbs / hvci    : {trust['virtualisation_based_security']}")
+    for note in trust["advice"]:
+        lines.append(f"                {note}")
 
     section("configuration")
     lines.append(f"config file   : {config.path}")
@@ -688,6 +776,21 @@ def build_parser() -> argparse.ArgumentParser:
     firewall.add_argument("--confirm-seconds", type=int, default=120,
                           help="how long before an unconfirmed lockdown reverts itself")
     firewall.set_defaults(func=cmd_firewall)
+
+    triage_cmd = sub.add_parser("triage", help="static analysis of a file without running it")
+    triage_cmd.add_argument("file")
+    triage_cmd.add_argument("--json", action="store_true")
+    triage_cmd.set_defaults(func=cmd_triage)
+
+    prevent = sub.add_parser("prevent", help="block execution or cut a program off the network")
+    prevent.add_argument("action", choices=["block", "unblock", "contain", "release", "list"])
+    prevent.add_argument("target", nargs="?", help="image name (block) or program path (contain)")
+    prevent.add_argument("--reason", help="why, for the ledger")
+    prevent.set_defaults(func=cmd_prevent)
+
+    integrity = sub.add_parser("integrity", help="Candy's own integrity and platform trust state")
+    integrity.add_argument("action", choices=["seal", "verify", "platform"])
+    integrity.set_defaults(func=cmd_integrity)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,

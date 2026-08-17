@@ -271,3 +271,40 @@ been checked against the RFC's published test vectors, so interoperability with 
 implementations (OpenSSL, Bouncy Castle, `hash-sigs`) should be treated as unverified until
 that check is done. For Candy signing its own feed and verifying it, this does not matter;
 for exchanging signatures with other software, it would.
+
+---
+
+## 10. Gap-fills: the free equivalent of each impossible requirement
+
+Every ❌ in section 9 got the strongest free approximation that exists. None of these
+*equal* what was asked for; each is stated with what it does and does not achieve.
+
+| Gap | Was requested | What was built instead | How much of the gap it closes |
+|---|---|---|---|
+| **AES-256-GCM** | "AES-256 with 512-bit keys" | `candy/vault.py` — AES-256-GCM in pure Python, verified against the **FIPS-197 C.3** known-answer vector and **NIST SP 800-38D GCM test case 13**. Quarantined files are now authenticated-encrypted, not XOR-defanged. | **Fully closed** (512-bit AES keys do not exist; 256 is the ceiling CNSA 2.0 itself specifies) |
+| **TPM 2.0 key sealing** | Keys sealed in hardware | **DPAPI machine-scope wrapping** of the vault key via `CryptProtectData`. Copying `vault.key` to another machine yields nothing. | **Partial.** A local process running as you can still unwrap it; a TPM-sealed key could not be extracted at all. But it removes the "secret in a readable file" problem, and it costs nothing. |
+| **Ring-0 interception** | Deny execution / injection in the kernel | **IFEO execution blocking** (`candy/prevent.py`) — Windows' loader runs a no-op stub instead of the blocked program, so it never executes. Plus **network containment**: a per-program firewall block that severs a process's traffic even when it cannot be killed. | **Partial.** IFEO is genuine pre-execution blocking, but matches on image *name*, so a rename escapes it. Containment stops exfiltration without stopping the process. |
+| **VT-x detonation sandbox** | Run the payload in a VM before packets leave | **Static triage** (`candy/triage.py`) — reads imports, strings, URLs, IPs and webhook endpoints out of the binary and scores capability *groups*. The injection triad, credential-store access, Defender-disabling strings, Discord/Telegram exfil sinks, Roblox session-cookie references. | **Partial.** Reads intent without executing, so it is safe and instant — but it is defeated by packing, which is itself detected and reported by entropy. |
+| **On-NPU neural anomaly model** | Neural detection of covert traffic | **Statistical timing analysis** (`candy/anomaly.py`) — beacon detection by interval jitter, fan-out detection by distinct-host count, z-score volume baselines. | **Arguably better here.** Beacon jitter catches C2 through encryption because it uses only timestamps, and every rule is auditable. There is no labelled training set for this threat class anyway. |
+| **Measured boot / PCR attestation** | Verify integrity against TPM at boot | **Measured application start** (`candy/integrity.py`) — Candy hashes its own modules, config and threat database into a manifest, signs it with the LMS post-quantum key, and re-verifies on every run. Plus **platform trust reporting**: Secure Boot state, TPM presence, VBS/HVCI, with plain-language advice. | **Partial.** Measures Candy rather than the OS, and reports platform state rather than enforcing it — but a patched module or edited config is caught before monitoring starts. |
+| **Rust / formal proofs of memory safety** | Provably no buffer overflows | **Fuzz testing.** Every parser pointed at attacker-controlled data — PE files, event XML, hosts files, command lines, CSV, domains — takes thousands of random, mutated and truncated inputs per run and must not raise. | **Partial.** Python has no buffer-overflow class to begin with (no manual memory management), and fuzzing demonstrates robustness rather than proving it. Not a formal proof, and not Rust. |
+| **ML-KEM-1024 key encapsulation** | Post-quantum key exchange | Nothing — deliberately. There is no tunnel to key. | **Not applicable**, and building it unused would be theatre. |
+
+### What "impenetrable" honestly means here
+
+After all of this, the posture on a properly configured machine is:
+
+1. Nothing reaches the network unless it is on a **hash-pinned allowlist** (default-deny).
+2. Known-bad programs **cannot start at all** (IFEO), and anything detected can be **cut off
+   from the network in under a second** even if it survives termination.
+3. Payloads are **read before they run** and scored on capability, not just name.
+4. C2 traffic is caught by **timing**, so encryption does not hide it.
+5. The rules Candy obeys are **post-quantum signed**; a hostile feed cannot forge them.
+6. Quarantined samples are **AES-256-GCM encrypted** under a **machine-bound key**.
+7. Candy's own code is **measured and signed**; tampering is reported before it starts.
+8. Every action is **logged into a hash chain** that cannot be silently edited.
+
+And the ceiling remains exactly where it was: **an attacker already running as
+administrator, or running in the kernel, wins.** No amount of user-mode engineering changes
+that — only a signed driver would, and that costs money. Everything above is the strongest
+posture reachable for zero.

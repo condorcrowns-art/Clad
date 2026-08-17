@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .anomaly import AnomalyEngine
 from .behavior import BehaviorEngine
 from .config import Config
 from .detect import Aggregator, Analyzer
@@ -61,6 +62,7 @@ class Engine:
         self.behavior = BehaviorEngine(self.config, self.handle_detection)
         self.kernel_events = WindowsEventMonitor(self.config, self.analyzer, self.handle_detection)
         self.persistence = PersistenceAuditor(self.config, self.analyzer, self.handle_detection)
+        self.anomaly = AnomalyEngine(self.config, self.handle_detection)
 
         self.tray: TrayIcon | None = None
         self.notifier: Notifier | None = None
@@ -95,6 +97,7 @@ class Engine:
             ("behavior_engine", self.behavior),
             ("kernel_events", self.kernel_events),
             ("persistence_auditor", self.persistence),
+            ("anomaly_engine", self.anomaly),
         ]
         for key, component in components:
             if not self.config.get(f"protection.{key}", True):
@@ -158,7 +161,7 @@ class Engine:
             self.tray.stop()
             self.tray = None
         for component in (self.proc_monitor, self.file_watcher, self.net_monitor,
-                          self.behavior, self.kernel_events, self.persistence):
+                          self.behavior, self.kernel_events, self.persistence, self.anomaly):
             try:
                 component.stop()
             except Exception:  # noqa: BLE001
@@ -293,6 +296,7 @@ class Engine:
                 "behavior_cycles": self.behavior.cycles,
                 "kernel_events": self.kernel_events.status(),
                 "persistence": self.persistence.mode,
+                "anomaly": self.anomaly.snapshot(),
                 "tray": bool(self.tray and self.tray.available),
             },
             "counters": {
