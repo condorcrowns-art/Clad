@@ -20,7 +20,8 @@ It assumes the attacker:
 
 It explicitly does **not** defend against:
 
-* a kernel-mode driver — including the "manual mapper" drivers some paid cheats use,
+* a kernel-mode driver that hides itself — though with Sysmon installed, Candy *sees the
+  driver load* (event 6) even when it cannot stop it,
 * an attacker with SYSTEM or administrator rights hunting for security tools,
 * a supply-chain compromise of Candy itself or its threat feed,
 * anything that runs before Candy starts and cleans up after itself.
@@ -30,6 +31,31 @@ Any user-mode tool that claims otherwise is overstating its reach.
 ---
 
 ## 2. Requested features that cannot be delivered for free, and why
+
+### A kernel driver of our own
+
+**Requested:** make Candy a kernel-level anti-cheat.
+
+**Reality:** loading a driver on Windows 10/11 x64 requires Microsoft attestation signing,
+which requires an EV code-signing certificate (a few hundred dollars a year, hardware token,
+verified legal identity). The three ways around that are all dead ends:
+
+| "Workaround" | Why it fails |
+|---|---|
+| `bcdedit -set testsigning on` / disable DSE | Requires Secure Boot off, shows a desktop watermark, must be done on every customer machine, and is itself a malware indicator — Candy flags it as critical (`tamper.bcdedit`) |
+| BYOVD — load a signed but vulnerable third-party driver | This is a malware technique, gets the driver blocklisted by Microsoft's vulnerable-driver list, and would make Candy indistinguishable from what it detects |
+| A leaked or stolen signing certificate | Criminal, and revoked quickly |
+
+**What Candy does instead:** it consumes kernel telemetry from drivers Microsoft already
+signed. Sysmon's driver reports `CreateRemoteThread` (event 8), `ProcessAccess` with granted
+access masks (10), `ImageLoad` with signature status (7), `DriverLoad` (6) and
+`ProcessTampering` (25). Defender reports its own detections and tampering. Candy reads those
+channels through `wevtutil`.
+
+The trade is explicit: Candy gets kernel-quality *observation* and gives up kernel-level
+*enforcement*. It cannot block an injection mid-flight — it can only see it happen and react
+in user mode, within a second or two. For a tripwire that is the right trade, and it means a
+bug in Candy can never bluescreen a customer's machine.
 
 ### Protected Process Light (PPL)
 

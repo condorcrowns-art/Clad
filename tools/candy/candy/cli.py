@@ -14,10 +14,12 @@ from .eventlog import iter_records, verify_chain
 from .events import Detection
 from .threatdb import ThreatDB, VALID_TARGETS, make_submission
 from .util import IS_WINDOWS, app_dir
+from .winapi import is_admin
+from .winevents import sysmon_installed
 
 BANNER = rf"""
-  Candy {VERSION} — Roblox executor tripwire
-  user-mode only · no kernel driver · MIT licensed
+  Candy {VERSION} — Roblox executor & malware tripwire
+  kernel-sourced telemetry · no driver of its own · proprietary
 """
 
 SEVERITY_TAGS = {
@@ -255,6 +257,79 @@ def cmd_selftest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """One command that collects everything needed to diagnose an install.
+
+    Written to be pasted into a bug report: it starts every monitor for a few
+    seconds, records what actually came up, and stops again.
+    """
+    import platform
+    import sys as _sys
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+    lines: list[str] = []
+
+    def section(title: str) -> None:
+        lines.append("")
+        lines.append(f"--- {title} " + "-" * max(0, 60 - len(title)))
+
+    lines.append(f"Candy {VERSION} doctor report")
+    section("system")
+    lines.append(f"platform      : {platform.platform()}")
+    lines.append(f"python        : {platform.python_version()} ({_sys.executable})")
+    lines.append(f"frozen build  : {getattr(_sys, 'frozen', False)}")
+    lines.append(f"administrator : {is_admin()}")
+
+    section("dependencies")
+    for module, why in (("psutil", "required for process/network monitoring"),
+                        ("watchdog", "real-time file events (optional)"),
+                        ("wmi", "instant process-start notifications (optional)"),
+                        ("win32api", "required by wmi (optional)"),
+                        ("tkinter", "graphical interface")):
+        try:
+            imported = __import__(module)
+            version = getattr(imported, "__version__", "present")
+            lines.append(f"{module:<12}: {version}")
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f"{module:<12}: MISSING ({exc.__class__.__name__}) — {why}")
+
+    section("kernel telemetry")
+    lines.append(f"sysmon        : {'installed' if sysmon_installed() else 'NOT installed'}")
+    if not sysmon_installed() and IS_WINDOWS:
+        lines.append("                install it free from Microsoft Sysinternals for "
+                     "kernel-level injection and driver-load detection")
+
+    section("configuration")
+    lines.append(f"config file   : {config.path}")
+    lines.append(f"mode          : {config.get('response.mode')}  "
+                 f"threshold {config.get('response.action_threshold')}")
+    lines.append(f"watch paths   : {[str(p) for p in config.watch_paths()] or 'none found'}")
+    lines.append(f"threat db     : {engine.db.stats()}")
+
+    section("starting monitors")
+    report = engine.start()
+    for key, values in report.items():
+        for value in values:
+            lines.append(f"{key:<12}: {value}")
+    time.sleep(float(args.seconds))
+    status = engine.status()
+    section("live status")
+    lines.append(json.dumps(status, indent=2))
+    engine.stop()
+
+    section("recent detections")
+    recent = engine.recent(10)
+    lines.extend(f"  {d.summary()}" for d in recent) if recent else lines.append("  none")
+
+    text = "\n".join(lines)
+    print(text)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"\nWritten to {args.out} — paste that file when asking for help.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="candy",
@@ -322,6 +397,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     selftest = sub.add_parser("selftest", help="verify the detection pipeline works")
     selftest.set_defaults(func=cmd_selftest)
+
+    doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
+    doctor.add_argument("--seconds", type=float, default=6.0,
+                        help="how long to let the monitors run before reporting (default 6)")
+    doctor.add_argument("--out", help="also write the report to this file")
+    doctor.set_defaults(func=cmd_doctor)
 
     return parser
 

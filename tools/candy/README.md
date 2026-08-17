@@ -1,12 +1,17 @@
 # Candy
 
-A free, open-source, **user-mode** tripwire that spots Roblox executors (Synapse-style
-injectors, KRNL, Fluxus, Potassium and friends) and the tooling that ships with them —
-and tells you the moment it sees one.
+Detects Roblox executors (Synapse-style injectors, KRNL, Fluxus, Potassium and friends),
+the stealer malware that ships with them, and the injection they perform — and tells you
+the moment it sees one.
 
-No kernel driver. No paid libraries. No account, no subscription, no telemetry.
-MIT licensed. Runs on Windows 10/11; the detection core also runs (with reduced
-visibility) anywhere Python does, which is how it is unit-tested.
+**Proprietary software. All rights reserved.** Not open source; see [LICENSE](LICENSE).
+
+Candy ships no kernel driver of its own, and instead reads kernel-sourced telemetry from
+drivers Microsoft already signed and shipped (Sysmon, Defender) when they are present —
+so it sees remote-thread injection, driver loads and process tampering at kernel level
+without the liability of running third-party code in ring 0. Runs on Windows 10/11; the
+detection core also runs (with reduced visibility) anywhere Python does, which is how it
+is unit-tested.
 
 ```
 python run.py            # graphical interface
@@ -25,13 +30,29 @@ useful than a longer feature list:
 | It can | It cannot |
 |---|---|
 | Notice a known executor being downloaded, extracted, or launched | Stop a determined attacker who is already running as administrator |
-| Spot a foreign DLL loaded inside `RobloxPlayerBeta.exe` | See a kernel-mode (driver-based) cheat — those live below anything user-mode code can observe |
-| Catch command lines that disable Defender, the firewall, or driver signing | Prevent an executor that starts *before* Candy does |
+| See remote-thread injection into `RobloxPlayerBeta.exe` — reported by the kernel, via Sysmon | Enforce anything inside Roblox. Roblox runs its own anti-cheat and accepts no third-party verdicts |
+| **See an unsigned kernel driver load** — how kernel-mode cheats arrive | Block that driver. Seeing it is user-mode; stopping it needs a driver Candy cannot legally ship |
+| Identify a renamed executor from the version resource inside the binary | Identify a *rebuilt* executor with all metadata stripped and no known behaviour |
+| Catch Defender being switched off, and exclusions being added | Prevent an executor that starts *before* Candy does |
 | Terminate a process, quarantine a file, block an IP — on your say-so | Resist a process running with higher privileges than itself |
 | Keep a tamper-evident forensic log | Detect *other players* cheating in a game you are playing |
 
-Two specific things the requirements for this project asked for that are **deliberately
-not implemented**, with reasons:
+### Why there is no Candy driver
+
+Loading a kernel driver on Windows 10/11 x64 requires Microsoft attestation signing, which
+requires an EV code-signing certificate. There is no free path to one. The alternatives —
+test-signing mode (Secure Boot off, undistributable), BYOVD (abusing someone else's signed
+driver, which is a malware technique Candy detects), or a leaked certificate (criminal) —
+are not products.
+
+So Candy takes the other road: **it reads the kernel telemetry that Microsoft's own signed
+drivers already publish.** Install Sysmon (free, from Microsoft Sysinternals) and Candy sees
+remote-thread creation, cross-process memory access, image loads with signature status,
+driver loads and process tampering — all sourced from kernel mode, none of it requiring a
+line of ring-0 code from us. A bug in Candy cannot bluescreen your machine, which is not
+true of any homemade anti-cheat driver.
+
+Two further things are **deliberately not implemented**, with reasons:
 
 * **Protected Process Light (PPL) registration.** Windows only grants PPL to binaries
   signed with a Microsoft-issued anti-malware (ELAM) certificate. That requires an EV
@@ -102,6 +123,7 @@ Candy runs unelevated too, and says so in its status when it is limited.
 ### The command line
 
 ```powershell
+Candy.exe doctor                  # full diagnostic report — paste this when asking for help
 Candy.exe run                     # monitor in the console until Ctrl+C
 Candy.exe run --enforce           # ...and act on detections this run
 Candy.exe scan                    # scan processes + the watched folders
@@ -149,8 +171,20 @@ Five collectors feed one scoring engine:
  on-demand scan ──┘    + heuristics) subject)                 / firewall block)
 ```
 
+* **Kernel event monitor** — reads `Microsoft-Windows-Sysmon/Operational`,
+  `Microsoft-Windows-Windows Defender/Operational` and the Security channel through
+  `wevtutil` (part of Windows). Maps `CreateRemoteThread` into Roblox, handles opened with
+  memory-write rights, unsigned image loads, **unsigned driver loads**, process tampering,
+  Defender being disabled, and Defender exclusions. This is the kernel-level layer.
 * **Process monitor** — WMI `Win32_ProcessStartTrace` when available (instant), psutil
   polling otherwise. Checks names, image paths, command lines and SHA-256 hashes.
+* **PE inspector** — reads the version resource inside Windows binaries. A file renamed
+  from `krnl.exe` to `homework.exe` still declares its original name internally, and that
+  gets matched against the threat database. Also measures section entropy to spot packed
+  payloads.
+* **Persistence auditor** — Run keys, Startup folders, scheduled tasks, services, Winlogon
+  and Image File Execution Options. The stealer bundled with an executor has to survive a
+  reboot, and there are only so many places to hide.
 * **File watcher** — watchdog events or a directory diff over Downloads, Desktop,
   Documents, `%TEMP%`, `%APPDATA%` and the Roblox folder. Hashes new executables and
   matches them against the database.
@@ -224,6 +258,10 @@ is created for you on first run. The blocks you are most likely to touch:
 | `whitelist.names` / `paths` / `hashes` / `ips` | mostly empty | Always trusted — beats every blacklist and heuristic |
 | `blacklist.names` / `hashes` / `ips` / `patterns` | empty | Your own additions, scored critical |
 | `behavior.protected_targets` | Roblox client + studio | Processes whose loaded modules are audited |
+| `winevents.channels` | all on | Which kernel event channels to read (sysmon / defender / security) |
+| `persistence.interval_minutes` | `15` | How often autostart locations are re-audited |
+| `pe.inspect` | `true` | Read version resources and entropy from binaries |
+| `notifications.min_severity` | `high` | Severity that raises a desktop toast |
 | `intel.enable_lookups` | `false` | Turn on VirusTotal/AbuseIPDB (needs your own free key) |
 | `updates.threat_feed_url` | empty | HTTPS URL of a community threat feed |
 | `scan.on_schedule` / `interval_minutes` | `false` / `120` | Periodic background scans |
@@ -279,7 +317,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 46 tests, no pytest required
+python -m unittest discover -s tests -v     # 94 tests, no pytest required
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -292,6 +330,10 @@ mean something.
 ```
 candy/
   config.py      configuration, whitelist/blacklist model
+  winevents.py   Sysmon/Defender/Security channel consumer  ← kernel-sourced detection
+  pe.py          PE version-resource + entropy inspection
+  persistence.py Run keys, tasks, services, Winlogon, IFEO
+  notify.py      tray icon and toasts, pure ctypes
   detect.py      analyzer + scoring aggregator      ← the core, fully unit-tested
   threatdb.py    signature database, feed updates
   events.py      Detection type + event bus
@@ -314,6 +356,18 @@ the pipeline is alive on the machine you are actually on.
 
 ---
 
+## Getting the most out of it
+
+**Install Sysmon.** It is free, it is Microsoft-signed, and it is the difference between
+inferring injection from a module snapshot and being told about it by the kernel the
+instant it happens. Candy detects whether it is present and says so in `doctor`.
+
+**Run as administrator.** Without it the Security and Defender channels are unreadable and
+other users' processes are invisible.
+
+**Leave it in observe mode for a few days.** Then switch to enforce once you have seen what
+it reports on your machine.
+
 ## Legal and ethical use
 
 Candy is a defensive tool for **your own machine**, or one you administer with
@@ -321,4 +375,6 @@ permission. It reports what it sees locally and takes only the actions you enabl
 does not phone home, upload files, or send anything anywhere unless you explicitly
 enable the optional reputation lookups — and those send a hash or an IP, nothing else.
 
-Licensed under the MIT License. See [LICENSE](LICENSE).
+Candy is proprietary software. See [LICENSE](LICENSE) — no license to use, copy,
+modify or redistribute it is granted by having access to the source. Third-party
+open-source components used by Candy remain under their own licenses, listed there.

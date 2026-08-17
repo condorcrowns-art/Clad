@@ -218,6 +218,8 @@ class App(ttk.Frame):
                            ("file_watcher", "File system watcher"),
                            ("network_monitor", "Network connection monitor"),
                            ("behavior_engine", "Behavioural analysis (injected module audit)"),
+                           ("kernel_events", "Kernel telemetry (Sysmon / Defender event channels)"),
+                           ("persistence_auditor", "Startup & persistence auditing"),
                            ("self_protection", "Self-protection (anti-debug, anti-tamper)")):
             var = tk.BooleanVar(value=bool(self.config_obj.get(f"protection.{key}", True)))
             self.monitor_vars[key] = var
@@ -237,8 +239,9 @@ class App(ttk.Frame):
         footer = ttk.Frame(frame)
         footer.pack(fill="x", pady=(10, 0))
         ttk.Button(footer, text="Open config file", command=self.open_config).pack(side="left")
-        ttk.Label(footer, text="Candy is user-mode only: it is a tripwire, not a kernel "
-                               "anti-cheat. See the README for what it cannot do.",
+        ttk.Label(footer, text="Candy reads kernel-sourced telemetry from Sysmon and Defender "
+                               "but ships no driver of its own. See the README for what it "
+                               "cannot do.",
                   wraplength=700, foreground="#666").pack(side="left", padx=10)
 
     def _build_statusbar(self) -> None:

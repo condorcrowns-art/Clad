@@ -31,6 +31,9 @@ DEFAULTS: dict[str, Any] = {
         "network_monitor": True,
         "behavior_engine": True,
         "self_protection": True,
+        # Kernel-sourced telemetry read from Sysmon/Defender/Security channels.
+        "kernel_events": True,
+        "persistence_auditor": True,
     },
     "response": {
         # observe  - detect and log only (safe default)
@@ -79,6 +82,28 @@ DEFAULTS: dict[str, Any] = {
         # Processes whose loaded modules we audit for injected DLLs.
         "protected_targets": ["robloxplayerbeta.exe", "robloxstudiobeta.exe"],
         "check_module_signatures": True,
+    },
+    "winevents": {
+        # Which event channels to read. Sysmon is the valuable one: install it
+        # from Microsoft (free) to get kernel-level injection and driver-load
+        # detection. The others work with what Windows already logs.
+        "channels": {"sysmon": True, "defender": True, "security": True},
+        "poll_interval_seconds": 8,
+        "max_events_per_poll": 200,
+    },
+    "persistence": {
+        "interval_minutes": 15,
+        "audit_on_start": True,
+    },
+    "pe": {
+        # Read version resources and section entropy from Windows binaries.
+        "inspect": True,
+    },
+    "notifications": {
+        "tray_icon": True,
+        "toasts": True,
+        "min_severity": "high",
+        "min_interval_seconds": 20,
     },
     "intel": {
         "enable_lookups": False,

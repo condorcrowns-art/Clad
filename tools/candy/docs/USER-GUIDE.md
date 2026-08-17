@@ -28,7 +28,22 @@ a game is cheating.
    **More info → Run anyway** if you built or downloaded it from a source you trust.
 4. The window opens showing "Protection stopped". Click **Start protection**.
 
-That's it. The dot turns green and it starts watching.
+That's it. The dot turns green and it starts watching. Candy also puts a shield icon in the
+notification area (bottom-right, near the clock) and pops up a desktop notification when it
+sees something serious — so you do not have to keep the window open.
+
+### Strongly recommended: install Sysmon
+
+Sysmon is a free tool from Microsoft. Candy works without it, but with it Candy can see
+things no ordinary program can: code being injected into Roblox as it happens, and drivers
+being loaded (which is how the most serious cheats and rootkits work).
+
+1. Download Sysmon from Microsoft Sysinternals (search "Microsoft Sysmon download" — it is
+   on microsoft.com, and it is free).
+2. Unzip it, then in an administrator Command Prompt run: `sysmon64 -accepteula -i`
+3. Restart Candy. Run `Candy.exe doctor` and you should see `sysmon : installed`.
+
+Nothing is sent anywhere; Sysmon writes to a local Windows event log that Candy reads.
 
 ---
 
@@ -130,8 +145,9 @@ netsh advfirewall firewall delete rule name="Candy Block <ip> (in)"
 
 Please read this part; it is short.
 
-* It cannot stop a cheat that loads as a **Windows driver** — that runs below where any
-  normal program can look.
+* It cannot **stop** a cheat that loads as a Windows driver. With Sysmon installed it will
+  *tell you* the driver loaded, which is most of the value — but blocking it would need a
+  driver of Candy's own, and those cost money to sign.
 * It cannot beat something that is **already running with administrator rights** and
   actively hunting for it.
 * It cannot catch an executor whose name it has never seen **and** which does nothing

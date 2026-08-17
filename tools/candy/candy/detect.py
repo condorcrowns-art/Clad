@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from .config import Config
@@ -170,6 +171,10 @@ class Analyzer:
 
         out.extend(self._masquerade_checks(info, emit))
         out.extend(self._context_checks(info, emit))
+        if exe and name:
+            # Same look-inside-the-binary check as for files: catches an
+            # executor that was renamed before being launched.
+            self.inspect_pe(exe, name, emit)
         return out
 
     def _masquerade_checks(self, info: dict[str, Any], emit) -> list[Detection]:
@@ -277,7 +282,84 @@ class Analyzer:
                 str(info_hash.get("severity", "high")),
                 signature_id=f"hash:{(sha256 or '')[:16]}",
             )
+        self.inspect_pe(path, name, emit)
         return out
+
+    # ------------------------------------------------------------------ PE
+    def inspect_pe(self, path: str, name: str, emit) -> None:
+        """Look inside a Windows binary for what its file name hides.
+
+        The high-value case: a file renamed to something innocent whose own
+        version resource still declares it is an executor.
+        """
+        if not self.config.get("pe.inspect", True):
+            return
+        if not name.lower().endswith((".exe", ".dll", ".sys", ".scr")):
+            return
+        try:
+            if not Path(path).is_file():
+                return
+        except OSError:
+            return
+
+        from . import pe as pe_module
+
+        info = pe_module.inspect_cached(path)
+        if info is None or not info.is_pe:
+            return
+
+        declared = info.renamed_from(name)
+        if declared:
+            # Does the *declared* name match a known executor? That is a rename
+            # to hide a specific product, not a build-system artefact.
+            hits = self.db.match_any({"process_name": declared, "file_name": declared})
+            if hits:
+                emit(
+                    "renamed_threat",
+                    (f"File is named '{name}' but its own version resource says it is "
+                     f"'{declared}' — a renamed '{hits[0].name}'."),
+                    "critical",
+                    signature_id=f"pe.renamed:{hits[0].id}",
+                    evidence={"original_filename": declared, "matched": hits[0].id,
+                              "company": info.company, "product": info.product},
+                )
+            else:
+                emit(
+                    "renamed_binary",
+                    (f"File is named '{name}' but declares its original name as "
+                     f"'{declared}'. Renaming is how signature checks get dodged."),
+                    "medium",
+                    signature_id="pe.renamed",
+                    evidence={"original_filename": declared, "company": info.company},
+                )
+
+        for field_name, value in (("company", info.company), ("product", info.product)):
+            for sig in self.db.match_any({"file_name": value or ""}):
+                emit(
+                    "pe_metadata",
+                    f"Embedded {field_name} '{value}' matches known threat '{sig.name}'.",
+                    sig.severity,
+                    signature_id=f"pe.{field_name}:{sig.id}",
+                    evidence={field_name: value},
+                )
+
+        if info.looks_packed:
+            emit(
+                "packed_binary",
+                (f"Executable code is packed or encrypted (entropy "
+                 f"{info.max_code_entropy:.2f}/8.00). Common for crypted loaders — and "
+                 f"for legitimate installers and protected commercial software."),
+                "low",
+                signature_id="pe.packed",
+                evidence={"entropy": round(info.max_code_entropy, 2)},
+            )
+        elif not info.has_version_info and name.lower().endswith(".exe"):
+            emit(
+                "no_version_info",
+                "Executable carries no version information — unusual for released software.",
+                "info",
+                signature_id="pe.no_version_info",
+            )
 
     # ------------------------------------------------------------- network
     def analyze_connection(self, conn: dict[str, Any]) -> list[Detection]:

@@ -14,8 +14,11 @@ from .events import Detection, EventBus
 from .filewatch import FileWatcher
 from .intel import IntelClient
 from .netmon import NetworkMonitor
+from .notify import Notifier, TrayIcon
+from .persistence import PersistenceAuditor
 from .procmon import ProcessMonitor
 from .responder import Responder
+from .winevents import WindowsEventMonitor
 from .threatdb import ThreatDB
 from .util import IS_WINDOWS, resource_dir, utc_stamp
 from .winapi import SingleInstance, disable_extension_points, is_admin, set_critical_error_mode
@@ -56,6 +59,11 @@ class Engine:
         self.net_monitor = NetworkMonitor(self.config, self.analyzer, self.handle_detection,
                                           intel=self.intel if self.intel.enabled else None)
         self.behavior = BehaviorEngine(self.config, self.handle_detection)
+        self.kernel_events = WindowsEventMonitor(self.config, self.analyzer, self.handle_detection)
+        self.persistence = PersistenceAuditor(self.config, self.analyzer, self.handle_detection)
+
+        self.tray: TrayIcon | None = None
+        self.notifier: Notifier | None = None
 
         self._instance = SingleInstance()
         self._stop = threading.Event()
@@ -85,6 +93,8 @@ class Engine:
             ("file_watcher", self.file_watcher),
             ("network_monitor", self.net_monitor),
             ("behavior_engine", self.behavior),
+            ("kernel_events", self.kernel_events),
+            ("persistence_auditor", self.persistence),
         ]
         for key, component in components:
             if not self.config.get(f"protection.{key}", True):
@@ -95,6 +105,10 @@ class Engine:
                 report["started"].append(key)
             except Exception as exc:  # noqa: BLE001
                 report["errors"].append(f"{key}: {exc}")
+
+        if self.kernel_events.degraded_reason:
+            report["skipped"].append(f"kernel_events: {self.kernel_events.degraded_reason}")
+        self._start_notifications(report)
 
         self.started_at = time.time()
         self._scheduler = threading.Thread(target=self._scheduler_loop, name="scheduler", daemon=True)
@@ -113,9 +127,32 @@ class Engine:
             threading.Thread(target=self.scan_now, name="startup-scan", daemon=True).start()
         return report
 
+    def _start_notifications(self, report: dict[str, Any]) -> None:
+        """Tray icon and toasts. Never fatal: a missing tray costs alerts, not
+        detection."""
+        if not self.config.get("notifications.tray_icon", True):
+            return
+        tray = TrayIcon("Candy")
+        if tray.start():
+            self.tray = tray
+            report["started"].append("tray icon")
+        else:
+            report["skipped"].append(f"tray icon ({tray.last_error})")
+        if self.config.get("notifications.toasts", True):
+            self.notifier = Notifier(
+                self.tray,
+                min_severity=str(self.config.get("notifications.min_severity", "high")),
+                min_interval=float(self.config.get("notifications.min_interval_seconds", 20)),
+            )
+            self.alert_hooks.append(self.notifier.handle)
+
     def stop(self) -> None:
         self._stop.set()
-        for component in (self.proc_monitor, self.file_watcher, self.net_monitor, self.behavior):
+        if self.tray is not None:
+            self.tray.stop()
+            self.tray = None
+        for component in (self.proc_monitor, self.file_watcher, self.net_monitor,
+                          self.behavior, self.kernel_events, self.persistence):
             try:
                 component.stop()
             except Exception:  # noqa: BLE001
@@ -187,12 +224,15 @@ class Engine:
         started = time.time()
         before = len(self.detections)
         processes = self.proc_monitor.full_scan()
+        persistence_hits = len(self.persistence.audit())
         targets = paths or self.config.get("scan.paths") or [str(p) for p in self.config.watch_paths()]
         file_stats = self.file_watcher.scan_paths(targets, progress=progress)
         self.behavior.run_cycle()
         self.net_monitor.scan_once()
+        self.kernel_events.poll_once()
         result = {
             "processes": processes,
+            "persistence_findings": persistence_hits,
             "files": file_stats.get("files", 0),
             "new_detections": len(self.detections) - before,
             "seconds": round(time.time() - started, 1),
@@ -241,11 +281,16 @@ class Engine:
                 "file": self.file_watcher.mode,
                 "network": self.net_monitor.mode,
                 "behavior_cycles": self.behavior.cycles,
+                "kernel_events": self.kernel_events.status(),
+                "persistence": self.persistence.mode,
+                "tray": bool(self.tray and self.tray.available),
             },
             "counters": {
                 "processes_analyzed": self.proc_monitor.scanned,
                 "files_analyzed": self.file_watcher.files_seen,
                 "connections_seen": self.net_monitor.connections_seen,
+                "kernel_events_seen": self.kernel_events.events_seen,
+                "autostart_entries": self.persistence.entries_seen,
                 "detections": total,
                 "by_severity": counts,
                 "events_dropped": self.bus.dropped,
@@ -254,7 +299,8 @@ class Engine:
             "intel": self.intel.status(),
             "log": str(self.log.path),
             "quarantine": str(self.config.quarantine_dir()),
-            "degraded": [msg for msg in [self.net_monitor.degraded_reason] if msg],
+            "degraded": [msg for msg in [self.net_monitor.degraded_reason,
+                                        self.kernel_events.degraded_reason] if msg],
         }
 
     def recent(self, limit: int = 50) -> list[Detection]:
