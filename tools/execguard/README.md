@@ -1,0 +1,324 @@
+# ExecGuard
+
+A free, open-source, **user-mode** tripwire that spots Roblox executors (Synapse-style
+injectors, KRNL, Fluxus, Potassium and friends) and the tooling that ships with them —
+and tells you the moment it sees one.
+
+No kernel driver. No paid libraries. No account, no subscription, no telemetry.
+MIT licensed. Runs on Windows 10/11; the detection core also runs (with reduced
+visibility) anywhere Python does, which is how it is unit-tested.
+
+```
+python run.py            # graphical interface
+python run.py run        # console monitor
+python run.py scan       # one-off scan
+python run.py selftest   # prove the detection pipeline works
+```
+
+---
+
+## Read this before you install it
+
+ExecGuard is a **tripwire, not an anti-cheat**. Being honest about the boundary is more
+useful than a longer feature list:
+
+| It can | It cannot |
+|---|---|
+| Notice a known executor being downloaded, extracted, or launched | Stop a determined attacker who is already running as administrator |
+| Spot a foreign DLL loaded inside `RobloxPlayerBeta.exe` | See a kernel-mode (driver-based) cheat — those live below anything user-mode code can observe |
+| Catch command lines that disable Defender, the firewall, or driver signing | Prevent an executor that starts *before* ExecGuard does |
+| Terminate a process, quarantine a file, block an IP — on your say-so | Resist a process running with higher privileges than itself |
+| Keep a tamper-evident forensic log | Detect *other players* cheating in a game you are playing |
+
+Two specific things the requirements for this project asked for that are **deliberately
+not implemented**, with reasons:
+
+* **Protected Process Light (PPL) registration.** Windows only grants PPL to binaries
+  signed with a Microsoft-issued anti-malware (ELAM) certificate. That requires an EV
+  code-signing certificate, a paid Microsoft attestation process, and membership in the
+  Microsoft Virus Initiative. There is no free path to it, and any tool claiming
+  otherwise is not actually running as PPL. See [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+* **Detours-style API hooking of other processes.** To hook another process's API calls
+  you must inject a DLL into it — the exact technique ExecGuard exists to detect. It
+  would trip Roblox's own anti-cheat, trip third-party antivirus, and be bypassed by any
+  executor that resolves syscalls directly. Instead ExecGuard **audits the result**:
+  it enumerates the modules loaded inside Roblox and flags the foreign ones. That check
+  survives renaming the executor's exe, which name signatures do not.
+
+What ExecGuard *does* provide is fast, legible, local notification with a full audit
+trail — enough time to close the game, change your password, and look at what happened.
+
+---
+
+## Install
+
+### Option A — portable exe (nothing to install)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build.ps1     # produces dist\ExecGuard.exe
+```
+
+Copy `dist\ExecGuard.exe` anywhere. On first run it creates `config\`, `data\`, `logs\`
+and `quarantine\` beside itself. Deleting the folder uninstalls it completely.
+
+### Option B — from source
+
+```powershell
+python -m pip install -r requirements.txt
+python run.py
+```
+
+Or use the guided installer, which also runs the self-test and can add a startup
+shortcut:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -DesktopShortcut
+powershell -ExecutionPolicy Bypass -File install.ps1 -InstallPath "D:\Tools\ExecGuard" -AutoStart
+```
+
+**Requirements:** Python 3.10+ (only for source runs) and `psutil`. `watchdog`, `WMI` and
+`pywin32` are optional — without them ExecGuard polls instead of receiving instant
+events, which is slower but fully functional.
+
+**Run as administrator** for full visibility: without elevation Windows hides other
+users' processes, the system-wide connection table, and firewall rule creation.
+ExecGuard runs unelevated too, and says so in its status when it is limited.
+
+---
+
+## Using it
+
+### The GUI
+
+| Tab | What it is for |
+|---|---|
+| **Threats** | Live detections, newest first. Select one to see the full evidence, then Kill / Quarantine / Block IP / Trust. |
+| **Status** | Live JSON: what is running, what is degraded, how many processes/files/connections have been checked. |
+| **Log** | The forensic log, plus a one-click integrity check of its hash chain. |
+| **Whitelist / Blacklist** | Add or remove names, paths, hashes, IPs and patterns. Saved to `config.json` immediately. |
+| **Quarantine** | Everything quarantined, with restore and permanent-delete. |
+| **Settings** | Response mode, automatic actions, which monitors run, scheduled scans. |
+
+### The command line
+
+```powershell
+ExecGuard.exe run                     # monitor in the console until Ctrl+C
+ExecGuard.exe run --enforce           # ...and act on detections this run
+ExecGuard.exe scan                    # scan processes + the watched folders
+ExecGuard.exe scan "C:\Users\me\Downloads"
+ExecGuard.exe status                  # JSON status
+ExecGuard.exe log --detections-only   # recent detections from the log
+ExecGuard.exe verify-log              # is the log intact?
+ExecGuard.exe quarantine list
+ExecGuard.exe quarantine restore "quarantine\<file>.quarantined"
+ExecGuard.exe list add whitelist names "MyGameLauncher.exe"
+ExecGuard.exe list add blacklist ips 203.0.113.5
+ExecGuard.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
+ExecGuard.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
+```
+
+`scan` exits with status 1 when it finds something, so it drops straight into a
+scheduled task or CI check.
+
+### Response modes
+
+ExecGuard starts in **observe** mode: it detects, logs and alerts, and changes nothing.
+That is the right default — a fresh signature set on an unfamiliar machine will produce
+false positives, and you want to see them before anything gets killed.
+
+Switch to **enforce** in Settings (or `--enforce`) once you trust the output. Enforce
+mode only acts when a subject's *aggregated* score reaches `response.action_threshold`
+(default 75 = one high-confidence signal such as a named executor or an injected module,
+or two medium ones), and only for the actions you tick: terminate, quarantine,
+firewall-block. Raise it to 100 if you want two signals before anything happens.
+
+Critical OS processes on `response.protected_processes` are never terminated, whatever
+the score. A bad signature should cost you a false alert, not a boot loop.
+
+---
+
+## How detection works
+
+Five collectors feed one scoring engine:
+
+```
+ process monitor ─┐                            ┌─ log (hash-chained JSONL)
+ file watcher  ───┤                            ├─ GUI / console alert
+ network monitor ─┼─→ Analyzer ─→ Aggregator ──┤
+ behaviour engine ┤   (signatures  (score per  └─ Responder (kill / quarantine
+ on-demand scan ──┘    + heuristics) subject)                 / firewall block)
+```
+
+* **Process monitor** — WMI `Win32_ProcessStartTrace` when available (instant), psutil
+  polling otherwise. Checks names, image paths, command lines and SHA-256 hashes.
+* **File watcher** — watchdog events or a directory diff over Downloads, Desktop,
+  Documents, `%TEMP%`, `%APPDATA%` and the Roblox folder. Hashes new executables and
+  matches them against the database.
+* **Network monitor** — diffs the connection table, flags blacklisted endpoints and
+  loader-style listening ports. Optional AbuseIPDB/VirusTotal lookups (your own free
+  key, off by default).
+* **Behaviour engine** — audits modules loaded inside Roblox processes (the injection
+  check), watches sustained CPU and handle counts, notices when an antivirus service
+  that *was* running disappears, and runs anti-debug checks on ExecGuard itself.
+* **Aggregator** — scores per subject: info 5, low 20, medium 45, high 75, critical 100.
+  Repeat hits from the same signature count once, so three *different* weak signals are
+  what escalate, not one signal firing every poll.
+
+Severity is assigned by evidence quality. "The process is named `krnl.exe`" is high.
+"An unsigned DLL is loaded inside RobloxPlayerBeta.exe" is critical. "An executable is
+running from `%TEMP%`" is low, because installers do that all day.
+
+---
+
+## The threat database
+
+`data/threats.json` — plain JSON, readable and diffable, no binary blob:
+
+```json
+{
+  "id": "exec.krnl",
+  "name": "KRNL",
+  "target": "process_name",
+  "pattern": "re:^krnl(bootstrapper|loader|ui)?\\.exe$",
+  "severity": "high",
+  "description": "KRNL executor client or bootstrapper."
+}
+```
+
+`target` is one of `process_name`, `process_path`, `cmdline`, `file_name`, `file_path`,
+`module_name`, `window_title`, `remote_host`. `pattern` is a literal substring unless it
+starts with `re:`, in which case it is a case-insensitive regular expression.
+
+**The shipped `hashes` and `endpoints` maps are empty on purpose.** A hash list is only
+worth anything if every entry was verified against a real sample; shipping invented or
+second-hand hashes produces false positives that quarantine innocent files. Add your own
+verified entries, or point `updates.threat_feed_url` at a community feed you trust
+(HTTPS only — an attacker who can MITM your feed could otherwise blacklist
+`explorer.exe`).
+
+Contribute a new executor:
+
+```powershell
+ExecGuard.exe submit --name "Nova Executor" --target process_name \
+  --pattern "re:^nova\.exe$" --severity high \
+  --description "Confirmed sample, injects nova.dll into RobloxPlayerBeta" --out nova.json
+```
+
+Then open a pull request adding it to the feed repository. See
+[docs/CONTRIBUTING-SIGNATURES.md](docs/CONTRIBUTING-SIGNATURES.md).
+
+---
+
+## Configuration
+
+Everything lives in `config/config.json`, and every key has a working default — the file
+is created for you on first run. The blocks you are most likely to touch:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `response.mode` | `observe` | `observe` = log only, `enforce` = act |
+| `response.auto_kill` / `auto_quarantine` / `auto_firewall` | `false` | Which actions enforce mode may take |
+| `response.action_threshold` | `75` | Aggregated score required to act (high = 75, medium = 45) |
+| `response.protected_processes` | OS list | Never terminated, whatever happens |
+| `paths.watch` | Downloads, Desktop, Documents, `%TEMP%`, `%APPDATA%`, Roblox, Public | Folders the file watcher covers |
+| `whitelist.names` / `paths` / `hashes` / `ips` | mostly empty | Always trusted — beats every blacklist and heuristic |
+| `blacklist.names` / `hashes` / `ips` / `patterns` | empty | Your own additions, scored critical |
+| `behavior.protected_targets` | Roblox client + studio | Processes whose loaded modules are audited |
+| `intel.enable_lookups` | `false` | Turn on VirusTotal/AbuseIPDB (needs your own free key) |
+| `updates.threat_feed_url` | empty | HTTPS URL of a community threat feed |
+| `scan.on_schedule` / `interval_minutes` | `false` / `120` | Periodic background scans |
+
+Whitelisting always wins. If ExecGuard flags a tool you installed on purpose, select the
+detection and click **Trust this** — or run
+`ExecGuard.exe list add whitelist paths "C:\Program Files\MyTool"`.
+
+Environment variables (`%USERPROFILE%`, `%APPDATA%`, …) are expanded at load time, and
+relative paths resolve next to the executable, so a portable copy works on any machine
+without editing anything.
+
+---
+
+## The forensic log
+
+`logs/execguard.jsonl` is append-only JSON Lines. Every record embeds the SHA-256 of the
+record before it, so deleting or editing any line breaks the chain from that point on:
+
+```
+> ExecGuard.exe verify-log
+FAIL logs\execguard.jsonl
+     chain broken: record claims prev=3f9a1c… but previous record hashes to 88b0e2… (record #147)
+```
+
+This does not *prevent* tampering — anything running as you can rewrite the whole file —
+but it makes the interesting case, malware quietly snipping out the records about
+itself, immediately visible.
+
+Quarantined files are moved into `quarantine/`, XOR-defanged so a double-click cannot
+run them, and paired with a `.json` sidecar recording the original path, hash, time and
+reason. Restore reverses it byte-for-byte.
+
+---
+
+## Resource use
+
+Measured targets: **under 5% CPU** and **under 100 MB RAM** on an idle desktop. What
+keeps it there:
+
+* Whitelisted paths are checked *before* hashing, so system binaries are never hashed.
+* Image hashes are cached by `(path, mtime, size)`; Authenticode results likewise.
+* The file watcher skips `node_modules`, `WinSxS`, `$Recycle.Bin` and friends, caps
+  recursion at 6 levels, and only hashes files under 128 MB.
+* Repeat signals are deduplicated at the aggregator rather than re-alerting every cycle.
+
+If it is still too heavy on a low-end machine, raise the poll intervals in
+`filewatch.poll_interval_seconds`, `network.poll_interval_seconds` and
+`behavior.poll_interval_seconds`, or turn a monitor off in Settings.
+
+---
+
+## Development
+
+```bash
+python -m unittest discover -s tests -v     # 46 tests, no pytest required
+python run.py selftest                      # end-to-end pipeline check
+```
+
+The detection core (`config`, `detect`, `threatdb`, `events`, `eventlog`, `responder`)
+is pure Python over plain dictionaries and is tested on any OS. The platform-specific
+collectors (`procmon`, `filewatch`, `netmon`, `behavior`, `winapi`) do the OS-specific
+work behind that boundary — which is why the tests above run on Linux in CI and still
+mean something.
+
+```
+execguard/
+  config.py      configuration, whitelist/blacklist model
+  detect.py      analyzer + scoring aggregator      ← the core, fully unit-tested
+  threatdb.py    signature database, feed updates
+  events.py      Detection type + event bus
+  eventlog.py    hash-chained forensic log
+  procmon.py     WMI / psutil process monitor
+  filewatch.py   watchdog / polling file watcher
+  netmon.py      connection table monitor
+  behavior.py    module audit, resource abuse, AV tampering, anti-debug
+  intel.py       optional VirusTotal / AbuseIPDB
+  responder.py   kill, quarantine, firewall
+  winapi.py      ctypes: WinVerifyTrust, anti-debug, mitigation policy
+  engine.py      wiring, scheduler, status
+  gui.py         tkinter interface
+  cli.py         command line
+```
+
+Windows-only paths (WMI, `WinVerifyTrust`, `netsh`, mitigation policies) are not covered
+by the unit tests — they need a real Windows host. `selftest` is the quick check that
+the pipeline is alive on the machine you are actually on.
+
+---
+
+## Legal and ethical use
+
+ExecGuard is a defensive tool for **your own machine**, or one you administer with
+permission. It reports what it sees locally and takes only the actions you enable. It
+does not phone home, upload files, or send anything anywhere unless you explicitly
+enable the optional reputation lookups — and those send a hash or an IP, nothing else.
+
+Licensed under the MIT License. See [LICENSE](LICENSE).

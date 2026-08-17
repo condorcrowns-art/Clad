@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "protection": {
+    "process_monitor": true,
+    "file_watcher": true,
+    "network_monitor": true,
+    "behavior_engine": true,
+    "self_protection": true
+  },
+  "response": {
+    "mode": "observe",
+    "auto_kill": false,
+    "auto_quarantine": false,
+    "auto_firewall": false,
+    "action_threshold": 75,
+    "protected_processes": [
+      "explorer.exe",
+      "csrss.exe",
+      "wininit.exe",
+      "winlogon.exe",
+      "services.exe",
+      "lsass.exe",
+      "smss.exe",
+      "svchost.exe",
+      "system",
+      "registry",
+      "dwm.exe",
+      "fontdrvhost.exe",
+      "sihost.exe",
+      "ctfmon.exe",
+      "msmpeng.exe",
+      "securityhealthservice.exe"
+    ]
+  },
+  "paths": {
+    "watch": [
+      "%USERPROFILE%\\Downloads",
+      "%USERPROFILE%\\Desktop",
+      "%USERPROFILE%\\Documents",
+      "%USERPROFILE%\\AppData\\Local\\Temp",
+      "%APPDATA%",
+      "%LOCALAPPDATA%\\Roblox",
+      "%PUBLIC%\\Downloads"
+    ],
+    "quarantine": "quarantine",
+    "logs": "logs",
+    "data": "data"
+  },
+  "filewatch": {
+    "extensions": [
+      ".exe",
+      ".dll",
+      ".sys",
+      ".tmp",
+      ".scr",
+      ".bat",
+      ".cmd",
+      ".ps1",
+      ".vbs",
+      ".js",
+      ".jar",
+      ".zip",
+      ".rar",
+      ".7z"
+    ],
+    "max_hash_bytes": 134217728,
+    "recursive": true,
+    "poll_interval_seconds": 4
+  },
+  "network": {
+    "poll_interval_seconds": 5,
+    "suspicious_local_ports": [
+      6969,
+      7777,
+      8080,
+      9090,
+      13337,
+      27015
+    ],
+    "alert_on_private_ranges": false
+  },
+  "behavior": {
+    "poll_interval_seconds": 6,
+    "cpu_threshold_percent": 80.0,
+    "cpu_sustained_samples": 3,
+    "handle_threshold": 4000,
+    "protected_targets": [
+      "robloxplayerbeta.exe",
+      "robloxstudiobeta.exe"
+    ],
+    "check_module_signatures": true
+  },
+  "intel": {
+    "enable_lookups": false,
+    "virustotal_api_key": "",
+    "abuseipdb_api_key": "",
+    "cache_ttl_hours": 24,
+    "request_timeout_seconds": 10,
+    "min_vt_detections": 3
+  },
+  "updates": {
+    "threat_feed_url": "",
+    "auto_update": false,
+    "interval_hours": 12
+  },
+  "scan": {
+    "on_start": false,
+    "on_schedule": false,
+    "interval_minutes": 120,
+    "paths": []
+  },
+  "logging": {
+    "max_log_bytes": 10485760,
+    "keep_rotations": 5,
+    "hash_chain": true
+  },
+  "whitelist": {
+    "names": [],
+    "paths": [
+      "%SystemRoot%",
+      "%ProgramFiles%",
+      "%ProgramFiles(x86)%",
+      "%LOCALAPPDATA%\\Roblox"
+    ],
+    "hashes": [],
+    "ips": []
+  },
+  "blacklist": {
+    "names": [],
+    "hashes": [],
+    "ips": [],
+    "patterns": []
+  },
+  "ui": {
+    "start_minimized": false,
+    "refresh_ms": 800,
+    "max_rows": 500
+  }
+}

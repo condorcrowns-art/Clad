@@ -1,0 +1,16 @@
+# Runtime state — created next to the executable on first run.
+logs/
+quarantine/
+data/intel_cache.json
+
+# Local overrides of the shipped defaults.
+config/config.local.json
+
+# Python / build artefacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.spec
