@@ -280,6 +280,176 @@ def cmd_scan_url(args: argparse.Namespace) -> int:
     return 1 if dangerous else 0
 
 
+def cmd_key(args: argparse.Namespace) -> int:
+    """Generate or inspect the post-quantum signing key."""
+    from .pqsign import LMS_TYPES, LmsPrivateKey
+
+    config = Config.load(args.config)
+    key_path = Path(args.path) if args.path else config.data_dir() / "signing-key.json"
+
+    if args.action == "generate":
+        if key_path.exists() and not args.force:
+            print(f"{key_path} already exists. Pass --force to replace it — but note that "
+                  f"every feed signed with the old key stops verifying.", file=sys.stderr)
+            return 1
+        lms_type = {5: 0x00000005, 10: 0x00000006, 15: 0x00000007}[args.height]
+        print(f"Generating an LMS key with 2^{args.height} = {2 ** args.height} one-time "
+              f"signatures. This builds the whole Merkle tree and is slow — "
+              f"{'a few seconds' if args.height <= 5 else 'up to a minute or two'}…")
+        key = LmsPrivateKey.generate(lms_type)
+        public = key.public_key().to_hex()
+        key.save(key_path)
+        print(f"\nPrivate key : {key_path}   ** SECRET — never copy this to two machines **")
+        print(f"Public key  : {public}")
+        print(f"Signatures  : {key.remaining} remaining\n")
+        print("Put the public key in every client's config.json:")
+        print('  "updates": { "trusted_public_key": "' + public[:32] + '…", '
+              '"require_signature": true }')
+        return 0
+
+    if not key_path.exists():
+        print(f"No signing key at {key_path}. Run: candy key generate", file=sys.stderr)
+        return 1
+    key = LmsPrivateKey.load(key_path)
+    print(json.dumps({
+        "path": str(key_path),
+        "algorithm": "LMS_SHA256_M32 / LMOTS_SHA256_N32_W8 (RFC 8554, CNSA 2.0 approved)",
+        "tree_height": key.height,
+        "capacity": 1 << key.height,
+        "used": key.q,
+        "remaining": key.remaining,
+        "public_key": key.public_key().to_hex(),
+    }, indent=2))
+    return 0
+
+
+def cmd_sign(args: argparse.Namespace) -> int:
+    """Sign a JSON file (a threat feed) with the post-quantum key."""
+    from .pqsign import LmsPrivateKey, sign_document
+
+    config = Config.load(args.config)
+    key_path = Path(args.key) if args.key else config.data_dir() / "signing-key.json"
+    if not key_path.exists():
+        print(f"No signing key at {key_path}. Run: candy key generate", file=sys.stderr)
+        return 1
+
+    try:
+        payload = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Could not read {args.file}: {exc}", file=sys.stderr)
+        return 1
+    if isinstance(payload, dict) and "signature" in payload and "payload" in payload:
+        payload = payload["payload"]      # re-signing an already signed file
+
+    key = LmsPrivateKey.load(key_path)
+    if key.remaining <= 0:
+        print("This key is exhausted — every one-time signature has been used. "
+              "Generate a new key and redistribute its public key.", file=sys.stderr)
+        return 1
+
+    document = sign_document(key, payload)
+    key.save()
+    out = Path(args.out) if args.out else Path(args.file).with_suffix(".signed.json")
+    out.write_text(json.dumps(document, indent=2), encoding="utf-8")
+    print(f"Signed {args.file} -> {out}")
+    print(f"Public key : {key.public_key().to_hex()}")
+    print(f"Remaining  : {key.remaining} signature(s) on this key")
+    return 0
+
+
+def cmd_verify_file(args: argparse.Namespace) -> int:
+    """Verify a signed file against the pinned public key."""
+    from .pqsign import verify_document
+
+    config = Config.load(args.config)
+    trusted = args.public_key or str(config.get("updates.trusted_public_key", ""))
+    try:
+        document = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Could not read {args.file}: {exc}", file=sys.stderr)
+        return 1
+    ok, detail = verify_document(document, trusted)
+    print(f"{'OK  ' if ok else 'FAIL'} {args.file}")
+    print(f"     {detail}")
+    return 0 if ok else 1
+
+
+def cmd_firewall(args: argparse.Namespace) -> int:
+    """Drive Windows Firewall into (and out of) default-deny outbound."""
+    from .firewall import FirewallController
+
+    config = Config.load(args.config)
+    controller = FirewallController(config)
+
+    if args.action == "status":
+        status = controller.status()
+        print(json.dumps(status.to_dict(), indent=2))
+        allowed = controller.load_allowlist()
+        print(f"\nAllowlist: {len(allowed)} program(s)")
+        for entry in allowed.values():
+            signed = {True: "signed", False: "UNSIGNED", None: "unknown"}[entry.signed]
+            print(f"  {entry.path}  [{signed}, pinned to {(entry.sha256 or '?')[:16]}…]")
+        return 0
+
+    if args.action == "learn":
+        print(f"Watching outbound connections for {args.seconds:.0f}s. "
+              f"Use the machine normally — open your browser, launch Roblox…\n")
+        programs = controller.learn(args.seconds, progress=lambda exe: print(f"  seen: {exe}"))
+        print(f"\n{len(programs)} program(s) made outbound connections.")
+        if args.apply:
+            for program in programs:
+                ok, detail = controller.allow_program(program)
+                print(f"  {'OK  ' if ok else 'FAIL'} {detail}")
+        else:
+            print("\nRe-run with --apply to add these to the allowlist.")
+        return 0
+
+    if args.action == "allow":
+        ok, detail = controller.allow_program(args.program)
+        print(f"{'OK' if ok else 'FAILED'}: {detail}")
+        return 0 if ok else 1
+
+    if args.action == "revoke":
+        ok, detail = controller.revoke_program(args.program)
+        print(f"{'OK' if ok else 'FAILED'}: {detail}")
+        return 0 if ok else 1
+
+    if args.action == "verify":
+        findings = controller.verify_allowlist()
+        if not findings:
+            print("Every allowed binary still matches the hash it was allowed with.")
+            return 0
+        for finding in findings:
+            print(f"REVOKED {finding['path']}: {finding['problem']}")
+        return 1
+
+    if args.action == "lockdown":
+        print("This blocks ALL outbound traffic except your allowlist.\n"
+              f"It reverts automatically in {args.confirm_seconds}s unless you run "
+              f"'candy firewall confirm'.\n")
+        ok, detail = controller.lockdown(confirm_seconds=args.confirm_seconds)
+        print(f"{'OK' if ok else 'FAILED'}: {detail}")
+        return 0 if ok else 1
+
+    if args.action == "confirm":
+        ok, detail = controller.confirm()
+        print(f"{'OK' if ok else 'FAILED'}: {detail}")
+        return 0 if ok else 1
+
+    if args.action == "unlock":
+        ok, detail = controller.unlock()
+        print(f"{'OK' if ok else 'FAILED'}: {detail}")
+        return 0 if ok else 1
+
+    if args.action == "reset":
+        removed, failed = controller.remove_all_rules()
+        controller.unlock()
+        print(f"Removed {removed} Candy firewall rule(s), {failed} failed. "
+              f"Outbound is allow-by-default again.")
+        return 0
+    return 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -490,6 +660,35 @@ def build_parser() -> argparse.ArgumentParser:
                           help="block it immediately if the verdict is malicious")
     scan_url.set_defaults(func=cmd_scan_url)
 
+    key = sub.add_parser("key", help="manage the post-quantum (LMS) signing key")
+    key.add_argument("action", choices=["generate", "show"])
+    key.add_argument("--height", type=int, default=10, choices=[5, 10, 15],
+                     help="tree height: 2^h signatures (default 10 = 1024)")
+    key.add_argument("--path", help="key file (default: data/signing-key.json)")
+    key.add_argument("--force", action="store_true", help="overwrite an existing key")
+    key.set_defaults(func=cmd_key)
+
+    sign = sub.add_parser("sign", help="post-quantum sign a threat feed or JSON file")
+    sign.add_argument("file")
+    sign.add_argument("--key", help="signing key file")
+    sign.add_argument("--out", help="output file (default: <file>.signed.json)")
+    sign.set_defaults(func=cmd_sign)
+
+    verify_file = sub.add_parser("verify-file", help="verify a post-quantum signed file")
+    verify_file.add_argument("file")
+    verify_file.add_argument("--public-key", help="override the pinned key from config.json")
+    verify_file.set_defaults(func=cmd_verify_file)
+
+    firewall = sub.add_parser("firewall", help="default-deny outbound firewall control")
+    firewall.add_argument("action", choices=["status", "learn", "allow", "revoke", "verify",
+                                             "lockdown", "confirm", "unlock", "reset"])
+    firewall.add_argument("program", nargs="?", help="program path for allow/revoke")
+    firewall.add_argument("--seconds", type=float, default=120.0, help="learning duration")
+    firewall.add_argument("--apply", action="store_true", help="apply what learning found")
+    firewall.add_argument("--confirm-seconds", type=int, default=120,
+                          help="how long before an unconfirmed lockdown reverts itself")
+    firewall.set_defaults(func=cmd_firewall)
+
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,
                         help="how long to let the monitors run before reporting (default 6)")
@@ -507,6 +706,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("add/remove need: <whitelist|blacklist> <field> <value>")
     if args.command == "quarantine" and args.action != "list" and not args.target:
         parser.error(f"'quarantine {args.action}' needs a target path")
+    if args.command == "firewall" and args.action in ("allow", "revoke") and not args.program:
+        parser.error(f"'firewall {args.action}' needs a program path")
     try:
         return int(args.func(args) or 0)
     except KeyboardInterrupt:

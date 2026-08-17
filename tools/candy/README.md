@@ -146,6 +146,13 @@ Candy.exe site block bad-executor.gg     # hosts-file sinkhole + firewall rules
 Candy.exe site unblock bad-executor.gg
 Candy.exe site list
 Candy.exe scan-url https://bad-executor.gg/download --block
+Candy.exe firewall learn --seconds 300 --apply   # build an allowlist from real behaviour
+Candy.exe firewall lockdown                      # default-deny outbound, auto-reverts in 120s
+Candy.exe firewall confirm                       # keep it
+Candy.exe firewall verify                        # revoke any binary that changed on disk
+Candy.exe key generate                           # post-quantum (LMS) signing key
+Candy.exe sign threats.json                      # sign a threat feed
+Candy.exe verify-file threats.signed.json
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
@@ -276,6 +283,8 @@ is created for you on first run. The blocks you are most likely to touch:
 | `response.auto_block_domains` | `false` | Let enforce mode sinkhole malicious domains |
 | `web.resolve_and_block_ips` | `true` | Also firewall a blocked domain's addresses (DoH ignores the hosts file) |
 | `whitelist.domains` / `blacklist.domains` | empty | Domain lists, suffix-matched across subdomains |
+| `updates.trusted_public_key` | empty | LMS public key the threat feed must be signed with |
+| `updates.require_signature` | `false` | Refuse any feed that is not post-quantum signed |
 | `intel.enable_lookups` | `false` | Turn on VirusTotal/AbuseIPDB (needs your own free key) |
 | `updates.threat_feed_url` | empty | HTTPS URL of a community threat feed |
 | `scan.on_schedule` / `interval_minutes` | `false` / `120` | Periodic background scans |
@@ -331,7 +340,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 122 tests, no pytest required
+python -m unittest discover -s tests -v     # 157 tests, no pytest required
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -346,6 +355,8 @@ candy/
   config.py      configuration, whitelist/blacklist model
   winevents.py   Sysmon/Defender/Security channel consumer  ← kernel-sourced detection
   netblock.py    hosts-file site blocking, reversible and backed up
+  firewall.py    default-deny outbound, hash-bound allowlist, panic rollback
+  pqsign.py      RFC 8554 LMS post-quantum signatures, pure stdlib
   pe.py          PE version-resource + entropy inspection
   persistence.py Run keys, tasks, services, Winlogon, IFEO
   notify.py      tray icon and toasts, pure ctypes

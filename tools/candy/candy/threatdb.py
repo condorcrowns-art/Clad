@@ -192,11 +192,16 @@ class ThreatDB:
             }
 
     # -------------------------------------------------------------- updates
-    def update_from_url(self, url: str, *, timeout: int = 20) -> dict[str, int]:
+    def update_from_url(self, url: str, *, timeout: int = 20,
+                        trusted_public_key: str = "", require_signature: bool = False) -> dict[str, int]:
         """Fetch a feed over HTTPS and merge it.
 
         HTTP is refused outright — an attacker who can MITM the feed could
-        otherwise whitelist themselves or blacklist ``explorer.exe``.
+        otherwise whitelist themselves or blacklist ``explorer.exe``. When a
+        trusted LMS public key is configured, the feed must additionally carry
+        a valid post-quantum signature over its exact payload bytes, which
+        makes TLS a transport detail rather than the only thing standing
+        between the user and a hostile rule set.
         """
         if not url.lower().startswith("https://"):
             raise ValueError("threat feed URL must use https://")
@@ -206,7 +211,25 @@ class ThreatDB:
             raw = response.read(MAX_FEED_BYTES + 1)
         if len(raw) > MAX_FEED_BYTES:
             raise ValueError("threat feed is larger than the 8 MB limit")
-        payload = json.loads(raw.decode("utf-8"))
+        document = json.loads(raw.decode("utf-8"))
+
+        # A signed feed is an envelope: {"payload": {...}, "signature": {...}}.
+        if isinstance(document, dict) and "signature" in document and "payload" in document:
+            from .pqsign import verify_document
+
+            ok, detail = verify_document(document, trusted_public_key)
+            if not ok:
+                raise ValueError(f"threat feed signature rejected: {detail}")
+            self.meta["signature"] = detail
+            payload = document["payload"]
+        elif require_signature:
+            raise ValueError(
+                "threat feed is unsigned and updates.require_signature is on. "
+                "Sign it with: candy sign <file> --out <signed file>")
+        else:
+            self.meta["signature"] = "unsigned feed (no signature required)"
+            payload = document
+
         if int(payload.get("meta", {}).get("schema", SCHEMA_VERSION)) > SCHEMA_VERSION:
             raise ValueError("threat feed uses a newer schema; update Candy first")
         result = self.ingest(payload)

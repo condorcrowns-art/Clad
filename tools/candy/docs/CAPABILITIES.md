@@ -197,3 +197,77 @@ all within seconds, with a tamper-evident record of every step.
 What it will not do is stop a competent attacker who already has administrator rights, or
 one running in the kernel. For that you need a signed driver, and that needs money. This
 document exists so nobody has to guess which side of that line a given feature falls on.
+
+---
+
+## 9. The "military / CNSA 2.0" specification, assessed line by line
+
+This section answers a specific request: build to NSA CNSA 2.0 and post-quantum
+requirements. Some of it is genuinely achievable with no budget, some of it is achievable
+but pointless in a host firewall, and some of it is impossible without money. Each line
+below says which, and what was built instead.
+
+### 1. Post-quantum encryption stack
+
+| Requirement | Verdict | What exists |
+|---|---|---|
+| **LMS / XMSS stateful hash signatures** | ✅ **BUILT** | `candy/pqsign.py` — full RFC 8554 LMS + LM-OTS in pure Python. Signs the threat feed and any JSON document. CNSA 2.0 approves exactly this family for software/firmware signing, and it needs nothing but `hashlib`. |
+| ML-KEM-1024 (Kyber, FIPS 203) | ⚠️ Not applicable | KEM = key *encapsulation*. It secures a tunnel between two endpoints. Candy has no tunnel: it inspects the local machine and writes firewall rules. There is nothing for a KEM to key. Implementing lattice arithmetic to leave it unused would be theatre. |
+| ML-DSA-87 (Dilithium, FIPS 204) | ⚠️ Deliberate substitution | Same job as LMS here — signing. Dilithium needs constant-time NTT arithmetic; a pure-Python version would be both slow and side-channel leaky, i.e. *worse* than the hash-based scheme actually chosen. LMS's security reduces to SHA-256 alone. |
+| AES-256-GCM | 🔶 Partly | Quarantined files are XOR-defanged, not encrypted. AES-256-GCM for the quarantine store is a reasonable next step (Windows ships CNG/BCrypt, so it stays free). |
+| "AES-256 with 512-bit ephemeral keys" | ❌ Not a real thing | AES is defined for 128/192/256-bit keys only. There is no AES-512. CNSA 2.0 itself specifies **AES-256**, which is the ceiling. |
+| SHA-512 hashing | 🔶 SHA-256 used | LMS parameter sets are defined over SHA-256; using SHA-512 would put the implementation outside RFC 8554. SHA-256 gives 128-bit post-quantum collision resistance, which exceeds what the signed data needs. |
+| Per-packet-bundle key rotation / PFS | ❌ Not applicable | Perfect forward secrecy is a property of a key exchange. Candy performs no key exchange and terminates no traffic. |
+
+**The honest framing:** post-quantum cryptography protects *data in transit and at rest*.
+A host firewall's job is *authorisation*, not confidentiality. The one place PQC genuinely
+belongs here is authenticating the rules Candy obeys — and that is exactly where it now is.
+A signed feed means an attacker who fully controls your network still cannot make Candy
+quarantine `explorer.exe`.
+
+### 2. Deep OS integration and execution isolation
+
+| Requirement | Verdict | Reality |
+|---|---|---|
+| Ring-0 / WFP callout driver | ❌ Impossible for free | A WFP callout is a kernel driver. Kernel drivers need Microsoft attestation signing, which needs a paid EV certificate. No exceptions, no workaround. |
+| eBPF hooks | ❌ Wrong platform | eBPF is Linux. Windows eBPF exists as a preview and still loads a signed driver. |
+| **Default-deny outbound** | ✅ **BUILT** | `candy/firewall.py` drives Windows Firewall — which *is* a WFP client, in the kernel, already signed by Microsoft — into `blockinbound,blockoutbound` with a per-application allowlist. This is the same enforcement point a callout driver would use, reached from user mode. |
+| **Process-to-network binding by hash** | ✅ **BUILT** | An allow rule records the binary's SHA-256 and Authenticode status. `candy firewall verify` re-checks them and revokes access the moment the file changes. An allow rule means "this exact binary", not "this path". |
+| Binding by memory signature / parent PID | 🔶 Partial | Parent-process and injected-module checks exist as *detections* (`heuristic.roblox_child`, Sysmon 7/8/10). They cannot gate a connection without a driver. |
+| Rust / Ada-SPARK core, formal proofs | ❌ Not done | Candy is Python. Python is memory-safe by construction — no manual allocation, so the buffer-overflow class is absent — but it is not formally verified, and it is not Rust. Worth noting the attack surface is small: Candy parses no untrusted network packets, which is where memory bugs in firewalls actually live. |
+
+### 3. Multi-layered threat defence
+
+| Requirement | Verdict | Reality |
+|---|---|---|
+| Hardware-virtualised detonation sandbox | ❌ Not feasible | Intercepting a connection to detonate its payload *before packets leave* requires the driver again. Windows Sandbox exists and is free, but only on Pro/Enterprise, and it cannot be inserted into the packet path. |
+| Behavioural heuristics | ✅ Built (not neural) | Sustained-CPU, handle-count, injected-module, masquerade, persistence and DNS heuristics with a scoring aggregator. A neural model on an NPU would need training data nobody has for this threat class; the statistical rules are honest about what they are. |
+| **Air-gapped telemetry** | ✅ **BUILT, and default** | Candy has no cloud, no account, no server. The only outbound traffic it can ever make is the optional threat-feed fetch and the optional VirusTotal/AbuseIPDB lookups, both off by default. |
+
+### 4. Hardware-rooted trust
+
+| Requirement | Verdict | Reality |
+|---|---|---|
+| TPM 2.0 key sealing | 🔶 Achievable, not yet built | Windows exposes TPM-backed keys through CNG's Platform Crypto Provider from user mode, so a non-extractable signing key is reachable for free via `ctypes`. Worth doing; the LMS key currently lives in a `0600` file on disk. |
+| Measured boot / PCR attestation | ⚠️ Reading only | PCR values can be read (`tpmtool`, TBS API), but *acting* on them at boot means an ELAM driver — the same paid-certificate wall as PPL. |
+| **Self-integrity checking** | ✅ Built | Hash-chained audit log with `candy verify-log`, anti-debug detection, config and binary hashing. Tamper-evident, not tamper-proof, and documented as such. |
+
+### Summary
+
+Of the four pillars requested, **two are now real** (post-quantum signing of the rules
+Candy obeys; default-deny outbound with hash-bound per-application allow rules), one is
+partially real (behavioural defence, air-gapped by design), and one is mostly out of reach
+without a signing certificate (hardware-rooted boot trust, ring-0 interception,
+detonation sandboxing).
+
+Nothing above was skipped for effort. Every ❌ is a wall made of money or of physics, and
+every ✅ was built to the standard actually specified.
+
+### Implementation caveat on LMS
+
+The LMS implementation follows RFC 8554 and is self-consistent — sign, verify, tamper
+detection, leaf exhaustion and cross-key rejection are all covered by tests. It has **not**
+been checked against the RFC's published test vectors, so interoperability with other LMS
+implementations (OpenSSL, Bouncy Castle, `hash-sigs`) should be treated as unverified until
+that check is done. For Candy signing its own feed and verifying it, this does not matter;
+for exchanging signatures with other software, it would.

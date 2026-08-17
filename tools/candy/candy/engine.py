@@ -106,6 +106,12 @@ class Engine:
             except Exception as exc:  # noqa: BLE001
                 report["errors"].append(f"{key}: {exc}")
 
+        from .firewall import FirewallController
+
+        pending = FirewallController(self.config, self.log).rollback_if_unconfirmed()
+        if pending:
+            report["skipped"].append(pending)
+
         if self.kernel_events.degraded_reason:
             report["skipped"].append(f"kernel_events: {self.kernel_events.degraded_reason}")
         self._start_notifications(report)
@@ -246,7 +252,11 @@ class Engine:
         if not url:
             return {"ok": False, "detail": "no updates.threat_feed_url is configured"}
         try:
-            added = self.db.update_from_url(url)
+            added = self.db.update_from_url(
+                url,
+                trusted_public_key=str(self.config.get("updates.trusted_public_key", "")),
+                require_signature=bool(self.config.get("updates.require_signature", False)),
+            )
         except Exception as exc:  # noqa: BLE001
             self.log.write({"event": "update", "ok": False, "error": str(exc)})
             return {"ok": False, "detail": str(exc)}

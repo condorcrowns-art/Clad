@@ -126,6 +126,11 @@ DEFAULTS: dict[str, Any] = {
         "threat_feed_url": "",
         "auto_update": False,
         "interval_hours": 12,
+        # Post-quantum (CNSA 2.0) feed authentication. Paste the LMS public key
+        # printed by 'candy key generate'; the feed is then rejected unless it
+        # carries a valid signature from that exact key.
+        "trusted_public_key": "",
+        "require_signature": False,
     },
     "scan": {
         "on_start": False,
