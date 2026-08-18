@@ -532,3 +532,49 @@ AMSI bypass strings, certutil downloads, Run keys, Winlogon hijack, IFEO debugge
 AppInit_DLLs, COM hijacking, LSA packages, direct executor download, renamed executor,
 double extension, executor in a zip, password-protected archive, phishing page,
 malvertising domain, and log tampering.
+
+---
+
+## 16. Full-system scan — finding what is already there
+
+Everything else in Candy watches for things *arriving*. `candy fullscan` looks for what is
+already on the machine: an executor installed months ago, a stealer running since a bad
+download, persistence somebody set up and forgot about.
+
+Five passes, none of which execute anything:
+
+| Pass | What it does |
+|---|---|
+| **Processes** | Every running image by name, path, hash and PE metadata, through the same analyser the live monitor uses |
+| **Modules** | Every DLL inside every readable process — foreign or unsigned code where it does not belong (`full`/`deep`) |
+| **Persistence** | Run keys, tasks, services, Winlogon, IFEO, AppInit, LSA packages, COM hijacks — everything set to survive a reboot |
+| **Files** | Hashed, matched against the threat database, parsed as PE for a renamed executor, triaged for capability, checked for Mark-of-the-Web and the page it came from |
+| **Alternate data streams** | Payloads hidden in NTFS streams, which no directory listing shows (`full`/`deep`, Windows) |
+
+| Profile | Covers | Typical time |
+|---|---|---|
+| `quick` | Processes, persistence, Downloads/Desktop/Temp/AppData | a minute or two |
+| `full` | + the whole user profile and Program Files, module audit, NTFS streams | tens of minutes |
+| `deep` | + every fixed drive | hours |
+
+Every pass respects `--minutes`, and a scan that runs out of budget stops cleanly and says
+**TIME BUDGET REACHED — scan incomplete** rather than pretending it finished. Nothing is
+quarantined or killed unless `--act` is passed.
+
+### What it is not
+
+It is **not an antivirus engine**. It has no signature set for the tens of thousands of
+non-Roblox malware families, no emulation, no cloud lookup. It finds: known executors
+(including renamed ones), files whose *capabilities* look like a stealer, payloads from
+pages that look like phishing, foreign modules, and persistence. A clean result means
+"nothing matching what this looks for" — the report says exactly that, and tells the user
+to run Defender's full scan as well, because Defender has kernel visibility and a
+signature set this does not.
+
+### Verified
+
+Run against this project's own build container, the scan correctly found four planted test
+artefacts and nothing else: a PE named `fake_stealer.exe` scoring **350 critical** —
+identified as a renamed `krnl.exe` from its version resource, with the injection triad,
+credential-store access and a Discord webhook read out of it — plus three lower-severity
+name matches. 675 files were skipped without being read, which is what keeps a scan fast.

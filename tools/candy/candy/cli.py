@@ -886,6 +886,65 @@ def cmd_dns(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fullscan(args: argparse.Namespace) -> int:
+    """Scan the machine for malware that is already on it."""
+    from .fullscan import PROFILES, FullScanner, format_report
+    from .winapi import verify_signature
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+
+    if args.profiles:
+        for name, spec in PROFILES.items():
+            print(f"{name:8} {spec['description']}")
+            print(f"         extensions: {len(spec['extensions'])}, depth {spec['max_depth']}, "
+                  f"modules={spec['modules']}, streams={spec['streams']}")
+        return 0
+
+    scanner = FullScanner(config, engine.analyzer, signature_checker=verify_signature)
+    last = [0.0]
+
+    def progress(message: str) -> None:
+        if args.quiet:
+            return
+        now = time.time()
+        if message.startswith("  ") and now - last[0] < 0.4:
+            return
+        last[0] = now
+        print(f"  {message}"[:110], flush=True)
+
+    print(f"Scanning ({args.profile} profile)"
+          + (f", time budget {args.minutes:.0f} min" if args.minutes else "") + "…\n")
+    report = scanner.scan(args.profile, roots=args.paths or None, progress=progress,
+                          time_budget=args.minutes * 60 if args.minutes else None)
+
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(format_report(report))
+
+    if args.out:
+        Path(args.out).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+        print(f"\nFull report written to {args.out}")
+
+    engine.log.write({"event": "fullscan", **{k: v for k, v in report.to_dict().items()
+                                              if k != "findings"},
+                      "findings": len(report.findings)})
+
+    if args.act and report.findings:
+        threshold = int(config.get("response.action_threshold", 75))
+        print(f"\nApplying the configured response to findings scoring >= {threshold}…")
+        for finding in report.findings:
+            if finding.score < threshold or finding.kind == "file" and not Path(finding.subject).is_file():
+                continue
+            if finding.kind.startswith("process") and finding.pid:
+                print(f"  {engine.responder.kill(finding.pid, forced=True)}")
+            elif finding.kind == "file":
+                print(f"  {engine.responder.quarantine(finding.subject, forced=True)}")
+
+    return 1 if report.findings else 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -1211,6 +1270,20 @@ def build_parser() -> argparse.ArgumentParser:
     dns.add_argument("--listen", default="127.0.0.1")
     dns.add_argument("--port", type=int, default=53)
     dns.set_defaults(func=cmd_dns)
+
+    fullscan = sub.add_parser("fullscan",
+                              help="scan the machine for malware that is already on it")
+    fullscan.add_argument("paths", nargs="*", help="override the profile's scan roots")
+    fullscan.add_argument("--profile", default="quick", choices=["quick", "full", "deep"])
+    fullscan.add_argument("--minutes", type=float, default=0,
+                          help="time budget; the scan stops cleanly and says it was truncated")
+    fullscan.add_argument("--json", action="store_true")
+    fullscan.add_argument("--out", help="write the full JSON report to this file")
+    fullscan.add_argument("--act", action="store_true",
+                          help="quarantine/kill findings at or above the action threshold")
+    fullscan.add_argument("--quiet", action="store_true")
+    fullscan.add_argument("--profiles", action="store_true", help="list the profiles and exit")
+    fullscan.set_defaults(func=cmd_fullscan)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,
