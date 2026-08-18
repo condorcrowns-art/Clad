@@ -169,7 +169,8 @@ class FullScanner:
 
     # ------------------------------------------------------------------ run
     def scan(self, profile: str = "quick", *, roots: Iterable[str] | None = None,
-             progress: Progress | None = None, time_budget: float | None = None) -> ScanReport:
+             progress: Progress | None = None, time_budget: float | None = None,
+             cancel: Callable[[], bool] | None = None) -> ScanReport:
         spec = PROFILES.get(profile)
         if spec is None:
             raise ValueError(f"unknown profile {profile!r}; choose from {', '.join(PROFILES)}")
@@ -183,14 +184,20 @@ class FullScanner:
                 progress(message)
 
         def expired() -> bool:
+            if cancel is not None and cancel():
+                return True
             return deadline is not None and time.monotonic() > deadline
+
+        # The inner passes take a single "stop now" callable so a cancel from a
+        # GUI button is honoured as promptly as a time budget running out.
+        stop = expired
 
         say("scanning running processes…")
         self._scan_processes(report, spec)
 
         if spec["modules"] and not expired():
             say("auditing loaded modules…")
-            self._scan_modules(report, deadline)
+            self._scan_modules(report, stop)
 
         if not expired():
             say("auditing persistence…")
@@ -203,11 +210,11 @@ class FullScanner:
                 report.truncated = True
                 break
             say(f"scanning {root}…")
-            self._scan_tree(Path(root), report, spec, deadline, progress)
+            self._scan_tree(Path(root), report, spec, stop, progress)
 
         if spec["streams"] and IS_WINDOWS and not expired():
             say("checking alternate data streams…")
-            self._scan_streams(report, chosen, deadline)
+            self._scan_streams(report, chosen, stop)
 
         report.seconds = time.monotonic() - started
         report.finished = utc_stamp()
@@ -265,13 +272,13 @@ class FullScanner:
                     reasons=[detection.message], sha256=detection.sha256,
                     pid=detection.pid, evidence=detection.evidence))
 
-    def _scan_modules(self, report: ScanReport, deadline: float | None) -> None:
+    def _scan_modules(self, report: ScanReport, stop: Callable[[], bool]) -> None:
         """Foreign or unsigned DLLs inside any process, not just Roblox."""
         if psutil is None:
             return
         trusted_roots = ("c:/windows", "c:/program files", "c:/program files (x86)", "/usr", "/lib")
         for proc in psutil.process_iter(["pid", "name"]):
-            if deadline and time.monotonic() > deadline:
+            if stop():
                 report.truncated = True
                 return
             try:
@@ -321,10 +328,10 @@ class FullScanner:
 
     # ---------------------------------------------------------------- files
     def _scan_tree(self, root: Path, report: ScanReport, spec: dict[str, Any],
-                   deadline: float | None, progress: Progress | None, depth: int = 0) -> None:
+                   stop: Callable[[], bool], progress: Progress | None, depth: int = 0) -> None:
         if depth > spec["max_depth"]:
             return
-        if deadline and time.monotonic() > deadline:
+        if stop():
             report.truncated = True
             return
         try:
@@ -333,13 +340,13 @@ class FullScanner:
             return
 
         for entry in entries:
-            if deadline and time.monotonic() > deadline:
+            if stop():
                 report.truncated = True
                 return
             try:
                 if entry.is_dir(follow_symlinks=False):
                     if entry.name.lower() not in SKIP_DIRS and not entry.name.startswith("."):
-                        self._scan_tree(Path(entry.path), report, spec, deadline,
+                        self._scan_tree(Path(entry.path), report, spec, stop,
                                         progress, depth + 1)
                     continue
                 suffix = Path(entry.name).suffix.lower()
@@ -437,12 +444,12 @@ class FullScanner:
 
     # -------------------------------------------------------------- streams
     def _scan_streams(self, report: ScanReport, roots: Iterable[Path],
-                      deadline: float | None) -> None:  # pragma: no cover - Windows only
+                      stop: Callable[[], bool]) -> None:  # pragma: no cover - Windows only
         """Alternate data streams: a payload hidden where no listing shows it."""
         import subprocess
 
         for root in roots:
-            if deadline and time.monotonic() > deadline:
+            if stop():
                 report.truncated = True
                 return
             try:

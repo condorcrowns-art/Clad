@@ -129,6 +129,37 @@ class BudgetAndProgressTests(unittest.TestCase):
             self.assertTrue(report.truncated)
             self.assertIn("TIME BUDGET REACHED", format_report(report))
 
+    def test_cancel_stops_the_scan_and_says_so(self):
+        """The GUI's Cancel button has to stop a deep scan promptly, and the
+        report must admit it did not finish."""
+        with tempfile.TemporaryDirectory() as tmp:
+            for index in range(40):
+                (Path(tmp) / f"sample{index}.exe").write_bytes(build_test_pe())
+            report = scanner_for(tmp).scan("quick", roots=[tmp], cancel=lambda: True)
+            self.assertTrue(report.truncated)
+            self.assertEqual(report.files_scanned, 0)
+
+    def test_cancel_that_never_fires_scans_everything(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "sample.exe").write_bytes(build_test_pe())
+            report = scanner_for(tmp).scan("quick", roots=[tmp], cancel=lambda: False)
+            self.assertFalse(report.truncated)
+            self.assertEqual(report.files_scanned, 1)
+
+    def test_cancel_mid_scan_keeps_the_findings_already_made(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for index in range(30):
+                (Path(tmp) / f"krnl{index}.exe").write_bytes(build_test_pe())
+            calls = {"n": 0}
+
+            def cancel() -> bool:
+                calls["n"] += 1
+                return calls["n"] > 12
+
+            report = scanner_for(tmp).scan("quick", roots=[tmp], cancel=cancel)
+            self.assertTrue(report.truncated)
+            self.assertLess(report.files_scanned, 30)
+
     def test_progress_is_reported(self):
         messages: list[str] = []
         with tempfile.TemporaryDirectory() as tmp:

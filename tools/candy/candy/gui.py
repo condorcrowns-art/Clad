@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import queue
 import threading
+import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
@@ -40,6 +41,11 @@ class App(ttk.Frame):
         self.engine = Engine(self.config_obj)
         self.queue = self.engine.bus.subscribe_queue()
         self.detections: list[Detection] = []
+        self.scan_findings: list = []
+        self.scan_report = None
+        self.scan_thread: threading.Thread | None = None
+        self.scan_cancel_event: threading.Event | None = None
+        self.extension_verdicts: list = []
 
         master.title(f"Candy {VERSION} — Roblox executor tripwire")
         master.geometry("1020x660")
@@ -53,6 +59,7 @@ class App(ttk.Frame):
         self.refresh_ms = int(self.config_obj.get("ui.refresh_ms", 800))
         self.after(300, self._pump)
         self.after(1000, self._refresh_status)
+        self.after(1200, self.refresh_protection)
 
     # ---------------------------------------------------------------- build
     def _build_header(self) -> None:
@@ -75,6 +82,11 @@ class App(ttk.Frame):
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill="both", expand=True)
         self._build_threats_tab()
+        self._build_scan_tab()
+        self._build_protection_tab()
+        self._build_extensions_tab()
+        self._build_tools_tab()
+        self._tools_index = self.tabs.index("end") - 1
         self._build_status_tab()
         self._build_log_tab()
         self._build_lists_tab()
@@ -247,6 +259,1064 @@ class App(ttk.Frame):
                                "but ships no driver of its own. See the README for what it "
                                "cannot do.",
                   wraplength=700, foreground="#666").pack(side="left", padx=10)
+
+    # ------------------------------------------------------------- scan tab
+    def _build_scan_tab(self) -> None:
+        frame = ttk.Frame(self.tabs, padding=6)
+        self.tabs.add(frame, text="Scan")
+
+        controls = ttk.Frame(frame)
+        controls.pack(fill="x", pady=(0, 6))
+        ttk.Label(controls, text="Profile").pack(side="left")
+        self.scan_profile = tk.StringVar(value="quick")
+        ttk.Combobox(controls, textvariable=self.scan_profile, width=8, state="readonly",
+                     values=["quick", "full", "deep"]).pack(side="left", padx=6)
+        ttk.Label(controls, text="Time budget").pack(side="left")
+        self.scan_minutes = tk.IntVar(value=10)
+        ttk.Spinbox(controls, from_=0, to=720, increment=5, width=5,
+                    textvariable=self.scan_minutes).pack(side="left", padx=4)
+        ttk.Label(controls, text="minutes (0 = no limit)").pack(side="left")
+        self.scan_button = ttk.Button(controls, text="Start scan", command=self.fullscan_start)
+        self.scan_button.pack(side="right")
+        self.scan_cancel_button = ttk.Button(controls, text="Cancel", state="disabled",
+                                             command=self.fullscan_cancel)
+        self.scan_cancel_button.pack(side="right", padx=6)
+
+        progress_row = ttk.Frame(frame)
+        progress_row.pack(fill="x", pady=(0, 6))
+        self.scan_bar = ttk.Progressbar(progress_row, mode="indeterminate", length=180)
+        self.scan_bar.pack(side="left")
+        self.scan_progress = ttk.Label(progress_row, text="Idle. A quick scan takes a minute "
+                                                          "or two; deep reads every fixed drive.")
+        self.scan_progress.pack(side="left", padx=10)
+
+        table = ttk.Frame(frame)
+        table.pack(side="top", fill="both", expand=True)
+        columns = ("severity", "score", "kind", "subject", "why")
+        self.scan_tree = ttk.Treeview(table, columns=columns, show="headings", height=15)
+        for column, width in (("severity", 80), ("score", 60), ("kind", 110),
+                              ("subject", 430), ("why", 340)):
+            self.scan_tree.heading(column, text=column.title())
+            self.scan_tree.column(column, width=width, anchor="w")
+        scroll = ttk.Scrollbar(table, orient="vertical", command=self.scan_tree.yview)
+        self.scan_tree.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.scan_tree.pack(side="left", fill="both", expand=True)
+        for severity, color in SEVERITY_COLORS.items():
+            self.scan_tree.tag_configure(severity, foreground=color)
+        self.scan_tree.bind("<<TreeviewSelect>>", self._on_scan_select)
+
+        detail_frame = ttk.LabelFrame(frame, text="Why this was flagged", padding=6)
+        detail_frame.pack(fill="x", pady=(8, 4))
+        self.scan_detail = tk.Text(detail_frame, height=6, wrap="word", font=("Consolas", 9))
+        self.scan_detail.pack(fill="both", expand=True)
+        self.scan_detail.configure(state="disabled")
+
+        actions = ttk.Frame(frame)
+        actions.pack(fill="x")
+        ttk.Button(actions, text="Explain this file", command=self.scan_explain).pack(side="left")
+        ttk.Button(actions, text="Quarantine", command=self.scan_quarantine).pack(side="left", padx=6)
+        ttk.Button(actions, text="Kill process", command=self.scan_kill).pack(side="left")
+        ttk.Button(actions, text="Trust (whitelist)", command=self.scan_trust).pack(side="left", padx=6)
+        ttk.Button(actions, text="Save report…", command=self.scan_save).pack(side="right")
+
+    def fullscan_start(self) -> None:
+        if self.scan_thread and self.scan_thread.is_alive():
+            return
+        profile = self.scan_profile.get()
+        if profile == "deep" and not messagebox.askyesno(
+                "Deep scan",
+                "A deep scan reads every fixed drive and audits every process's modules.\n\n"
+                "It can take hours on a large disk. Candy stays usable while it runs, and "
+                "Cancel stops it cleanly.\n\nStart it?"):
+            return
+
+        self.scan_cancel_event = threading.Event()
+        self.scan_findings = []
+        for item in self.scan_tree.get_children():
+            self.scan_tree.delete(item)
+        self.scan_button.configure(state="disabled")
+        self.scan_cancel_button.configure(state="normal")
+        self.scan_bar.start(60)
+        minutes = max(0, int(self.scan_minutes.get()))
+        roots = None
+
+        def worker() -> None:
+            from .fullscan import FullScanner
+            from .winapi import verify_signature
+
+            scanner = FullScanner(self.config_obj, self.engine.analyzer,
+                                  signature_checker=verify_signature)
+            last = [0.0]
+
+            def progress(message: str) -> None:
+                now = time.monotonic()
+                if now - last[0] < 0.25:
+                    return
+                last[0] = now
+                self.after(0, lambda: self.scan_progress.configure(text=truncate(message, 96)))
+
+            try:
+                report = scanner.scan(profile, roots=roots, progress=progress,
+                                      time_budget=minutes * 60 if minutes else None,
+                                      cancel=self.scan_cancel_event.is_set)
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda: self._fullscan_failed(exc))
+                return
+            self.after(0, lambda: self._fullscan_done(report))
+
+        self.scan_thread = threading.Thread(target=worker, daemon=True)
+        self.scan_thread.start()
+        self.set_status(f"Full scan started ({profile}).")
+
+    def fullscan_cancel(self) -> None:
+        if self.scan_cancel_event:
+            self.scan_cancel_event.set()
+            self.scan_progress.configure(text="Cancelling — finishing the current folder…")
+
+    def _fullscan_finished_ui(self) -> None:
+        self.scan_bar.stop()
+        self.scan_button.configure(state="normal")
+        self.scan_cancel_button.configure(state="disabled")
+
+    def _fullscan_failed(self, exc: Exception) -> None:
+        self._fullscan_finished_ui()
+        self.scan_progress.configure(text="Scan failed.")
+        messagebox.showerror("Scan failed", f"{type(exc).__name__}: {exc}")
+
+    def _fullscan_done(self, report) -> None:
+        self._fullscan_finished_ui()
+        self.scan_report = report
+        self.scan_findings = list(report.findings)
+        for index, finding in enumerate(self.scan_findings):
+            self.scan_tree.insert(
+                "", "end", iid=str(index),
+                values=(finding.severity.upper(), finding.score, finding.kind,
+                        truncate(finding.subject, 110),
+                        truncate("; ".join(finding.reasons), 90)),
+                tags=(finding.severity,))
+        counts = report.by_severity
+        summary = (", ".join(f"{count} {level}" for level, count in sorted(counts.items()))
+                   or "nothing flagged")
+        self.scan_progress.configure(
+            text=f"{report.files_scanned:,} files, {report.processes_scanned} processes, "
+                 f"{report.persistence_entries} autostart entries in {report.seconds:.0f}s — "
+                 f"{summary}" + (" (stopped early)" if report.truncated else ""))
+        self.engine.log.write({"event": "fullscan",
+                               "profile": report.profile, "seconds": round(report.seconds, 1),
+                               "findings": len(report.findings), "worst": report.worst})
+        self.set_status(f"Scan finished: {len(report.findings)} finding(s).")
+
+    def _selected_finding(self):
+        selection = self.scan_tree.selection()
+        if not selection:
+            return None
+        try:
+            return self.scan_findings[int(selection[0])]
+        except (ValueError, IndexError):
+            return None
+
+    def _on_scan_select(self, _event=None) -> None:
+        finding = self._selected_finding()
+        if not finding:
+            return
+        lines = [finding.subject, f"kind: {finding.kind}   score: {finding.score} "
+                                  f"({finding.severity})"]
+        if finding.sha256:
+            lines.append(f"sha256: {finding.sha256}")
+        if finding.pid:
+            lines.append(f"pid: {finding.pid}")
+        lines.append("")
+        lines.extend(f"  • {reason}" for reason in finding.reasons)
+        if finding.evidence:
+            lines.append("")
+            lines.append(json.dumps(finding.evidence, indent=2)[:1500])
+        self.scan_detail.configure(state="normal")
+        self.scan_detail.delete("1.0", "end")
+        self.scan_detail.insert("end", "\n".join(lines))
+        self.scan_detail.configure(state="disabled")
+
+    def scan_explain(self) -> None:
+        finding = self._selected_finding()
+        if not finding:
+            messagebox.showinfo("Candy", "Select a finding first.")
+            return
+        self.explain_file(finding.subject)
+
+    def scan_quarantine(self) -> None:
+        finding = self._selected_finding()
+        if not finding or not Path(finding.subject).is_file():
+            messagebox.showinfo("Candy", "Select a finding that refers to a file that still exists.")
+            return
+        if not messagebox.askyesno("Quarantine", f"Move this file to quarantine?\n\n"
+                                                 f"{finding.subject}\n\nIt can be restored from "
+                                                 f"the Quarantine tab."):
+            return
+        self.set_status(str(self.engine.responder.quarantine(finding.subject, forced=True)))
+        self.reload_quarantine()
+
+    def scan_kill(self) -> None:
+        finding = self._selected_finding()
+        if not finding or not finding.pid:
+            messagebox.showinfo("Candy", "Select a finding that has a process ID.")
+            return
+        if not messagebox.askyesno("Terminate", f"Terminate pid {finding.pid}?\n\n"
+                                                f"{finding.subject}"):
+            return
+        self.set_status(str(self.engine.responder.kill(finding.pid, forced=True)))
+
+    def scan_trust(self) -> None:
+        finding = self._selected_finding()
+        if not finding:
+            return
+        field, value = ("hashes", finding.sha256) if finding.sha256 else ("paths", finding.subject)
+        if not messagebox.askyesno("Trust", f"Always trust this?\n\n{field}: {value}\n\n"
+                                            f"Only do this for software you installed yourself."):
+            return
+        self.config_obj.add_list_entry("whitelist", field, str(value))
+        self.reload_lists()
+        self.set_status(f"Whitelisted {field}: {value}")
+
+    def scan_save(self) -> None:
+        if not self.scan_report:
+            messagebox.showinfo("Candy", "Run a scan first.")
+            return
+        path = filedialog.asksaveasfilename(title="Save scan report", defaultextension=".json",
+                                            initialfile="candy-scan.json",
+                                            filetypes=[("JSON report", "*.json")])
+        if not path:
+            return
+        Path(path).write_text(json.dumps(self.scan_report.to_dict(), indent=2), encoding="utf-8")
+        self.set_status(f"Report written to {path}")
+
+    # ------------------------------------------------------- protection tab
+    def _build_protection_tab(self) -> None:
+        outer = ttk.Frame(self.tabs, padding=6)
+        self.tabs.add(outer, text="Protection")
+
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        scroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        frame = ttk.Frame(canvas, padding=(0, 0, 12, 0))
+        frame.bind("<Configure>",
+                   lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=frame, anchor="nw")
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        ttk.Label(frame, text="Everything here changes Windows itself, so most of it needs "
+                              "Candy to be running as administrator. Every change on this page "
+                              "is undone by 'Undo every change' at the bottom.",
+                  wraplength=880, foreground="#666").pack(anchor="w", pady=(0, 8))
+
+        # --- download guard
+        guard_box = ttk.LabelFrame(frame, text="Download guard — what is allowed to land on disk",
+                                   padding=8)
+        guard_box.pack(fill="x", pady=4)
+        self.guard_policy = tk.StringVar(
+            value=str(self.config_obj.get("download_guard.policy", "balanced")))
+        for value, label in (
+                ("off", "Off — watch downloads but never reject one"),
+                ("balanced", "Balanced — reject known threats, renamed executors and "
+                             "stealer capabilities (default)"),
+                ("fortress", "Fortress — reject EVERY unsigned executable that came from the "
+                             "internet, whatever it claims to be")):
+            ttk.Radiobutton(guard_box, text=label, value=value, variable=self.guard_policy,
+                            command=self.save_guard_policy).pack(anchor="w")
+
+        # --- ad and tracker blocking
+        ad_box = ttk.LabelFrame(frame, text="Ads, trackers and malvertising", padding=8)
+        ad_box.pack(fill="x", pady=4)
+        self.adblock_status = ttk.Label(ad_box, text="checking…")
+        self.adblock_status.pack(anchor="w")
+        ad_row = ttk.Frame(ad_box)
+        ad_row.pack(anchor="w", pady=(6, 0))
+        ttk.Button(ad_row, text="Turn on", command=lambda: self.adblock_set(True)).pack(side="left")
+        ttk.Button(ad_row, text="Turn off", command=lambda: self.adblock_set(False)).pack(side="left", padx=6)
+        ttk.Button(ad_row, text="Import a public list…", command=self.adblock_import).pack(side="left")
+        ttk.Button(ad_row, text="Allow a site…", command=self.adblock_allow).pack(side="left", padx=6)
+
+        # --- DNS resolver
+        dns_box = ttk.LabelFrame(frame, text="Local DNS filtering resolver", padding=8)
+        dns_box.pack(fill="x", pady=4)
+        self.dns_enabled = tk.BooleanVar(value=bool(self.config_obj.get("dns.enabled")))
+        ttk.Checkbutton(dns_box, text="Filter every DNS lookup on this machine "
+                                      "(binds port 53; needs administrator; applies when "
+                                      "protection restarts)",
+                        variable=self.dns_enabled, command=self.save_dns).pack(anchor="w")
+        self.dns_status = ttk.Label(dns_box, text="")
+        self.dns_status.pack(anchor="w")
+        dns_row = ttk.Frame(dns_box)
+        dns_row.pack(anchor="w", pady=(6, 0))
+        ttk.Label(dns_row, text="Test a domain").pack(side="left")
+        self.dns_test_value = tk.StringVar()
+        ttk.Entry(dns_row, textvariable=self.dns_test_value, width=34).pack(side="left", padx=6)
+        ttk.Button(dns_row, text="Would this be blocked?", command=self.dns_test).pack(side="left")
+
+        # --- network hardening
+        net_box = ttk.LabelFrame(frame, text="Network hardening — encrypted DNS, browser policy, "
+                                             "legacy protocols", padding=8)
+        net_box.pack(fill="x", pady=4)
+        net_row = ttk.Frame(net_box)
+        net_row.pack(anchor="w")
+        ttk.Label(net_row, text="Resolver").pack(side="left")
+        self.netharden_resolver = tk.StringVar(value="quad9")
+        ttk.Combobox(net_row, textvariable=self.netharden_resolver, width=18, state="readonly",
+                     values=self._resolver_names()).pack(side="left", padx=6)
+        ttk.Button(net_row, text="Apply all", command=self.netharden_apply).pack(side="left")
+        ttk.Button(net_row, text="Revert", command=self.netharden_revert).pack(side="left", padx=6)
+        ttk.Label(net_box, text="Forces filtering DNS-over-HTTPS in Chrome, Edge and Firefox so "
+                                "malware cannot quietly resolve around the block, and turns off "
+                                "LLMNR, NetBIOS and mDNS name poisoning.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
+        # --- kernel policy
+        kernel_box = ttk.LabelFrame(frame, text="Kernel-enforced policy (Defender ASR and "
+                                                "process mitigations)", padding=8)
+        kernel_box.pack(fill="x", pady=4)
+        self.kernel_status = ttk.Label(kernel_box, text="")
+        self.kernel_status.pack(anchor="w")
+        kernel_row = ttk.Frame(kernel_box)
+        kernel_row.pack(anchor="w", pady=(6, 0))
+        ttk.Button(kernel_row, text="Enable (block mode)",
+                   command=lambda: self.kernel_asr("block")).pack(side="left")
+        ttk.Button(kernel_row, text="Audit only",
+                   command=lambda: self.kernel_asr("audit")).pack(side="left", padx=6)
+        ttk.Button(kernel_row, text="Disable", command=self.kernel_asr_off).pack(side="left")
+        kernel_row2 = ttk.Frame(kernel_box)
+        kernel_row2.pack(anchor="w", pady=(6, 0))
+        ttk.Label(kernel_row2, text="Harden a program").pack(side="left")
+        self.kernel_image = tk.StringVar(value="RobloxPlayerBeta.exe")
+        ttk.Entry(kernel_row2, textvariable=self.kernel_image, width=28).pack(side="left", padx=6)
+        self.kernel_profile = tk.StringVar(value="game")
+        ttk.Combobox(kernel_row2, textvariable=self.kernel_profile, width=10, state="readonly",
+                     values=self._mitigation_profiles()).pack(side="left")
+        ttk.Button(kernel_row2, text="Harden",
+                   command=lambda: self.kernel_harden(True)).pack(side="left", padx=6)
+        ttk.Button(kernel_row2, text="Undo",
+                   command=lambda: self.kernel_harden(False)).pack(side="left")
+        ttk.Label(kernel_box, text="Hardening Roblox makes Windows refuse to load unsigned "
+                                   "DLLs into it — the kernel does the blocking, not Candy.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
+        # --- firewall
+        fw_box = ttk.LabelFrame(frame, text="Default-deny outbound firewall", padding=8)
+        fw_box.pack(fill="x", pady=4)
+        self.firewall_status = ttk.Label(fw_box, text="")
+        self.firewall_status.pack(anchor="w")
+        fw_row = ttk.Frame(fw_box)
+        fw_row.pack(anchor="w", pady=(6, 0))
+        ttk.Button(fw_row, text="Learn what needs the internet (2 min)",
+                   command=self.firewall_learn).pack(side="left")
+        ttk.Button(fw_row, text="Lock down", command=self.firewall_lockdown).pack(side="left", padx=6)
+        ttk.Button(fw_row, text="Keep it (confirm)", command=self.firewall_confirm).pack(side="left")
+        ttk.Button(fw_row, text="Unlock", command=self.firewall_unlock).pack(side="left", padx=6)
+        ttk.Button(fw_row, text="Allow a program…", command=self.firewall_allow).pack(side="left")
+        ttk.Button(fw_row, text="Re-check allowed binaries",
+                   command=self.firewall_verify).pack(side="left", padx=6)
+        ttk.Label(fw_box, text="A lockdown reverts itself automatically after two minutes unless "
+                               "you confirm it, so a mistake cannot leave you offline.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
+        # --- break glass / revert
+        panic_box = ttk.LabelFrame(frame, text="Break glass", padding=8)
+        panic_box.pack(fill="x", pady=4)
+        panic_row = ttk.Frame(panic_box)
+        panic_row.pack(anchor="w")
+        ttk.Button(panic_row, text="PANIC — maximum lockdown",
+                   command=self.panic).pack(side="left")
+        ttk.Button(panic_row, text="Undo every change Candy has made",
+                   command=self.revert_all).pack(side="left", padx=8)
+        ttk.Button(panic_row, text="Refresh this page",
+                   command=self.refresh_protection).pack(side="left")
+
+        out_box = ttk.LabelFrame(frame, text="Result of the last action", padding=6)
+        out_box.pack(fill="both", expand=True, pady=(6, 0))
+        self.protect_out = tk.Text(out_box, height=9, wrap="word", font=("Consolas", 9))
+        self.protect_out.pack(fill="both", expand=True)
+
+    def _resolver_names(self) -> list[str]:
+        try:
+            from .netharden import RESOLVERS
+
+            return list(RESOLVERS)
+        except Exception:  # noqa: BLE001
+            return ["quad9"]
+
+    def _mitigation_profiles(self) -> list[str]:
+        try:
+            from .kernelpolicy import MITIGATION_PROFILES
+
+            return list(MITIGATION_PROFILES)
+        except Exception:  # noqa: BLE001
+            return ["game"]
+
+    def emit(self, text: str) -> None:
+        """Append a line to the Protection tab's output pane."""
+        self.protect_out.insert("end", text.rstrip() + "\n")
+        self.protect_out.see("end")
+
+    def _run(self, work, *, busy: str = "Working…", then=None) -> None:
+        """Run a blocking action off the Tk thread and report it when it lands."""
+        self.set_status(busy)
+        self.emit(f"$ {busy}")
+
+        def worker() -> None:
+            try:
+                result = work()
+            except Exception as exc:  # noqa: BLE001
+                result = exc
+
+            def finish() -> None:
+                if isinstance(result, Exception):
+                    self.emit(f"  FAILED: {type(result).__name__}: {result}")
+                    self.set_status(f"Failed: {result}")
+                    return
+                for line in str(result).splitlines() or [""]:
+                    self.emit(f"  {line}")
+                self.set_status("Done.")
+                if then:
+                    then(result)
+
+            self.after(0, finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def save_guard_policy(self) -> None:
+        policy = self.guard_policy.get()
+        self.config_obj.set("download_guard.policy", policy)
+        self.config_obj.save()
+        self.set_status(f"Download guard policy: {policy}")
+        if policy == "fortress":
+            messagebox.showinfo("Fortress policy",
+                                "Fortress mode rejects every unsigned executable downloaded "
+                                "from the internet.\n\nA lot of legitimate small software is "
+                                "unsigned — indie games, mods, open-source tools. Those will be "
+                                "quarantined too. Restore anything you recognise from the "
+                                "Quarantine tab.")
+
+    def save_dns(self) -> None:
+        self.config_obj.set("dns.enabled", bool(self.dns_enabled.get()))
+        self.config_obj.save()
+        self.set_status("DNS resolver setting saved — restart protection to apply.")
+
+    def dns_test(self) -> None:
+        domain = self.dns_test_value.get().strip()
+        if not domain:
+            return
+
+        def work() -> str:
+            from .adblock import AdBlocker
+            from .dnsproxy import DnsFilter
+
+            dns_filter = DnsFilter(self.config_obj, self.engine.db, self.engine.analyzer)
+            dns_filter.load(AdBlocker(self.config_obj).seed_domains())
+            verdict = dns_filter.decide(domain)
+            return (f"{domain}: {'BLOCKED' if verdict.blocked else 'allowed'}"
+                    + (f" — {verdict.reason}" if verdict.reason else ""))
+
+        self._run(work, busy=f"Testing {domain}…")
+
+    def adblock_set(self, enabled: bool) -> None:
+        def work() -> str:
+            from .adblock import AdBlocker
+
+            self.config_obj.set("adblock.enabled", enabled)
+            self.config_obj.save()
+            blocker = AdBlocker(self.config_obj)
+            return str(blocker.apply() if enabled else blocker.clear())
+
+        self._run(work, busy=f"Turning ad blocking {'on' if enabled else 'off'}…",
+                  then=lambda _r: self.refresh_protection())
+
+    def adblock_import(self) -> None:
+        from tkinter import simpledialog
+
+        source = simpledialog.askstring(
+            "Import a blocklist",
+            "URL or file path of a hosts-format or Adblock-format list:",
+            initialvalue="https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+            parent=self)
+        if not source:
+            return
+
+        def work() -> str:
+            from .adblock import AdBlocker
+
+            return str(AdBlocker(self.config_obj).import_list(source))
+
+        self._run(work, busy="Importing blocklist…", then=lambda _r: self.refresh_protection())
+
+    def adblock_allow(self) -> None:
+        from tkinter import simpledialog
+
+        domain = simpledialog.askstring("Allow a site",
+                                        "Domain to stop blocking (e.g. example.com):",
+                                        parent=self)
+        if not domain:
+            return
+
+        def work() -> str:
+            from .adblock import AdBlocker
+
+            return str(AdBlocker(self.config_obj).allow(domain))
+
+        self._run(work, busy=f"Allowing {domain}…", then=lambda _r: self.refresh_protection())
+
+    def netharden_apply(self) -> None:
+        if not messagebox.askyesno(
+                "Harden the network",
+                "Candy will point this machine at a filtering resolver, force encrypted DNS in "
+                "your browsers, and turn off LLMNR, NetBIOS and mDNS.\n\n"
+                "This needs administrator rights and changes system settings. 'Revert' undoes "
+                "all of it.\n\nContinue?"):
+            return
+
+        def work() -> str:
+            from .netharden import NetworkHardener
+
+            results = NetworkHardener(self.config_obj).apply_all(
+                resolver=self.netharden_resolver.get())
+            lines = []
+            for result in results:
+                lines.append(str(result))
+                lines.extend(f"    + {item}" for item in result.changed)
+                lines.extend(f"    ! {item}" for item in result.skipped)
+            return "\n".join(lines)
+
+        self._run(work, busy="Applying network hardening…")
+
+    def netharden_revert(self) -> None:
+        def work() -> str:
+            from .netharden import NetworkHardener
+
+            return "\n".join(str(r) for r in NetworkHardener(self.config_obj).revert_all())
+
+        self._run(work, busy="Reverting network hardening…")
+
+    def kernel_asr(self, mode: str) -> None:
+        def work() -> str:
+            from .kernelpolicy import ASR_RULES, KernelPolicy
+
+            result = KernelPolicy(self.config_obj).apply_asr(mode=mode)
+            lines = [str(result)]
+            lines.extend(f"  ON   {ASR_RULES[rule][0]}" for rule in result.applied)
+            lines.extend(f"  --   {ASR_RULES[rule][0]} (not accepted by this Defender build)"
+                         for rule in result.failed)
+            return "\n".join(lines)
+
+        self._run(work, busy=f"Applying attack-surface reduction rules ({mode})…",
+                  then=lambda _r: self.refresh_protection())
+
+    def kernel_asr_off(self) -> None:
+        def work() -> str:
+            from .kernelpolicy import KernelPolicy
+
+            return str(KernelPolicy(self.config_obj).disable_asr())
+
+        self._run(work, busy="Disabling attack-surface reduction rules…",
+                  then=lambda _r: self.refresh_protection())
+
+    def kernel_harden(self, enable: bool) -> None:
+        image = self.kernel_image.get().strip()
+        if not image:
+            return
+        profile = self.kernel_profile.get()
+
+        def work() -> str:
+            from .kernelpolicy import KernelPolicy
+
+            policy = KernelPolicy(self.config_obj)
+            if enable:
+                return str(policy.harden_process(image, profile))
+            return str(policy.unharden_process(image))
+
+        self._run(work, busy=f"{'Hardening' if enable else 'Unhardening'} {image}…")
+
+    def firewall_learn(self) -> None:
+        if not messagebox.askyesno(
+                "Learn what needs the internet",
+                "Candy will watch outbound connections for two minutes and add every program "
+                "that makes one to the allowlist.\n\n"
+                "Use the machine normally while it runs — open your browser, launch Roblox, "
+                "start anything you rely on. Whatever you don't open now will be blocked "
+                "when you lock down.\n\nStart?"):
+            return
+
+        def work() -> str:
+            from .firewall import FirewallController
+
+            controller = FirewallController(self.config_obj)
+            programs = controller.learn(120.0)
+            lines = [f"{len(programs)} program(s) made outbound connections."]
+            for program in programs:
+                ok, detail = controller.allow_program(program)
+                lines.append(f"  {'OK  ' if ok else 'FAIL'} {detail}")
+            return "\n".join(lines)
+
+        self._run(work, busy="Watching outbound connections for 2 minutes…",
+                  then=lambda _r: self.refresh_protection())
+
+    def firewall_lockdown(self) -> None:
+        if not messagebox.askyesno(
+                "Lock down outbound traffic",
+                "This blocks ALL outbound traffic except the programs on your allowlist.\n\n"
+                "It reverts itself after two minutes unless you press 'Keep it (confirm)', so "
+                "if it breaks something you can simply wait.\n\nLock down now?"):
+            return
+
+        def work() -> str:
+            from .firewall import FirewallController
+
+            ok, detail = FirewallController(self.config_obj).lockdown(confirm_seconds=120)
+            return f"{'OK' if ok else 'FAILED'}: {detail}"
+
+        self._run(work, busy="Locking down outbound traffic…",
+                  then=lambda _r: self.refresh_protection())
+
+    def firewall_confirm(self) -> None:
+        def work() -> str:
+            from .firewall import FirewallController
+
+            ok, detail = FirewallController(self.config_obj).confirm()
+            return f"{'OK' if ok else 'FAILED'}: {detail}"
+
+        self._run(work, busy="Confirming the lockdown…", then=lambda _r: self.refresh_protection())
+
+    def firewall_unlock(self) -> None:
+        def work() -> str:
+            from .firewall import FirewallController
+
+            ok, detail = FirewallController(self.config_obj).unlock()
+            return f"{'OK' if ok else 'FAILED'}: {detail}"
+
+        self._run(work, busy="Unlocking outbound traffic…", then=lambda _r: self.refresh_protection())
+
+    def firewall_allow(self) -> None:
+        path = filedialog.askopenfilename(title="Allow this program through the firewall",
+                                          filetypes=[("Programs", "*.exe"), ("All files", "*.*")])
+        if not path:
+            return
+
+        def work() -> str:
+            from .firewall import FirewallController
+
+            ok, detail = FirewallController(self.config_obj).allow_program(path)
+            return f"{'OK' if ok else 'FAILED'}: {detail}"
+
+        self._run(work, busy=f"Allowing {path}…", then=lambda _r: self.refresh_protection())
+
+    def firewall_verify(self) -> None:
+        def work() -> str:
+            from .firewall import FirewallController
+
+            findings = FirewallController(self.config_obj).verify_allowlist()
+            if not findings:
+                return "Every allowed binary still matches the hash it was allowed with."
+            return "\n".join(f"REVOKED {f['path']}: {f['problem']}" for f in findings)
+
+        self._run(work, busy="Re-checking allowed binaries…")
+
+    def panic(self) -> None:
+        if not messagebox.askyesno(
+                "Break glass",
+                "PANIC puts everything into its strictest state at once:\n\n"
+                "  • enforcement on, every automatic action enabled\n"
+                "  • download guard set to fortress\n"
+                "  • ad and tracker blocking on\n"
+                "  • outbound firewall locked to your allowlist\n\n"
+                "The firewall lockdown reverts itself in two minutes unless you confirm it.\n\n"
+                "Do this now?"):
+            return
+
+        def work() -> str:
+            from .adblock import AdBlocker
+            from .firewall import FirewallController
+
+            self.config_obj.set("response.mode", "enforce")
+            for switch in ("auto_kill", "auto_quarantine", "auto_firewall", "auto_block_domains"):
+                self.config_obj.set(f"response.{switch}", True)
+            self.config_obj.set("download_guard.policy", "fortress")
+            self.config_obj.set("adblock.enabled", True)
+            self.config_obj.save()
+            ok, detail = FirewallController(self.config_obj).lockdown(confirm_seconds=120)
+            return ("enforcement : every automatic action enabled, guard set to fortress\n"
+                    f"adblock     : {AdBlocker(self.config_obj).apply()}\n"
+                    f"firewall    : {detail}\n\n"
+                    "Press 'Keep it (confirm)' within two minutes to keep the lockdown.")
+
+        self._run(work, busy="BREAK GLASS — maximum lockdown…", then=lambda _r: self._after_panic())
+        self.tabs.select(2)
+
+    def _after_panic(self) -> None:
+        self.mode_var.set("enforce")
+        self.auto_kill.set(True)
+        self.auto_quarantine.set(True)
+        self.auto_firewall.set(True)
+        self.auto_block_domains.set(True)
+        self.guard_policy.set("fortress")
+        self.refresh_protection()
+
+    def revert_all(self) -> None:
+        from .uninstall import Reverter, format_plan
+
+        plan = Reverter(self.config_obj).plan()
+        preview = format_plan(plan)
+        if not messagebox.askyesno("Undo every change",
+                                   f"{preview}\n\nUndo all of this now?"):
+            return
+
+        def work() -> str:
+            reverter = Reverter(self.config_obj, self.engine.log)
+            result = reverter.revert_all()
+            lines = [f"[{'OK  ' if ok else 'FAIL'}] {name:22} {detail[:90]}"
+                     for name, ok, detail in result.steps]
+            lines.append("")
+            lines.append("Quarantined files and logs were left alone — they are evidence.")
+            return "\n".join(lines)
+
+        self._run(work, busy="Undoing every system change Candy has made…",
+                  then=lambda _r: self.refresh_protection())
+
+    def refresh_protection(self) -> None:
+        """Read the live state of every hardening subsystem, off the Tk thread."""
+        def work() -> dict:
+            state: dict = {}
+            try:
+                from .adblock import AdBlocker
+
+                state["adblock"] = AdBlocker(self.config_obj).status()
+            except Exception as exc:  # noqa: BLE001
+                state["adblock_error"] = str(exc)
+            try:
+                from .firewall import FirewallController
+
+                controller = FirewallController(self.config_obj)
+                state["firewall"] = controller.status().to_dict()
+                state["allowlist"] = len(controller.load_allowlist())
+            except Exception as exc:  # noqa: BLE001
+                state["firewall_error"] = str(exc)
+            try:
+                from .kernelpolicy import KernelPolicy
+
+                state["kernel"] = KernelPolicy(self.config_obj).status()
+            except Exception as exc:  # noqa: BLE001
+                state["kernel_error"] = str(exc)
+            try:
+                state["dns"] = self.engine.dns_proxy.status()
+            except Exception as exc:  # noqa: BLE001
+                state["dns_error"] = str(exc)
+            return state
+
+        def apply(state: dict) -> None:
+            adblock = state.get("adblock")
+            self.adblock_status.configure(
+                text=(f"{'ON' if adblock.get('enabled') else 'OFF'} — "
+                      f"{adblock.get('blocked_domains', 0)} domain(s) sinkholed; categories: "
+                      f"{', '.join(adblock.get('categories', [])) or 'none'}"
+                      + ("" if adblock.get("writable") else
+                         f"   [hosts file not writable: {adblock.get('detail', '')}]"))
+                if adblock else f"unavailable ({state.get('adblock_error', 'unknown')})")
+
+            firewall = state.get("firewall")
+            self.firewall_status.configure(
+                text=(f"{'LOCKED DOWN' if firewall.get('locked_down') else 'normal (allow by default)'}"
+                      f" — allowlist: {state.get('allowlist', 0)} program(s)"
+                      f"{'' if firewall.get('admin') else '   [not administrator — changes will fail]'}")
+                if firewall else f"unavailable ({state.get('firewall_error', 'unknown')})")
+
+            kernel = state.get("kernel")
+            self.kernel_status.configure(
+                text=(f"mode: {kernel.get('asr_mode', 'not configured')} — "
+                      f"{kernel.get('asr_active_count', 0)} of "
+                      f"{len(kernel.get('asr_rules', {}))} rule(s) active; "
+                      f"{len(kernel.get('hardened_processes', {}))} program(s) hardened")
+                if kernel else f"unavailable ({state.get('kernel_error', 'unknown')})")
+
+            dns = state.get("dns")
+            if dns:
+                mode = dns.get("mode", "idle")
+                self.dns_status.configure(
+                    text=f"resolver {mode} — {dns.get('blocklist_size', 0)} domain(s) on the "
+                         f"blocklist, {dns.get('queries', 0)} lookup(s) seen, "
+                         f"{dns.get('blocked', 0)} blocked"
+                         + (f"   [{dns.get('last_error')}]" if dns.get("last_error") else ""))
+            else:
+                self.dns_status.configure(text=f"unavailable ({state.get('dns_error', 'unknown')})")
+
+        def worker() -> None:
+            state = work()
+            self.after(0, lambda: apply(state))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # ------------------------------------------------------- extensions tab
+    def _build_extensions_tab(self) -> None:
+        frame = ttk.Frame(self.tabs, padding=6)
+        self.tabs.add(frame, text="Extensions")
+
+        ttk.Label(frame, text="A browser extension with permission to read cookies on roblox.com "
+                              "can take your account without ever needing your password. Candy "
+                              "reads what each installed extension asked for — it never touches "
+                              "browser files.",
+                  wraplength=880, foreground="#666").pack(anchor="w", pady=(0, 6))
+
+        bar = ttk.Frame(frame)
+        bar.pack(fill="x", pady=(0, 6))
+        ttk.Button(bar, text="Scan installed extensions", command=self.extensions_scan).pack(side="left")
+        self.extensions_all = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bar, text="show low-risk extensions too", variable=self.extensions_all,
+                        command=self._render_extensions).pack(side="left", padx=10)
+        self.extensions_summary = ttk.Label(bar, text="")
+        self.extensions_summary.pack(side="left", padx=10)
+
+        table = ttk.Frame(frame)
+        table.pack(side="top", fill="both", expand=True)
+        columns = ("score", "verdict", "browser", "name", "id")
+        self.extensions_tree = ttk.Treeview(table, columns=columns, show="headings", height=13)
+        for column, width in (("score", 60), ("verdict", 90), ("browser", 100),
+                              ("name", 320), ("id", 300)):
+            self.extensions_tree.heading(column, text=column.title())
+            self.extensions_tree.column(column, width=width, anchor="w")
+        ext_scroll = ttk.Scrollbar(table, orient="vertical", command=self.extensions_tree.yview)
+        self.extensions_tree.configure(yscrollcommand=ext_scroll.set)
+        ext_scroll.pack(side="right", fill="y")
+        self.extensions_tree.pack(side="left", fill="both", expand=True)
+        self.extensions_tree.bind("<<TreeviewSelect>>", self._on_extension_select)
+
+        detail = ttk.LabelFrame(frame, text="What it asked for", padding=6)
+        detail.pack(fill="x", pady=(8, 0))
+        self.extensions_detail = tk.Text(detail, height=8, wrap="word", font=("Consolas", 9))
+        self.extensions_detail.pack(fill="both", expand=True)
+        self.extensions_detail.configure(state="disabled")
+
+    def extensions_scan(self) -> None:
+        self.set_status("Reading installed browser extensions…")
+
+        def worker() -> None:
+            from .browserscan import scan_all
+
+            try:
+                verdicts = scan_all()
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda: self.set_status(f"Extension scan failed: {exc}"))
+                return
+            self.after(0, lambda: self._extensions_done(verdicts))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _extensions_done(self, verdicts) -> None:
+        self.extension_verdicts = list(verdicts)
+        self._render_extensions()
+        risky = sum(1 for v in self.extension_verdicts if v.score >= 65)
+        self.set_status(f"{len(self.extension_verdicts)} extension(s) read, {risky} worth a look.")
+
+    def _render_extensions(self) -> None:
+        for item in self.extensions_tree.get_children():
+            self.extensions_tree.delete(item)
+        shown = [(index, verdict) for index, verdict in enumerate(self.extension_verdicts)
+                 if self.extensions_all.get() or verdict.score >= 25]
+        shown.sort(key=lambda pair: -pair[1].score)
+        for index, verdict in shown:
+            extension = verdict.extension
+            self.extensions_tree.insert(
+                "", "end", iid=str(index),
+                values=(verdict.score, verdict.severity.upper(), extension.browser,
+                        truncate(extension.name or "(unnamed)", 70),
+                        truncate(extension.extension_id, 60)),
+                tags=(self._extension_tag(verdict.score),))
+        for severity, color in SEVERITY_COLORS.items():
+            self.extensions_tree.tag_configure(severity, foreground=color)
+        hidden = len(self.extension_verdicts) - len(shown)
+        self.extensions_summary.configure(
+            text=f"{len(shown)} shown" + (f", {hidden} low-risk hidden" if hidden else ""))
+
+    @staticmethod
+    def _extension_tag(score: int) -> str:
+        if score >= 120:
+            return "critical"
+        if score >= 65:
+            return "high"
+        if score >= 40:
+            return "medium"
+        return "low"
+
+    def _on_extension_select(self, _event=None) -> None:
+        selection = self.extensions_tree.selection()
+        if not selection:
+            return
+        try:
+            verdict = self.extension_verdicts[int(selection[0])]
+        except (ValueError, IndexError):
+            return
+        extension = verdict.extension
+        lines = [f"{extension.name or '(unnamed)'}  [{extension.browser} / {extension.profile}]",
+                 f"id      : {extension.extension_id}",
+                 f"version : {extension.version}",
+                 f"path    : {extension.path}",
+                 f"source  : {'SIDELOADED — not from a store' if extension.sideloaded else 'store install'}",
+                 "",
+                 f"score {verdict.score} ({verdict.severity})", ""]
+        lines.extend(f"  • {reason}" for reason in verdict.reasons)
+        lines.append("")
+        lines.append(f"permissions: {', '.join(extension.permissions) or 'none declared'}")
+        lines.append(f"sites      : {', '.join(extension.all_hosts) or 'none declared'}")
+        self.extensions_detail.configure(state="normal")
+        self.extensions_detail.delete("1.0", "end")
+        self.extensions_detail.insert("end", "\n".join(lines))
+        self.extensions_detail.configure(state="disabled")
+
+    # ------------------------------------------------------------ tools tab
+    def _build_tools_tab(self) -> None:
+        frame = ttk.Frame(self.tabs, padding=8)
+        self.tabs.add(frame, text="Tools")
+
+        file_box = ttk.LabelFrame(frame, text="Explain a file — everything Candy can say about "
+                                              "it, and why", padding=8)
+        file_box.pack(fill="x")
+        row = ttk.Frame(file_box)
+        row.pack(fill="x")
+        self.explain_path = tk.StringVar()
+        ttk.Entry(row, textvariable=self.explain_path, width=70).pack(side="left")
+        ttk.Button(row, text="Browse…", command=self.explain_browse).pack(side="left", padx=6)
+        ttk.Button(row, text="Explain", command=lambda: self.explain_file(None)).pack(side="left")
+        ttk.Label(file_box, text="Use this on anything a scan flagged before you delete it — it "
+                                 "shows the reasoning, so a false positive is recognisable as one.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
+        url_box = ttk.LabelFrame(frame, text="Check a link before you open it", padding=8)
+        url_box.pack(fill="x", pady=8)
+        url_row = ttk.Frame(url_box)
+        url_row.pack(fill="x")
+        self.check_url_value = tk.StringVar()
+        entry = ttk.Entry(url_row, textvariable=self.check_url_value, width=70)
+        entry.pack(side="left")
+        entry.bind("<Return>", lambda _e: self.check_url())
+        ttk.Button(url_row, text="Check", command=self.check_url).pack(side="left", padx=6)
+        ttk.Button(url_row, text="Check and block", command=lambda: self.check_url(block=True)
+                   ).pack(side="left")
+
+        test_box = ttk.LabelFrame(frame, text="Prove it works", padding=8)
+        test_box.pack(fill="x")
+        test_row = ttk.Frame(test_box)
+        test_row.pack(fill="x")
+        ttk.Button(test_row, text="Run the detection self-test",
+                   command=self.run_selftest).pack(side="left")
+        ttk.Button(test_row, text="Show the technique matrix",
+                   command=self.show_matrix).pack(side="left", padx=6)
+        ttk.Button(test_row, text="Verify Candy's own files",
+                   command=self.check_integrity).pack(side="left")
+        ttk.Label(test_box, text="The self-test replays real injection, persistence and download "
+                                 "techniques through the detection pipeline and reports which "
+                                 "ones were caught. Nothing malicious is executed.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
+        out_box = ttk.LabelFrame(frame, text="Output", padding=6)
+        out_box.pack(fill="both", expand=True, pady=(8, 0))
+        self.tools_out = tk.Text(out_box, wrap="none", font=("Consolas", 9))
+        tools_scroll = ttk.Scrollbar(out_box, orient="vertical", command=self.tools_out.yview)
+        self.tools_out.configure(yscrollcommand=tools_scroll.set)
+        tools_scroll.pack(side="right", fill="y")
+        self.tools_out.pack(side="left", fill="both", expand=True)
+
+    def _tools_show(self, text: str) -> None:
+        self.tools_out.delete("1.0", "end")
+        self.tools_out.insert("end", text)
+        self.tools_out.see("1.0")
+        self.tabs.select(self._tools_index)
+
+    def _capture(self, func, **fields) -> str:
+        """Run a CLI command with its output captured, so the GUI and the CLI
+        can never drift apart in what they report."""
+        import argparse
+        import contextlib
+        import io
+
+        buffer = io.StringIO()
+        namespace = argparse.Namespace(
+            config=str(self.config_obj.path) if self.config_obj.path else None, **fields)
+        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+            try:
+                func(namespace)
+            except SystemExit:
+                pass
+            except Exception as exc:  # noqa: BLE001
+                buffer.write(f"\n{type(exc).__name__}: {exc}\n")
+        return buffer.getvalue()
+
+    def explain_browse(self) -> None:
+        path = filedialog.askopenfilename(title="Explain this file")
+        if path:
+            self.explain_path.set(path)
+            self.explain_file(path)
+
+    def explain_file(self, path: str | None) -> None:
+        target = path or self.explain_path.get().strip()
+        if not target:
+            messagebox.showinfo("Candy", "Choose a file first.")
+            return
+        self.explain_path.set(target)
+        self.set_status(f"Explaining {target}…")
+
+        def worker() -> None:
+            from .cli import cmd_explain
+
+            text = self._capture(cmd_explain, file=target)
+            self.after(0, lambda: (self._tools_show(text), self.set_status("Explanation ready.")))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def check_url(self, block: bool = False) -> None:
+        url = self.check_url_value.get().strip()
+        if not url:
+            return
+        if block and not messagebox.askyesno(
+                "Block this site",
+                f"Sinkhole {url} in the Windows hosts file and add firewall rules for its "
+                f"current addresses?\n\nBoth are reversible from the Protection tab."):
+            return
+        self.set_status(f"Checking {url}…")
+
+        def worker() -> None:
+            from .cli import cmd_check_url
+
+            text = self._capture(cmd_check_url, url=url, block=block)
+            self.after(0, lambda: (self._tools_show(text), self.set_status("Link checked.")))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def run_selftest(self) -> None:
+        self.set_status("Running the detection self-test…")
+
+        def worker() -> None:
+            from . import coverage as cov
+
+            try:
+                outcomes = cov.run_selftest(self.engine)
+                text = cov.format_report(outcomes)
+            except Exception as exc:  # noqa: BLE001
+                text = f"{type(exc).__name__}: {exc}"
+            self.after(0, lambda: (self._tools_show(text), self.set_status("Self-test finished.")))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def show_matrix(self) -> None:
+        def worker() -> None:
+            from .cli import cmd_coverage
+
+            text = self._capture(cmd_coverage, matrix=True, json=False, live=False, verbose=False)
+            self.after(0, lambda: self._tools_show(text))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def check_integrity(self) -> None:
+        def worker() -> None:
+            from .cli import cmd_integrity
+
+            text = self._capture(cmd_integrity, action="check", out=None)
+            self.after(0, lambda: self._tools_show(text))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _build_statusbar(self) -> None:
         self.statusbar = ttk.Label(self, text="Ready.", anchor="w", relief="sunken", padding=(6, 2))

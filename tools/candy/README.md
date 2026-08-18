@@ -118,14 +118,24 @@ Candy runs unelevated too, and says so in its status when it is limited.
 
 ### The GUI
 
+Everything the CLI can do, the window can do. Nothing here requires a terminal.
+
 | Tab | What it is for |
 |---|---|
 | **Threats** | Live detections, newest first. Select one to see the full evidence, then Kill / Quarantine / Block IP / Trust. |
+| **Scan** | On-demand full-system scan (quick / full / deep) with a time budget and a working Cancel. Results are sortable by severity; each one can be explained, quarantined, killed or trusted. |
+| **Protection** | Every system-level control in one page: download-guard policy, ad and tracker blocking, the local DNS resolver, network hardening, Defender ASR and process mitigations, default-deny firewall, PANIC, and **Undo every change**. Live status for each. |
+| **Extensions** | Browser extension audit — what each installed extension asked for, and which combinations can take a Roblox account without a password. |
+| **Tools** | Explain a file, check a link before opening it, run the detection self-test, show the technique matrix, verify Candy's own files. |
 | **Status** | Live JSON: what is running, what is degraded, how many processes/files/connections have been checked. |
 | **Log** | The forensic log, plus a one-click integrity check of its hash chain. |
 | **Whitelist / Blacklist** | Add or remove names, paths, hashes, IPs and patterns. Saved to `config.json` immediately. |
 | **Quarantine** | Everything quarantined, with restore and permanent-delete. |
 | **Settings** | Response mode, automatic actions, which monitors run, scheduled scans. |
+
+Every action that changes the machine — lockdown, panic, network hardening, quarantine,
+revert — asks before it does anything, and says what it will do in plain language. Long
+jobs run on a background thread, so the window stays usable while a deep scan runs.
 
 ### The command line
 
@@ -370,7 +380,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 341 tests, no pytest required
+python -m unittest discover -s tests -v     # 353 tests, no pytest required
 python run.py coverage                     # technique self-test: 27/27 detected
 python run.py selftest                      # end-to-end pipeline check
 ```
@@ -418,7 +428,7 @@ candy/
   responder.py   kill, quarantine, firewall
   winapi.py      ctypes: WinVerifyTrust, anti-debug, mitigation policy
   engine.py      wiring, scheduler, status
-  gui.py         tkinter interface
+  gui.py         tkinter interface — scan, protection, extensions, tools
   cli.py         command line
 ```
 

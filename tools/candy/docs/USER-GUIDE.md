@@ -105,6 +105,45 @@ never terminated regardless of settings.
 
 ## 6. The other tabs
 
+**Scan** — checks what is *already* on the machine, rather than what arrives next.
+Pick a profile and press Start:
+
+* **Quick** (a minute or two) — running programs, everything set to start with Windows,
+  and the folders payloads land in: Downloads, Desktop, Temp, AppData.
+* **Full** (roughly ten minutes) — all of that plus your whole user folder and Program Files.
+* **Deep** (can take hours) — every fixed drive, plus every DLL loaded inside every process.
+
+Set a time budget if you are impatient; the scan stops cleanly and tells you it did not
+finish. **Cancel** works at any point. Click any result to see exactly why it was flagged,
+then **Explain this file** if you want the full reasoning before deciding.
+
+**Protection** — every change Candy can make to Windows, in one page, with its current
+state shown next to it:
+
+* **Download guard** — how strict to be about files arriving on disk. *Fortress* rejects
+  every unsigned program downloaded from the internet. That is deliberately blunt: a lot of
+  honest small software is unsigned, and it will be quarantined too.
+* **Ads, trackers and malvertising** — on/off, plus importing a public blocklist.
+* **Local DNS resolver** — filters every name lookup on the machine.
+* **Network hardening** — encrypted DNS, forced in your browsers so malware cannot resolve
+  around the block, and legacy name-poisoning protocols turned off.
+* **Kernel policy** — turns on Defender's attack-surface reduction rules, and can harden
+  Roblox so Windows itself refuses to load unsigned DLLs into it.
+* **Firewall** — learn what needs the internet, then lock everything else out. A lockdown
+  undoes itself after two minutes unless you confirm it, so you cannot strand yourself.
+* **PANIC** — all of the above at maximum, in one click.
+* **Undo every change Candy has made** — shows you the list first, then reverses it.
+
+Most of this needs Candy to be running as administrator. It will say so if it is not.
+
+**Extensions** — reads what every browser extension you have installed asked permission
+to do. An extension that can read cookies on roblox.com can take your account without
+ever needing your password; that combination is what this tab is looking for. Candy only
+reads — it never deletes or changes anything in your browser.
+
+**Tools** — explain a file (everything Candy can say about it, and why), check a link
+before you open it, and prove the whole thing works with the detection self-test.
+
 * **Status** — a live report of what is running. Useful when asking for help: copy the
   whole thing into your question.
 * **Log** — everything that has happened, saved to `logs/candy.jsonl`. **Verify

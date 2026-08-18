@@ -652,3 +652,41 @@ Mark-of-the-Web and the page it came from, threat-database matches with rule ids
 structure including the declared original name, entropy, static triage with the exact
 strings that matched, and the download guard's verdict. If nothing is wrong it says so —
 and points out that a scan hit was probably location-based rather than about the file.
+
+---
+
+## 18. The window — every capability, no terminal
+
+Everything above is reachable from `Candy.exe` with no arguments. That matters because
+the person most at risk from an executor is not the person who will open PowerShell.
+
+| Tab | Surfaces |
+|---|---|
+| **Threats** | Live detections with full evidence; kill, quarantine, block, trust |
+| **Scan** | `fullscan` — profile, time budget, working Cancel, per-finding explain/quarantine/kill/trust, JSON export |
+| **Protection** | `guard`, `adblock`, `dns`, `netharden`, `kernel`, `firewall`, `panic`, `revert` — with live state for each |
+| **Extensions** | `extensions` — permission audit across Chromium and Firefox profiles |
+| **Tools** | `explain`, `check-url`, `coverage`, `integrity` |
+| **Status / Log / Lists / Quarantine / Settings** | as before |
+
+Three rules the GUI keeps:
+
+* **Nothing that changes the machine happens without a confirmation dialog** that says
+  what will change and how to undo it. Enforced by test — `test_destructive_actions_ask_first`
+  fails if a new destructive handler is added without one.
+* **Nothing slow runs on the Tk thread.** Scans, hardening, self-tests and status reads
+  all run on workers and marshal back through `after()`. Also enforced by test.
+* **The GUI and the CLI cannot report different things.** Explain, check-url, coverage and
+  integrity call the CLI functions directly with their output captured, so there is one
+  implementation of each, not two. `test_gui_passes_every_argument_the_cli_command_reads`
+  fails if a CLI command grows an argument the GUI does not supply.
+
+Those tests read `gui.py` as source rather than importing it, because Tk cannot be driven
+on a headless build box — which is exactly how the GUI fell a whole feature-generation
+behind the CLI in the first place.
+
+### What is still untested
+
+The GUI has been syntax-checked and structurally tested, not *run*. Tk is not installed on
+the machine Candy is built on. Every Windows-only path — like everything else in section 11
+— needs `candy doctor` and a real session on Windows 10/11 before it can be called verified.
