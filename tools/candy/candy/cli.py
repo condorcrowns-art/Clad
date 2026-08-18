@@ -945,6 +945,139 @@ def cmd_fullscan(args: argparse.Namespace) -> int:
     return 1 if report.findings else 0
 
 
+def cmd_extensions(args: argparse.Namespace) -> int:
+    """Audit installed browser extensions."""
+    from .browserscan import format_report, scan_all
+
+    verdicts = scan_all()
+    if args.json:
+        print(json.dumps([v.to_dict() for v in verdicts], indent=2))
+    else:
+        print(format_report(verdicts, show_all=args.all))
+    return 1 if any(v.score >= 65 for v in verdicts) else 0
+
+
+def cmd_explain(args: argparse.Namespace) -> int:
+    """Everything Candy can say about one file, and why.
+
+    Written for triaging a scan finding: it shows the reasoning rather than a
+    verdict, so a false positive is recognisable as one.
+    """
+    from . import pe
+    from .guard import read_origin
+    from .triage import format_report as format_triage, triage
+    from .util import sha256_file
+    from .winapi import verify_signature
+
+    path = Path(args.file)
+    if not path.is_file():
+        print(f"{path} is not a file", file=sys.stderr)
+        return 2
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+
+    print("=" * 78)
+    print(f"EXPLAIN: {path}")
+    print("=" * 78)
+
+    stat = path.stat()
+    digest = sha256_file(path, max_bytes=None)
+    print(f"Size      : {stat.st_size:,} bytes")
+    print(f"Modified  : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(stat.st_mtime))}")
+    print(f"SHA-256   : {digest}")
+
+    signed = verify_signature(str(path))
+    print(f"Signature : " + {True: "valid and trusted", False: "UNSIGNED or untrusted",
+                             None: "could not be checked (non-Windows, or unreadable)"}[signed])
+
+    origin = read_origin(path)
+    if origin.zone_id is not None:
+        print(f"Origin    : {origin.zone_name}"
+              + (f" — {origin.source}" if origin.source else ""))
+        if origin.source:
+            from .phishing import analyze_url
+
+            site = analyze_url(origin.source)
+            print(f"            source page scores {site.score} ({site.verdict})")
+    else:
+        print("Origin    : no Mark-of-the-Web (not downloaded, or the tag was stripped)")
+
+    print("\n--- threat database ---")
+    detections = engine.analyzer.analyze_file(str(path), sha256=digest, event="explain")
+    if detections:
+        for detection in detections:
+            print(f"  [{detection.severity.upper():8}] {detection.message}")
+            if detection.signature_id:
+                print(f"             rule: {detection.signature_id}")
+    else:
+        print("  no signature, hash or name match")
+
+    print("\n--- PE structure ---")
+    info = pe.inspect(path)
+    if info.is_pe:
+        print(f"  type            : {'DLL' if info.is_dll else 'executable'}, "
+              f"machine 0x{info.machine:04x}")
+        print(f"  declared name   : {info.original_filename or '(none)'}")
+        print(f"  company         : {info.company or '(none)'}")
+        print(f"  product         : {info.product or '(none)'}")
+        print(f"  code entropy    : {info.max_code_entropy:.2f}/8.00"
+              f"{'  ← packed or encrypted' if info.looks_packed else ''}")
+        print(f"  sections        : {', '.join(s.name for s in info.sections)}")
+        renamed = info.renamed_from(path.name)
+        if renamed:
+            print(f"  RENAMED         : this file calls itself '{renamed}'")
+    else:
+        print(f"  not a PE file ({info.error})")
+
+    print("\n--- static triage ---")
+    print(format_triage(triage(path, signature_checker=verify_signature)))
+
+    print("\n--- download guard verdict ---")
+    verdict = engine.guard.assess(path)
+    print(f"  policy    : {engine.guard.policy}")
+    print(f"  score     : {verdict.score}  ({verdict.severity})")
+    for clearance in verdict.clearances:
+        print(f"  CLEAR     {clearance}")
+    for reason in verdict.reasons:
+        print(f"  FLAG      {reason}")
+    print(f"  DECISION  : {verdict.action.upper()}")
+
+    print("\n" + "=" * 78)
+    if verdict.action == "allow" and not detections:
+        print("Nothing here looks wrong. If a scan flagged this file, the finding was")
+        print("probably location-based (an executable somewhere unusual) rather than")
+        print("about the file itself.")
+    else:
+        print("To act:  candy quarantine add \"" + str(path) + "\"")
+        print("To trust: candy list add whitelist hashes " + (digest or ""))
+    return 0
+
+
+def cmd_revert(args: argparse.Namespace) -> int:
+    """Undo every system change Candy has made."""
+    from .uninstall import Reverter, format_plan
+
+    config = Config.load(args.config)
+    engine = Engine(config) if args.yes else None
+    reverter = Reverter(config, engine.log if engine else None)
+
+    if not args.yes:
+        print(format_plan(reverter.plan(), admin=is_admin()))
+        return 0
+
+    print("Reverting every system change Candy has made…\n")
+    result = reverter.revert_all(progress=lambda message: print(f"  {message}"))
+    print()
+    for name, ok, detail in result.steps:
+        print(f"  [{'OK  ' if ok else 'FAIL'}] {name:22} {detail[:90]}")
+    print()
+    print("Quarantined files and logs were left alone — they are evidence.")
+    print("Delete the Candy folder to finish removing it." if result.ok else
+          "Some steps failed; re-run from an administrator prompt.")
+    return 0 if result.ok else 1
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Prove the pipeline works end to end without touching a real threat."""
     config = Config.load(args.config)
@@ -1284,6 +1417,20 @@ def build_parser() -> argparse.ArgumentParser:
     fullscan.add_argument("--quiet", action="store_true")
     fullscan.add_argument("--profiles", action="store_true", help="list the profiles and exit")
     fullscan.set_defaults(func=cmd_fullscan)
+
+    extensions = sub.add_parser("extensions", help="audit installed browser extensions")
+    extensions.add_argument("--all", action="store_true", help="include low-risk extensions")
+    extensions.add_argument("--json", action="store_true")
+    extensions.set_defaults(func=cmd_extensions)
+
+    explain = sub.add_parser("explain", help="everything Candy can say about one file, and why")
+    explain.add_argument("file")
+    explain.set_defaults(func=cmd_explain)
+
+    revert = sub.add_parser("revert", help="undo every system change Candy has made")
+    revert.add_argument("--yes", action="store_true",
+                        help="actually revert (without this it is a dry run)")
+    revert.set_defaults(func=cmd_revert)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=6.0,

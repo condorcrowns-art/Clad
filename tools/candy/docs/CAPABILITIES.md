@@ -578,3 +578,77 @@ artefacts and nothing else: a PE named `fake_stealer.exe` scoring **350 critical
 identified as a renamed `krnl.exe` from its version resource, with the injection triad,
 credential-store access and a Discord webhook read out of it — plus three lower-severity
 name matches. 675 files were skipped without being read, which is what keeps a scan fast.
+
+---
+
+## 17. Browser extensions, BITS, and a clean way out
+
+Three additions that close named gaps.
+
+### Browser extension auditing — two blind spots down to one
+
+A malicious extension is persistence, injection and credential theft in one, and it was
+previously invisible to Candy. It is also the most direct route to the thing this tool
+exists to protect: an extension with the `cookies` permission and a `roblox.com` host match
+can read the `.ROBLOSECURITY` session cookie and sign in as you **without needing your
+password**.
+
+`candy extensions` reads every extension manifest across every Chromium profile (Chrome,
+Edge, Brave, Opera, Opera GX, Vivaldi, Chromium) and every Firefox-family profile, and
+scores what each one is *permitted* to do. An extension cannot exceed its manifest, so the
+manifest is a complete statement of capability.
+
+Two signals carry most of the weight:
+
+| Signal | Why |
+|---|---|
+| **Permission combinations** | `cookies` alone is ordinary. `cookies` + broad host access + no store listing is a harvester. |
+| **No `update_url`** | Store-installed extensions carry one. Without it, the extension was sideloaded, dropped by an installer, or loaded unpacked in developer mode. |
+
+Scored against realistic manifests: a fake "Roblox Theme Pro" asking for `cookies`, `tabs`,
+`webRequest` and `*://*.roblox.com/*` scores **175 critical** and names the reason in
+plain language; Dark Reader with `<all_urls>` and `scripting` scores 40 medium, which is
+honest — it genuinely can read every page; an extension asking only for `storage` scores 0
+and is not shown.
+
+Candy **does not delete browser files**. A half-removed extension breaks the profile, so
+the report tells you to remove it from the browser's own extensions page.
+
+### BITS transfer jobs
+
+BITS is a Windows service that downloads in the background, survives reboots and logoffs,
+and runs outside any browser — which is why malware uses it to fetch its next stage.
+`Get-BitsTransfer` enumeration now runs in the persistence audit. A job pointing anywhere
+other than Windows Update scores **high**; a Windows Update job scores `info`.
+
+Adding this immediately exposed a false positive worth recording: a Windows Update job
+downloading a `.cab` into `%WINDIR%\Temp` tripped the "runs at startup from a temporary
+folder" rule. That rule now requires the target to actually be executable. A downloaded
+data file is not a program running at startup.
+
+**Coverage is now 55 techniques: 12 prevent, 30 detect, 12 partial, and one blind spot** —
+atom bombing, which genuinely has no user-mode signal. The self-test covers 27 of them,
+all passing.
+
+### `candy revert` — one command out
+
+Candy changes a lot of system state: the hosts file, DNS, firewall rules and policy, IFEO
+keys, browser enterprise policy, Defender ASR rules, process mitigations, a boot task,
+protocol registry switches. Any tool that does that owes the user one command that puts it
+all back.
+
+- **Dry run by default.** `candy revert` lists exactly what would be undone and changes
+  nothing. `--yes` performs it.
+- **Never fails closed.** Each step is independent; one failure does not stop the rest.
+  Leaving DNS pointed at a resolver that is no longer running would be worse than any
+  change Candy made.
+- **Evidence is kept.** Quarantined files and logs are deliberately *not* removed.
+
+### `candy explain <file>` — judging a finding instead of guessing
+
+A scan finding is only useful if you can tell a real threat from a false positive.
+`explain` runs every analyser over one file and shows the reasoning: hash, signature,
+Mark-of-the-Web and the page it came from, threat-database matches with rule ids, full PE
+structure including the declared original name, entropy, static triage with the exact
+strings that matched, and the download guard's verdict. If nothing is wrong it says so —
+and points out that a scan hit was probably location-based rather than about the file.

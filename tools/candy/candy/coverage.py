@@ -149,11 +149,19 @@ TECHNIQUES: list[Technique] = [
               PARTIAL, "IFEO debugger form is detected; a replaced binary in System32 is "
               "caught only if it lands in a watched path",
               "Add %SystemRoot%\\System32 to paths.watch to close this."),
-    Technique("per.bits_job", "BITS transfer job", "persistence", NONE,
-              "Not enumerated", "Blind spot. bitsadmin enumeration would close it."),
-    Technique("per.browser_extension", "Malicious browser extension", "persistence", NONE,
-              "Not enumerated",
-              "Blind spot. The browser URL policy limits what one can reach."),
+    Technique("per.bits_job", "BITS transfer job", "persistence", DETECT,
+              "Get-BitsTransfer enumeration in the persistence audit; a job pointing "
+              "anywhere but Windows Update scores high",
+              "BITS downloads survive reboots and run outside the browser."),
+    Technique("per.browser_extension", "Malicious browser extension", "persistence", DETECT,
+              "Extension manifests are read across every Chromium profile and Firefox "
+              "profile and scored on declared permissions",
+              "An extension cannot exceed its manifest, so the manifest is a complete "
+              "statement of capability."),
+    Technique("cred.extension_cookie_theft", "Session cookie theft by extension", "evasion",
+              DETECT,
+              "cookies permission combined with roblox.com host access scores critical",
+              "The most direct route to a stolen Roblox account: no password needed."),
     Technique("per.office_addin", "Office add-in / template", "persistence", PARTIAL,
               "ASR rules block Office child processes and executable content", "", "admin"),
 
@@ -381,6 +389,34 @@ def run_selftest(engine: Any, *, live: bool = False,
     verdict = dns_filter.decide("ads.popads.net")
     record("del.malvertising", verdict.blocked, verdict.reason or "not blocked",
            "resolver decision for a malvertising domain")
+
+    # --- browser extensions ---
+    from .browserscan import assess, parse_chromium_manifest
+
+    hostile = parse_chromium_manifest(json.dumps({
+        "manifest_version": 3, "name": "Roblox Theme Pro", "version": "1.0",
+        "permissions": ["cookies", "tabs", "webRequest"],
+        "host_permissions": ["*://*.roblox.com/*", "<all_urls>"],
+    }), browser="Chrome", profile="Default", extension_id="selftest0000")
+    verdict = assess(hostile)
+    record("per.browser_extension", verdict.score >= 65,
+           verdict.reasons[0] if verdict.reasons else "no reasons produced",
+           "synthetic extension manifest with cookies + roblox host access")
+    record("cred.extension_cookie_theft", "roblox" in verdict.targets,
+           f"targets: {', '.join(verdict.targets) or 'none'}",
+           "same manifest, checking the Roblox-specific rule")
+
+    # --- BITS jobs ---
+    from .persistence import parse_bits_jobs
+
+    jobs = parse_bits_jobs(
+        '"DisplayName","JobState","OwnerAccount","RemoteName","LocalName"\n'
+        '"Updater","Suspended","PC\\user","http://203.0.113.9/stage2.exe",'
+        '"C:\\Users\\user\\AppData\\Local\\Temp\\s2.exe"\n')
+    bits_hits = analyze_entry(jobs[0], engine.analyzer) if jobs else []
+    record("per.bits_job", bool(bits_hits),
+           bits_hits[0].message if bits_hits else "no detection produced",
+           "synthetic BITS job pointing at an unknown host")
 
     # --- log integrity ---
     from .eventlog import verify_chain

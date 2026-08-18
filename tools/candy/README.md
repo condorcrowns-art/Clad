@@ -176,6 +176,10 @@ Candy.exe coverage                               # prove it: run the self-test
 Candy.exe fullscan --profile quick               # find malware already on the machine
 Candy.exe fullscan --profile full --minutes 30 --out report.json
 Candy.exe fullscan --profile deep --act          # every drive, and act on what it finds
+Candy.exe extensions                             # audit browser extensions
+Candy.exe explain suspicious.exe                 # why was this flagged? full reasoning
+Candy.exe revert                                 # dry run: what would be undone
+Candy.exe revert --yes                           # undo every system change Candy made
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
 Candy.exe submit --name "Nova Executor" --target process_name --pattern "re:^nova\.exe$" --severity high
 ```
@@ -366,8 +370,8 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 314 tests, no pytest required
-python run.py coverage                     # technique self-test: 24/24 detected
+python -m unittest discover -s tests -v     # 341 tests, no pytest required
+python run.py coverage                     # technique self-test: 27/27 detected
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -397,6 +401,8 @@ candy/
   dnsproxy.py    local DNS filtering resolver with live phishing analysis
   coverage.py    54-technique coverage matrix and the self-test harness
   fullscan.py    on-demand system scan: processes, modules, persistence, files, streams
+  browserscan.py browser extension auditing by declared permissions
+  uninstall.py   reverts every system change, dry run by default
   pe.py          PE version-resource + entropy inspection
   persistence.py Run keys, tasks, services, Winlogon, IFEO
   notify.py      tray icon and toasts, pure ctypes

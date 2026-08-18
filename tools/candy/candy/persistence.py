@@ -166,6 +166,19 @@ def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection
             signature_id=f"persistence:{sig.id}",
         )
 
+    if entry.source == "bits_job":
+        url = entry.extra.get("url", "")
+        emit("bits_job",
+             (f"A BITS background transfer job '{entry.name}' is queued"
+              + (f" from {url[:80]}" if url else "")
+              + f" to {entry.extra.get('local') or 'an unknown path'}. BITS downloads "
+                f"survive reboots and run outside the browser, which is why malware uses "
+                f"it to fetch its next stage."),
+             "high" if url and not url.lower().startswith(
+                 ("https://download.windowsupdate.com", "http://download.windowsupdate.com",
+                  "https://au.download.windowsupdate.com")) else "info",
+             signature_id="persistence.bits_job")
+
     if entry.source == "com_hijack":
         emit("com_hijack",
              (f"A per-user COM server is registered for {entry.extra.get('clsid', '?')} "
@@ -204,8 +217,12 @@ def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection
             signature_id="persistence.ifeo",
         )
 
+    # Only executables count here. A BITS job downloading a .cab into
+    # %WINDIR%\Temp is Windows Update doing its job, not persistence.
+    executable = image.lower().endswith(
+        (".exe", ".dll", ".scr", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".hta"))
     normalized = normalize_path(image)
-    if normalized and any(hint in normalized + "/" for hint in LOW_TRUST_DIR_HINTS):
+    if executable and normalized and any(hint in normalized + "/" for hint in LOW_TRUST_DIR_HINTS):
         signed = analyzer.signature_checker(image) if analyzer.signature_checker else None
         emit(
             "autostart_from_temp",
@@ -239,7 +256,50 @@ def enumerate_all(config: Config) -> list[PersistenceEntry]:
     entries.extend(_enumerate_services())
     entries.extend(_enumerate_extra_locations())
     entries.extend(_enumerate_com_hijacks())
+    entries.extend(_enumerate_bits_jobs())
     return entries
+
+
+def parse_bits_jobs(text: str) -> list[PersistenceEntry]:
+    """Parse `Get-BitsTransfer` CSV output.
+
+    BITS is a background download service that survives reboots and logoffs,
+    which is exactly why malware uses it to fetch the next stage. A job that
+    has been sitting there for days pointing at a URL is not a Windows update.
+    """
+    import csv
+    import io
+
+    entries: list[PersistenceEntry] = []
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        rows = list(reader)
+    except (csv.Error, TypeError):
+        return entries
+
+    for row in rows:
+        name = (row.get("DisplayName") or row.get("JobId") or "").strip()
+        url = (row.get("RemoteName") or row.get("RemoteURL") or "").strip()
+        local = (row.get("LocalName") or "").strip()
+        if not name and not url:
+            continue
+        entries.append(PersistenceEntry(
+            source="bits_job", name=name or "(unnamed BITS job)",
+            command=local or url, location="BITS",
+            extra={"url": url, "local": local,
+                   "state": (row.get("JobState") or "").strip(),
+                   "owner": (row.get("OwnerAccount") or "").strip()}))
+    return entries
+
+
+def _enumerate_bits_jobs() -> list[PersistenceEntry]:  # pragma: no cover - Windows only
+    output = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                   "Get-BitsTransfer -AllUsers -ErrorAction SilentlyContinue | "
+                   "Select-Object DisplayName,JobState,OwnerAccount,"
+                   "@{n='RemoteName';e={$_.FileList.RemoteName -join ';'}},"
+                   "@{n='LocalName';e={$_.FileList.LocalName -join ';'}} | "
+                   "ConvertTo-Csv -NoTypeInformation"], timeout=60)
+    return parse_bits_jobs(output) if output else []
 
 
 def _enumerate_extra_locations() -> list[PersistenceEntry]:  # pragma: no cover - Windows only
