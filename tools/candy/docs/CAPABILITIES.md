@@ -982,3 +982,90 @@ is code.
 
 New coverage entries: `cred.clipper`, `eva.signer_swap`, `per.baseline_drift` —
 62 techniques, 35 detect.
+
+
+---
+
+## 23. Candy's own security
+
+A security tool is a privilege-escalation target, and this one can be installed
+to start at boot **as SYSTEM**. It also reads its own control data off disk:
+`config.json` decides what is trusted, the mitigations ledger names images that
+reach a PowerShell command line, quarantine metadata names paths a restore
+writes to, and the trust ledger decides what clears without assessment.
+
+An audit of that surface found four real issues. All four are fixed, each with a
+regression test.
+
+### 1. PowerShell command injection via image names — fixed
+
+`candy kernel harden <name>` interpolates the name into
+`Set-ProcessMitigation -Name '<name>'`. `valid_image_name()` rejected path
+separators but **allowed single quotes, backticks, `$` and `;`**, so
+`a'; Start-Process calc; '.exe` passed every check and closed the quoted string.
+`read_mitigations()` interpolated its argument with **no validation at all**.
+
+The reachable path was not only the command line: image names are read back out
+of the mitigations ledger, a JSON file in Candy's data folder. On a machine where
+that folder is writable and Candy runs elevated, that is a file an attacker
+controls reaching a SYSTEM command line.
+
+Fixed by rejecting shell metacharacters outright (an image name never legitimately
+contains one), validating `read_mitigations`, filtering option names read back from
+disk, and adding `ps_quote()` at the call sites — a validator and an escaper fail
+in different ways, and the escaper still holds if the validator is ever loosened.
+
+### 2. Quarantine restore path traversal — fixed
+
+`restore()` wrote the file to whatever `original_path` said in a JSON file sitting
+next to the quarantined payload. Nothing authenticated that JSON. The escalation:
+an unprivileged user drops a crafted `.quarantined` + `.json` pair naming
+`C:\Windows\System32\…`, and a SYSTEM-run Candy writes attacker-controlled
+content there.
+
+Fixed with two independent layers. Quarantine metadata is now **HMAC-authenticated**
+with a key derived from the vault key (or a dedicated `0600` file), so a forged or
+edited one is refused rather than obeyed. And the destination is validated
+regardless: absolute only, no `..` segments, never inside `C:\Windows`,
+`Program Files` or the Start Menu. `--to` remains for a user who knows better.
+
+> The traversal check initially used `Path(raw).parts`, which does not split
+> backslashes off Windows — `C:\Users\..\Windows\x.exe` has one part and sailed
+> through. It splits the normalised path now, and there is a test for exactly that
+> string.
+
+### 3. Open DNS resolver — fixed
+
+`dns.listen` was free-form. Binding the filtering resolver to `0.0.0.0` makes it an
+open resolver, which is a UDP amplifier: a spoofed 40-byte query returns a
+500-byte answer aimed at whoever the attacker names. Candy's resolver exists to
+filter *this* machine's lookups, so anything but loopback is now refused unless
+`dns.allow_public_bind` is explicitly set, and the refusal explains why.
+
+### 4. No lockdown on Candy's own directories — fixed
+
+Nothing set permissions on the data, log, quarantine or config directories. On
+Windows a folder under `C:\` or a user profile inherits user-writable ACLs, which
+is what makes issues 1 and 2 exploitable rather than theoretical.
+
+`candy selfcheck` reports the posture; `candy selfcheck --fix` runs
+`icacls /inheritance:r` and re-grants SYSTEM and Administrators only. It also
+checks key-file modes, unauthenticated legacy quarantine metadata, the DNS
+binding, and specifically flags the **writable folder + SYSTEM boot task**
+combination as critical, because that pairing is the escalation.
+
+The check is included in `candy doctor` output and on the GUI's Tools tab, because
+a posture check nobody runs is not a control.
+
+### Audited and found clean
+
+* **No `shell=True`, `os.system`, `eval` or `exec` anywhere.** Every subprocess
+  call passes an argument list.
+* **XML entity attacks.** Event-log XML is wrapped in `<Events>` before parsing,
+  which makes any `DOCTYPE` malformed, and `ElementTree` does not resolve external
+  entities. Both billion-laughs and external-entity payloads are rejected by the
+  parser — verified, not assumed.
+* **Archive handling** reads `namelist()` and never extracts, so there is no
+  zip-slip path.
+* **Hosts-file and firewall-rule injection** were already closed by
+  `normalize_domain()` and `safe_rule_name()`.

@@ -1595,6 +1595,8 @@ class App(ttk.Frame):
                    command=self.show_matrix).pack(side="left", padx=6)
         ttk.Button(test_row, text="Verify Candy's own files",
                    command=self.check_integrity).pack(side="left")
+        ttk.Button(test_row, text="Check Candy's own security",
+                   command=self.selfcheck).pack(side="left", padx=6)
         ttk.Label(test_box, text="The self-test replays real injection, persistence and download "
                                  "techniques through the detection pipeline and reports which "
                                  "ones were caught. Nothing malicious is executed.",
@@ -1694,6 +1696,18 @@ class App(ttk.Frame):
             from .cli import cmd_coverage
 
             text = self._capture(cmd_coverage, matrix=True, json=False, live=False, verbose=False)
+            self.after(0, lambda: self._tools_show(text))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def selfcheck(self) -> None:
+        def worker() -> None:
+            from .selfprotect import SelfProtect, format_report
+
+            try:
+                text = format_report(SelfProtect(self.config_obj, self.engine.log).check())
+            except Exception as exc:  # noqa: BLE001
+                text = f"{type(exc).__name__}: {exc}"
             self.after(0, lambda: self._tools_show(text))
 
         threading.Thread(target=worker, daemon=True).start()

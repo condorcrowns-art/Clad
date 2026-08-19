@@ -176,7 +176,7 @@ def cmd_quarantine(args: argparse.Namespace) -> int:
     if args.action == "add":
         result = responder.quarantine(args.target, forced=True)
     elif args.action == "restore":
-        result = responder.restore(args.target)
+        result = responder.restore(args.target, getattr(args, "to", None))
     else:
         result = responder.delete_quarantined(args.target)
     print(result)
@@ -212,6 +212,28 @@ def cmd_list(args: argparse.Namespace) -> int:
                   f"disk. Trusting the full path instead is safer — Candy can then "
                   f"pin the exact build.")
     return 0
+
+
+def cmd_selfcheck(args: argparse.Namespace) -> int:
+    """Candy's own security posture — it is a privilege-escalation target too."""
+    from .selfprotect import SelfProtect, format_report
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+    guard = SelfProtect(config, engine.log)
+
+    if args.fix:
+        print("Locking down Candy's own directories…\n")
+        for finding in guard.harden():
+            print(f"  [{'OK  ' if finding.ok else 'FAIL'}] {finding.check}: {finding.detail}")
+        print()
+
+    report = guard.check()
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(format_report(report))
+    return 0 if report.ok else 1
 
 
 def cmd_baseline(args: argparse.Namespace) -> int:
@@ -1575,6 +1597,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     recent = engine.recent(10)
     lines.extend(f"  {d.summary()}" for d in recent) if recent else lines.append("  none")
 
+    # Candy's own posture belongs in the diagnostic, not in a command nobody
+    # runs: a writable control directory on a machine where Candy starts as
+    # SYSTEM matters more than anything else in this report.
+    section("candy's own security")
+    from .selfprotect import SelfProtect, format_report as format_self
+
+    lines.append(format_self(SelfProtect(config).check()))
+
     text = "\n".join(lines)
     print(text)
     if args.out:
@@ -1625,6 +1655,7 @@ def build_parser() -> argparse.ArgumentParser:
     log.set_defaults(func=cmd_log)
 
     quarantine = sub.add_parser("quarantine", help="manage quarantined files")
+    quarantine.add_argument("--to", dest="to", help="restore to this path instead")
     quarantine.add_argument("action", choices=["list", "add", "restore", "delete"])
     quarantine.add_argument("target", nargs="?", help="file path (for add/restore/delete)")
     quarantine.set_defaults(func=cmd_quarantine)
@@ -1635,6 +1666,13 @@ def build_parser() -> argparse.ArgumentParser:
     lists.add_argument("field", nargs="?", choices=["names", "paths", "hashes", "ips", "patterns"])
     lists.add_argument("value", nargs="?")
     lists.set_defaults(func=cmd_list)
+
+    selfcheck = sub.add_parser("selfcheck",
+                               help="check (and fix) the permissions on Candy's own files")
+    selfcheck.add_argument("--fix", action="store_true",
+                           help="lock the directories to SYSTEM and Administrators")
+    selfcheck.add_argument("--json", action="store_true")
+    selfcheck.set_defaults(func=cmd_selfcheck)
 
     baseline = sub.add_parser("baseline",
                               help="snapshot what runs at startup, and see what changes")

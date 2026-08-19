@@ -133,6 +133,18 @@ class PolicyResult:
         return f"{'OK' if self.ok else 'FAILED'}: {self.detail}"
 
 
+def ps_quote(value: str) -> str:
+    """Quote a value for a PowerShell single-quoted string.
+
+    Belt and braces. Every caller here already validates its input with
+    ``valid_image_name``, but a validator and an escaper protect against
+    different mistakes: the validator can be relaxed by a future edit, and this
+    keeps the command line intact if it is. PowerShell escapes a single quote
+    inside a single-quoted string by doubling it.
+    """
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def _powershell(script: str, timeout: int = 90) -> tuple[bool, str]:
     """Run a PowerShell one-liner. Returns (ok, output)."""
     if not IS_WINDOWS:
@@ -259,13 +271,14 @@ class KernelPolicy:
             return PolicyResult(False, "administrator rights are required")
 
         options = ",".join(spec["enable"])
-        ok, output = _powershell(f"Set-ProcessMitigation -Name '{name}' -Enable {options}")
+        ok, output = _powershell(
+            f"Set-ProcessMitigation -Name {ps_quote(name)} -Enable {options}")
         if not ok:
             # Older builds reject unknown option names outright; retry with the
             # subset every supported build understands rather than giving up.
             fallback = ["DEP", "BottomUp", "HighEntropy", "DisableExtensionPoints"]
             ok, output = _powershell(
-                f"Set-ProcessMitigation -Name '{name}' -Enable {','.join(fallback)}")
+                f"Set-ProcessMitigation -Name {ps_quote(name)} -Enable {','.join(fallback)}")
             if not ok:
                 return PolicyResult(False, f"Set-ProcessMitigation failed: {output[:300]}")
             spec = {**spec, "enable": fallback}
@@ -288,14 +301,26 @@ class KernelPolicy:
         entry = ledger.get("mitigations", {}).pop(name.lower(), None)
         if entry is None:
             return PolicyResult(False, f"{name} was not hardened by Candy")
-        options = ",".join(entry.get("options", []))
-        ok, output = _powershell(f"Set-ProcessMitigation -Name '{name}' -Disable {options}")
+        # Options come back out of a JSON file on disk. If that file is
+        # writable by someone who should not be trusted, this is where their
+        # content would reach a command line — so it is filtered, not trusted.
+        options = ",".join(option for option in entry.get("options", [])
+                           if str(option).isalnum())
+        ok, output = _powershell(
+            f"Set-ProcessMitigation -Name {ps_quote(name)} -Disable {options}")
         self._save(ledger)
         return PolicyResult(ok, f"{name}: mitigations removed" if ok else output[:300])
 
     def read_mitigations(self, image: str) -> dict[str, Any]:
+        from .prevent import valid_image_name
+
+        # This one took its argument straight from the caller and interpolated
+        # it into a PowerShell command with no validation at all.
+        name = valid_image_name(image)
+        if name is None:
+            return {}
         ok, output = _powershell(
-            f"Get-ProcessMitigation -Name '{image}' | ConvertTo-Json -Depth 4 -Compress")
+            f"Get-ProcessMitigation -Name {ps_quote(name)} | ConvertTo-Json -Depth 4 -Compress")
         if not ok or not output:
             return {}
         try:

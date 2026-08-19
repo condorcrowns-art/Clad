@@ -7,8 +7,11 @@ triggers from the GUI or CLI always run.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import ipaddress
 import json
+import os
 import shutil
 import subprocess
 import threading
@@ -19,7 +22,8 @@ from typing import Any
 from .config import Config
 from .events import Detection
 from .procmon import children_of, terminate_process
-from .util import IS_WINDOWS, ensure_dir, sha256_file, utc_stamp
+from .util import (IS_WINDOWS, ensure_dir, looks_absolute, normalize_path,
+                   sha256_file, utc_stamp)
 from .winapi import is_admin
 
 # Quarantined files are XOR'd with this byte so they cannot be executed by a
@@ -37,6 +41,36 @@ class ActionResult:
 
     def __str__(self) -> str:
         return f"{'OK' if self.ok else 'FAILED'}: {self.action} — {self.detail}"
+
+
+# Directories a restore must never write into unaided. Restoring quarantined
+# malware *into* System32 is not a recovery operation under any reading.
+PROTECTED_RESTORE_ROOTS = (
+    "c:/windows", "c:/program files", "c:/program files (x86)",
+    "c:/programdata/microsoft/windows/start menu",
+)
+
+
+def unsafe_restore_target(target: Path) -> str | None:
+    """Why this destination must be refused, or None if it is fine."""
+    raw = str(target)
+    if not raw.strip():
+        return "the metadata names no original path"
+    if "\x00" in raw:
+        return "the path contains a null byte"
+    if not looks_absolute(raw):
+        return "the path is not absolute"
+    normalised = normalize_path(raw)
+    # Split on the normalised separator, not Path.parts: off Windows,
+    # Path(r"C:\Users\..\Windows") has a single part and the traversal is
+    # invisible, which is how this check first passed a path it should not have.
+    if ".." in normalised.split("/"):
+        return "the path contains a parent-directory segment"
+    for root in PROTECTED_RESTORE_ROOTS:
+        if normalised == root or normalised.startswith(root.rstrip("/") + "/"):
+            return (f"it is inside {root} — Candy will not put a quarantined file back "
+                    f"into a system directory")
+    return None
 
 
 class Responder:
@@ -152,6 +186,11 @@ class Responder:
             "reason": detection.message if detection else "manual quarantine",
             "signature_id": detection.signature_id if detection else None,
         }
+        # The restore path writes a file to whatever "original_path" says. That
+        # makes this metadata a control file, so it is authenticated: a forged
+        # or edited one is refused rather than obeyed. Matters most when Candy
+        # runs as SYSTEM from the boot task and its folder is not locked down.
+        meta["hmac"] = self._meta_hmac(meta)
         target.with_suffix(target.suffix + ".json").write_text(
             json.dumps(meta, indent=2), encoding="utf-8")
         return self._record(ActionResult("quarantine", True,
@@ -185,8 +224,26 @@ class Responder:
         if not quarantined.exists() or not meta_path.exists():
             return self._record(ActionResult("restore", False,
                                              f"no quarantined file and metadata at {quarantined}"))
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        target = Path(destination) if destination else Path(meta["original_path"])
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            return self._record(ActionResult("restore", False,
+                                             f"unreadable quarantine metadata: {exc}"))
+
+        if not self._meta_authentic(meta):
+            return self._record(ActionResult(
+                "restore", False,
+                "the quarantine metadata for this file is not one Candy wrote, or it "
+                "has been edited. Refusing to restore it — this is exactly what an "
+                "attempt to make Candy write a file somewhere privileged looks like. "
+                "Use --to to choose a destination yourself if you know the file is "
+                "safe."))
+
+        target = Path(destination) if destination else Path(meta.get("original_path") or "")
+        problem = unsafe_restore_target(target)
+        if problem:
+            return self._record(ActionResult("restore", False,
+                                             f"refusing to restore to {target}: {problem}"))
         try:
             ensure_dir(target.parent)
             from .vault import Vault, is_encrypted
@@ -216,6 +273,50 @@ class Responder:
                     f"restored to {target}, but it still scores {verdict.score}: "
                     f"{verdict.reasons[0]}"))
         return self._record(ActionResult("restore", True, f"restored to {target}"))
+
+    def _meta_key(self) -> bytes:
+        """A key only Candy can read, used to authenticate quarantine metadata.
+
+        Derived from the vault key when there is one so there is nothing extra
+        to protect; falls back to a dedicated 0600 file. Neither is a defence
+        against an attacker who is already root — it is a defence against one
+        who can write into the quarantine folder but cannot read Candy's keys,
+        which is the realistic case when Candy runs elevated and its data
+        folder does not.
+        """
+        key_path = self.config.data_dir() / "meta.key"
+        try:
+            vault_key = self.config.data_dir() / "vault.key"
+            if vault_key.is_file():
+                return hashlib.sha256(b"candy-quarantine-meta|"
+                                      + vault_key.read_bytes()).digest()
+        except OSError:
+            pass
+        try:
+            if key_path.is_file():
+                return key_path.read_bytes()
+            material = os.urandom(32)
+            key_path.write_bytes(material)
+            try:
+                os.chmod(key_path, 0o600)
+            except OSError:
+                pass
+            return material
+        except OSError:
+            # No key store available: fail closed by returning a value that
+            # will never match a stored HMAC, so restores require --to.
+            return b"\x00" * 32
+
+    def _meta_hmac(self, meta: dict[str, Any]) -> str:
+        payload = json.dumps({k: v for k, v in sorted(meta.items()) if k != "hmac"},
+                             separators=(",", ":"), sort_keys=True).encode("utf-8")
+        return hmac.new(self._meta_key(), payload, hashlib.sha256).hexdigest()
+
+    def _meta_authentic(self, meta: dict[str, Any]) -> bool:
+        recorded = str(meta.get("hmac") or "")
+        if not recorded:
+            return False
+        return hmac.compare_digest(recorded, self._meta_hmac(meta))
 
     def delete_quarantined(self, quarantine_file: str | Path) -> ActionResult:
         quarantined = Path(quarantine_file)

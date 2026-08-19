@@ -232,6 +232,30 @@ class _Server(socketserver.ThreadingUDPServer):
     daemon_threads = True
 
 
+def is_loopback(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(str(host).strip()).is_loopback
+    except ValueError:
+        return str(host).strip().lower() in ("localhost", "")
+
+
+def public_bind_problem(host: str, *, allowed: bool = False) -> str | None:
+    """Why binding here would be dangerous, or None if it is fine.
+
+    A DNS resolver that answers the network is an open resolver, and an open
+    resolver is a UDP amplifier: a spoofed 40-byte query becomes a 500-byte
+    answer aimed at whoever the attacker names. Candy's resolver exists to
+    filter *this* machine's lookups, so anything but loopback is refused
+    unless the user has explicitly said otherwise.
+    """
+    if allowed or is_loopback(host):
+        return None
+    return (f"refusing to bind the DNS resolver to {host}: anything but a loopback "
+            f"address makes this an open resolver, which can be abused to amplify "
+            f"traffic at someone else. Set dns.allow_public_bind if you genuinely "
+            f"intend to serve other machines, and firewall it yourself.")
+
+
 class DnsProxy:
     """UDP DNS proxy: filter locally, forward the rest upstream."""
 
@@ -253,6 +277,12 @@ class DnsProxy:
 
     # ------------------------------------------------------------ lifecycle
     def start(self, host: str = "127.0.0.1", port: int = DNS_PORT) -> tuple[bool, str]:
+        problem = public_bind_problem(host, allowed=bool(
+            self.config.get("dns.allow_public_bind", False)))
+        if problem:
+            self.last_error = problem
+            self.mode = "refused"
+            return False, problem
         try:
             server = _Server((host, port), _Handler)
         except OSError as exc:

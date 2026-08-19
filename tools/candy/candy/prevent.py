@@ -65,12 +65,32 @@ def is_protected_image(name: str) -> bool:
     return basename(name).lower() in PROTECTED_IMAGE_NAMES
 
 
+# Characters that are harmless in a filename but are syntax to a shell. An
+# image name reaches PowerShell (Set-ProcessMitigation) and the registry, so
+# anything a command interpreter would act on is refused outright rather than
+# escaped — a name containing these is not a real image name in any case.
+SHELL_METACHARACTERS = "'`$;&|<>(){}[]!%^,\n\r\t\x00"
+
+
 def valid_image_name(name: str) -> str | None:
-    """An image *name* — never a path, never anything with separators."""
+    """An image *name* — never a path, never anything with separators.
+
+    This is a security boundary, not a tidiness check: the result is
+    interpolated into a PowerShell command line by ``kernelpolicy`` and written
+    into registry key names by the IFEO blocker. A name like
+    ``a'; Start-Process calc; '.exe`` satisfies "ends with .exe" and used to
+    pass, which made ``candy kernel harden`` an arbitrary-command primitive for
+    anyone who could influence the argument — including through the mitigations
+    ledger on disk.
+    """
     candidate = (name or "").strip().strip('"')
     if not candidate or len(candidate) > 120:
         return None
     if any(ch in candidate for ch in '\\/:*?"<>|\r\n\t'):
+        return None
+    if any(ch in candidate for ch in SHELL_METACHARACTERS):
+        return None
+    if candidate in (".", "..") or candidate.startswith("-"):
         return None
     if not candidate.lower().endswith((".exe", ".scr", ".com")):
         return None

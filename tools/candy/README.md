@@ -202,6 +202,8 @@ Candy.exe baseline save                          # snapshot what runs at startup
 Candy.exe baseline diff                          # what has been added since
 Candy.exe clipboard probe                        # bait a clipboard hijacker
 Candy.exe selfupdate check                       # is there a newer Candy?
+Candy.exe selfcheck                              # Candy's own security posture
+Candy.exe selfcheck --fix                        # lock its folders to SYSTEM + Administrators
 Candy.exe revert                                 # dry run: what would be undone
 Candy.exe revert --yes                           # undo every system change Candy made
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
@@ -394,7 +396,7 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 478 tests, no pytest required
+python -m unittest discover -s tests -v     # 506 tests, no pytest required
 python run.py coverage                     # technique self-test: 34/34 detected
 python run.py selftest                      # end-to-end pipeline check
 ```
@@ -424,6 +426,7 @@ candy/
   baseline.py    autostart snapshot and diff — what is new since known-good
   clipboard.py   clipper detection, passive and by active decoy
   selfupdate.py  signed, hash-pinned, staged self-update (unconfigured by design)
+  selfprotect.py Candy's own attack surface: directory ACLs and posture checks
   adblock.py     ad / tracker / malvertising hosts blocking, importable lists
   phishing.py    homograph, typosquat and bait analysis with no feed
   kernelpolicy.py  ASR rules, process mitigations, WDAC — enforced by Windows' kernel

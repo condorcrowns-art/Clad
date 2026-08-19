@@ -91,7 +91,7 @@ class TabCoverageTests(unittest.TestCase):
                         "extensions_scan", "explain_file", "check_url", "run_selftest",
                         "trust_check", "trust_pin", "trust_accept",
                         "apply_level", "credguard_set", "baseline_save",
-                        "baseline_diff", "clipboard_probe"):
+                        "baseline_diff", "clipboard_probe", "selfcheck"):
             self.assertIn(handler, methods, f"nothing in the GUI can do {handler}")
 
     def test_destructive_actions_ask_first(self):
@@ -156,7 +156,7 @@ class ThreadingTests(unittest.TestCase):
     def test_slow_actions_run_off_the_tk_thread(self):
         source = gui_source()
         for handler in ("def fullscan_start", "def extensions_scan", "def explain_file",
-                        "def run_selftest", "def refresh_protection"):
+                        "def run_selftest", "def refresh_protection", "def selfcheck"):
             start = source.index(handler)
             end = source.index("\n    def ", start + 1)
             body = source[start:end]
