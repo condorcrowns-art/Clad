@@ -261,7 +261,16 @@ class Engine:
                 if now - last_scan >= interval:
                     last_scan = now
                     try:
-                        self.scan_now()
+                        # scan.profile picks how deep the scheduled sweep goes:
+                        # "light" is the running processes plus the watched
+                        # folders; quick/full/deep run the real on-demand
+                        # scanner with a time budget so a scheduled scan can
+                        # never run away with the machine.
+                        profile = str(self.config.get("scan.profile", "light")).lower()
+                        if profile in ("quick", "full", "deep"):
+                            self.full_scan(profile)
+                        else:
+                            self.scan_now()
                     except Exception:  # noqa: BLE001
                         pass
             if self.config.get("updates.auto_update", False):
@@ -275,6 +284,34 @@ class Engine:
             self._stop.wait(30)
 
     # ---------------------------------------------------------------- tasks
+    def full_scan(self, profile: str = "quick",
+                  progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+        """Run the on-demand full-system scanner and report its findings.
+
+        Shared by the scheduler and by anything that wants a real sweep rather
+        than the light pass. Findings above the action threshold are routed
+        through the normal detection path, so the configured response applies
+        exactly as it would to a live event.
+        """
+        from .fullscan import FullScanner
+        from .winapi import verify_signature
+
+        budget = self.config.get("scan.budget_minutes", 20)
+        scanner = FullScanner(self.config, self.analyzer, signature_checker=verify_signature)
+        report = scanner.scan(profile, progress=progress,
+                              time_budget=float(budget) * 60 if budget else None)
+        for finding in report.findings:
+            self.handle_detection(Detection(
+                source="fullscan", kind=finding.kind, subject=finding.subject,
+                message="; ".join(finding.reasons) or f"{finding.kind} finding",
+                severity=finding.severity, path=finding.subject, pid=finding.pid,
+                sha256=finding.sha256, signature_id="fullscan",
+                evidence=finding.to_dict()))
+        self.log.write({"event": "scheduled_fullscan", "profile": profile,
+                        "seconds": round(report.seconds, 1),
+                        "findings": len(report.findings), "worst": report.worst})
+        return report.to_dict()
+
     def scan_now(self, paths: list[str] | None = None,
                  progress: Callable[[str], None] | None = None) -> dict[str, Any]:
         """On-demand scan: every running process plus the watched folders."""

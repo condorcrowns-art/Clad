@@ -802,3 +802,97 @@ different config file, and including entries the user had since removed. The GUI
 and CLI both construct multiple `Config` objects per session, so this was
 reachable in normal use. Fixed with a deep copy, with a regression test that
 fails if `DEFAULTS` is ever mutated.
+
+
+---
+
+## 20. Protection levels — one dial, six seams
+
+Candy had grown a setting per subsystem, and knowing which eight to turn on is
+exactly the expertise the person being robbed does not have. There is now one
+dial with four positions. Every level states what it **breaks** as plainly as
+what it gives — a level that only lists benefits is marketing, not a security
+control, and there is a test that fails if one ever ships without that line.
+
+| Level | Posture | What it breaks |
+|---|---|---|
+| `relaxed` | Watch and tell me. Changes nothing on the system. | Nothing — and it stops nothing either. |
+| `standard` | Block the obvious, act above the threshold, watch the credential stores. | Occasionally quarantines an unsigned tool you wanted. |
+| `strict` | Filtering DNS, forced encrypted DNS, ASR in block mode, Roblox hardened. | Some DLL-based mods and overlays stop working. |
+| `fortress` | Nothing unsigned from the internet gets in; outbound default-deny. | A lot. Expect to grant exceptions regularly. |
+
+**A level is a starting point, not a cage.** Change any setting afterwards and
+`candy level` reports `custom` rather than the machine claiming a posture it no
+longer has — `current()` reads the settings, never the stored label. And the six
+areas can be applied independently:
+
+```powershell
+candy level fortress --only downloads    # fortress-grade download blocking, nothing else
+candy level strict --only network,kernel # harden the network and the kernel, leave responses alone
+candy level standard --dry-run           # show every change first, apply none
+```
+
+Areas: `response`, `downloads`, `network`, `kernel`, `credentials`, `scanning`.
+
+Scanning varies with the level too: `relaxed` does a light pass, `fortress` runs a
+real `full` sweep hourly. Every level bounds its scheduled scan with a time budget,
+because a scheduled scan that runs away with the machine is a scan that gets
+disabled.
+
+---
+
+## 21. Credential stores — guarding the thing that actually gets stolen
+
+Everything else in Candy watches for the *executor*. But nobody loses an account
+because an executor ran. They lose it because something read `.ROBLOSECURITY`
+out of the browser cookie database and posted it to a Discord webhook — after
+which the attacker is logged in as them, with no password and no 2FA prompt.
+
+Candy could previously see an **extension** with permission to do that. Nothing
+at all saw a native process doing it directly, which is what every stealer
+bundled with a "free executor" actually does. That was the largest real gap in
+the product for its stated purpose.
+
+Windows can see it, for free, and will report it:
+
+1. `auditpol` enables the **File System** audit subcategory.
+2. A **SACL** goes on the specific files that matter — an audit ACE, not a
+   permission change. Nothing is blocked and nothing is denied.
+3. Every process that opens one produces **Security event 4663**, naming the
+   image and the access it asked for.
+
+Same bargain as the rest of Candy: no driver of our own, but the drivers
+Microsoft already shipped will answer questions if asked properly.
+
+**What is watched:** the Roblox session store (`appStorage.json`), Chromium
+cookie/password/`Local State` files across Chrome, Edge, Brave and Opera GX,
+Firefox profiles, Discord token storage, and Exodus/Electrum wallets.
+
+**What keeps it quiet enough to leave on:** every store names the processes that
+own it. Chrome reading its own cookie jar is not an alert — it happens constantly.
+Anything *else* opening it is the finding. Windows components, Defender, the
+indexer and anything whitelisted are excluded, and `credguard.allow_processes`
+takes user additions.
+
+**Decoys.** Candy also plants files that look exactly like credential stores in
+plausible places — `Login Data.bak`, `leveldb.bak`, `wallet.dat`. Nothing
+legitimate knows they exist, so there is no owner list and no threshold: one
+access is a program walking a stealer's path list. Scored above a real store
+access at 130, because it is the cleanest signal in the whole tool.
+
+Coverage entries: `cred.native_cookie_theft` and `cred.canary`, both **detect**,
+both marked `needs admin`.
+
+### Limits
+
+* **Arming needs administrator.** Without it the analysis still runs; there is
+  simply nothing generating the events.
+* **Detection, not prevention.** A SACL logs; it does not deny. Candy learns the
+  cookie was read, and can then kill and quarantine — but the read already
+  happened. Treat a real hit as "rotate your session now", which is why the
+  detection text says so.
+* **Object-access auditing is chatty at the OS level.** Candy narrows the SACL to
+  specific files rather than whole trees for exactly that reason.
+* **Untested on Windows**, like everything else that touches `auditpol` and
+  `icacls` — the parsers, scoring and event routing are covered by tests; the
+  arming is not.

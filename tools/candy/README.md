@@ -193,6 +193,11 @@ Candy.exe trust check                            # has anything you trusted been
 Candy.exe trust check --revoke                   # stop trusting whatever changed
 Candy.exe trust accept newbuild.exe              # record a new version as known-good
 Candy.exe trust history                          # every build seen, and what each can do
+Candy.exe level                                  # list the four protection levels
+Candy.exe level strict                           # apply one
+Candy.exe level fortress --only downloads        # apply one area of one level
+Candy.exe credguard arm                          # watch your session and password files
+Candy.exe credguard status                       # what is watched, and what decoys are planted
 Candy.exe revert                                 # dry run: what would be undone
 Candy.exe revert --yes                           # undo every system change Candy made
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
@@ -385,8 +390,8 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 394 tests, no pytest required
-python run.py coverage                     # technique self-test: 29/29 detected
+python -m unittest discover -s tests -v     # 435 tests, no pytest required
+python run.py coverage                     # technique self-test: 31/31 detected
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -410,6 +415,8 @@ candy/
   integrity.py   signed self-measurement, platform trust reporting
   guard.py       download rejection: Mark-of-the-Web, archives, fortress policy
   drift.py       trust pinned to a build + per-program capability lineage
+  credguard.py   SACL auditing + decoys on the files that hold your sessions
+  levels.py      one protection dial, six independently applicable areas
   adblock.py     ad / tracker / malvertising hosts blocking, importable lists
   phishing.py    homograph, typosquat and bait analysis with no feed
   kernelpolicy.py  ASR rules, process mitigations, WDAC — enforced by Windows' kernel

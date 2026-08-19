@@ -183,10 +183,20 @@ DEFAULTS: dict[str, Any] = {
         "trusted_public_key": "",
         "require_signature": False,
     },
+    "credguard": {
+        "enabled": False,
+        "canaries": True,
+        "allow_processes": [],
+        "extra_stores": [],
+    },
     "scan": {
         "on_start": False,
         "on_schedule": False,
         "interval_minutes": 120,
+        # "light" is the running processes plus the watched folders. quick,
+        # full and deep run the real on-demand scanner on a schedule.
+        "profile": "light",
+        "budget_minutes": 20,
         "paths": [],
     },
     "logging": {

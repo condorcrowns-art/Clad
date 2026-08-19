@@ -162,6 +162,18 @@ TECHNIQUES: list[Technique] = [
               DETECT,
               "cookies permission combined with roblox.com host access scores critical",
               "The most direct route to a stolen Roblox account: no password needed."),
+    Technique("cred.native_cookie_theft", "Session cookie theft by a native process",
+              "evasion", DETECT,
+              "A SACL on the browser cookie databases and the Roblox session store "
+              "makes Windows log every process that opens them (Security 4663); "
+              "anything that is not the owning application is reported",
+              "Needs administrator to arm the audit policy. The owning browser is "
+              "expected for its own store, which is what keeps this quiet enough to "
+              "leave on.", "admin"),
+    Technique("cred.canary", "Credential-store enumeration", "evasion", DETECT,
+              "Decoy credential files nothing legitimate knows about; one access is "
+              "a program walking a stealer's path list",
+              "The cleanest signal Candy has — no heuristic, no threshold.", "admin"),
     Technique("per.office_addin", "Office add-in / template", "persistence", PARTIAL,
               "ASR rules block Office child processes and executable content", "", "admin"),
 
@@ -422,6 +434,30 @@ def run_selftest(engine: Any, *, live: bool = False,
     record("cred.extension_cookie_theft", "roblox" in verdict.targets,
            f"targets: {', '.join(verdict.targets) or 'none'}",
            "same manifest, checking the Roblox-specific rule")
+
+    # --- credential theft: the payload, not the delivery ---
+    from .credguard import CredentialGuard
+    from .util import expand_path as _expand
+
+    credguard = CredentialGuard(engine.config)
+    cookie_path = str(_expand(
+        r"%LOCALAPPDATA%\Google\Chrome\User Data\Default\Network\Cookies"))
+    theft = credguard.assess(object_name=cookie_path,
+                             process_image=r"C:\Users\p\Downloads\krnl.exe")
+    record("cred.native_cookie_theft", theft is not None and theft.score >= 100,
+           (theft.reasons[0] if theft else "not detected"),
+           "Security 4663: an unsigned download opened the Chrome cookie database")
+
+    benign = credguard.assess(
+        object_name=cookie_path,
+        process_image=r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+    canary = credguard.assess(object_name=r"C:\Users\p\Documents\wallet.dat",
+                              process_image=r"C:\Users\p\AppData\Local\Temp\x.exe")
+    record("cred.canary",
+           canary is not None and canary.canary and benign is None,
+           f"decoy access scored {canary.score if canary else 0}; the browser reading "
+           f"its own cookies produced {'no alert' if benign is None else 'a false positive'}",
+           "a process opened a decoy credential file that nothing legitimate knows about")
 
     # --- exit scam: a trusted build is replaced ---
     import tempfile as _tempfile

@@ -182,10 +182,18 @@
     "trusted_public_key": "",
     "require_signature": false
   },
+  "credguard": {
+    "enabled": false,
+    "canaries": true,
+    "allow_processes": [],
+    "extra_stores": []
+  },
   "scan": {
     "on_start": false,
     "on_schedule": false,
     "interval_minutes": 120,
+    "profile": "light",
+    "budget_minutes": 20,
     "paths": []
   },
   "logging": {

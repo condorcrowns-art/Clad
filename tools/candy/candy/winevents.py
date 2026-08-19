@@ -33,6 +33,7 @@ from typing import Any, Callable, Iterable
 
 from .config import Config
 from .detect import ROBLOX_IMAGE_NAMES, Analyzer
+from .credguard import AUDIT_EVENTS, CredentialGuard
 from .events import Detection
 from .util import IS_WINDOWS, basename, normalize_path
 
@@ -153,6 +154,7 @@ class WindowsEventAnalyzer:
         self.config = config
         self.analyzer = analyzer
         self.self_images = {name.lower() for name in self_images} or {"candy.exe"}
+        self.credguard = CredentialGuard(config)
 
     def analyze(self, record: dict[str, Any]) -> list[Detection]:
         channel = record.get("channel", "")
@@ -367,6 +369,11 @@ class WindowsEventAnalyzer:
 
     # ----------------------------------------------------------- security
     def _security(self, record: dict[str, Any]) -> list[Detection]:
+        # 4663/4656 are the object-access records a SACL produces. They are how
+        # Candy learns that something read the cookie jar — see credguard.py.
+        if record.get("event_id") in AUDIT_EVENTS:
+            finding = self.credguard.from_event(record)
+            return [self.credguard.to_detection(finding)] if finding else []
         if record.get("event_id") != 4688:
             return []
         data = record.get("data", {})

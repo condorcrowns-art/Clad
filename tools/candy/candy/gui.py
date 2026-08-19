@@ -510,6 +510,29 @@ class App(ttk.Frame):
                               "is undone by 'Undo every change' at the bottom.",
                   wraplength=880, foreground="#666").pack(anchor="w", pady=(0, 8))
 
+        # --- protection level: the one dial most people should ever touch
+        level_box = ttk.LabelFrame(frame, text="Protection level", padding=8)
+        level_box.pack(fill="x", pady=4)
+        from . import levels as _levels
+
+        self.level_var = tk.StringVar(value=_levels.current(self.config_obj))
+        for name in _levels.ORDER:
+            level = _levels.LEVELS[name]
+            row = ttk.Frame(level_box)
+            row.pack(fill="x", anchor="w", pady=(2, 0))
+            ttk.Radiobutton(row, text=f"{name.capitalize()} — {level.headline}",
+                            value=name, variable=self.level_var,
+                            command=self.apply_level).pack(anchor="w")
+            ttk.Label(row, text=f"breaks: {level.breaks}", wraplength=800,
+                      foreground="#888").pack(anchor="w", padx=(24, 0))
+        self.level_status = ttk.Label(level_box, text="")
+        self.level_status.pack(anchor="w", pady=(6, 0))
+        ttk.Label(level_box,
+                  text="A level is a starting point, not a cage. Change anything below and "
+                       "Candy reports the result as 'custom' rather than quietly putting it "
+                       "back.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
         # --- download guard
         guard_box = ttk.LabelFrame(frame, text="Download guard — what is allowed to land on disk",
                                    padding=8)
@@ -617,6 +640,29 @@ class App(ttk.Frame):
                    command=self.firewall_verify).pack(side="left", padx=6)
         ttk.Label(fw_box, text="A lockdown reverts itself automatically after two minutes unless "
                                "you confirm it, so a mistake cannot leave you offline.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
+        # --- credential stores
+        cred_box = ttk.LabelFrame(frame, text="Your Roblox session, passwords and cookies",
+                                  padding=8)
+        cred_box.pack(fill="x", pady=4)
+        self.credguard_status = ttk.Label(cred_box, text="")
+        self.credguard_status.pack(anchor="w")
+        cred_row = ttk.Frame(cred_box)
+        cred_row.pack(anchor="w", pady=(6, 0))
+        ttk.Button(cred_row, text="Watch these files",
+                   command=lambda: self.credguard_set(True)).pack(side="left")
+        ttk.Button(cred_row, text="Stop watching",
+                   command=lambda: self.credguard_set(False)).pack(side="left", padx=6)
+        ttk.Button(cred_row, text="Show what is protected",
+                   command=self.credguard_stores).pack(side="left")
+        ttk.Label(cred_box,
+                  text="Nobody loses an account because an executor ran — they lose it "
+                       "because something read .ROBLOSECURITY out of the browser and "
+                       "posted it to a Discord webhook. Candy asks Windows to log every "
+                       "process that opens those files, and plants decoys that nothing "
+                       "legitimate has any reason to touch. Nothing is blocked and no "
+                       "permission is changed.",
                   wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
 
         # --- trusted programs
@@ -1001,6 +1047,87 @@ class App(ttk.Frame):
         self._run(work, busy="Undoing every system change Candy has made…",
                   then=lambda _r: self.refresh_protection())
 
+    def apply_level(self) -> None:
+        from . import levels
+
+        name = self.level_var.get()
+        if name not in levels.LEVELS:
+            return
+        result = levels.plan(self.config_obj, name)
+        if not messagebox.askyesno(
+                f"Switch to {name}",
+                f"{levels.describe(name)}\n\n"
+                f"{len(result.changed)} setting(s) change.\n\nApply it?"):
+            self.level_var.set(levels.current(self.config_obj))
+            return
+
+        def work() -> str:
+            levels.apply(self.config_obj, name)
+            lines = [f"{c.key}: {c.before} → {c.after}" for c in result.changed]
+            for action in result.actions:
+                lines.append(self._level_action(action))
+            return "\n".join(lines) or "nothing changed"
+
+        self._run(work, busy=f"Switching to {name}…", then=lambda _r: self._after_level())
+
+    def _level_action(self, action: str) -> str:
+        from .cli import _apply_level_action
+
+        return _apply_level_action(self.config_obj, self.engine, action)
+
+    def _after_level(self) -> None:
+        """Pull the settings widgets back in line with what the level wrote."""
+        self.mode_var.set(str(self.config_obj.get("response.mode", "observe")))
+        self.auto_kill.set(bool(self.config_obj.get("response.auto_kill")))
+        self.auto_quarantine.set(bool(self.config_obj.get("response.auto_quarantine")))
+        self.auto_firewall.set(bool(self.config_obj.get("response.auto_firewall")))
+        self.auto_block_domains.set(bool(self.config_obj.get("response.auto_block_domains")))
+        self.threshold.set(int(self.config_obj.get("response.action_threshold", 75)))
+        self.guard_policy.set(str(self.config_obj.get("download_guard.policy", "balanced")))
+        self.dns_enabled.set(bool(self.config_obj.get("dns.enabled")))
+        self.scan_schedule.set(bool(self.config_obj.get("scan.on_schedule")))
+        self.scan_interval.set(int(self.config_obj.get("scan.interval_minutes", 120)))
+        self.refresh_protection()
+
+    def credguard_set(self, on: bool) -> None:
+        if on and not messagebox.askyesno(
+                "Watch your credential stores",
+                "Candy will ask Windows to log every process that opens your browser "
+                "cookie and password databases, your Roblox session file, and your "
+                "Discord tokens — and will place decoy files that nothing legitimate "
+                "has any reason to read.\n\n"
+                "Nothing is blocked and no permission is changed: this only adds audit "
+                "entries. Needs administrator.\n\nTurn it on?"):
+            return
+
+        def work() -> str:
+            from .credguard import CredentialGuard
+
+            guard = CredentialGuard(self.config_obj, self.engine.log)
+            result = guard.arm() if on else guard.disarm()
+            lines = [str(result)]
+            lines.extend(f"  watching {label}" for label in result.armed)
+            lines.extend(f"  could not watch {label}" for label in result.skipped)
+            return "\n".join(lines)
+
+        self._run(work, busy=f"{'Arming' if on else 'Disarming'} credential auditing…",
+                  then=lambda _r: self.refresh_protection())
+
+    def credguard_stores(self) -> None:
+        def work() -> str:
+            from .credguard import present_stores
+
+            lines = []
+            for store, path in present_stores(self.config_obj):
+                lines.append(f"[{store.severity.upper()}] {store.label}")
+                lines.append(f"    {path}")
+                lines.append(f"    owned by: {', '.join(store.owners) or 'nothing'}")
+                if store.note:
+                    lines.append(f"    {store.note}")
+            return "\n".join(lines) or "None of the known credential stores exist here."
+
+        self._run(work, busy="Reading credential stores…")
+
     def trust_check(self, revoke: bool) -> None:
         if revoke and not messagebox.askyesno(
                 "Stop trusting changed programs",
@@ -1119,6 +1246,14 @@ class App(ttk.Frame):
             except Exception as exc:  # noqa: BLE001
                 state["kernel_error"] = str(exc)
             try:
+                from . import levels as _lv
+                from .credguard import CredentialGuard
+
+                state["level"] = _lv.current(self.config_obj)
+                state["credguard"] = CredentialGuard(self.config_obj).status()
+            except Exception as exc:  # noqa: BLE001
+                state["credguard_error"] = str(exc)
+            try:
                 from .drift import TrustLedger
 
                 ledger = TrustLedger(self.config_obj)
@@ -1158,6 +1293,22 @@ class App(ttk.Frame):
                       f"{len(kernel.get('asr_rules', {}))} rule(s) active; "
                       f"{len(kernel.get('hardened_processes', {}))} program(s) hardened")
                 if kernel else f"unavailable ({state.get('kernel_error', 'unknown')})")
+
+            if "level" in state:
+                self.level_status.configure(text=f"Currently: {state['level']}")
+                self.level_var.set(state["level"] if state["level"] != "custom"
+                                   else self.level_var.get())
+            credguard = state.get("credguard")
+            if credguard:
+                self.credguard_status.configure(
+                    text=f"{len(credguard.get('stores_present', []))} store(s) found here, "
+                         f"{len(credguard.get('armed', []))} watched, "
+                         f"{len(credguard.get('canaries_planted', []))} decoy(s) planted"
+                         + ("   [not Windows — arming is inert]"
+                            if "windows" not in str(credguard.get("platform", "")) else ""))
+            elif "credguard_error" in state:
+                self.credguard_status.configure(
+                    text=f"unavailable ({state['credguard_error']})")
 
             if "pins" in state:
                 self.trust_status.configure(

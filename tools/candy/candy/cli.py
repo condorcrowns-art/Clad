@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .config import Config
 from .drift import DRIFTABLE_FIELDS
+from .levels import ORDER as LEVEL_NAMES
 from .engine import VERSION, Engine
 from .eventlog import iter_records, verify_chain
 from .events import Detection
@@ -210,6 +211,151 @@ def cmd_list(args: argparse.Namespace) -> int:
             print(f"Note: '{args.value}' trusts ANY file with that name, anywhere on "
                   f"disk. Trusting the full path instead is safer — Candy can then "
                   f"pin the exact build.")
+    return 0
+
+
+def cmd_level(args: argparse.Namespace) -> int:
+    """One dial for how hard Candy pushes, with per-area override."""
+    from . import levels
+
+    config = Config.load(args.config)
+
+    if not args.level:
+        here = levels.current(config)
+        print(f"Current level: {here}\n")
+        for name in levels.ORDER:
+            level = levels.LEVELS[name]
+            mark = "→" if name == here else " "
+            print(f"{mark} {name:9} {level.headline}")
+            print(f"            breaks: {level.breaks}")
+            print()
+        print("candy level <name>              apply a level")
+        print("candy level <name> --only downloads,network   apply only those areas")
+        print("candy level <name> --dry-run    show what would change")
+        print(f"\nAreas: {', '.join(levels.AREAS)}")
+        return 0
+
+    if args.explain:
+        print(levels.describe(args.level))
+        return 0
+
+    areas = args.only.split(",") if args.only else None
+    try:
+        result = levels.plan(config, args.level, areas)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    print(levels.format_plan(result, current_level=levels.current(config)))
+    if args.dry_run:
+        print("\nDry run — nothing was changed.")
+        return 0
+
+    levels.apply(config, args.level, areas)
+    print("\nSettings saved.")
+
+    if not result.actions:
+        return 0
+    if not is_admin():
+        print("\nNot running as administrator — the system changes above were not "
+              "applied. Re-run from an admin prompt to finish.")
+        return 1
+
+    print("\nApplying system changes…")
+    engine = Engine(config)
+    for action in result.actions:
+        print(f"  {_apply_level_action(config, engine, action)}")
+    return 0
+
+
+def _apply_level_action(config: Config, engine: Engine, action: str) -> str:
+    """Run one system-level action named by a protection level."""
+    try:
+        if action == "adblock":
+            from .adblock import AdBlocker
+
+            return f"adblock: {AdBlocker(config).apply()}"
+        if action == "dns":
+            return "dns: enabled in settings — starts with protection"
+        if action == "netharden":
+            from .netharden import NetworkHardener
+
+            results = NetworkHardener(config).apply_all()
+            return "netharden: " + "; ".join(str(r) for r in results)
+        if action == "asr":
+            from .kernelpolicy import KernelPolicy
+
+            return f"asr: {KernelPolicy(config).apply_asr(mode='block')}"
+        if action == "harden_roblox":
+            from .kernelpolicy import KernelPolicy
+
+            policy = KernelPolicy(config)
+            profile = str(config.get("kernel.mitigation_profile", "game"))
+            done = [str(policy.harden_process(image, profile))
+                    for image in config.get("protection.protected_targets") or
+                    ["RobloxPlayerBeta.exe"]]
+            return "harden: " + "; ".join(done)
+        if action == "credguard":
+            from .credguard import CredentialGuard
+
+            return f"credguard: {CredentialGuard(config, engine.log).arm()}"
+        if action == "firewall_lockdown":
+            from .firewall import FirewallController
+
+            ok, detail = FirewallController(config).lockdown(confirm_seconds=120)
+            return f"firewall: {detail}"
+    except Exception as exc:  # noqa: BLE001 - one failed action must not abort the rest
+        return f"{action}: FAILED — {type(exc).__name__}: {exc}"
+    return f"{action}: nothing to do"
+
+
+def cmd_credguard(args: argparse.Namespace) -> int:
+    """Protect and watch the files that hold your sessions and passwords."""
+    from .credguard import CredentialGuard, format_status, present_stores
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+    guard = CredentialGuard(config, engine.log)
+
+    if args.action == "status":
+        print(format_status(guard.status()))
+        return 0
+
+    if args.action == "stores":
+        for store, path in present_stores(config):
+            print(f"[{store.severity.upper():8}] {store.label}")
+            print(f"           {path}")
+            print(f"           owned by: {', '.join(store.owners) or 'nothing in particular'}")
+            if store.note:
+                print(f"           {store.note}")
+        return 0
+
+    if args.action == "arm":
+        result = guard.arm(canaries=not args.no_canaries)
+        print(result)
+        for label in result.armed:
+            print(f"  auditing {label}")
+        for label in result.skipped:
+            print(f"  could not audit {label}")
+        if result.ok:
+            print("\nWindows will now log every process that opens these files, and "
+                  "Candy will tell you when it is not the program that owns them.")
+        return 0 if result.ok else 1
+
+    if args.action == "disarm":
+        print(guard.disarm())
+        return 0
+
+    if args.action == "test":
+        finding = guard.assess(object_name=args.path or "", process_image=args.process or "")
+        if finding is None:
+            print("Not a finding: either not a protected store, or the process that "
+                  "owns it.")
+            return 0
+        print(f"[{finding.severity.upper()}] score {finding.score}")
+        for reason in finding.reasons:
+            print(f"  {reason}")
+        return 1
     return 0
 
 
@@ -1367,6 +1513,23 @@ def build_parser() -> argparse.ArgumentParser:
     lists.add_argument("field", nargs="?", choices=["names", "paths", "hashes", "ips", "patterns"])
     lists.add_argument("value", nargs="?")
     lists.set_defaults(func=cmd_list)
+
+    level = sub.add_parser("level", help="how hard Candy pushes: one dial, four positions")
+    level.add_argument("level", nargs="?", choices=list(LEVEL_NAMES),
+                       help="omit to list the levels and show the current one")
+    level.add_argument("--only", help="apply only these areas, comma separated")
+    level.add_argument("--dry-run", action="store_true", help="show changes, apply nothing")
+    level.add_argument("--explain", action="store_true", help="describe the level in full")
+    level.set_defaults(func=cmd_level)
+
+    credguard = sub.add_parser("credguard",
+                               help="audit the files that hold your Roblox and browser sessions")
+    credguard.add_argument("action", choices=["status", "arm", "disarm", "stores", "test"])
+    credguard.add_argument("--path", help="object path, for 'test'")
+    credguard.add_argument("--process", help="accessing process image, for 'test'")
+    credguard.add_argument("--no-canaries", action="store_true",
+                           help="do not plant decoy credential files")
+    credguard.set_defaults(func=cmd_credguard)
 
     trust = sub.add_parser("trust",
                            help="pin and re-check the builds behind your trust decisions")
