@@ -198,6 +198,157 @@ class DriftDetectionTests(unittest.TestCase):
             self.assertIn("ANY file with that name", text)
 
 
+class LineageTests(unittest.TestCase):
+    """The case path-pinning misses: the program is re-downloaded rather than
+    replaced in place, so there is no prior file at that path to compare."""
+
+    def test_a_build_joins_its_program_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = config_for(tmp)
+            app = Path(tmp) / "loader.exe"
+            app.write_bytes(build_test_pe())
+            ledger = TrustLedger(config)
+            ledger.record_build("loader.exe", app, "a" * 64, capabilities=["download"])
+            self.assertEqual(len(ledger.builds_for("loader.exe")), 1)
+
+    def test_the_same_build_is_not_recorded_twice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = TrustLedger(config_for(tmp))
+            ledger.record_build("loader.exe", "x", "a" * 64)
+            ledger.record_build("loader.exe", "y", "a" * 64)
+            self.assertEqual(len(ledger.builds_for("loader.exe")), 1)
+
+    def test_lineage_is_keyed_by_name_not_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = TrustLedger(config_for(tmp))
+            ledger.record_build("loader.exe", r"C:\one\loader.exe", "a" * 64)
+            self.assertEqual(len(ledger.builds_for(r"D:\somewhere\else\loader.exe")), 1)
+
+    def test_capability_gain_is_measured_against_the_programs_own_past(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = TrustLedger(config_for(tmp))
+            ledger.record_build("loader.exe", "x", "a" * 64,
+                                capabilities=["download", "persistence"])
+            gained, exfil = ledger.capability_gain(
+                "loader.exe", ["download", "persistence", "credentials"], [])
+            self.assertEqual(gained, ["credentials"])
+            self.assertEqual(exfil, [])
+
+    def test_a_capability_the_program_always_had_is_not_a_gain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = TrustLedger(config_for(tmp))
+            ledger.record_build("loader.exe", "x", "a" * 64, capabilities=["injection"])
+            gained, _ = ledger.capability_gain("loader.exe", ["injection"], [])
+            self.assertEqual(gained, [])
+
+    def test_a_new_exfil_channel_is_a_gain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = TrustLedger(config_for(tmp))
+            ledger.record_build("loader.exe", "x", "a" * 64, exfil=[])
+            _, exfil = ledger.capability_gain("loader.exe", [], ["discord_webhook"])
+            self.assertEqual(exfil, ["discord_webhook"])
+
+    def test_a_program_with_no_history_reports_no_gain(self):
+        """Everything would look 'gained' against an empty baseline, which
+        would flag every first sighting as an exit scam."""
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = TrustLedger(config_for(tmp))
+            gained, exfil = ledger.capability_gain(
+                "unknown.exe", ["credentials"], ["discord_webhook"])
+            self.assertEqual((gained, exfil), ([], []))
+
+    def test_accept_records_what_the_build_can_do(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = config_for(tmp)
+            app = Path(tmp) / "tool.exe"
+            app.write_bytes(build_test_pe() + b"\x00https://discord.com/api/webhooks/1/x")
+            build = TrustLedger(config).accept(app)
+            self.assertIsNotNone(build)
+            self.assertIn("discord_webhook", build.exfil)
+
+    def test_lineage_survives_a_reload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = config_for(tmp)
+            TrustLedger(config).record_build("loader.exe", "x", "a" * 64,
+                                             capabilities=["download"])
+            self.assertEqual(len(TrustLedger(config).builds_for("loader.exe")), 1)
+
+    def test_pinning_a_file_also_enrols_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = config_for(tmp)
+            app = Path(tmp) / "tool.exe"
+            app.write_bytes(build_test_pe())
+            TrustLedger(config).pin(app)
+            self.assertEqual(len(TrustLedger(config).builds_for("tool.exe")), 1)
+
+
+class ReDownloadTests(unittest.TestCase):
+    """An executor is re-downloaded every week because Roblox updates break it.
+    The new build lands somewhere new, so nothing at that path ever changed —
+    and a name-based whitelist entry used to clear it unassessed, at score 0."""
+
+    def _setup(self, tmp: str):
+        config = config_for(tmp)
+        config.add_list_entry("whitelist", "names", "loader.exe")
+        guard = guard_for(config, signed=False)
+        first = Path(tmp) / "Downloads" / "loader.exe"
+        first.parent.mkdir(parents=True, exist_ok=True)
+        first.write_bytes(build_test_pe())
+        guard.ledger.accept(first)
+        guard.ledger._cache = guard.ledger._lineage = None
+        return config, guard, first
+
+    def test_the_accepted_build_still_clears(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _config, guard, first = self._setup(tmp)
+            self.assertEqual(guard.assess(first).action, "allow")
+
+    def test_a_new_build_at_a_new_path_is_not_cleared_by_the_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _config, guard, _first = self._setup(tmp)
+            elsewhere = Path(tmp) / "Extracted"
+            elsewhere.mkdir()
+            second = elsewhere / "loader.exe"
+            second.write_bytes(build_test_pe() + b"\x00a different build")
+            verdict = guard.assess(second)
+            self.assertEqual(verdict.clearances, [])
+            self.assertTrue(any("never run before" in reason for reason in verdict.reasons))
+            self.assertEqual(verdict.trust.known_builds, 1)
+
+    def test_a_new_build_that_gained_a_stealer_is_quarantined(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _config, guard, _first = self._setup(tmp)
+            elsewhere = Path(tmp) / "Extracted"
+            elsewhere.mkdir()
+            second = elsewhere / "loader.exe"
+            second.write_bytes(build_test_pe()
+                               + b"\x00CredEnumerateW CryptUnprotectData "
+                                 b"https://discord.com/api/webhooks/1/steal")
+            verdict = guard.assess(second)
+            self.assertEqual(verdict.action, "quarantine")
+            self.assertIn("discord_webhook", verdict.trust.gained_exfil)
+            self.assertTrue(any("no previous build" in reason for reason in verdict.reasons))
+
+    def test_the_reasoning_names_the_capability_in_plain_language(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _config, guard, _first = self._setup(tmp)
+            second = Path(tmp) / "loader.exe"
+            second.write_bytes(build_test_pe()
+                               + b"\x00CredEnumerateW CryptUnprotectData")
+            reasons = " ".join(guard.assess(second).reasons)
+            self.assertIn("saved passwords", reasons)
+
+    def test_accepting_the_new_build_makes_it_clear(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _config, guard, _first = self._setup(tmp)
+            second = Path(tmp) / "loader.exe"
+            second.write_bytes(build_test_pe() + b"\x00honest new feature")
+            self.assertNotEqual(guard.assess(second).action, "allow")
+            guard.ledger.accept(second)
+            guard.ledger._cache = guard.ledger._lineage = None
+            self.assertEqual(guard.assess(second).action, "allow")
+
+
 class GuardIntegrationTests(unittest.TestCase):
     """The exit scam, end to end: trusted yesterday, replaced today."""
 
@@ -263,7 +414,7 @@ class GuardIntegrationTests(unittest.TestCase):
             config.add_list_entry("whitelist", "hashes", sha256_file(app, max_bytes=None))
             verdict = guard_for(config, signed=False).assess(app)
             self.assertEqual(verdict.action, "allow")
-            self.assertIn("on your whitelist", verdict.clearances)
+            self.assertTrue(any("by hash" in c for c in verdict.clearances))
 
 
 if __name__ == "__main__":

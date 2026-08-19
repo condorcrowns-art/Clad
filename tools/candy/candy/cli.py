@@ -225,7 +225,7 @@ def cmd_trust(args: argparse.Namespace) -> int:
     from .winapi import verify_signature
 
     config = Config.load(args.config)
-    engine = Engine(config) if args.revoke else None
+    engine = Engine(config) if args.revoke or args.action == "accept" else None
     ledger = TrustLedger(config, engine.log if engine else None,
                          signature_checker=verify_signature)
 
@@ -238,6 +238,38 @@ def cmd_trust(args: argparse.Namespace) -> int:
             for name in unverifiable:
                 print(f"  {name}")
             print("Re-trust them by full path, or by hash, so they can be pinned.")
+        return 0
+
+    if args.action == "accept":
+        if not args.file:
+            print("'trust accept' needs a file", file=sys.stderr)
+            return 2
+        build = ledger.accept(args.file)
+        if build is None:
+            print(f"{args.file} could not be read", file=sys.stderr)
+            return 2
+        print(f"Recorded this build of {Path(args.file).name}: {build.sha256[:32]}…")
+        if build.capabilities:
+            print(f"  it can: {', '.join(build.capabilities)}")
+        if build.exfil:
+            print(f"  drop channels: {', '.join(build.exfil)}")
+        print("Future builds of this program will be compared against it.")
+        return 0
+
+    if args.action == "history":
+        lineage = ledger.lineage()
+        if not lineage:
+            print("No build history recorded yet.")
+            return 0
+        for name, builds in sorted(lineage.items()):
+            print(f"\n{name} — {len(builds)} build(s)")
+            for build in builds:
+                signed = {True: "signed", False: "unsigned", None: "unknown"}[build.signed]
+                print(f"  {build.sha256[:16]}…  [{signed:8}] first seen {build.first_seen}")
+                if build.capabilities:
+                    print(f"                     can: {', '.join(build.capabilities)}")
+                if build.exfil:
+                    print(f"                     drops to: {', '.join(build.exfil)}")
         return 0
 
     if args.action == "list":
@@ -1338,7 +1370,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     trust = sub.add_parser("trust",
                            help="pin and re-check the builds behind your trust decisions")
-    trust.add_argument("action", choices=["pin", "check", "list"])
+    trust.add_argument("action", choices=["pin", "check", "list", "accept", "history"])
+    trust.add_argument("file", nargs="?", help="file to accept as a known-good build")
     trust.add_argument("--revoke", action="store_true",
                        help="stop trusting anything whose binary changed")
     trust.set_defaults(func=cmd_trust)

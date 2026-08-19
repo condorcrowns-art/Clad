@@ -191,6 +191,8 @@ Candy.exe explain suspicious.exe                 # why was this flagged? full re
 Candy.exe trust pin                              # pin the builds behind your whitelist
 Candy.exe trust check                            # has anything you trusted been replaced?
 Candy.exe trust check --revoke                   # stop trusting whatever changed
+Candy.exe trust accept newbuild.exe              # record a new version as known-good
+Candy.exe trust history                          # every build seen, and what each can do
 Candy.exe revert                                 # dry run: what would be undone
 Candy.exe revert --yes                           # undo every system change Candy made
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
@@ -383,8 +385,8 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 377 tests, no pytest required
-python run.py coverage                     # technique self-test: 28/28 detected
+python -m unittest discover -s tests -v     # 394 tests, no pytest required
+python run.py coverage                     # technique self-test: 29/29 detected
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -407,7 +409,7 @@ candy/
   triage.py      static payload analysis: imports, strings, exfil sinks
   integrity.py   signed self-measurement, platform trust reporting
   guard.py       download rejection: Mark-of-the-Web, archives, fortress policy
-  drift.py       trust pinned to a build, not a name — the exit-scam case
+  drift.py       trust pinned to a build + per-program capability lineage
   adblock.py     ad / tracker / malvertising hosts blocking, importable lists
   phishing.py    homograph, typosquat and bait analysis with no feed
   kernelpolicy.py  ASR rules, process mitigations, WDAC — enforced by Windows' kernel

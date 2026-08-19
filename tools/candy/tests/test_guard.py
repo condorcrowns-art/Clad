@@ -168,7 +168,25 @@ class DownloadGuardTests(unittest.TestCase):
             verdict = guard.assess(self.write_pe(tmp, "krnl.exe"))
             self.assertEqual(verdict.action, "allow")
 
-    def test_whitelisted_file_is_cleared_immediately(self):
+    def test_whitelisting_by_hash_clears_immediately(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = self.write_pe(tmp, "krnl.exe")
+            from candy.util import sha256_file
+
+            config = Config({"paths": {"data": str(root / "d"), "logs": str(root / "l"),
+                                       "quarantine": str(root / "q")},
+                             "whitelist": {"hashes": [sha256_file(path, max_bytes=None)]}},
+                            root / "c.json")
+            guard = DownloadGuard(config, Analyzer(config, make_db()))
+            verdict = guard.assess(path)
+            self.assertEqual(verdict.action, "allow")
+            self.assertTrue(verdict.clearances)
+
+    def test_whitelisting_by_name_alone_does_not_clear_an_unknown_build(self):
+        """Deliberate: a name is a label, not a program. Anything can take it —
+        including next week's build from a site that has since sold out. The
+        old behaviour cleared this instantly at score 0."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config = Config({"paths": {"data": str(root / "d"), "logs": str(root / "l"),
@@ -176,8 +194,26 @@ class DownloadGuardTests(unittest.TestCase):
                              "whitelist": {"names": ["krnl.exe"]}}, root / "c.json")
             guard = DownloadGuard(config, Analyzer(config, make_db()))
             verdict = guard.assess(self.write_pe(tmp, "krnl.exe"))
+            self.assertNotEqual(verdict.action, "allow")
+            self.assertEqual(verdict.clearances, [])
+            self.assertTrue(any("trusted by name" in reason for reason in verdict.reasons))
+
+    def test_a_build_already_accepted_under_a_trusted_name_clears(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = Config({"paths": {"data": str(root / "d"), "logs": str(root / "l"),
+                                       "quarantine": str(root / "q")},
+                             "whitelist": {"names": ["krnl.exe"]}}, root / "c.json")
+            path = self.write_pe(tmp, "krnl.exe")
+            from candy.drift import TrustLedger
+            from candy.util import sha256_file
+
+            TrustLedger(config).record_build("krnl.exe", path,
+                                             sha256_file(path, max_bytes=None))
+            guard = DownloadGuard(config, Analyzer(config, make_db()))
+            verdict = guard.assess(path)
             self.assertEqual(verdict.action, "allow")
-            self.assertIn("on your whitelist", verdict.clearances)
+            self.assertTrue(verdict.clearances)
 
     def test_archive_with_a_known_executor_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

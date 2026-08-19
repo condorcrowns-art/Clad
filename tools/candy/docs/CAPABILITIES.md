@@ -747,9 +747,49 @@ and asks you to re-trust by path instead.
   building; it is not built.
 * **It does not stop you re-trusting it.** Someone who wants an executor will
   click through. That is a real limit and no amount of engineering removes it.
+* **Capability comparison is coarse.** It reads imports and strings. A packed or
+  obfuscated build hides both — though packing is itself scored, and a build that
+  becomes packed when previous ones were not is visible as a change.
+* **A program with no history gets no benefit.** The first build Candy sees
+  establishes the baseline; if that one is already malicious, there is nothing to
+  compare it against. This defends the honest-then-sold-out case, which is what an
+  exit scam is.
 
-Coverage matrix entry: `eva.trusted_update`, marked **partial** — deliberately
-not "prevent".
+### Pinning a path is only half of it
+
+The first version of this only pinned *paths*, and that misses how executors are
+actually used. Roblox updates break them weekly, so people re-download rather than
+letting anything update in place — and the new build lands in a different folder,
+or beside the old one as `krnl (1).exe`. Nothing at that path ever changed, so a
+name-based whitelist entry cleared a file that had never been seen before, **at
+score 0, with no triage at all**. That is the exact moment the exit scam pays off.
+
+So a trusted *name* now carries a **lineage**: every build ever accepted under that
+name, and what each one could do — the triage API groups it imports, and the
+hard-coded drop channels in its strings.
+
+| Situation | Result |
+|---|---|
+| A build already accepted under that name | cleared |
+| A build never seen before under that name | +45, assessed normally, never cleared on the name alone |
+| ...that gained credential access | +90 — "this build can read saved passwords, cookies and browser credential stores; no previous build of it could" |
+| ...that gained an exfil channel no previous build had | +100 — "contains an exfiltration channel no previous build had: discord_webhook" |
+| ...that gained defence evasion / injection / persistence | +80 / +55 / +45 |
+| A program with no recorded history | no gain charged — everything would look "gained" against an empty baseline |
+
+The baseline is **the program's own past**. That is why this works where signatures
+and reputation do not: it needs nobody else to have seen the malicious build first,
+no vendor to publish a hash, and no certificate to be revoked. Measured on the real
+pipeline, an honest build clears; the same program re-downloaded to a different
+folder with `CredEnumerateW`, `CryptUnprotectData` and a Discord webhook added
+scores **342 → quarantine**, and says why in those words.
+
+`candy trust accept <file>` (or "Accept a new build…" in the GUI) is the one-click
+answer when the new version is legitimate: that exact build clears from then on,
+and the *next* one is measured against it too.
+
+Coverage matrix entries: `eva.trusted_update` and `eva.trusted_redownload`, both
+marked **partial** — deliberately not "prevent".
 
 ### A real bug this exposed
 

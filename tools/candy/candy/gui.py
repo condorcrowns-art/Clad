@@ -632,6 +632,8 @@ class App(ttk.Frame):
                    command=lambda: self.trust_check(True)).pack(side="left", padx=6)
         ttk.Button(trust_row, text="Pin current builds",
                    command=self.trust_pin).pack(side="left")
+        ttk.Button(trust_row, text="Accept a new build…",
+                   command=self.trust_accept).pack(side="left", padx=6)
         ttk.Label(trust_box, text="Trust is pinned to a build, not to a name. If a program "
                                   "you trusted is replaced by a different version — the way an "
                                   "exit scam works — Candy stops clearing it and tells you. It "
@@ -1040,6 +1042,41 @@ class App(ttk.Frame):
         self._run(work, busy="Pinning the builds you trust…",
                   then=lambda _r: self.refresh_protection())
 
+    def trust_accept(self) -> None:
+        """Record a new version of something already trusted as known-good.
+
+        This is the one-click answer to "this is a build of X you have never
+        run before": the user looks at it, decides, and from then on that exact
+        build clears — and the next new build is measured against it too.
+        """
+        path = filedialog.askopenfilename(title="Accept this build as known-good")
+        if not path:
+            return
+        if not messagebox.askyesno(
+                "Accept this build",
+                f"Record this exact build as one you trust?\n\n{path}\n\n"
+                f"Candy will clear it from now on, and will compare future versions of "
+                f"this program against what this one can do.\n\n"
+                f"Look at it first if you are not sure — Tools → Explain a file."):
+            return
+
+        def work() -> str:
+            from .drift import TrustLedger
+            from .winapi import verify_signature
+
+            build = TrustLedger(self.config_obj, self.engine.log,
+                                signature_checker=verify_signature).accept(path)
+            if build is None:
+                return f"{path} could not be read."
+            lines = [f"Recorded build {build.sha256[:32]}…"]
+            if build.capabilities:
+                lines.append(f"  it can: {', '.join(build.capabilities)}")
+            if build.exfil:
+                lines.append(f"  drop channels: {', '.join(build.exfil)}")
+            return "\n".join(lines)
+
+        self._run(work, busy="Recording this build…", then=lambda _r: self.refresh_protection())
+
     def _pin_trust(self, field: str, value: str) -> None:
         """Record the build behind a trust decision made from this window."""
         if field not in ("paths", "names"):
@@ -1087,6 +1124,8 @@ class App(ttk.Frame):
                 ledger = TrustLedger(self.config_obj)
                 state["pins"] = len(ledger.load())
                 state["unpinned"] = len(ledger.unverifiable())
+                state["builds"] = sum(len(b) for b in ledger.lineage().values())
+                state["programs"] = len(ledger.lineage())
             except Exception as exc:  # noqa: BLE001
                 state["trust_error"] = str(exc)
             try:
@@ -1122,9 +1161,10 @@ class App(ttk.Frame):
 
             if "pins" in state:
                 self.trust_status.configure(
-                    text=f"{state['pins']} build(s) pinned"
-                         + (f"; {state['unpinned']} entry/entries trusted by name only "
-                            f"— those clear any file with that name"
+                    text=f"{state['pins']} pinned file(s); "
+                         f"{state.get('builds', 0)} build(s) recorded across "
+                         f"{state.get('programs', 0)} program(s)"
+                         + (f"; {state['unpinned']} trusted by name with no build history"
                             if state.get("unpinned") else ""))
             else:
                 self.trust_status.configure(

@@ -340,15 +340,26 @@ class Config:
     def is_whitelisted(self, *, name: str | None = None, path: str | None = None,
                        sha256: str | None = None) -> bool:
         """Whitelist wins over every blacklist and heuristic, by design."""
-        if name and name.lower() in self._whitelist_names:
-            return True
+        return self.whitelist_match(name=name, path=path, sha256=sha256) is not None
+
+    def whitelist_match(self, *, name: str | None = None, path: str | None = None,
+                        sha256: str | None = None) -> str | None:
+        """Which *kind* of trust cleared this, if any: hashes, paths or names.
+
+        The three are not equally strong and callers need to tell them apart. A
+        hash names the exact bytes and cannot be inherited. A path names a
+        location, which a later build can occupy. A name is only a label —
+        anything, anywhere, can take it. Checked strongest first.
+        """
         if sha256 and sha256.lower() in self._whitelist_hashes:
-            return True
+            return "hashes"
         if path:
             for allowed in self._whitelist_paths:
                 if is_within(path, allowed):
-                    return True
-        return False
+                    return "paths"
+        if name and name.lower() in self._whitelist_names:
+            return "names"
+        return None
 
     def is_ip_whitelisted(self, ip: str) -> bool:
         return ip in self._whitelist_ips

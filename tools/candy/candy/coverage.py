@@ -220,6 +220,15 @@ TECHNIQUES: list[Technique] = [
               "same publisher warns rather than quarantines, because that is also what "
               "every honest auto-update looks like. Candy cannot compare signer "
               "identities — WinVerifyTrust answers valid/invalid, not who."),
+    Technique("eva.trusted_redownload",
+              "Exit scam — the new build is downloaded fresh, not replaced in place",
+              "evasion", PARTIAL,
+              "A trusted *name* carries a build history; an unseen build under that "
+              "name is assessed rather than cleared, and scored on what it gained "
+              "over every previous build of the same program",
+              "The baseline is the program's own past, so it needs nobody else to "
+              "have seen the malicious version first. It still cannot judge whether "
+              "the new capability is honest, and the user can accept it in one click."),
 ]
 
 
@@ -439,6 +448,38 @@ def run_selftest(engine: Any, *, live: bool = False,
                "whitelisted file replaced with different bytes after being trusted")
         engine.config.remove_list_entry("whitelist", "paths", str(trusted))
         ledger.forget(trusted)
+
+    # --- exit scam, re-download variant: new build, new path, trusted name ---
+    with _tempfile.TemporaryDirectory() as lineage_tmp:
+        from .drift import TrustLedger as _TrustLedger
+
+        engine.config.add_list_entry("whitelist", "names", "selftest-loader.exe")
+        honest = Path(lineage_tmp) / "downloads" / "selftest-loader.exe"
+        honest.parent.mkdir(parents=True, exist_ok=True)
+        honest.write_bytes(build_test_pe())
+        _TrustLedger(engine.config).accept(honest)
+        engine.guard.ledger._cache = engine.guard.ledger._lineage = None
+
+        accepted = engine.guard.assess(honest)
+
+        elsewhere = Path(lineage_tmp) / "extracted"
+        elsewhere.mkdir(parents=True, exist_ok=True)
+        scam = elsewhere / "selftest-loader.exe"
+        scam.write_bytes(build_test_pe() + b"\x00CredEnumerateW CryptUnprotectData "
+                                           b"https://discord.com/api/webhooks/1/x")
+        engine.guard.ledger._cache = engine.guard.ledger._lineage = None
+        rescan = engine.guard.assess(scam)
+
+        record("eva.trusted_redownload",
+               accepted.action == "allow" and rescan.action != "allow"
+               and bool(rescan.trust and rescan.trust.gained_exfil),
+               f"accepted build cleared; unseen build at a new path {rescan.action} "
+               f"at score {rescan.score}, gained "
+               f"{', '.join((rescan.trust.gained_capabilities if rescan.trust else []))}"
+               f" + {', '.join((rescan.trust.gained_exfil if rescan.trust else []))}",
+               "trusted-by-name program re-downloaded to a different folder with "
+               "credential access and a Discord webhook added")
+        engine.config.remove_list_entry("whitelist", "names", "selftest-loader.exe")
 
     # --- BITS jobs ---
     from .persistence import parse_bits_jobs

@@ -1,4 +1,28 @@
 {
-  "updated": "2026-08-19T10:54:23Z",
-  "pins": {}
+  "updated": "2026-08-19T11:07:24Z",
+  "pins": {},
+  "lineage": {
+    "trustedtool.exe": [
+      {
+        "sha256": "c5eb31c3df424fe3c1e66c40ae6b5ec7b709f8886109e7b70b564df3560df868",
+        "first_seen": "2026-08-19T11:07:24Z",
+        "signed": null,
+        "capabilities": [],
+        "exfil": [],
+        "path": "/tmp/tmpho0j3k54/TrustedTool.exe",
+        "size": 1536
+      }
+    ],
+    "selftest-loader.exe": [
+      {
+        "sha256": "c5eb31c3df424fe3c1e66c40ae6b5ec7b709f8886109e7b70b564df3560df868",
+        "first_seen": "2026-08-19T11:07:24Z",
+        "signed": null,
+        "capabilities": [],
+        "exfil": [],
+        "path": "/tmp/tmpy3qrn42k/downloads/selftest-loader.exe",
+        "size": 1536
+      }
+    ]
+  }
 }

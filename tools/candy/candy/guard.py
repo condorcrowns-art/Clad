@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config
-from .drift import DRIFT_SCORE, DriftFinding, TrustLedger
+from .drift import DriftFinding, TrustLedger, TrustVerdict
 from .events import Detection
 from .util import IS_WINDOWS, basename, sha256_file
 
@@ -184,6 +184,7 @@ class DownloadVerdict:
     archive: ArchiveFinding | None = None
     sha256: str | None = None
     drift: DriftFinding | None = None
+    trust: TrustVerdict | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {"path": self.path, "action": self.action, "score": self.score,
@@ -191,7 +192,8 @@ class DownloadVerdict:
                 "clearances": self.clearances, "origin": self.origin.to_dict(),
                 "archive": self.archive.to_dict() if self.archive else None,
                 "sha256": self.sha256,
-                "drift": self.drift.to_dict() if self.drift else None}
+                "drift": self.drift.to_dict() if self.drift else None,
+                "trust": self.trust.to_dict() if self.trust else None}
 
     def summary(self) -> str:
         verb = {"quarantine": "REJECTED", "warn": "FLAGGED", "allow": "allowed"}[self.action]
@@ -226,6 +228,17 @@ class DownloadGuard:
     def policy(self) -> str:
         return str(self.config.get("download_guard.policy", "balanced")).lower()
 
+    def _triage(self, target: Path, *, is_executable: bool):
+        """Static triage, once per assessment, or None when it does not apply."""
+        if not is_executable or not self.config.get("download_guard.triage", True):
+            return None
+        from .triage import triage as run_triage
+
+        try:
+            return run_triage(target, signature_checker=None)
+        except Exception:  # noqa: BLE001 - a triage failure is not a verdict
+            return None
+
     # ------------------------------------------------------------- assess
     def assess(self, path: str | Path) -> DownloadVerdict:
         """Judge one file. Pure decision — takes no action."""
@@ -240,26 +253,34 @@ class DownloadGuard:
 
         name = target.name
         verdict.sha256 = sha256_file(target, max_bytes=None)
-        if self.config.is_whitelisted(name=name, path=str(target), sha256=verdict.sha256):
-            # A whitelist entry that names the exact bytes cannot drift. A name
-            # or a path can: the file it pointed at yesterday may be a
-            # different build today, which is precisely what an exit-scam
-            # update looks like. Trust the entry, not the label.
-            drift = self.ledger.drifted(target, verdict.sha256)
-            if drift is None:
-                verdict.clearances.append("on your whitelist")
-                return verdict
-            verdict.score += DRIFT_SCORE
-            verdict.reasons.append(
-                "this program is on your whitelist, but the file has changed since "
-                "you trusted it"
-                + (" and it is no longer validly signed" if drift.signed_now is False
-                   and drift.signed_before is True else "")
-                + f" (trusted {drift.expected[:12]}…, now {drift.found[:12]}…)")
-            verdict.drift = drift
-
         is_executable = suffix in EXECUTABLE_SUFFIXES
         is_archive = suffix in ARCHIVE_SUFFIXES
+
+        # Static triage is computed once and reused: the trust ruling needs the
+        # capability profile, and so does the scoring below.
+        triage_report = self._triage(target, is_executable=is_executable)
+        capabilities = list((triage_report.capabilities or {}).keys()) if triage_report else []
+        exfil_channels = list((triage_report.exfil or {}).keys()) if triage_report else []
+
+        # --- trust -----------------------------------------------------
+        # A whitelist entry that names the exact bytes cannot be inherited. A
+        # path can be reoccupied by a later build. A *name* is only a label —
+        # the file that takes it next week has never been seen before, which is
+        # exactly the shape of an exit-scam update. Each is judged differently.
+        basis = self.config.whitelist_match(name=name, path=str(target),
+                                            sha256=verdict.sha256)
+        if basis:
+            trust = self.ledger.evaluate(
+                target, verdict.sha256, basis=basis, capabilities=capabilities,
+                exfil=exfil_channels,
+                signed=self.signature_checker(str(target)) if self.signature_checker else None)
+            verdict.trust = trust
+            verdict.drift = trust.drift
+            if trust.cleared:
+                verdict.clearances.extend(trust.clearances)
+                return verdict
+            verdict.score += trust.score
+            verdict.reasons.extend(trust.reasons)
 
         # --- origin ---------------------------------------------------
         if verdict.origin.from_internet:
@@ -297,10 +318,8 @@ class DownloadGuard:
                 verdict.reasons.append("signature could not be verified")
 
         # --- capability -----------------------------------------------
-        if is_executable and self.config.get("download_guard.triage", True):
-            from .triage import triage as run_triage
-
-            report = run_triage(target, signature_checker=None)
+        if triage_report is not None:
+            report = triage_report
             if report.score >= 45:
                 verdict.score += report.score
                 verdict.reasons.append(
