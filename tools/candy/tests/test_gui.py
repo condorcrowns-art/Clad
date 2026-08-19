@@ -88,7 +88,8 @@ class TabCoverageTests(unittest.TestCase):
                         "dns_test", "netharden_apply", "netharden_revert", "kernel_asr",
                         "kernel_harden", "firewall_learn", "firewall_lockdown",
                         "firewall_confirm", "firewall_unlock", "panic", "revert_all",
-                        "extensions_scan", "explain_file", "check_url", "run_selftest"):
+                        "extensions_scan", "explain_file", "check_url", "run_selftest",
+                        "trust_check", "trust_pin"):
             self.assertIn(handler, methods, f"nothing in the GUI can do {handler}")
 
     def test_destructive_actions_ask_first(self):
@@ -101,6 +102,21 @@ class TabCoverageTests(unittest.TestCase):
             end = source.index("\n    def ", start + 1)
             self.assertIn("askyesno", source[start:end],
                           f"{handler.split()[1]} acts without asking the user")
+
+
+    def test_every_whitelist_add_pins_the_build(self):
+        """Trusting from the GUI has to record what was trusted, or the
+        exit-scam defence has a hole exactly where users actually grant
+        trust."""
+        source = gui_source()
+        for handler in ("def action_whitelist", "def scan_trust", "def list_add"):
+            start = source.index(handler)
+            end = source.index("\n    def ", start + 1)
+            body = source[start:end]
+            if "add_list_entry" not in body:
+                continue
+            self.assertIn("_pin_trust", body,
+                          f"{handler.split()[1]} grants trust without pinning the build")
 
 
 class CliBridgeTests(unittest.TestCase):

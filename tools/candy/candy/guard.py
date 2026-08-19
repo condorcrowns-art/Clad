@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config
+from .drift import DRIFT_SCORE, DriftFinding, TrustLedger
 from .events import Detection
 from .util import IS_WINDOWS, basename, sha256_file
 
@@ -182,13 +183,15 @@ class DownloadVerdict:
     origin: Origin = field(default_factory=Origin)
     archive: ArchiveFinding | None = None
     sha256: str | None = None
+    drift: DriftFinding | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {"path": self.path, "action": self.action, "score": self.score,
                 "severity": self.severity, "reasons": self.reasons,
                 "clearances": self.clearances, "origin": self.origin.to_dict(),
                 "archive": self.archive.to_dict() if self.archive else None,
-                "sha256": self.sha256}
+                "sha256": self.sha256,
+                "drift": self.drift.to_dict() if self.drift else None}
 
     def summary(self) -> str:
         verb = {"quarantine": "REJECTED", "warn": "FLAGGED", "allow": "allowed"}[self.action]
@@ -214,6 +217,8 @@ class DownloadGuard:
         self.analyzer = analyzer
         self.responder = responder
         self.signature_checker = signature_checker
+        # Trust is pinned to a build, not to a name. See candy/drift.py.
+        self.ledger = TrustLedger(config, signature_checker=signature_checker)
         self.assessed = 0
         self.rejected = 0
 
@@ -236,8 +241,22 @@ class DownloadGuard:
         name = target.name
         verdict.sha256 = sha256_file(target, max_bytes=None)
         if self.config.is_whitelisted(name=name, path=str(target), sha256=verdict.sha256):
-            verdict.clearances.append("on your whitelist")
-            return verdict
+            # A whitelist entry that names the exact bytes cannot drift. A name
+            # or a path can: the file it pointed at yesterday may be a
+            # different build today, which is precisely what an exit-scam
+            # update looks like. Trust the entry, not the label.
+            drift = self.ledger.drifted(target, verdict.sha256)
+            if drift is None:
+                verdict.clearances.append("on your whitelist")
+                return verdict
+            verdict.score += DRIFT_SCORE
+            verdict.reasons.append(
+                "this program is on your whitelist, but the file has changed since "
+                "you trusted it"
+                + (" and it is no longer validly signed" if drift.signed_now is False
+                   and drift.signed_before is True else "")
+                + f" (trusted {drift.expected[:12]}…, now {drift.found[:12]}…)")
+            verdict.drift = drift
 
         is_executable = suffix in EXECUTABLE_SUFFIXES
         is_archive = suffix in ARCHIVE_SUFFIXES

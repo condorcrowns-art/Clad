@@ -65,6 +65,27 @@ class ConfigTests(unittest.TestCase):
         merged = deep_merge({"a": {"x": 1, "y": 2}}, {"a": {"y": 3}})
         self.assertEqual(merged, {"a": {"x": 1, "y": 3}})
 
+    def test_deep_merge_does_not_alias_the_base(self):
+        """A shallow copy here meant a Config wrote *into* DEFAULTS: one
+        whitelist add appended to the module-level list, and every Config
+        built afterwards in the same process inherited it — including ones
+        loaded from a different config file."""
+        base = {"whitelist": {"names": ["a.exe"], "nested": {"deep": [1]}}}
+        merged = deep_merge(base, {})
+        merged["whitelist"]["names"].append("b.exe")
+        merged["whitelist"]["nested"]["deep"].append(2)
+        self.assertEqual(base["whitelist"]["names"], ["a.exe"])
+        self.assertEqual(base["whitelist"]["nested"]["deep"], [1])
+
+    def test_adding_a_list_entry_never_touches_the_module_defaults(self):
+        from candy.config import DEFAULTS
+
+        before = json.dumps(DEFAULTS, sort_keys=True)
+        config = make_config()
+        config.add_list_entry("whitelist", "names", "leaky-canary.exe")
+        self.assertEqual(json.dumps(DEFAULTS, sort_keys=True), before)
+        self.assertFalse(make_config().is_whitelisted(name="leaky-canary.exe"))
+
     def test_defaults_are_conservative(self):
         config = make_config()
         self.assertEqual(config.get("response.mode"), "observe")

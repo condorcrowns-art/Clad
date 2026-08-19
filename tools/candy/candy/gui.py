@@ -474,6 +474,7 @@ class App(ttk.Frame):
                                             f"Only do this for software you installed yourself."):
             return
         self.config_obj.add_list_entry("whitelist", field, str(value))
+        self._pin_trust(field, str(value))
         self.reload_lists()
         self.set_status(f"Whitelisted {field}: {value}")
 
@@ -616,6 +617,26 @@ class App(ttk.Frame):
                    command=self.firewall_verify).pack(side="left", padx=6)
         ttk.Label(fw_box, text="A lockdown reverts itself automatically after two minutes unless "
                                "you confirm it, so a mistake cannot leave you offline.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
+        # --- trusted programs
+        trust_box = ttk.LabelFrame(frame, text="Programs you have trusted", padding=8)
+        trust_box.pack(fill="x", pady=4)
+        self.trust_status = ttk.Label(trust_box, text="")
+        self.trust_status.pack(anchor="w")
+        trust_row = ttk.Frame(trust_box)
+        trust_row.pack(anchor="w", pady=(6, 0))
+        ttk.Button(trust_row, text="Re-check them now",
+                   command=lambda: self.trust_check(False)).pack(side="left")
+        ttk.Button(trust_row, text="Stop trusting anything that changed",
+                   command=lambda: self.trust_check(True)).pack(side="left", padx=6)
+        ttk.Button(trust_row, text="Pin current builds",
+                   command=self.trust_pin).pack(side="left")
+        ttk.Label(trust_box, text="Trust is pinned to a build, not to a name. If a program "
+                                  "you trusted is replaced by a different version — the way an "
+                                  "exit scam works — Candy stops clearing it and tells you. It "
+                                  "cannot judge whether the new version is honest; it can "
+                                  "refuse to assume it.",
                   wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
 
         # --- break glass / revert
@@ -978,6 +999,64 @@ class App(ttk.Frame):
         self._run(work, busy="Undoing every system change Candy has made…",
                   then=lambda _r: self.refresh_protection())
 
+    def trust_check(self, revoke: bool) -> None:
+        if revoke and not messagebox.askyesno(
+                "Stop trusting changed programs",
+                "Candy will remove the whitelist entry for every program whose file has "
+                "changed since you trusted it.\n\n"
+                "Nothing is deleted or blocked — those programs simply get assessed "
+                "normally again, and you can re-trust any of them.\n\nContinue?"):
+            return
+
+        def work() -> str:
+            from .drift import TrustLedger, format_report
+            from .winapi import verify_signature
+
+            ledger = TrustLedger(self.config_obj, self.engine.log,
+                                 signature_checker=verify_signature)
+            report = ledger.check(revoke=revoke)
+            return format_report(report, unverifiable=ledger.unverifiable())
+
+        self._run(work, busy="Re-checking every program you have trusted…",
+                  then=lambda _r: (self.reload_lists(), self.refresh_protection()))
+
+    def trust_pin(self) -> None:
+        def work() -> str:
+            from .drift import TrustLedger
+            from .winapi import verify_signature
+
+            ledger = TrustLedger(self.config_obj, self.engine.log,
+                                 signature_checker=verify_signature)
+            count = ledger.pin_whitelist()
+            unverifiable = ledger.unverifiable()
+            lines = [f"Pinned {count} build(s) behind your whitelist."]
+            if unverifiable:
+                lines.append("")
+                lines.append("Trusted by name only — these clear ANY file with that name:")
+                lines.extend(f"  {name}" for name in unverifiable)
+                lines.append("Re-trust them by full path so they can be pinned.")
+            return "\n".join(lines)
+
+        self._run(work, busy="Pinning the builds you trust…",
+                  then=lambda _r: self.refresh_protection())
+
+    def _pin_trust(self, field: str, value: str) -> None:
+        """Record the build behind a trust decision made from this window."""
+        if field not in ("paths", "names"):
+            return
+
+        def work() -> None:
+            from .drift import TrustLedger
+            from .winapi import verify_signature
+
+            target = Path(value)
+            if target.is_file():
+                TrustLedger(self.config_obj, self.engine.log,
+                            signature_checker=verify_signature).pin(
+                    target, field=field, subject=value)
+
+        threading.Thread(target=work, daemon=True).start()
+
     def refresh_protection(self) -> None:
         """Read the live state of every hardening subsystem, off the Tk thread."""
         def work() -> dict:
@@ -1002,6 +1081,14 @@ class App(ttk.Frame):
                 state["kernel"] = KernelPolicy(self.config_obj).status()
             except Exception as exc:  # noqa: BLE001
                 state["kernel_error"] = str(exc)
+            try:
+                from .drift import TrustLedger
+
+                ledger = TrustLedger(self.config_obj)
+                state["pins"] = len(ledger.load())
+                state["unpinned"] = len(ledger.unverifiable())
+            except Exception as exc:  # noqa: BLE001
+                state["trust_error"] = str(exc)
             try:
                 state["dns"] = self.engine.dns_proxy.status()
             except Exception as exc:  # noqa: BLE001
@@ -1032,6 +1119,16 @@ class App(ttk.Frame):
                       f"{len(kernel.get('asr_rules', {}))} rule(s) active; "
                       f"{len(kernel.get('hardened_processes', {}))} program(s) hardened")
                 if kernel else f"unavailable ({state.get('kernel_error', 'unknown')})")
+
+            if "pins" in state:
+                self.trust_status.configure(
+                    text=f"{state['pins']} build(s) pinned"
+                         + (f"; {state['unpinned']} entry/entries trusted by name only "
+                            f"— those clear any file with that name"
+                            if state.get("unpinned") else ""))
+            else:
+                self.trust_status.configure(
+                    text=f"unavailable ({state.get('trust_error', 'unknown')})")
 
             dns = state.get("dns")
             if dns:
@@ -1475,6 +1572,7 @@ class App(ttk.Frame):
                 f"yourself and recognise."):
             return
         self.config_obj.add_list_entry("whitelist", field, value)
+        self._pin_trust(field, value)
         self.reload_lists()
         self.set_status(f"Whitelisted {field}: {value}")
 
@@ -1499,6 +1597,8 @@ class App(ttk.Frame):
         if not value:
             return
         self.config_obj.add_list_entry(self.list_kind.get(), self.list_field.get(), value)
+        if self.list_kind.get() == "whitelist":
+            self._pin_trust(self.list_field.get(), value)
         self.list_value.set("")
         self.reload_lists()
         self.set_status(f"Added to {self.list_kind.get()}.{self.list_field.get()}: {value}")

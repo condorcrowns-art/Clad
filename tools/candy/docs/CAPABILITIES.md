@@ -690,3 +690,75 @@ behind the CLI in the first place.
 The GUI has been syntax-checked and structurally tested, not *run*. Tk is not installed on
 the machine Candy is built on. Every Windows-only path — like everything else in section 11
 — needs `candy doctor` and a real session on Windows 10/11 before it can be called verified.
+
+
+---
+
+## 19. The exit scam — what trust is actually pinned to
+
+The hardest case for everything above, and the one a user raised directly: an
+executor or utility that was honest when you whitelisted it, and ships a stealer
+three versions later.
+
+It defeats every identity-based layer simultaneously, by construction:
+
+| Layer | Why it fails |
+|---|---|
+| Name signatures | Same name it always had |
+| Hash matching | New build, and nobody has published the hash yet |
+| Authenticode | Often the same certificate, still valid |
+| Reputation / community feed | Reputation was earned honestly, and lags by definition |
+| User consent | Already granted — and the user *wants* it to run |
+
+**Nothing detects the intent behind an update.** That is not a gap to be closed
+with more rules; there is no observable difference between "v2.1 adds a feature"
+and "v2.1 adds a stealer" until the stealer runs.
+
+There is one observable the case always produces: **the file changed.**
+
+`candy/drift.py` pins trust to a build rather than a label. When you whitelist
+something by name or by path, Candy records the SHA-256 of the file that was
+actually there. On the next assessment — a download, a scan, `candy trust check`,
+or the Protection tab — it re-hashes and compares.
+
+| What happened | What Candy does |
+|---|---|
+| Trusted file unchanged | Cleared instantly, as before |
+| Trusted **unsigned** file changed | +70 to the score → **quarantined** at the default threshold |
+| Trusted **signed** file changed | Whitelist clearance withdrawn, warned and logged — not quarantined, because an honest auto-update looks identical |
+| Trusted file was signed and is now unsigned | Called out explicitly as hostile-until-proven-otherwise |
+| Trusted by hash | Untouched — a hash *is* the identity and cannot be inherited |
+| Trusted file is gone | Reported, and the pin is **kept**, so a replacement is checked against the original |
+
+The firewall allowlist has always worked this way — `verify_allowlist()` revokes a
+program whose bytes changed. This applies the same discipline to the whitelist,
+which previously matched on name alone: any file called `helper.exe`, anywhere on
+disk, inherited that trust. `candy trust check` now names those entries explicitly
+and asks you to re-trust by path instead.
+
+### What this does not do
+
+* **It cannot tell you the new build is malicious.** It tells you it is a new
+  build. The judgement is yours, and `candy explain` is there to inform it.
+* **It cannot compare signers.** `WinVerifyTrust` answers valid/invalid, not
+  *who*. A build signed by a different publisher with a valid certificate reads
+  the same as one from the original publisher. Extracting signer identity is
+  achievable from user mode via `WinTrust`/`CryptQueryObject` and is worth
+  building; it is not built.
+* **It does not stop you re-trusting it.** Someone who wants an executor will
+  click through. That is a real limit and no amount of engineering removes it.
+
+Coverage matrix entry: `eva.trusted_update`, marked **partial** — deliberately
+not "prevent".
+
+### A real bug this exposed
+
+Writing the tests surfaced a genuine defect in `config.py`: `deep_merge` used
+`dict(base)`, a shallow copy, so a `Config` built from `DEFAULTS` shared its
+nested lists with the module-level dict. Adding one whitelist entry appended to
+`DEFAULTS["whitelist"]["names"]` — meaning **every `Config` constructed
+afterwards in the same process inherited it**, including ones loaded from a
+different config file, and including entries the user had since removed. The GUI
+and CLI both construct multiple `Config` objects per session, so this was
+reachable in normal use. Fixed with a deep copy, with a regression test that
+fails if `DEFAULTS` is ever mutated.

@@ -5,13 +5,17 @@
     "file_watcher": true,
     "network_monitor": true,
     "behavior_engine": true,
-    "self_protection": true
+    "self_protection": true,
+    "kernel_events": true,
+    "persistence_auditor": true,
+    "anomaly_engine": true
   },
   "response": {
     "mode": "observe",
     "auto_kill": false,
     "auto_quarantine": false,
     "auto_firewall": false,
+    "auto_block_domains": false,
     "action_threshold": 75,
     "protected_processes": [
       "explorer.exe",
@@ -90,6 +94,79 @@
     ],
     "check_module_signatures": true
   },
+  "winevents": {
+    "channels": {
+      "sysmon": true,
+      "defender": true,
+      "security": true
+    },
+    "poll_interval_seconds": 8,
+    "max_events_per_poll": 200
+  },
+  "persistence": {
+    "interval_minutes": 15,
+    "audit_on_start": true
+  },
+  "quarantine": {
+    "encrypt": true,
+    "encrypt_max_bytes": 33554432
+  },
+  "prevent": {
+    "stub_program": "%SystemRoot%\\System32\\systray.exe",
+    "auto_block_execution": false,
+    "auto_contain_network": false
+  },
+  "anomaly": {
+    "sample_interval_seconds": 15,
+    "max_beacon_jitter": 0.2,
+    "fanout_hosts": 25
+  },
+  "download_guard": {
+    "policy": "balanced",
+    "reject_score": 60,
+    "triage": true
+  },
+  "dns": {
+    "enabled": false,
+    "listen": "127.0.0.1",
+    "port": 53,
+    "upstream_resolver": "quad9",
+    "upstream": [],
+    "upstream_timeout_seconds": 3.0,
+    "cache_seconds": 300,
+    "phishing_analysis": true,
+    "phishing_block_score": 70,
+    "set_system_dns": true
+  },
+  "adblock": {
+    "enabled": false,
+    "categories": [
+      "ads",
+      "trackers",
+      "malvertising",
+      "fake_download"
+    ],
+    "allow": [],
+    "max_entries": 60000,
+    "lists": []
+  },
+  "phishing": {
+    "enabled": true,
+    "block_score": 70
+  },
+  "web": {
+    "hosts_file": "",
+    "resolve_and_block_ips": true
+  },
+  "pe": {
+    "inspect": true
+  },
+  "notifications": {
+    "tray_icon": true,
+    "toasts": true,
+    "min_severity": "high",
+    "min_interval_seconds": 20
+  },
   "intel": {
     "enable_lookups": false,
     "virustotal_api_key": "",
@@ -101,7 +178,9 @@
   "updates": {
     "threat_feed_url": "",
     "auto_update": false,
-    "interval_hours": 12
+    "interval_hours": 12,
+    "trusted_public_key": "",
+    "require_signature": false
   },
   "scan": {
     "on_start": false,
@@ -116,6 +195,7 @@
   },
   "whitelist": {
     "names": [],
+    "domains": [],
     "paths": [
       "%SystemRoot%",
       "%ProgramFiles%",
@@ -129,6 +209,7 @@
     "names": [],
     "hashes": [],
     "ips": [],
+    "domains": [],
     "patterns": []
   },
   "ui": {

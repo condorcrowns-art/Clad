@@ -212,6 +212,14 @@ TECHNIQUES: list[Technique] = [
               "Add the drive to paths.watch for file-level coverage.", "admin"),
     Technique("del.lolbin", "certutil / mshta / rundll32 download", "delivery", DETECT,
               "Command-line signatures + ASR script rules", ""),
+    Technique("eva.trusted_update", "Exit scam — a trusted program ships a malicious update",
+              "evasion", PARTIAL,
+              "Trust is pinned to a build: a whitelisted file whose bytes change stops "
+              "being cleared and is re-assessed, and its firewall allowance is revoked",
+              "Detects the update, never the intent. A validly signed update from the "
+              "same publisher warns rather than quarantines, because that is also what "
+              "every honest auto-update looks like. Candy cannot compare signer "
+              "identities — WinVerifyTrust answers valid/invalid, not who."),
 ]
 
 
@@ -405,6 +413,32 @@ def run_selftest(engine: Any, *, live: bool = False,
     record("cred.extension_cookie_theft", "roblox" in verdict.targets,
            f"targets: {', '.join(verdict.targets) or 'none'}",
            "same manifest, checking the Roblox-specific rule")
+
+    # --- exit scam: a trusted build is replaced ---
+    import tempfile as _tempfile
+
+    with _tempfile.TemporaryDirectory() as trust_tmp:
+        from .drift import TrustLedger
+
+        trusted = Path(trust_tmp) / "TrustedTool.exe"
+        trusted.write_bytes(build_test_pe())
+        engine.config.add_list_entry("whitelist", "paths", str(trusted))
+        ledger = TrustLedger(engine.config)
+        ledger.pin(trusted, field="paths", subject=str(trusted))
+
+        cleared = engine.guard.assess(trusted)
+        trusted.write_bytes(build_test_pe() + b"\x00second build")
+        engine.guard.ledger._cache = None
+        replaced = engine.guard.assess(trusted)
+
+        record("eva.trusted_update",
+               cleared.action == "allow" and replaced.action != "allow"
+               and replaced.drift is not None,
+               f"trusted build cleared ({cleared.action}), replaced build "
+               f"{replaced.action} at score {replaced.score}",
+               "whitelisted file replaced with different bytes after being trusted")
+        engine.config.remove_list_entry("whitelist", "paths", str(trusted))
+        ledger.forget(trusted)
 
     # --- BITS jobs ---
     from .persistence import parse_bits_jobs

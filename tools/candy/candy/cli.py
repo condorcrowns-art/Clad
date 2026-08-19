@@ -9,11 +9,12 @@ import time
 from pathlib import Path
 
 from .config import Config
+from .drift import DRIFTABLE_FIELDS
 from .engine import VERSION, Engine
 from .eventlog import iter_records, verify_chain
 from .events import Detection
 from .threatdb import ThreatDB, VALID_TARGETS, make_submission
-from .util import IS_WINDOWS, app_dir
+from .util import IS_WINDOWS, app_dir, expand_path
 from .winapi import is_admin
 from .winevents import sysmon_installed
 
@@ -190,7 +191,70 @@ def cmd_list(args: argparse.Namespace) -> int:
     changed = (config.add_list_entry(args.list, args.field, args.value) if args.action == "add"
                else config.remove_list_entry(args.list, args.field, args.value))
     print(f"{'Updated' if changed else 'No change to'} {args.list}.{args.field}: {args.value}")
+
+    # Trusting something by name or path is trusting a label. Pin the build
+    # that is actually there, so a later replacement is visible.
+    if changed and args.action == "add" and args.list == "whitelist" \
+            and args.field in DRIFTABLE_FIELDS:
+        from .drift import TrustLedger
+        from .winapi import verify_signature
+
+        ledger = TrustLedger(config, signature_checker=verify_signature)
+        target = Path(expand_path(args.value))
+        pin = ledger.pin(target, field=args.field, subject=args.value) \
+            if target.is_file() else None
+        if pin:
+            print(f"Pinned to this build: {pin.sha256[:32]}…")
+            print("If this file changes, Candy will stop trusting it and say so.")
+        elif args.field == "names":
+            print(f"Note: '{args.value}' trusts ANY file with that name, anywhere on "
+                  f"disk. Trusting the full path instead is safer — Candy can then "
+                  f"pin the exact build.")
     return 0
+
+
+def cmd_trust(args: argparse.Namespace) -> int:
+    """Pin, re-check and revoke the builds behind your trust decisions.
+
+    This is the answer to the exit-scam case: the executor or utility that was
+    honest when you whitelisted it and ships a stealer three versions later.
+    Candy cannot judge the new build's intent, but it will not let the old
+    build's trust cover it silently.
+    """
+    from .drift import TrustLedger, format_report
+    from .winapi import verify_signature
+
+    config = Config.load(args.config)
+    engine = Engine(config) if args.revoke else None
+    ledger = TrustLedger(config, engine.log if engine else None,
+                         signature_checker=verify_signature)
+
+    if args.action == "pin":
+        count = ledger.pin_whitelist()
+        print(f"Pinned {count} build(s) behind your whitelist.")
+        unverifiable = ledger.unverifiable()
+        if unverifiable:
+            print("\nTrusted by name only — these clear ANY file with that name:")
+            for name in unverifiable:
+                print(f"  {name}")
+            print("Re-trust them by full path, or by hash, so they can be pinned.")
+        return 0
+
+    if args.action == "list":
+        pins = ledger.load()
+        print(f"{len(pins)} pinned build(s):")
+        for pin in pins.values():
+            signed = {True: "signed", False: "unsigned", None: "unknown"}[pin.signed]
+            print(f"  {pin.sha256[:16]}…  [{signed:8}] {pin.path}")
+            print(f"                     trusted as {pin.field} = {pin.subject}"
+                  f"  ({pin.pinned_at})")
+        return 0
+
+    report = ledger.check(revoke=args.revoke)
+    print(format_report(report, unverifiable=ledger.unverifiable()))
+    if report.findings and not args.revoke:
+        print("\nTo stop trusting everything that changed:  candy trust check --revoke")
+    return 1 if report.findings else 0
 
 
 def cmd_submit(args: argparse.Namespace) -> int:
@@ -1271,6 +1335,13 @@ def build_parser() -> argparse.ArgumentParser:
     lists.add_argument("field", nargs="?", choices=["names", "paths", "hashes", "ips", "patterns"])
     lists.add_argument("value", nargs="?")
     lists.set_defaults(func=cmd_list)
+
+    trust = sub.add_parser("trust",
+                           help="pin and re-check the builds behind your trust decisions")
+    trust.add_argument("action", choices=["pin", "check", "list"])
+    trust.add_argument("--revoke", action="store_true",
+                       help="stop trusting anything whose binary changed")
+    trust.set_defaults(func=cmd_trust)
 
     submit = sub.add_parser("submit", help="build a threat-database submission for a new executor")
     submit.add_argument("--name", required=True, help='product name, e.g. "Nova Executor"')

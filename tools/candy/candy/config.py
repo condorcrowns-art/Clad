@@ -1,6 +1,7 @@
 """Configuration loading, defaults, and the whitelist/blacklist model."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 import threading
@@ -221,17 +222,24 @@ DEFAULTS: dict[str, Any] = {
 
 
 def deep_merge(base: dict, override: dict) -> dict:
-    """Recursively merge ``override`` into a copy of ``base``.
+    """Recursively merge ``override`` into a *deep* copy of ``base``.
 
     Used so a user config that only sets two keys still gets every default,
     and so new defaults appear after an upgrade without editing config.json.
+
+    The copy has to be deep. ``dict(base)`` shares every nested list and dict
+    with the original, which meant a Config built from DEFAULTS was writing
+    *into* DEFAULTS: adding one whitelist entry appended to the module-level
+    default list, and every Config constructed afterwards in the same process
+    inherited it — including ones loaded from a different config file, and
+    including entries the user had since removed.
     """
-    result = dict(base)
+    result = copy.deepcopy(base)
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(result.get(key), dict):
             result[key] = deep_merge(result[key], value)
         else:
-            result[key] = value
+            result[key] = copy.deepcopy(value)
     return result
 
 
