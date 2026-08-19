@@ -301,3 +301,141 @@ def window_titles() -> list[tuple[int, str]]:
         return results
     except Exception:  # noqa: BLE001
         return []
+
+
+# --------------------------------------------------------------- signer name
+# WinVerifyTrust answers "is this signature valid?" and nothing else. It cannot
+# tell you a build signed by a different company with a perfectly valid
+# certificate is not the one you trusted last week — which is exactly the
+# question an exit scam raises. CryptQueryObject plus CertGetNameString answers
+# "signed by whom", from user mode, for free.
+_signer_cache: dict[tuple[str, float, int], str | None] = {}
+_signer_lock = threading.Lock()
+
+CERT_QUERY_OBJECT_FILE = 0x00000001
+CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED = 1 << 10
+CERT_QUERY_FORMAT_FLAG_BINARY = 1 << 1
+CMSG_SIGNER_INFO_PARAM = 6
+CERT_NAME_SIMPLE_DISPLAY_TYPE = 4
+X509_ASN_ENCODING = 0x00000001
+PKCS_7_ASN_ENCODING = 0x00010000
+ENCODING = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+
+
+def signer_name(path: str | os.PathLike) -> str | None:
+    """The subject name on an Authenticode signature, or None.
+
+    None means "could not be determined" — not Windows, unsigned, or an API
+    failure. Callers must never read None as "different signer"; an unknown
+    signer is exactly as informative as no answer, which is not at all.
+
+    Cached per (path, mtime, size) like ``verify_signature``, because the
+    guard and the trust ledger both ask about the same files repeatedly.
+    """
+    if not IS_WINDOWS:
+        return None
+    try:
+        stat = Path(path).stat()
+        key = (str(path).lower(), stat.st_mtime, stat.st_size)
+    except OSError:
+        return None
+
+    with _signer_lock:
+        if key in _signer_cache:
+            return _signer_cache[key]
+
+    name = _read_signer_name(path)
+    with _signer_lock:
+        if len(_signer_cache) > 4096:
+            _signer_cache.clear()
+        _signer_cache[key] = name
+    return name
+
+
+def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cover - Windows only
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        crypt32 = ctypes.windll.crypt32
+        encoding = wintypes.DWORD()
+        content_type = wintypes.DWORD()
+        format_type = wintypes.DWORD()
+        store = ctypes.c_void_p()
+        message = ctypes.c_void_p()
+
+        ok = crypt32.CryptQueryObject(
+            CERT_QUERY_OBJECT_FILE, ctypes.c_wchar_p(str(path)),
+            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED, CERT_QUERY_FORMAT_FLAG_BINARY,
+            0, ctypes.byref(encoding), ctypes.byref(content_type),
+            ctypes.byref(format_type), ctypes.byref(store), ctypes.byref(message), None)
+        if not ok:
+            return None
+
+        try:
+            size = wintypes.DWORD()
+            if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_INFO_PARAM, 0, None,
+                                            ctypes.byref(size)):
+                return None
+            buffer = ctypes.create_string_buffer(size.value)
+            if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_INFO_PARAM, 0, buffer,
+                                            ctypes.byref(size)):
+                return None
+
+            class CRYPT_INTEGER_BLOB(ctypes.Structure):
+                _fields_ = [("cbData", wintypes.DWORD),
+                            ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+            class CERT_INFO(ctypes.Structure):
+                _fields_ = [("dwVersion", wintypes.DWORD),
+                            ("SerialNumber", CRYPT_INTEGER_BLOB),
+                            ("Issuer", CRYPT_INTEGER_BLOB)]
+
+            # The signer info's first two members after the version are the
+            # issuer and serial, which together identify the certificate.
+            class CMSG_SIGNER_INFO(ctypes.Structure):
+                _fields_ = [("dwVersion", wintypes.DWORD),
+                            ("Issuer", CRYPT_INTEGER_BLOB),
+                            ("SerialNumber", CRYPT_INTEGER_BLOB)]
+
+            signer = ctypes.cast(buffer, ctypes.POINTER(CMSG_SIGNER_INFO)).contents
+            info = CERT_INFO()
+            info.Issuer = signer.Issuer
+            info.SerialNumber = signer.SerialNumber
+
+            CERT_FIND_SUBJECT_CERT = 0x000B0000
+            context = crypt32.CertFindCertificateInStore(
+                store, ENCODING, 0, CERT_FIND_SUBJECT_CERT, ctypes.byref(info), None)
+            if not context:
+                return None
+            try:
+                length = crypt32.CertGetNameStringW(
+                    context, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, None, None, 0)
+                if length <= 1:
+                    return None
+                out = ctypes.create_unicode_buffer(length)
+                crypt32.CertGetNameStringW(context, CERT_NAME_SIMPLE_DISPLAY_TYPE,
+                                           0, None, out, length)
+                return (out.value or "").strip() or None
+            finally:
+                crypt32.CertFreeCertificateContext(context)
+        finally:
+            if message:
+                crypt32.CryptMsgClose(message)
+            if store:
+                crypt32.CertCloseStore(store, 0)
+    except Exception:  # noqa: BLE001 - an API failure is not a verdict
+        return None
+
+
+def signer_changed(before: str | None, after: str | None) -> bool:
+    """Did the publisher actually change?
+
+    False whenever either side is unknown. A tool that shouts "different
+    signer!" because it could not read one of them is a tool that gets
+    ignored, and the unknown case is common — unsigned files, older formats,
+    and every non-Windows run.
+    """
+    if not before or not after:
+        return False
+    return before.strip().lower() != after.strip().lower()

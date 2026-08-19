@@ -180,7 +180,15 @@
     "auto_update": false,
     "interval_hours": 12,
     "trusted_public_key": "",
-    "require_signature": false
+    "require_signature": false,
+    "self_update_url": "",
+    "signing_key": "",
+    "require_self_signature": true,
+    "allow_downgrade": false
+  },
+  "clipboard": {
+    "enabled": false,
+    "poll_seconds": 0.8
   },
   "credguard": {
     "enabled": false,

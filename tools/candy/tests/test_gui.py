@@ -90,7 +90,8 @@ class TabCoverageTests(unittest.TestCase):
                         "firewall_confirm", "firewall_unlock", "panic", "revert_all",
                         "extensions_scan", "explain_file", "check_url", "run_selftest",
                         "trust_check", "trust_pin", "trust_accept",
-                        "apply_level", "credguard_set"):
+                        "apply_level", "credguard_set", "baseline_save",
+                        "baseline_diff", "clipboard_probe"):
             self.assertIn(handler, methods, f"nothing in the GUI can do {handler}")
 
     def test_destructive_actions_ask_first(self):
@@ -99,7 +100,8 @@ class TabCoverageTests(unittest.TestCase):
         source = gui_source()
         for handler in ("def firewall_lockdown", "def panic", "def revert_all",
                         "def netharden_apply", "def scan_quarantine",
-                        "def trust_accept", "def apply_level", "def credguard_set"):
+                        "def trust_accept", "def apply_level", "def credguard_set",
+                        "def baseline_save", "def clipboard_probe"):
             start = source.index(handler)
             end = source.index("\n    def ", start + 1)
             self.assertIn("askyesno", source[start:end],

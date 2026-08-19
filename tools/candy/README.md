@@ -198,6 +198,10 @@ Candy.exe level strict                           # apply one
 Candy.exe level fortress --only downloads        # apply one area of one level
 Candy.exe credguard arm                          # watch your session and password files
 Candy.exe credguard status                       # what is watched, and what decoys are planted
+Candy.exe baseline save                          # snapshot what runs at startup
+Candy.exe baseline diff                          # what has been added since
+Candy.exe clipboard probe                        # bait a clipboard hijacker
+Candy.exe selfupdate check                       # is there a newer Candy?
 Candy.exe revert                                 # dry run: what would be undone
 Candy.exe revert --yes                           # undo every system change Candy made
 Candy.exe update --url https://raw.githubusercontent.com/<you>/<repo>/main/threats.json
@@ -390,8 +394,8 @@ If it is still too heavy on a low-end machine, raise the poll intervals in
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v     # 435 tests, no pytest required
-python run.py coverage                     # technique self-test: 31/31 detected
+python -m unittest discover -s tests -v     # 478 tests, no pytest required
+python run.py coverage                     # technique self-test: 34/34 detected
 python run.py selftest                      # end-to-end pipeline check
 ```
 
@@ -417,6 +421,9 @@ candy/
   drift.py       trust pinned to a build + per-program capability lineage
   credguard.py   SACL auditing + decoys on the files that hold your sessions
   levels.py      one protection dial, six independently applicable areas
+  baseline.py    autostart snapshot and diff — what is new since known-good
+  clipboard.py   clipper detection, passive and by active decoy
+  selfupdate.py  signed, hash-pinned, staged self-update (unconfigured by design)
   adblock.py     ad / tracker / malvertising hosts blocking, importable lists
   phishing.py    homograph, typosquat and bait analysis with no feed
   kernelpolicy.py  ASR rules, process mitigations, WDAC — enforced by Windows' kernel

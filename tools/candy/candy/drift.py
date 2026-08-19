@@ -89,6 +89,13 @@ CAPABILITY_GAIN_SCORE = {
 # There is no benign reading of this one.
 EXFIL_GAIN_SCORE = 100
 
+# The publisher on the certificate changed. WinVerifyTrust cannot see this —
+# it answers valid/invalid, not who — so without CryptQueryObject a build
+# signed by a completely different company reads as "still signed, fine".
+# Only charged when *both* names are known; an unreadable signer is not a
+# different signer.
+SIGNER_CHANGE_SCORE = 110
+
 
 @dataclass
 class Pin:
@@ -99,6 +106,7 @@ class Pin:
     field: str = "paths"
     subject: str = ""
     signed: bool | None = None
+    signer: str | None = None
     pinned_at: str = ""
     size: int = 0
 
@@ -140,6 +148,7 @@ class Build:
     sha256: str
     first_seen: str = ""
     signed: bool | None = None
+    signer: str | None = None
     capabilities: list[str] = field(default_factory=list)
     exfil: list[str] = field(default_factory=list)
     path: str = ""
@@ -161,6 +170,8 @@ class TrustVerdict:
     drift: DriftFinding | None = None
     gained_capabilities: list[str] = field(default_factory=list)
     gained_exfil: list[str] = field(default_factory=list)
+    signer_before: str | None = None
+    signer_now: str | None = None
     known_builds: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -168,7 +179,8 @@ class TrustVerdict:
                 "reasons": self.reasons, "clearances": self.clearances,
                 "drift": self.drift.to_dict() if self.drift else None,
                 "gained_capabilities": self.gained_capabilities,
-                "gained_exfil": self.gained_exfil, "known_builds": self.known_builds}
+                "gained_exfil": self.gained_exfil, "known_builds": self.known_builds,
+                "signer_before": self.signer_before, "signer_now": self.signer_now}
 
 
 @dataclass
@@ -277,8 +289,9 @@ class TrustLedger:
                 signed = self.signature_checker(str(target))
             except Exception:  # noqa: BLE001 - a checker failure is not a verdict
                 signed = None
+        signer = self._signer(target)
         pin = Pin(path=str(target), sha256=digest, field=field,
-                  subject=subject or str(target), signed=signed,
+                  subject=subject or str(target), signed=signed, signer=signer,
                   pinned_at=utc_stamp(), size=size)
         pins = self.load()
         pins[self.key_for(target)] = pin
@@ -287,7 +300,7 @@ class TrustLedger:
         # later build of the same name can be compared against it.
         capabilities, exfil = profile_of(target)
         self.record_build(basename(str(target)), target, digest, capabilities=capabilities,
-                          exfil=exfil, signed=signed, size=size)
+                          exfil=exfil, signed=signed, size=size, signer=signer)
         self._write_log("trust_pinned", path=str(target), sha256=digest, field=field)
         return pin
 
@@ -317,7 +330,7 @@ class TrustLedger:
             size = 0
         return self.record_build(basename(str(target)), target, digest,
                                  capabilities=capabilities, exfil=exfil,
-                                 signed=signed, size=size)
+                                 signed=signed, size=size, signer=self._signer(target))
 
     def pin_whitelist(self, *, search_roots: Iterable[str] | None = None) -> int:
         """Pin every file the whitelist currently clears by path or by name.
@@ -411,7 +424,8 @@ class TrustLedger:
 
     def record_build(self, name: str, path: str | Path, sha256: str, *,
                      capabilities: Iterable[str] = (), exfil: Iterable[str] = (),
-                     signed: bool | None = None, size: int = 0) -> Build:
+                     signed: bool | None = None, size: int = 0,
+                     signer: str | None = None) -> Build:
         """Add a build to a program's history, or return the one already there."""
         key = self._program_key(name)
         lineage = self.lineage()
@@ -419,7 +433,7 @@ class TrustLedger:
         for build in builds:
             if build.sha256 == sha256:
                 return build
-        build = Build(sha256=sha256, first_seen=utc_stamp(), signed=signed,
+        build = Build(sha256=sha256, first_seen=utc_stamp(), signed=signed, signer=signer,
                       capabilities=sorted(set(capabilities)), exfil=sorted(set(exfil)),
                       path=str(path), size=size)
         builds.append(build)
@@ -482,6 +496,7 @@ class TrustLedger:
                    if drift.signed_now is False and drift.signed_before is True else "")
                 + f" (trusted {drift.expected[:12]}…, now {drift.found[:12]}…)")
             self._score_capability_gain(verdict, name, capabilities, exfil, target, sha256)
+            self._score_signer_change(verdict, name, target)
             return verdict
 
         # basis == "names": the weakest form, and the one people actually use
@@ -509,6 +524,35 @@ class TrustLedger:
 
         self._score_capability_gain(verdict, name, capabilities, exfil, target, sha256)
         return verdict
+
+    def _signer(self, path: Path) -> str | None:
+        try:
+            from .winapi import signer_name
+
+            return signer_name(str(path))
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _score_signer_change(self, verdict: "TrustVerdict", name: str,
+                             target: Path) -> None:
+        """Charge for a change of publisher, when both names are readable."""
+        from .winapi import signer_changed
+
+        known = [build.signer for build in self.builds_for(name) if build.signer]
+        current = self._signer(target)
+        verdict.signer_now = current
+        verdict.signer_before = known[-1] if known else None
+        if not known or not current:
+            return
+        if any(not signer_changed(previous, current) for previous in known):
+            return
+        verdict.score += SIGNER_CHANGE_SCORE
+        verdict.reasons.append(
+            f"'{name}' is now signed by {current}, but every build of it you have "
+            f"accepted was signed by {', '.join(sorted(set(known)))}. A valid "
+            f"signature from a different company is still a different company.")
+        self._write_log("signer_change", program=name, path=str(target),
+                        was=known, now=current)
 
     def _score_capability_gain(self, verdict: "TrustVerdict", name: str,
                                capabilities: Iterable[str], exfil: Iterable[str],

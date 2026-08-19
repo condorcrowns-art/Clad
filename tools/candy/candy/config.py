@@ -182,6 +182,18 @@ DEFAULTS: dict[str, Any] = {
         # carries a valid signature from that exact key.
         "trusted_public_key": "",
         "require_signature": False,
+        # Candy's own updates. Unset on purpose: a self-updater pointed at a
+        # domain nobody owns belongs to whoever registers it first.
+        "self_update_url": "",
+        "signing_key": "",
+        # Separate from require_signature above, which governs the threat feed.
+        # A threat feed is data; a self-update is code, so it is never optional.
+        "require_self_signature": True,
+        "allow_downgrade": False,
+    },
+    "clipboard": {
+        "enabled": False,
+        "poll_seconds": 0.8,
     },
     "credguard": {
         "enabled": False,

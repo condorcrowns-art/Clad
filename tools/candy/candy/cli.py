@@ -214,6 +214,128 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_baseline(args: argparse.Namespace) -> int:
+    """Snapshot what runs at startup, and diff against it later."""
+    from .baseline import BaselineStore, format_diff
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+    store = BaselineStore(config, engine.log)
+
+    if args.action == "save":
+        existing = store.load()
+        if existing and not args.force:
+            print(f"A baseline already exists, taken {existing.taken} "
+                  f"({len(existing.entries)} entries).")
+            print("Re-taking it makes everything that has appeared since invisible.")
+            print("Run 'candy baseline diff' first, or pass --force.")
+            return 1
+        snapshot = store.capture(note=args.note or "")
+        store.save(snapshot)
+        print(f"Baseline saved: {len(snapshot.entries)} autostart entries at "
+              f"{snapshot.taken}")
+        print(f"  {store.path}")
+        print("\nThis only proves what changes from now on. If the machine is already "
+              "compromised, the compromise is in the baseline too — run "
+              "'candy fullscan' first if you are not sure.")
+        return 0
+
+    if args.action == "show":
+        snapshot = store.load()
+        if snapshot is None:
+            print("No baseline saved.")
+            return 1
+        print(f"Taken {snapshot.taken} — {len(snapshot.entries)} entries")
+        for entry in sorted(snapshot.entries.values(), key=lambda e: (e.source, e.name)):
+            print(f"  {entry.source:18} {entry.name}")
+            print(f"  {'':18} {entry.command[:100]}")
+        return 0
+
+    report = store.diff(analyzer=engine.analyzer)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(format_diff(report))
+    for change in report.changes:
+        if change.severity in ("high", "critical"):
+            engine.handle_detection(Detection(
+                source="baseline", kind=f"autostart_{change.kind}",
+                subject=change.entry.name,
+                message=f"{change.kind}: {change.entry.name} — {change.reasons[0]}",
+                severity=change.severity, path=change.entry.image,
+                signature_id="baseline.change", evidence=change.to_dict()))
+    return 1 if report.changes else 0
+
+
+def cmd_clipboard(args: argparse.Namespace) -> int:
+    """Clipboard hijack detection — the theft nobody notices."""
+    from .clipboard import ClipboardMonitor, classify
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+    monitor = ClipboardMonitor(config, engine.handle_detection)
+
+    if args.action == "status":
+        print(json.dumps(monitor.status(), indent=2))
+        return 0
+    if args.action in ("on", "off"):
+        config.set("clipboard.enabled", args.action == "on")
+        config.save()
+        print(f"Clipboard monitoring {'enabled' if args.action == 'on' else 'disabled'}. "
+              f"Restart protection to apply.")
+        return 0
+    if args.action == "classify":
+        kind = classify(args.value or "")
+        print(f"{args.value}: {kind or 'not a payment destination'}")
+        return 0
+    if args.action == "probe":
+        print("Putting a decoy payment address on the clipboard and reading it back…")
+        print("Your clipboard contents are restored afterwards.\n")
+        finding = monitor.probe()
+        if finding is None:
+            print("The decoy came back unchanged. Nothing is rewriting the clipboard "
+                  "right now.")
+            print("\nThis proves nothing about a clipper that only acts on real "
+                  "addresses, or one that is not running yet. It is a spot check.")
+            return 0
+        print(f"[{finding.severity.upper()}] {finding.summary()}")
+        for reason in finding.reasons:
+            print(f"  {reason}")
+        return 1
+    return 0
+
+
+def cmd_selfupdate(args: argparse.Namespace) -> int:
+    """Check for, verify and stage a new version of Candy."""
+    from .selfupdate import Updater
+
+    config = Config.load(args.config)
+    engine = Engine(config)
+    updater = Updater(config, VERSION, engine.log)
+
+    if args.action == "status":
+        print(json.dumps(updater.status(), indent=2))
+        return 0
+
+    result = updater.check()
+    print(result)
+    for check in result.checks:
+        print(f"  {check}")
+    if result.status != "available":
+        return 0 if result.ok else 1
+    if result.info and result.info.notes:
+        print(f"\nRelease notes: {result.info.notes}")
+    if args.action == "check":
+        print("\nRun 'candy selfupdate stage' to download and verify it.")
+        return 0
+
+    staged = updater.stage(result.info)
+    print(f"\n{staged}")
+    for check in staged.checks:
+        print(f"  {check}")
+    return 0 if staged.ok else 1
+
+
 def cmd_level(args: argparse.Namespace) -> int:
     """One dial for how hard Candy pushes, with per-area override."""
     from . import levels
@@ -1513,6 +1635,24 @@ def build_parser() -> argparse.ArgumentParser:
     lists.add_argument("field", nargs="?", choices=["names", "paths", "hashes", "ips", "patterns"])
     lists.add_argument("value", nargs="?")
     lists.set_defaults(func=cmd_list)
+
+    baseline = sub.add_parser("baseline",
+                              help="snapshot what runs at startup, and see what changes")
+    baseline.add_argument("action", choices=["save", "diff", "show"])
+    baseline.add_argument("--note", help="why this baseline was taken")
+    baseline.add_argument("--force", action="store_true",
+                          help="overwrite an existing baseline")
+    baseline.add_argument("--json", action="store_true")
+    baseline.set_defaults(func=cmd_baseline)
+
+    clipboard = sub.add_parser("clipboard", help="clipboard hijack (clipper) detection")
+    clipboard.add_argument("action", choices=["status", "on", "off", "probe", "classify"])
+    clipboard.add_argument("value", nargs="?", help="text to classify")
+    clipboard.set_defaults(func=cmd_clipboard)
+
+    selfupdate = sub.add_parser("selfupdate", help="check for a new version of Candy")
+    selfupdate.add_argument("action", choices=["check", "stage", "status"])
+    selfupdate.set_defaults(func=cmd_selfupdate)
 
     level = sub.add_parser("level", help="how hard Candy pushes: one dial, four positions")
     level.add_argument("level", nargs="?", choices=list(LEVEL_NAMES),

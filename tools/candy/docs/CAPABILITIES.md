@@ -896,3 +896,89 @@ both marked `needs admin`.
 * **Untested on Windows**, like everything else that touches `auditpol` and
   `icacls` — the parsers, scoring and event routing are covered by tests; the
   arming is not.
+
+
+---
+
+## 22. The six remaining gaps, closed
+
+### Autostart baseline (`candy baseline`)
+
+Persistence auditing answers "what runs at startup?" and scores each entry. That
+is the right question once and the wrong one every time after, because the answer
+is thirty entries long and twenty-nine of them were there last week.
+
+`candy baseline save` snapshots the autostart set when the machine is believed
+clean; `candy baseline diff` reports what moved. **Added** entries are the finding.
+**Changed** entries matter more — same Run key, different target, is a hijack of
+something already trusted rather than a new entry beside it, and it sorts above
+additions. **Removed** entries are reported quietly.
+
+Location in `%TEMP%`, `Downloads`, or a launch via `mshta`/`powershell`/`rundll32`
+raises the severity. Every report ends by saying what a baseline cannot prove: if
+the machine was already compromised, the compromise is in the baseline.
+
+### Clipboard hijacking (`candy clipboard`)
+
+A clipper replaces a copied payment address with the attacker's. It needs no
+injection, no persistence and no privileges, and it is often the entire payload of
+a "free executor" because it monetises without touching the account.
+
+* **Passive** — a payment destination replaced by a *different* destination of the
+  same type. Copying an address and then copying ordinary text is not flagged.
+  A substitution under two seconds scores higher than a person changing their mind.
+* **Active** — `candy clipboard probe` writes a decoy address and reads it back.
+  Nothing legitimate rewrites it, so a changed value is not a heuristic. Your
+  clipboard contents are restored afterwards.
+
+Recognised: BTC, ETH, LTC, XMR, SOL, TRX, Roblox trade links, Discord invites.
+Candy never checks a balance, contacts a chain, or sends an address anywhere.
+
+> A bug the tests caught: the bitcoin decoy contained a lowercase `l`, which base58
+> excludes, so Candy's own classifier rejected its own bait and the active probe was
+> silently inert — it would write, read the swap back, and discard it. There is now
+> a test asserting every probe value satisfies its own pattern.
+
+### Signer identity (`winapi.signer_name`)
+
+`WinVerifyTrust` answers valid/invalid, never *who*. `CryptQueryObject` plus
+`CertGetNameString` reads the subject name off the certificate, so a build signed
+by a different company with a perfectly valid certificate is visible as what it is.
+Wired into the trust ledger: a program whose publisher changed scores **110**.
+
+Only charged when **both** names are readable. A tool that shouts "different
+publisher!" because it could not read one of them is a tool that gets ignored.
+
+### Quarantine restore re-assessment
+
+A quarantine list is a list of things Candy already judged dangerous. Restoring one
+months later — after the threat database has learned more about it — was a silent
+bypass of every check. `restore()` now re-assesses through the download guard and
+puts the file straight back if it still fails, naming why. `force=True` is the
+user's explicit override for a false positive.
+
+### Token-grabber triage
+
+Two additions to static triage: session-token **shapes** (Discord, Telegram, the
+Roblox cookie prefix) — a binary that knows the shape of a token intends to take
+one — and **credential-path lists**. Three or more of `Local State`, `Login Data`,
+`Network\Cookies`, `cookies.sqlite`, `key4.db`, `logins.json`, `leveldb`,
+`appStorage.json`, `ROBLOSECURITY`, `wallet.dat` in one binary is a stealer's
+shopping list, +60. One is not — plenty of honest software mentions `Local State`.
+
+### Self-update (`candy selfupdate`)
+
+The mechanism exists and is **deliberately not pointed anywhere**. There is no
+release feed yet, and a self-updater aimed at a domain nobody owns belongs to
+whoever registers it first.
+
+When configured it enforces: HTTPS only; a valid **LMS post-quantum signature** on
+the manifest (TLS authenticates the server, not the file — so an unsigned update is
+refused even over good transport); a pinned SHA-256 on the payload; no downgrades
+unless explicitly allowed; and **staging only** — nothing running is ever replaced
+as a side effect of a check. `updates.require_self_signature` defaults to **true**
+and is separate from the threat-feed switch: a threat feed is data, a self-update
+is code.
+
+New coverage entries: `cred.clipper`, `eva.signer_swap`, `per.baseline_drift` —
+62 techniques, 35 detect.

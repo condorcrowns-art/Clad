@@ -169,8 +169,17 @@ class Responder:
                 continue
         return entries
 
-    def restore(self, quarantine_file: str | Path, destination: str | Path | None = None) -> ActionResult:
-        """Undo a quarantine. Restores to the original path unless told otherwise."""
+    def restore(self, quarantine_file: str | Path, destination: str | Path | None = None,
+                *, guard: Any = None, force: bool = False) -> ActionResult:
+        """Undo a quarantine. Restores to the original path unless told otherwise.
+
+        When a ``guard`` is supplied the restored file is re-assessed and put
+        straight back if it still fails. A quarantine list is a list of things
+        Candy already judged dangerous; restoring one months later, after the
+        threat database has learned more about it, should not be a silent
+        bypass of every check. ``force`` restores anyway, which is what the
+        user is choosing when they confirm a false positive.
+        """
         quarantined = Path(quarantine_file)
         meta_path = quarantined.with_suffix(quarantined.suffix + ".json")
         if not quarantined.exists() or not meta_path.exists():
@@ -191,6 +200,21 @@ class Responder:
             meta_path.unlink(missing_ok=True)
         except (OSError, shutil.Error) as exc:
             return self._record(ActionResult("restore", False, f"restore failed: {exc}"))
+
+        if guard is not None and not force:
+            verdict = guard.assess(target)
+            if verdict.action == "quarantine":
+                again = self.quarantine(target, forced=True)
+                return self._record(ActionResult(
+                    "restore", False,
+                    f"restored and immediately re-quarantined: {verdict.summary()}. "
+                    f"Candy still judges this file dangerous — restore it with "
+                    f"force if you are certain. ({again.detail})"))
+            if verdict.reasons:
+                return self._record(ActionResult(
+                    "restore", True,
+                    f"restored to {target}, but it still scores {verdict.score}: "
+                    f"{verdict.reasons[0]}"))
         return self._record(ActionResult("restore", True, f"restored to {target}"))
 
     def delete_quarantined(self, quarantine_file: str | Path) -> ActionResult:

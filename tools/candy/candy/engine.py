@@ -9,6 +9,7 @@ from typing import Any, Callable
 from .anomaly import AnomalyEngine
 from .dnsproxy import DnsFilter, DnsProxy
 from .behavior import BehaviorEngine
+from .clipboard import ClipboardMonitor
 from .config import Config
 from .detect import Aggregator, Analyzer
 from .eventlog import EventLog
@@ -67,6 +68,7 @@ class Engine:
         self.net_monitor = NetworkMonitor(self.config, self.analyzer, self.handle_detection,
                                           intel=self.intel if self.intel.enabled else None)
         self.behavior = BehaviorEngine(self.config, self.handle_detection)
+        self.clipboard = ClipboardMonitor(self.config, self.handle_detection)
         self.kernel_events = WindowsEventMonitor(self.config, self.analyzer, self.handle_detection)
         self.persistence = PersistenceAuditor(self.config, self.analyzer, self.handle_detection)
         self.anomaly = AnomalyEngine(self.config, self.handle_detection)
@@ -209,7 +211,7 @@ class Engine:
                 NetworkHardener(self.config, self.log).restore_resolver()
             self.dns_proxy.stop()
         for component in (self.proc_monitor, self.file_watcher, self.net_monitor,
-                          self.behavior, self.kernel_events, self.persistence, self.anomaly):
+                          self.behavior, self.kernel_events, self.persistence, self.anomaly, self.clipboard):
             try:
                 component.stop()
             except Exception:  # noqa: BLE001

@@ -174,6 +174,25 @@ TECHNIQUES: list[Technique] = [
               "Decoy credential files nothing legitimate knows about; one access is "
               "a program walking a stealer's path list",
               "The cleanest signal Candy has — no heuristic, no threshold.", "admin"),
+    Technique("cred.clipper", "Clipboard hijacking (address swap)", "evasion", DETECT,
+              "Payment destinations on the clipboard are watched for same-type "
+              "substitution, and an active probe writes a decoy address and reads it "
+              "back — nothing legitimate rewrites that",
+              "The passive check can fire when you genuinely copy two addresses in a "
+              "row, and says so. The probe cannot: nothing has a reason to alter it."),
+    Technique("eva.signer_swap", "Valid signature from a different publisher",
+              "evasion", DETECT,
+              "CryptQueryObject reads the subject name off the certificate; a build "
+              "signed by a company other than the one every accepted build carried "
+              "scores 110",
+              "WinVerifyTrust alone cannot see this — it answers valid/invalid, not "
+              "who. Only charged when both names are readable."),
+    Technique("per.baseline_drift", "New autostart appearing after a known-good point",
+              "persistence", DETECT,
+              "An autostart snapshot taken when the machine is believed clean; "
+              "additions and target-replacements are diffed against it",
+              "Only proves what changed since the snapshot. If the machine was "
+              "already compromised, the compromise is in the baseline."),
     Technique("per.office_addin", "Office add-in / template", "persistence", PARTIAL,
               "ASR rules block Office child processes and executable content", "", "admin"),
 
@@ -435,6 +454,53 @@ def run_selftest(engine: Any, *, live: bool = False,
            f"targets: {', '.join(verdict.targets) or 'none'}",
            "same manifest, checking the Roblox-specific rule")
 
+    # --- clipboard hijacking ---
+    from .clipboard import PROBE_VALUES, assess_swap, classify
+
+    swap = assess_swap("0x" + "a" * 40, "0x" + "b" * 40, seconds_apart=0.4)
+    innocent = assess_swap("0x" + "a" * 40, "shopping list")
+    probe_ok = all(classify(value) == kind for kind, value in PROBE_VALUES.items())
+    record("cred.clipper",
+           swap is not None and swap.severity == "critical" and innocent is None
+           and probe_ok,
+           f"same-type swap scored {swap.score if swap else 0}; copying ordinary text "
+           f"after an address produced {'no alert' if innocent is None else 'a false positive'}; "
+           f"every probe decoy classifies: {probe_ok}",
+           "an ethereum address on the clipboard replaced by a different one 0.4s later")
+
+    # --- publisher change on a valid signature ---
+    from .winapi import signer_changed
+
+    record("eva.signer_swap",
+           signer_changed("Acme Software Ltd", "Totally Legit LLC")
+           and not signer_changed(None, "Totally Legit LLC")
+           and not signer_changed("Acme Software Ltd", "acme software ltd"),
+           "a different publisher is a change; an unreadable one is not, and case is "
+           "not a change",
+           "the same program, validly signed, by a different company")
+
+    # --- autostart appearing after a known-good baseline ---
+    import tempfile as _tempfile
+
+    with _tempfile.TemporaryDirectory() as base_tmp:
+        from .baseline import BaselineStore
+        from .config import Config as _Config
+        from .persistence import PersistenceEntry as _Entry
+
+        base_config = _Config({"paths": {"data": base_tmp}}, None)
+        store = BaselineStore(base_config)
+        clean = [_Entry(source="hkcu_run", name="Steam",
+                        command=r"C:\Program Files\Steam\steam.exe")]
+        store.save(store.capture(clean))
+        after = clean + [_Entry(source="hkcu_run", name="Updater",
+                                command=r"C:\Users\p\AppData\Local\Temp\svc.exe")]
+        diff = store.diff(after)
+        record("per.baseline_drift",
+               len(diff.added) == 1 and diff.added[0].severity in ("medium", "high", "critical"),
+               f"{len(diff.added)} addition(s) found, severity "
+               f"{diff.added[0].severity if diff.added else 'none'}",
+               "a Run key pointing into %TEMP% appeared after the baseline was taken")
+
     # --- credential theft: the payload, not the delivery ---
     from .credguard import CredentialGuard
     from .util import expand_path as _expand
@@ -460,8 +526,6 @@ def run_selftest(engine: Any, *, live: bool = False,
            "a process opened a decoy credential file that nothing legitimate knows about")
 
     # --- exit scam: a trusted build is replaced ---
-    import tempfile as _tempfile
-
     with _tempfile.TemporaryDirectory() as trust_tmp:
         from .drift import TrustLedger
 

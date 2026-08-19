@@ -665,6 +665,27 @@ class App(ttk.Frame):
                        "permission is changed.",
                   wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
 
+        # --- startup baseline and clipboard
+        watch_box = ttk.LabelFrame(frame, text="Startup baseline and clipboard", padding=8)
+        watch_box.pack(fill="x", pady=4)
+        self.baseline_status = ttk.Label(watch_box, text="")
+        self.baseline_status.pack(anchor="w")
+        watch_row = ttk.Frame(watch_box)
+        watch_row.pack(anchor="w", pady=(6, 0))
+        ttk.Button(watch_row, text="Save a baseline",
+                   command=self.baseline_save).pack(side="left")
+        ttk.Button(watch_row, text="What changed since?",
+                   command=self.baseline_diff).pack(side="left", padx=6)
+        ttk.Button(watch_row, text="Test for a clipboard hijacker",
+                   command=self.clipboard_probe).pack(side="left")
+        ttk.Label(watch_box,
+                  text="Take a baseline when the machine is clean. After that, anything "
+                       "new that arranges to run at startup shows up as an addition "
+                       "instead of one more line in a list of thirty. The clipboard test "
+                       "puts a decoy payment address on your clipboard and reads it back "
+                       "— your clipboard is restored afterwards.",
+                  wraplength=840, foreground="#666").pack(anchor="w", pady=(4, 0))
+
         # --- trusted programs
         trust_box = ttk.LabelFrame(frame, text="Programs you have trusted", padding=8)
         trust_box.pack(fill="x", pady=4)
@@ -1128,6 +1149,76 @@ class App(ttk.Frame):
 
         self._run(work, busy="Reading credential stores…")
 
+    def baseline_save(self) -> None:
+        from .baseline import BaselineStore
+
+        existing = BaselineStore(self.config_obj).load()
+        if existing and not messagebox.askyesno(
+                "Replace the baseline",
+                f"A baseline already exists, taken {existing.taken} with "
+                f"{len(existing.entries)} entries.\n\n"
+                f"Replacing it makes everything that has appeared since invisible. "
+                f"Check 'What changed since?' first.\n\nReplace it anyway?"):
+            return
+        if not existing and not messagebox.askyesno(
+                "Save a baseline",
+                "Candy will record everything currently set to run at startup, and "
+                "report anything new from now on.\n\n"
+                "Only do this when you believe the machine is clean — if something is "
+                "already there, it becomes part of the baseline.\n\nSave it?"):
+            return
+
+        def work() -> str:
+            store = BaselineStore(self.config_obj, self.engine.log)
+            snapshot = store.capture()
+            store.save(snapshot)
+            return (f"Baseline saved: {len(snapshot.entries)} autostart entries.\n"
+                    f"This only proves what changes from now on.")
+
+        self._run(work, busy="Recording what runs at startup…",
+                  then=lambda _r: self.refresh_protection())
+
+    def baseline_diff(self) -> None:
+        def work() -> str:
+            from .baseline import BaselineStore, format_diff
+
+            store = BaselineStore(self.config_obj, self.engine.log)
+            report = store.diff(analyzer=self.engine.analyzer)
+            for change in report.changes:
+                if change.severity in ("high", "critical"):
+                    self.engine.handle_detection(Detection(
+                        source="baseline", kind=f"autostart_{change.kind}",
+                        subject=change.entry.name,
+                        message=f"{change.kind}: {change.entry.name} — {change.reasons[0]}",
+                        severity=change.severity, path=change.entry.image,
+                        signature_id="baseline.change", evidence=change.to_dict()))
+            return format_diff(report)
+
+        self._run(work, busy="Comparing startup against the baseline…")
+
+    def clipboard_probe(self) -> None:
+        if not messagebox.askyesno(
+                "Test for a clipboard hijacker",
+                "Candy will put a decoy payment address on your clipboard and read it "
+                "back a moment later. If something rewrites it, that is a clipboard "
+                "hijacker caught in the act.\n\n"
+                "Whatever you had copied is put back afterwards.\n\nRun the test?"):
+            return
+
+        def work() -> str:
+            from .clipboard import ClipboardMonitor
+
+            monitor = ClipboardMonitor(self.config_obj, self.engine.handle_detection)
+            finding = monitor.probe()
+            if finding is None:
+                return ("The decoy came back unchanged — nothing is rewriting the "
+                        "clipboard right now.\n"
+                        "This is a spot check: it proves nothing about a clipper that "
+                        "is not running yet, or one that only acts on real addresses.")
+            return f"[{finding.severity.upper()}] " + "\n".join(finding.reasons)
+
+        self._run(work, busy="Baiting a clipboard hijacker…")
+
     def trust_check(self, revoke: bool) -> None:
         if revoke and not messagebox.askyesno(
                 "Stop trusting changed programs",
@@ -1260,6 +1351,11 @@ class App(ttk.Frame):
                 state["pins"] = len(ledger.load())
                 state["unpinned"] = len(ledger.unverifiable())
                 state["builds"] = sum(len(b) for b in ledger.lineage().values())
+                from .baseline import BaselineStore
+
+                snapshot = BaselineStore(self.config_obj).load()
+                state["baseline"] = (f"{len(snapshot.entries)} entries, taken "
+                                     f"{snapshot.taken}") if snapshot else ""
                 state["programs"] = len(ledger.lineage())
             except Exception as exc:  # noqa: BLE001
                 state["trust_error"] = str(exc)
@@ -1309,6 +1405,11 @@ class App(ttk.Frame):
             elif "credguard_error" in state:
                 self.credguard_status.configure(
                     text=f"unavailable ({state['credguard_error']})")
+
+            if "baseline" in state:
+                self.baseline_status.configure(
+                    text=f"Startup baseline: {state['baseline']}" if state["baseline"]
+                    else "No startup baseline saved yet.")
 
             if "pins" in state:
                 self.trust_status.configure(

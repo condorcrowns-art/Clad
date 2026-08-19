@@ -73,6 +73,23 @@ EXFIL_PATTERNS = {
     "raw_gist": re.compile(rb"https?://(?:raw\.githubusercontent\.com|gist\.github)\S+", re.I),
 }
 
+# Session tokens carried *inside* a binary, and the code that goes looking for
+# them. A grabber has to know the shape of what it is stealing, so the shape
+# shows up in its strings whether or not it ever hard-codes a real one.
+TOKEN_PATTERNS = {
+    "discord_token": re.compile(rb"[MNO][A-Za-z\d_-]{23,25}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27,40}"),
+    "roblox_cookie": re.compile(rb"_\|WARNING:-DO-NOT-SHARE-THIS", re.I),
+    "telegram_token": re.compile(rb"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"),
+}
+
+# Paths a credential grabber walks. Finding several of these in one binary is
+# a stealer's shopping list, whatever else the file claims to be.
+CREDENTIAL_PATHS = (
+    rb"Local State", rb"Login Data", rb"Network\\Cookies", rb"cookies.sqlite",
+    rb"key4.db", rb"logins.json", rb"Local Storage\\leveldb",
+    rb"appStorage.json", rb"ROBLOSECURITY", rb"wallet.dat",
+)
+
 URL_RE = re.compile(rb"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]{4,200}")
 IPV4_RE = re.compile(rb"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
 
@@ -174,6 +191,26 @@ def triage(path: str | Path, *, signature_checker=None, max_bytes: int = MAX_TRI
             report.exfil[label] = matches[:5]
             report.score += 45
             report.notes.append(f"contains a {label.replace('_', ' ')} — a common exfiltration sink")
+
+    for label, pattern in TOKEN_PATTERNS.items():
+        if pattern.search(haystack):
+            report.exfil.setdefault("tokens", []).append(label)
+            report.score += 55
+            report.notes.append(
+                f"carries a {label.replace('_', ' ')} pattern — a binary that knows the "
+                f"shape of a session token is a binary that intends to take one")
+
+    walked = [needle.decode("ascii", "replace")
+              for needle in CREDENTIAL_PATHS if needle.lower() in lowered]
+    if len(walked) >= 3:
+        report.capabilities.setdefault("credentials", {
+            "severity": "critical",
+            "description": "walks the credential stores of browsers, Discord and wallets",
+            "indicators": walked[:8], "count": len(walked)})
+        report.score += 60
+        report.notes.append(
+            f"references {len(walked)} credential-store paths ({', '.join(walked[:4])}) — "
+            f"that list is a stealer's shopping list, not a coincidence")
 
     if report.packed:
         report.score += 15
