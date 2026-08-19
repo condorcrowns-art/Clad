@@ -80,6 +80,10 @@ Windows Firewall.
 
 ## Install
 
+**New to this? Read [docs/WINDOWS-FIRST-RUN.md](docs/WINDOWS-FIRST-RUN.md).** It
+walks the safe order: read-only commands first, machine-changing ones later, and
+what each of the risky ones can break.
+
 ### Option A — portable exe (nothing to install)
 
 ```powershell
