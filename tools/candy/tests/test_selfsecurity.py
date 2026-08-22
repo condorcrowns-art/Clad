@@ -168,6 +168,50 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertEqual(extract_image(r"%APPDATA%\My App\thing.exe"),
                          r"%APPDATA%\My App\thing.exe")
 
+    def test_browser_component_updates_are_not_alarming(self):
+        """Chrome, Edge and the Store queue dozens of BITS jobs on an ordinary
+        machine. Flagging them produced eight highs on a clean install."""
+        from candy.persistence import bits_job_severity
+
+        for url in ("https://dl.google.com/diffgen-puffin/x",
+                    "http://edgedl.me.gvt1.com/edgedl/release2/chrome_component/x",
+                    "http://msedge.b.tlu.dl.delivery.mp.microsoft.com/files/x",
+                    "https://download.windowsupdate.com/d/msdownload/x"):
+            with self.subTest(url=url):
+                severity, _why = bits_job_severity(url, r"C:\Temp\blob")
+                self.assertEqual(severity, "info")
+
+    def test_an_executable_from_an_unknown_host_is_still_high(self):
+        from candy.persistence import bits_job_severity
+
+        severity, why = bits_job_severity("http://203.0.113.9/stage2.exe",
+                                          r"C:\Users\p\AppData\Local\Temp\s2.exe")
+        self.assertEqual(severity, "high")
+        self.assertIn("executable", why)
+
+    def test_a_lookalike_update_host_does_not_inherit_the_pass(self):
+        """Suffix matching on the hostname, not "contains" — otherwise
+        dl.google.com.evil.tld reads as Google."""
+        from candy.persistence import bits_job_severity
+
+        severity, _why = bits_job_severity("https://dl.google.com.evil.tld/x.exe",
+                                           r"C:\Temp\x.exe")
+        self.assertEqual(severity, "high")
+
+    def test_a_non_executable_from_an_unknown_host_is_only_low(self):
+        from candy.persistence import bits_job_severity
+
+        severity, _why = bits_job_severity("http://198.51.100.5/data.json",
+                                           r"C:\Temp\data.json")
+        self.assertEqual(severity, "low")
+
+    def test_the_host_parser_is_not_fooled_by_credentials(self):
+        from candy.persistence import bits_host
+
+        self.assertEqual(bits_host("http://evil.tld@dl.google.com/x"), "dl.google.com")
+        self.assertEqual(bits_host("https://dl.google.com:8443/x"), "dl.google.com")
+        self.assertEqual(bits_host("not a url"), "")
+
     def test_com_hijack_requires_an_actual_machine_wide_entry(self):
         """The finding said "this shadows the system-wide registration" without
         ever looking at HKLM. Every Electron app registers per-user COM, so on

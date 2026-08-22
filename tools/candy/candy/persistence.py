@@ -150,6 +150,72 @@ def extract_image(command: str) -> str:
     return (match.group(2) or "").strip()
 
 
+# Hosts that exist to deliver software updates over BITS. Chrome, Edge, the
+# Store and Windows Update all queue dozens of these on an ordinary machine —
+# flagging them produced eight high-severity findings on a clean install, which
+# is how a real user learns to ignore the tool.
+#
+# Matched on the hostname only, as a suffix, so a lookalike like
+# "dl.google.com.evil.tld" does not slip through.
+UPDATE_HOSTS = (
+    "windowsupdate.com",
+    "delivery.mp.microsoft.com",
+    "officecdn.microsoft.com",
+    "update.microsoft.com",
+    "dl.google.com",
+    "gvt1.com",                 # edgedl.me.gvt1.com — Chrome/Edge components
+    "update.googleapis.com",
+    "mozilla.org",
+    "mozilla.net",
+)
+
+# What a next-stage payload looks like when it lands. A .crx3 or a hash-named
+# blob in a browser's own BITS temp folder is a component update; an .exe or a
+# .dll is the thing worth waking someone up for.
+BITS_EXECUTABLE_SUFFIXES = (".exe", ".dll", ".scr", ".com", ".ps1", ".bat",
+                            ".cmd", ".vbs", ".js", ".hta", ".msi", ".sys")
+
+
+def bits_host(url: str) -> str:
+    """Hostname of a BITS source URL, lowercased. '' when unparseable."""
+    text = str(url or "").strip()
+    if "://" not in text:
+        return ""
+    rest = text.split("://", 1)[1]
+    host = rest.split("/", 1)[0].split("@")[-1].split(":")[0]
+    return host.strip().lower()
+
+
+def is_update_host(url: str) -> bool:
+    host = bits_host(url)
+    if not host:
+        return False
+    return any(host == known or host.endswith("." + known) for known in UPDATE_HOSTS)
+
+
+def bits_job_severity(url: str, local: str) -> tuple[str, str]:
+    """How much a BITS job matters, and the sentence explaining why.
+
+    Two axes rather than one. A known update CDN is routine whatever it
+    fetches; an unknown host matters most when what lands is executable.
+    """
+    executable = str(local or "").strip().lower().endswith(BITS_EXECUTABLE_SUFFIXES)
+    if is_update_host(url):
+        return "info", (f"This is {bits_host(url)}, a software update service — routine "
+                        f"background updating, not a download you started.")
+    if not url:
+        return "low", ("Its source could not be read, so there is nothing to judge it "
+                       "by. Worth a look only if you did not expect it.")
+    if executable:
+        return "high", ("BITS downloads survive reboots and run outside the browser, "
+                        "and this one fetches an executable from a host that is not a "
+                        "known update service — which is exactly how malware stages "
+                        "its next step.")
+    return "low", ("BITS downloads survive reboots and run outside the browser. This "
+                   "one is not from a known update service, but what it fetches is not "
+                   "executable, so it is worth knowing about rather than acting on.")
+
+
 def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection]:
     """Score one persistence entry. Pure — no registry, no processes."""
     config, db = analyzer.config, analyzer.db
@@ -185,16 +251,13 @@ def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection
 
     if entry.source == "bits_job":
         url = entry.extra.get("url", "")
+        local = entry.extra.get("local") or ""
+        severity, why = bits_job_severity(url, local)
         emit("bits_job",
              (f"A BITS background transfer job '{entry.name}' is queued"
               + (f" from {url[:80]}" if url else "")
-              + f" to {entry.extra.get('local') or 'an unknown path'}. BITS downloads "
-                f"survive reboots and run outside the browser, which is why malware uses "
-                f"it to fetch its next stage."),
-             "high" if url and not url.lower().startswith(
-                 ("https://download.windowsupdate.com", "http://download.windowsupdate.com",
-                  "https://au.download.windowsupdate.com")) else "info",
-             signature_id="persistence.bits_job")
+              + f" to {local or 'an unknown path'}. {why}"),
+             severity, signature_id="persistence.bits_job")
 
     if entry.source == "com_hijack":
         emit("com_hijack",
