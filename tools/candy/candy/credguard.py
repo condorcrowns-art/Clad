@@ -192,7 +192,7 @@ class ArmResult:
     detail: str = ""
 
     def __str__(self) -> str:
-        return (f"{'armed' if self.ok else 'not armed'}: {len(self.armed)} store(s)"
+        return (f"{'armed' if self.ok else 'NOT armed'}: {len(self.armed)} store(s)"
                 + (f" — {self.detail}" if self.detail else ""))
 
 
@@ -366,23 +366,44 @@ class CredentialGuard:
         if policy is None:
             return ArmResult(False, detail="auditpol failed — run as administrator")
 
+        errors: list[str] = []
         for store, path in present_stores(self.config):
-            if _set_audit_ace(path):
+            ok, detail = _set_audit_ace(path)
+            if ok:
                 result.armed.append(store.label)
             else:
                 result.skipped.append(f"{store.label} ({path})")
+                if detail:
+                    errors.append(detail)
 
         if canaries:
             for path in self.plant_canaries():
-                if _set_audit_ace(path):
+                ok, detail = _set_audit_ace(path)
+                if ok:
                     result.armed.append(f"decoy {path.name}")
+                elif detail:
+                    errors.append(detail)
 
+        # Arming nothing is a failure, not a quiet success. Reporting "armed"
+        # over zero audited stores is how a completely invalid command line
+        # went unnoticed — say so, and say what Windows said.
+        result.ok = bool(result.armed)
         self.config.set("credguard.armed", result.armed)
-        self.config.set("credguard.enabled", True)
+        self.config.set("credguard.enabled", bool(result.armed))
         self.config.save()
-        self._write_log("credguard_armed", armed=result.armed, skipped=result.skipped)
-        result.detail = (f"{len(result.armed)} audited"
-                         + (f", {len(result.skipped)} could not be" if result.skipped else ""))
+        self._write_log("credguard_armed", armed=result.armed, skipped=result.skipped,
+                        errors=errors[:5])
+        if result.armed:
+            result.detail = (f"{len(result.armed)} audited"
+                             + (f", {len(result.skipped)} could not be"
+                                if result.skipped else ""))
+        else:
+            first = errors[0].splitlines()[0][:200] if errors else ""
+            result.detail = (
+                f"nothing could be audited ({len(result.skipped)} store(s) tried). "
+                f"Setting an audit rule needs the 'Manage auditing and security log' "
+                f"privilege, which an elevated prompt normally has."
+                + (f" Windows said: {first}" if first else ""))
         return result
 
     def disarm(self, *, remove_canaries: bool = True) -> ArmResult:
@@ -441,6 +462,22 @@ class CredentialGuard:
 
 
 # ------------------------------------------------------------------- helpers
+def _run_reporting(command: list[str], timeout: int = 60) -> tuple[bool, str]:
+    """Like _run, but hands back *why* it failed.
+
+    Discarding stderr is what let a completely invalid command line look like
+    a quiet no-op for as long as it did.
+    """
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, timeout=timeout,
+                              check=False,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    output = ((done.stdout or "") + (done.stderr or "")).strip()
+    return done.returncode == 0, output
+
+
 def _run(command: list[str], timeout: int = 30) -> str | None:
     try:
         completed = subprocess.run(command, capture_output=True, text=True,
@@ -453,21 +490,65 @@ def _run(command: list[str], timeout: int = 30) -> str | None:
     return completed.stdout
 
 
-def audit_command(path: str | Path) -> list[str]:
-    """The icacls invocation that adds the audit ACE. Split out to be tested.
+def ps_literal(value: str) -> str:
+    """A PowerShell single-quoted literal. Interior quotes are doubled."""
+    return "'" + str(value).replace("'", "''") + "'"
 
-    ``(OI)(CI)`` makes the entry inherit to files and folders so a profile
-    directory covers the databases inside it; ``F`` audits every access type.
+
+def audit_script(path: str | Path, *, directory: bool) -> str:
+    """PowerShell that adds a read-audit ACE to a file or folder's SACL.
+
+    icacls cannot do this. It has no /setaudit switch — that was invented,
+    every call exited non-zero, and the failure was swallowed, so arming
+    reported success having audited nothing. Set-Acl with an audit rule is
+    the actual mechanism, and it needs the SeSecurityPrivilege that comes with
+    an elevated token.
+
+    A folder gets ContainerInherit+ObjectInherit so the databases inside it
+    are covered; a file takes no inheritance flags at all, which Windows
+    rejects if you pass them.
     """
-    return ["icacls", str(path), "/setaudit", "Everyone:(OI)(CI)F"]
+    literal = ps_literal(str(path))
+    rule = (f"New-Object System.Security.AccessControl.FileSystemAuditRule("
+            f"'Everyone','Read',"
+            + ("'ContainerInherit,ObjectInherit','None'," if directory else "")
+            + f"'Success,Failure')")
+    return (
+        "$ErrorActionPreference='Stop'; "
+        f"$acl = Get-Acl -LiteralPath {literal} -Audit; "
+        f"$rule = {rule}; "
+        "$acl.AddAuditRule($rule); "
+        f"Set-Acl -LiteralPath {literal} -AclObject $acl"
+    )
 
 
-def _set_audit_ace(path: Path) -> bool:  # pragma: no cover - Windows only
-    return _run(audit_command(path)) is not None
+def unaudit_script(path: str | Path) -> str:
+    literal = ps_literal(str(path))
+    return (
+        "$ErrorActionPreference='Stop'; "
+        f"$acl = Get-Acl -LiteralPath {literal} -Audit; "
+        "$acl.GetAuditRules($true,$false,[System.Security.Principal.NTAccount]) | "
+        "ForEach-Object { [void]$acl.RemoveAuditRule($_) }; "
+        f"Set-Acl -LiteralPath {literal} -AclObject $acl"
+    )
+
+
+def audit_command(path: str | Path, *, directory: bool = False) -> list[str]:
+    """The full command line, split out so the shape stays testable."""
+    return ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-Command", audit_script(path, directory=directory)]
+
+
+def _set_audit_ace(path: Path) -> tuple[bool, str]:  # pragma: no cover - Windows only
+    ok, output = _run_reporting(audit_command(path, directory=path.is_dir()))
+    return ok, output
 
 
 def _clear_audit_ace(path: Path) -> bool:  # pragma: no cover - Windows only
-    return _run(["icacls", str(path), "/remove:a", "Everyone"]) is not None
+    ok, _output = _run_reporting(
+        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+         "-Command", unaudit_script(path)])
+    return ok
 
 
 def format_status(status: dict[str, Any]) -> str:

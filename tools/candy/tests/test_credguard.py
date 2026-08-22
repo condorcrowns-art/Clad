@@ -65,12 +65,14 @@ class StoreTests(unittest.TestCase):
             self.assertTrue(any(s.label == "My wallet" for s in known_stores(config)))
 
     def test_the_audit_command_is_an_audit_not_a_permission_change(self):
-        """/setaudit adds a SACL entry. /grant would change who can read the
-        file, which is not something a monitoring tool should ever do."""
-        command = audit_command(r"C:\x\Cookies")
-        self.assertIn("/setaudit", command)
-        self.assertNotIn("/grant", command)
-        self.assertNotIn("/deny", command)
+        """A monitoring tool must never change who can read a file. This test
+        used to assert icacls /setaudit — a switch that does not exist, so it
+        was asserting the shape of a command that could only ever fail."""
+        joined = " ".join(audit_command(r"C:\x\Cookies"))
+        self.assertIn("AddAuditRule", joined)
+        self.assertNotIn("/grant", joined)
+        self.assertNotIn("/deny", joined)
+        self.assertNotIn("SetAccessRule", joined)
 
 
 class AssessmentTests(unittest.TestCase):
@@ -225,6 +227,50 @@ class EventPlumbingTests(unittest.TestCase):
         result = self.guard.arm()
         self.assertFalse(result.ok)
         self.assertIn("Windows-only", result.detail)
+
+
+class ArmingTests(unittest.TestCase):
+    """icacls has no /setaudit switch. It was invented, every call exited
+    non-zero, the error was discarded, and arming reported success having
+    audited nothing at all."""
+
+    def test_the_audit_command_uses_set_acl_not_icacls(self):
+        from candy.credguard import audit_command
+
+        command = audit_command(r"C:\x\Cookies")
+        self.assertEqual(command[0], "powershell")
+        self.assertNotIn("icacls", " ".join(command))
+        self.assertIn("Set-Acl", " ".join(command))
+        self.assertIn("AddAuditRule", " ".join(command))
+
+    def test_a_folder_gets_inheritance_and_a_file_does_not(self):
+        """Windows rejects a file rule carrying inheritance flags."""
+        from candy.credguard import audit_script
+
+        folder = audit_script(r"C:\x\Profiles", directory=True)
+        single = audit_script(r"C:\x\Cookies", directory=False)
+        self.assertIn("ContainerInherit,ObjectInherit", folder)
+        self.assertNotIn("ContainerInherit", single)
+
+    def test_it_audits_rather_than_changing_permissions(self):
+        """A monitoring tool must never alter who can read a file."""
+        from candy.credguard import audit_script
+
+        script = audit_script(r"C:\x\Cookies", directory=False)
+        self.assertIn("FileSystemAuditRule", script)
+        self.assertNotIn("FileSystemAccessRule", script)
+        self.assertNotIn("SetAccessRule", script)
+
+    def test_paths_with_quotes_cannot_break_out(self):
+        from candy.credguard import ps_literal
+
+        self.assertEqual(ps_literal("a'b"), "'a''b'")
+
+    def test_arming_nothing_is_reported_as_failure(self):
+        from candy.credguard import ArmResult
+
+        self.assertFalse(ArmResult(False, [], ["x"], "nothing could be audited").ok)
+        self.assertIn("NOT armed", str(ArmResult(False, [], ["x"], "")))
 
 
 class LevelTests(unittest.TestCase):
