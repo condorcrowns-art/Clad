@@ -226,6 +226,46 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertIn("Sysmon64", SYSMON_SERVICE_NAMES)
         self.assertIn("Sysmon", SYSMON_SERVICE_NAMES)
 
+    def test_windows_own_lsa_packages_are_not_critical_findings(self):
+        """scecli ships on every Windows install ever made. Reporting it as
+        critical on every machine is how a real alert gets ignored."""
+        from candy.persistence import unexpected_lsa_packages
+
+        for value in ("scecli", "scecli; rassfm",
+                      "kerberos; msv1_0; schannel; wdigest; tspkg; pku2u; cloudap",
+                      ""):
+            with self.subTest(value=value):
+                self.assertEqual(unexpected_lsa_packages(value), [])
+
+    def test_an_unexpected_lsa_package_is_still_critical(self):
+        """This is a real credential-theft technique — mimikatz registers its
+        SSP exactly here — so the rule has to keep working."""
+        from candy.persistence import unexpected_lsa_packages
+
+        self.assertEqual(unexpected_lsa_packages("scecli; mimilib"), ["mimilib"])
+        self.assertEqual(unexpected_lsa_packages("evilssp.dll"), ["evilssp.dll"])
+
+    def test_a_multi_string_registry_value_is_not_a_python_repr(self):
+        """REG_MULTI_SZ arrives as a list, and str() on it gives "['scecli']" —
+        brackets, quotes and all. That string went into the message, the path
+        and the image, so the finding read like nonsense and no file check
+        could ever match it."""
+        from candy.persistence import registry_value_text
+
+        self.assertEqual(registry_value_text(["scecli"]), "scecli")
+        self.assertEqual(registry_value_text(["a", "b"]), "a; b")
+        self.assertEqual(registry_value_text("plain"), "plain")
+
+    def test_an_effectively_empty_value_produces_nothing(self):
+        """['""'] is the normal empty state of Security Packages on many
+        machines. It was truthy, so it became a critical finding about an
+        empty string."""
+        from candy.persistence import registry_value_text
+
+        self.assertEqual(registry_value_text(['""']), "")
+        self.assertEqual(registry_value_text([]), "")
+        self.assertEqual(registry_value_text(None), "")
+
     def test_com_hijack_requires_an_actual_machine_wide_entry(self):
         """The finding said "this shadows the system-wide registration" without
         ever looking at HKLM. Every Electron app registers per-user COM, so on

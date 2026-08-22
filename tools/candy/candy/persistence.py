@@ -216,6 +216,46 @@ def bits_job_severity(url: str, local: str) -> tuple[str, str]:
                    "executable, so it is worth knowing about rather than acting on.")
 
 
+# LSA packages that ship with Windows. Code registered here runs inside lsass
+# where credentials live, so an *unexpected* one is genuinely critical — but
+# scecli is on every Windows install ever made, and reporting it as a critical
+# finding on every machine is how a real alert gets ignored.
+DEFAULT_LSA_PACKAGES = {
+    # Notification Packages
+    "scecli", "rassfm",
+    # Security / Authentication Packages
+    "kerberos", "msv1_0", "schannel", "wdigest", "tspkg", "pku2u",
+    "cloudap", "negoexts", "ntlm", "livessp", "lsasrv",
+}
+
+
+def registry_value_text(value: Any) -> str:
+    """One readable string from a registry value of any type.
+
+    REG_MULTI_SZ comes back from winreg as a *list*, and str() on a list gives
+    "['scecli']" — brackets, quotes and all. That string then travelled into
+    the message, the path and the image fields, so the finding read like
+    nonsense and no file check could ever match it.
+    """
+    if isinstance(value, (list, tuple)):
+        parts = [str(item).strip().strip('"') for item in value]
+        return "; ".join(part for part in parts if part)
+    return str(value if value is not None else "").strip().strip('"')
+
+
+def unexpected_lsa_packages(command: str) -> list[str]:
+    """The packages in this value that Windows did not put there."""
+    out: list[str] = []
+    for part in str(command or "").replace(";", " ").split():
+        name = part.strip().strip('"').lower()
+        # Registered by name, sometimes with a .dll suffix.
+        if name.endswith(".dll"):
+            name = name[:-4]
+        if name and name not in DEFAULT_LSA_PACKAGES:
+            out.append(part.strip().strip('"'))
+    return out
+
+
 def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection]:
     """Score one persistence entry. Pure — no registry, no processes."""
     config, db = analyzer.config, analyzer.db
@@ -271,10 +311,14 @@ def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection
               f"will load that DLL — this is machine-wide injection by configuration."),
              "critical", signature_id="persistence.appinit")
     elif entry.source == "registry_autostart" and "lsass" in entry.name.lower():
-        emit("lsa_package",
-             (f"An LSA package is registered: '{entry.command}'. Code registered here runs "
-              f"inside lsass, where credentials live."),
-             "critical", signature_id="persistence.lsa")
+        unexpected = unexpected_lsa_packages(entry.command)
+        if unexpected:
+            emit("lsa_package",
+                 (f"An LSA package Windows did not install is registered: "
+                  f"{', '.join(unexpected)}. Code registered here runs inside lsass, "
+                  f"where every credential on this machine passes through."),
+                 "critical", signature_id="persistence.lsa",
+                 evidence={"unexpected": unexpected, "value": entry.command})
     elif entry.source == "registry_autostart":
         emit("registry_autostart",
              f"{entry.name} is set to run '{entry.command}'.",
@@ -399,20 +443,22 @@ def _enumerate_extra_locations() -> list[PersistenceEntry]:  # pragma: no cover 
                         except OSError:
                             break
                         index += 1
-                        if value:
+                        text = registry_value_text(value)
+                        if text:
                             entries.append(PersistenceEntry(
                                 source="registry_autostart", name=f"{description}: {name}",
-                                command=str(value), location=f"{hive}\\{subkey}",
+                                command=text, location=f"{hive}\\{subkey}",
                                 extra={"technique": description}))
                 else:
                     try:
                         value, _ = winreg.QueryValueEx(key, value_name)
                     except OSError:
                         continue
-                    if value and str(value).strip():
+                    text = registry_value_text(value)
+                    if text:
                         entries.append(PersistenceEntry(
                             source="registry_autostart", name=description,
-                            command=str(value), location=f"{hive}\\{subkey}\\{value_name}",
+                            command=text, location=f"{hive}\\{subkey}\\{value_name}",
                             extra={"technique": description}))
         except OSError:
             continue
