@@ -306,6 +306,42 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertNotIn("command=str(value)", source)
         self.assertNotIn("command=str(debugger)", source)
 
+    def test_windows_own_netsh_helpers_are_not_findings(self):
+        """Nine mediums on a clean install, every one a stock Windows helper.
+        A third-party netsh helper is a real technique; the shipped set is not."""
+        from candy.persistence import is_default_extra_location
+
+        description = "netsh helper DLL — loaded whenever netsh runs"
+        for dll in ("nshhttp.dll", "nshipsec.dll", "nshwfp.dll", "rpcnsh.dll",
+                    "WcnNetsh.dll", "whhelper.dll", "wlancfg.dll", "wshelper.dll",
+                    "wwancfg.dll"):
+            with self.subTest(dll=dll):
+                self.assertTrue(is_default_extra_location(description, "x", dll))
+
+    def test_a_third_party_netsh_helper_is_still_reported(self):
+        from candy.persistence import is_default_extra_location
+
+        description = "netsh helper DLL — loaded whenever netsh runs"
+        self.assertFalse(is_default_extra_location(description, "x", "evil.dll"))
+        self.assertFalse(is_default_extra_location(
+            description, "x", r"C:\Users\p\AppData\Roaming\evil.dll"))
+
+    def test_the_startup_folder_at_its_default_is_not_redirected(self):
+        """It reported "redirected Startup folder" while pointing at the
+        location Windows puts it. Redirection means moved, not present."""
+        from candy.persistence import is_default_extra_location
+
+        self.assertTrue(is_default_extra_location(
+            "redirected Startup folder", "Startup",
+            r"C:\Users\p\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"))
+
+    def test_a_genuinely_redirected_startup_folder_is_reported(self):
+        from candy.persistence import is_default_extra_location
+
+        self.assertFalse(is_default_extra_location(
+            "redirected Startup folder", "Startup",
+            r"C:\Users\p\AppData\Local\Temp\Evil"))
+
     def test_com_hijack_requires_an_actual_machine_wide_entry(self):
         """The finding said "this shadows the system-wide registration" without
         ever looking at HKLM. Every Electron app registers per-user COM, so on

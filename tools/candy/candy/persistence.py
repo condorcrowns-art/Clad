@@ -300,6 +300,47 @@ def winlogon_is_default(value: str, defaults: set[str]) -> bool:
     return False
 
 
+# netsh helper DLLs that ship with Windows. A third-party one is a genuine
+# persistence technique — it loads into netsh every time it runs — but the
+# stock set is large, present on every machine, and reporting all of it
+# produced nine medium findings on a clean install. Matched on the DLL name,
+# because the value name beside it varies ("rpc" holds rpcnsh.dll).
+DEFAULT_NETSH_HELPERS = {
+    "authfwcfg.dll", "dhcpcmonitor.dll", "dot3cfg.dll", "fwcfg.dll", "hnetmon.dll",
+    "ifmon.dll", "netiohlp.dll", "netprofm.dll", "nettrace.dll", "nshhttp.dll",
+    "nshipsec.dll", "nshwfp.dll", "p2pnetsh.dll", "peerdistsh.dll", "rasmontr.dll",
+    "rpcnsh.dll", "wcnnetsh.dll", "whhelper.dll", "wlancfg.dll", "wshelper.dll",
+    "wwancfg.dll", "wcncsvc.dll", "mprapi.dll", "wevtapi.dll",
+}
+
+# Where the Startup folder normally points. The entry is only interesting when
+# it has been *redirected* somewhere else — reporting it while it sits at its
+# own default is the report describing stock Windows as a finding.
+DEFAULT_STARTUP_TAILS = (
+    "/microsoft/windows/start menu/programs/startup",
+)
+
+
+def is_default_extra_location(description: str, name: str, value: str) -> bool:
+    """Is this entry just Windows in its out-of-the-box state?
+
+    Every false positive found on real machines has had this shape: a rule
+    reporting that a Windows feature exists, rather than that its
+    configuration has been changed. The question worth asking is always
+    "is this different from default", never "is this present".
+    """
+    lowered = description.lower()
+
+    if "netsh helper" in lowered:
+        return basename(value).lower() in DEFAULT_NETSH_HELPERS
+
+    if "startup folder" in lowered:
+        normalised = normalize_path(value).rstrip("/")
+        return any(normalised.endswith(tail) for tail in DEFAULT_STARTUP_TAILS)
+
+    return False
+
+
 def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection]:
     """Score one persistence entry. Pure — no registry, no processes."""
     config, db = analyzer.config, analyzer.db
@@ -488,7 +529,7 @@ def _enumerate_extra_locations() -> list[PersistenceEntry]:  # pragma: no cover 
                             break
                         index += 1
                         text = registry_value_text(value)
-                        if text:
+                        if text and not is_default_extra_location(description, name, text):
                             entries.append(PersistenceEntry(
                                 source="registry_autostart", name=f"{description}: {name}",
                                 command=text, location=f"{hive}\\{subkey}",
@@ -499,7 +540,7 @@ def _enumerate_extra_locations() -> list[PersistenceEntry]:  # pragma: no cover 
                     except OSError:
                         continue
                     text = registry_value_text(value)
-                    if text:
+                    if text and not is_default_extra_location(description, value_name, text):
                         entries.append(PersistenceEntry(
                             source="registry_autostart", name=description,
                             command=text, location=f"{hive}\\{subkey}\\{value_name}",
