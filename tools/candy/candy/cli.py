@@ -1584,8 +1584,26 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     writable, reason = hosts.available()
     lines.append(f"hosts file    : {hosts.path} ({reason})")
     lines.append(f"blocked sites : {hosts.blocked() or 'none'}")
+
+    # Ad blocking keeps its own marked section of the hosts file, so the line
+    # above never counted it. Turning on 73 domains and then reading
+    # "blocked sites : none" is the report contradicting what just happened.
+    from .adblock import AdBlocker
+
+    ad_status = AdBlocker(config).status()
+    lines.append(f"ad blocking   : {'ON' if ad_status.get('enabled') else 'off'} — "
+                 f"{ad_status.get('blocked_domains', 0)} domain(s), categories: "
+                 f"{', '.join(ad_status.get('categories', [])) or 'none'}")
+
     lines.append(f"firewall      : {'available' if IS_WINDOWS else 'Windows only'}"
                  f"{'' if is_admin() else ' — needs administrator to add rules'}")
+
+    # Credential-store auditing had no line here at all, which is a large part
+    # of how it went eight versions doing nothing while reporting success.
+    section("credential stores")
+    from .credguard import CredentialGuard, format_status
+
+    lines.append(format_status(CredentialGuard(config).status()))
 
     section("platform trust")
     from .integrity import platform_trust

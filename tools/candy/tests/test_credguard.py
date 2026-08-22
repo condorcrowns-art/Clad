@@ -273,6 +273,30 @@ class ArmingTests(unittest.TestCase):
         self.assertIn("NOT armed", str(ArmResult(False, [], ["x"], "")))
 
 
+class DoctorReportingTests(unittest.TestCase):
+    """A protection you cannot verify from the diagnostic is a protection that
+    can quietly stop working — which is exactly what credguard did."""
+
+    def test_doctor_reports_ad_blocking_separately(self):
+        """Ad blocking keeps its own marked section of the hosts file, so the
+        "blocked sites" line never counted it. Enabling 73 domains and then
+        reading "blocked sites : none" is the report contradicting itself."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "cli.py").read_text(encoding="utf-8")
+        start = source.index('def cmd_doctor')
+        body = source[start:]
+        self.assertIn("ad blocking", body)
+        self.assertIn("AdBlocker(config).status()", body)
+
+    def test_doctor_reports_the_credential_stores(self):
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "cli.py").read_text(encoding="utf-8")
+        start = source.index('def cmd_doctor')
+        body = source[start:]
+        self.assertIn('section("credential stores")', body)
+        self.assertIn("CredentialGuard(config).status()", body)
+
+
 class LevelTests(unittest.TestCase):
     def test_every_level_states_what_it_breaks(self):
         """A level that only lists benefits is marketing, not a security
