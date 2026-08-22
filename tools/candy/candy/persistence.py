@@ -256,6 +256,50 @@ def unexpected_lsa_packages(command: str) -> list[str]:
     return out
 
 
+# Where Windows' own logon binaries live, in every form the registry stores
+# them in. The variable forms are listed explicitly rather than expanded, so
+# the comparison never depends on expansion succeeding.
+SYSTEM_ROOT_PREFIXES = ("c:/windows/", "%systemroot%/", "%windir%/", "/systemroot/")
+
+
+def under_system_root(path: str) -> bool:
+    normalised = normalize_path(path).lstrip("/")
+    return any(normalised.startswith(prefix.lstrip("/")) for prefix in SYSTEM_ROOT_PREFIXES)
+
+
+def winlogon_is_default(value: str, defaults: set[str]) -> bool:
+    """Is this Winlogon value one Windows itself set?
+
+    Deliberately forgiving about shape, because the *stored* form varies and a
+    false "your logon has been hijacked" is about the most alarming thing this
+    tool could say. Userinit is conventionally written with a trailing comma;
+    it is often stored as REG_EXPAND_SZ with %systemroot% rather than an
+    absolute path; and either form may carry stray whitespace.
+    """
+    candidate = registry_value_text(value).rstrip(",").strip()
+    if not candidate:
+        return True
+    forms = {normalize_path(candidate), candidate.lower()}
+    try:
+        forms.add(normalize_path(expand_path(candidate)))
+    except Exception:  # noqa: BLE001 - expansion is best-effort
+        pass
+    for default in defaults:
+        cleaned = str(default).rstrip(",").strip()
+        if normalize_path(cleaned) in forms or cleaned.lower() in forms:
+            return True
+        # %systemroot%\system32\userinit.exe and the absolute form name the
+        # same file. Matching on the tail plus a system root catches that even
+        # where the variable cannot be expanded — relying on expansion alone
+        # means a machine that fails to expand it gets told its logon has been
+        # hijacked. A same-named file somewhere else (C:\Users\p\userinit.exe)
+        # is still reported, which is the case that matters.
+        if basename(cleaned) and basename(cleaned) == basename(candidate) \
+                and under_system_root(candidate):
+            return True
+    return False
+
+
 def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection]:
     """Score one persistence entry. Pure — no registry, no processes."""
     config, db = analyzer.config, analyzer.db
@@ -518,7 +562,7 @@ def _enumerate_com_hijacks() -> list[PersistenceEntry]:  # pragma: no cover - Wi
                         continue
                     entries.append(PersistenceEntry(
                         source="com_hijack", name=f"COM {clsid} ({server})",
-                        command=str(value),
+                        command=registry_value_text(value),
                         location=f"HKCU\\{COM_HIJACK_ROOT}\\{clsid}\\{server}",
                         extra={"technique": "per-user COM server shadows the machine-wide one",
                                "clsid": clsid, "shadows_hklm": True}))
@@ -546,7 +590,7 @@ def _enumerate_run_keys() -> list[PersistenceEntry]:  # pragma: no cover - Windo
                     index += 1
                     entries.append(PersistenceEntry(
                         source=f"{root_name.lower()}_run", name=str(name),
-                        command=str(value), location=f"{root_name}\\{subkey}"))
+                        command=registry_value_text(value), location=f"{root_name}\\{subkey}"))
         except OSError:
             continue
     return entries
@@ -563,10 +607,12 @@ def _enumerate_winlogon() -> list[PersistenceEntry]:  # pragma: no cover - Windo
                     value, _ = winreg.QueryValueEx(key, value_name.capitalize())
                 except OSError:
                     continue
-                if normalize_path(str(value)) not in {normalize_path(d) for d in defaults}:
-                    entries.append(PersistenceEntry(
-                        source="winlogon", name=value_name.capitalize(),
-                        command=str(value), location=f"HKLM\\{WINLOGON_KEY}"))
+                text = registry_value_text(value)
+                if winlogon_is_default(text, defaults):
+                    continue
+                entries.append(PersistenceEntry(
+                    source="winlogon", name=value_name.capitalize(),
+                    command=text, location=f"HKLM\\{WINLOGON_KEY}"))
     except OSError:
         pass
     return entries
@@ -592,7 +638,7 @@ def _enumerate_ifeo() -> list[PersistenceEntry]:  # pragma: no cover - Windows o
                 except OSError:
                     continue
                 entries.append(PersistenceEntry(
-                    source="ifeo", name=f"IFEO:{target}", command=str(debugger),
+                    source="ifeo", name=f"IFEO:{target}", command=registry_value_text(debugger),
                     location=f"HKLM\\{base}\\{target}", extra={"target": target}))
     except OSError:
         pass

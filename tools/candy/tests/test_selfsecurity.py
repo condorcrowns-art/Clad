@@ -266,6 +266,46 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertEqual(registry_value_text([]), "")
         self.assertEqual(registry_value_text(None), "")
 
+    def test_every_stored_form_of_userinit_is_recognised(self):
+        """Found by auditing for the same shape as the LSA bug rather than
+        waiting to hit it. Userinit is stored with a trailing comma, often as
+        REG_EXPAND_SZ with %systemroot%, sometimes with stray whitespace. The
+        comparison only handled the absolute form, so a machine storing the
+        variable form would be told its logon had been hijacked."""
+        from candy.persistence import winlogon_is_default
+
+        defaults = {"c:/windows/system32/userinit.exe",
+                    "c:/windows/system32/userinit.exe,"}
+        for value in (r"C:\Windows\system32\userinit.exe,",
+                      r"%systemroot%\system32\userinit.exe,",
+                      r"%windir%\system32\userinit.exe",
+                      "\\SystemRoot\\system32\\userinit.exe",
+                      r"C:\WINDOWS\system32\userinit.exe, ",
+                      ""):
+            with self.subTest(value=value):
+                self.assertTrue(winlogon_is_default(value, defaults))
+
+    def test_a_real_winlogon_hijack_is_still_caught(self):
+        """Including one that keeps the filename but moves the file — which is
+        what the same-name shortcut would otherwise wave through."""
+        from candy.persistence import winlogon_is_default
+
+        defaults = {"c:/windows/system32/userinit.exe,"}
+        for value in (r"C:\Users\p\AppData\Local\Temp\evil.exe",
+                      r"C:\Users\p\userinit.exe",
+                      r"C:\Windows\system32\userinit.exe, C:\Temp\evil.exe"):
+            with self.subTest(value=value):
+                self.assertFalse(winlogon_is_default(value, defaults))
+
+    def test_no_registry_read_stringifies_a_raw_value(self):
+        """The LSA bug was str() on a list. Every registry read in the module
+        goes through registry_value_text now, so the class is closed rather
+        than the one instance."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "persistence.py").read_text(encoding="utf-8")
+        self.assertNotIn("command=str(value)", source)
+        self.assertNotIn("command=str(debugger)", source)
+
     def test_com_hijack_requires_an_actual_machine_wide_entry(self):
         """The finding said "this shadows the system-wide registration" without
         ever looking at HKLM. Every Electron app registers per-user COM, so on
