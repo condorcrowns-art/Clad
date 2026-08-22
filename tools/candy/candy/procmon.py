@@ -112,6 +112,9 @@ class ProcessMonitor:
         self.mode = "idle"
         self.last_cycle: float = 0.0
         self.scanned = 0
+        # Set when the WMI fast path could not start, so status and doctor can
+        # say which mode is really running rather than which one was attempted.
+        self.wmi_error: str | None = None
 
     # ------------------------------------------------------------ lifecycle
     def start(self) -> None:
@@ -124,7 +127,9 @@ class ProcessMonitor:
         thread = threading.Thread(target=self._poll_loop, name="procmon-poll", daemon=True)
         thread.start()
         self._threads.append(thread)
-        self.mode = "wmi+poll" if started_wmi else "poll"
+        # The WMI thread upgrades this to "wmi+poll" only once it is actually
+        # watching; if it cannot start, it downgrades the text itself.
+        self.mode = "poll (starting WMI…)" if started_wmi else "poll"
 
     def stop(self) -> None:
         self._stop.set()
@@ -152,8 +157,19 @@ class ProcessMonitor:
             return
         pythoncom.CoInitialize()
         try:
-            connection = wmi.WMI()
-            watcher = connection.Win32_ProcessStartTrace.watch_for()
+            try:
+                connection = wmi.WMI()
+                watcher = connection.Win32_ProcessStartTrace.watch_for()
+            except Exception as exc:  # noqa: BLE001
+                # Win32_ProcessStartTrace needs administrator. Without it WMI
+                # raises access-denied here, which used to kill this thread with
+                # an unhandled traceback across the console — alarming, and
+                # misleading, because polling carries on regardless and catches
+                # the same process starts a little later.
+                self.wmi_error = str(exc).strip() or exc.__class__.__name__
+                self.mode = "poll (WMI needs administrator)"
+                return
+            self.mode = "wmi+poll"
             while not self._stop.is_set():
                 try:
                     event = watcher(timeout_ms=1000)

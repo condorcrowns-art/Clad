@@ -60,11 +60,18 @@ if IS_WINDOWS:  # pragma: no cover - Windows only
             ("dwInfoFlags", wintypes.DWORD),
         ]
 
+    # A window procedure returns LRESULT, which is pointer-sized — 64 bits on a
+    # 64-bit build. Declaring it as c_long truncates to 32 bits, and ctypes then
+    # refuses the real lparam with "int too long to convert" on every single
+    # message the window receives. c_ssize_t is LRESULT on both architectures.
+    LRESULT = ctypes.c_ssize_t
+    WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT,
+                                 wintypes.WPARAM, wintypes.LPARAM)
+
     class WNDCLASS(ctypes.Structure):
         _fields_ = [
             ("style", wintypes.UINT),
-            ("lpfnWndProc", ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, wintypes.UINT,
-                                               wintypes.WPARAM, wintypes.LPARAM)),
+            ("lpfnWndProc", WNDPROC),
             ("cbClsExtra", ctypes.c_int),
             ("cbWndExtra", ctypes.c_int),
             ("hInstance", wintypes.HINSTANCE),
@@ -75,8 +82,6 @@ if IS_WINDOWS:  # pragma: no cover - Windows only
             ("lpszClassName", wintypes.LPCWSTR),
         ]
 
-    WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, wintypes.UINT,
-                                 wintypes.WPARAM, wintypes.LPARAM)
 
 
 class TrayIcon:
@@ -125,17 +130,32 @@ class TrayIcon:
             user32 = ctypes.windll.user32
             kernel32 = ctypes.windll.kernel32
 
+            # Without explicit types ctypes assumes 32-bit ints for every
+            # argument, and the very first message carrying a real pointer in
+            # lparam raises OverflowError inside the callback — which Python
+            # can only print, so it repeats for every message forever.
+            user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT,
+                                              wintypes.WPARAM, wintypes.LPARAM]
+            user32.DefWindowProcW.restype = LRESULT
+
             def window_proc(hwnd, message, wparam, lparam):
-                if message == WM_APP_TRAY and lparam == WM_LBUTTONDBLCLK and self.on_open:
-                    try:
-                        self.on_open()
-                    except Exception:  # noqa: BLE001
-                        pass
+                try:
+                    if (message == WM_APP_TRAY and lparam == WM_LBUTTONDBLCLK
+                            and self.on_open):
+                        try:
+                            self.on_open()
+                        except Exception:  # noqa: BLE001
+                            pass
+                        return 0
+                    if message == WM_DESTROY:
+                        user32.PostQuitMessage(0)
+                        return 0
+                    return user32.DefWindowProcW(hwnd, message, wparam, lparam)
+                except Exception:  # noqa: BLE001
+                    # A raising window proc cannot report anything useful — the
+                    # message loop is not ours. Swallow it so a tray-icon
+                    # problem never becomes a wall of console noise.
                     return 0
-                if message == WM_DESTROY:
-                    user32.PostQuitMessage(0)
-                    return 0
-                return user32.DefWindowProcW(hwnd, message, wparam, lparam)
 
             self._wndproc_ref = WNDPROC(window_proc)
             window_class = WNDCLASS()

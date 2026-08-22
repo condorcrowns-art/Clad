@@ -80,6 +80,59 @@ class CommandInjectionTests(unittest.TestCase):
                 self.assertEqual(quoted[1:-1].count("'") % 2, 0)
 
 
+class WindowsRegressionTests(unittest.TestCase):
+    """Bugs found the first time Candy ran on a real Windows machine."""
+
+    def test_the_window_proc_return_type_is_pointer_sized(self):
+        """LRESULT is 64-bit on a 64-bit build. Declared as c_long it truncates,
+        and ctypes then rejects every real lparam with "int too long to
+        convert" — once per window message, forever."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "notify.py").read_text(encoding="utf-8")
+        self.assertIn("LRESULT = ctypes.c_ssize_t", source)
+        self.assertNotIn("ctypes.WINFUNCTYPE(ctypes.c_long", source)
+        self.assertIn("DefWindowProcW.argtypes", source)
+        self.assertIn("DefWindowProcW.restype", source)
+
+    def test_the_window_proc_cannot_raise(self):
+        """A raising window proc has nowhere to report — Python can only print
+        it, so it becomes console spam on every message."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "notify.py").read_text(encoding="utf-8")
+        start = source.index("def window_proc(")
+        end = source.index("self._wndproc_ref", start)
+        self.assertIn("except Exception", source[start:end])
+
+    def test_wmi_startup_failure_is_caught(self):
+        """Win32_ProcessStartTrace needs administrator. Without it watch_for()
+        raises access-denied and used to kill the thread with a traceback,
+        even though polling carries on and catches the same events."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "procmon.py").read_text(encoding="utf-8")
+        start = source.index("def _wmi_loop(")
+        end = source.index("while not self._stop.is_set():", start)
+        body = source[start:end]
+        self.assertIn("watch_for()", body)
+        self.assertIn("except Exception", body)
+        self.assertIn("self.wmi_error", body)
+
+    def test_the_monitor_does_not_claim_wmi_before_it_works(self):
+        """It used to report "wmi+poll" the moment the thread was launched,
+        including when that thread immediately died on access-denied."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "procmon.py").read_text(encoding="utf-8")
+        self.assertNotIn('self.mode = "wmi+poll" if started_wmi else "poll"', source)
+
+    def test_the_window_class_uses_the_same_proc_type(self):
+        """The struct field had its own c_long copy of the signature. A struct
+        that disagrees with the callback is the same truncation bug wearing a
+        different hat."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "notify.py").read_text(encoding="utf-8")
+        self.assertIn('("lpfnWndProc", WNDPROC)', source)
+        self.assertNotIn("ctypes.c_long", source)
+
+
 class RestoreTargetTests(unittest.TestCase):
     """Restore writes a file to whatever the metadata names."""
 
