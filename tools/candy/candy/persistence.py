@@ -95,6 +95,16 @@ IFEO_SENSITIVE = {
     "msmpeng.exe", "mpcmdrun.exe", "candy.exe", "cmd.exe", "powershell.exe",
 }
 
+# A full path may contain spaces ("C:\Program Files\..."). \S+? cannot cross
+# one, so an unquoted Program Files path used to come back as
+# "Files\Google\Chrome\chrome.exe" — a path that does not exist, so every
+# lookup against it silently failed. This alternative is anchored at the start
+# of the command and at a drive letter, UNC prefix or %VAR%, so it may contain
+# spaces without swallowing arguments from an entry like "rundll32.exe x.dll".
+_PATH_START = r'(?:[A-Za-z]:[\\/]|\\\\|%\w+%)'
+_FULL_PATH_COMMAND = re.compile(
+    r'^\s*(' + _PATH_START + r'[^"|<>]*?\.(?:exe|dll|scr|bat|cmd|ps1|vbs|js))(?:\s|$)',
+    re.IGNORECASE)
 _EXE_IN_COMMAND = re.compile(r'"([^"]+?\.(?:exe|dll|scr|bat|cmd|ps1|vbs|js))"|(\S+?\.(?:exe|scr|bat|cmd|ps1|vbs|js))',
                              re.IGNORECASE)
 
@@ -127,10 +137,17 @@ def extract_image(command: str) -> str:
     """
     if not command:
         return ""
+    # Quoted first: the author told us exactly where the path ends.
     match = _EXE_IN_COMMAND.search(command)
+    if match and match.group(1):
+        return match.group(1).strip()
+    # Then a whole-command path, which may contain spaces.
+    full = _FULL_PATH_COMMAND.match(command)
+    if full:
+        return full.group(1).strip()
     if not match:
         return command.strip().strip('"').split(" ")[0]
-    return (match.group(1) or match.group(2) or "").strip()
+    return (match.group(2) or "").strip()
 
 
 def analyze_entry(entry: PersistenceEntry, analyzer: Analyzer) -> list[Detection]:
@@ -339,6 +356,21 @@ def _enumerate_extra_locations() -> list[PersistenceEntry]:  # pragma: no cover 
     return entries
 
 
+def _clsid_in_hklm(clsid: str, server: str) -> bool:  # pragma: no cover - Windows only
+    """Is this CLSID also registered machine-wide? That is what shadowing means."""
+    import winreg
+
+    for root in (winreg.HKEY_LOCAL_MACHINE,):
+        for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+            try:
+                with winreg.OpenKey(root, f"{COM_HIJACK_ROOT}\\{clsid}\\{server}", 0,
+                                    winreg.KEY_READ | view):
+                    return True
+            except OSError:
+                continue
+    return False
+
+
 def _enumerate_com_hijacks() -> list[PersistenceEntry]:  # pragma: no cover - Windows only
     """Per-user CLSID entries that shadow a machine-wide COM server.
 
@@ -366,12 +398,21 @@ def _enumerate_com_hijacks() -> list[PersistenceEntry]:  # pragma: no cover - Wi
                         continue
                     if not value:
                         continue
+                    # Only a per-user CLSID that *also* exists machine-wide is
+                    # actually shadowing anything. Modern applications —
+                    # OneDrive, Discord, Chrome, every Electron app — register
+                    # their own per-user COM servers as a matter of course, and
+                    # flagging those produced dozens of high-severity findings
+                    # on a clean machine while stating something untrue about
+                    # each one.
+                    if not _clsid_in_hklm(clsid, server):
+                        continue
                     entries.append(PersistenceEntry(
                         source="com_hijack", name=f"COM {clsid} ({server})",
                         command=str(value),
                         location=f"HKCU\\{COM_HIJACK_ROOT}\\{clsid}\\{server}",
                         extra={"technique": "per-user COM server shadows the machine-wide one",
-                               "clsid": clsid}))
+                               "clsid": clsid, "shadows_hklm": True}))
     except OSError:
         pass
     return entries

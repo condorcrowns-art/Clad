@@ -133,6 +133,59 @@ class WindowsRegressionTests(unittest.TestCase):
         self.assertNotIn("ctypes.c_long", source)
 
 
+class FalsePositiveTests(unittest.TestCase):
+    """Found by running against a real, clean Windows 11 machine: 42 detections
+    with 11 highs, none of them real. A tool that cries wolf gets closed."""
+
+    def test_a_program_files_path_is_not_truncated(self):
+        """\\S+? cannot cross the space in "Program Files", so an unquoted path
+        came back as "Files\\Google\\..." — which exists nowhere, so every
+        signature, hash and signature check against it silently did nothing."""
+        from candy.persistence import extract_image
+
+        self.assertEqual(
+            extract_image(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+
+    def test_quoted_paths_still_win(self):
+        from candy.persistence import extract_image
+
+        self.assertEqual(extract_image(r'"C:\Program Files\x\a.exe" -silent'),
+                         r"C:\Program Files\x\a.exe")
+
+    def test_arguments_are_still_not_swallowed(self):
+        """A path that may contain spaces must not eat the rest of the line."""
+        from candy.persistence import extract_image
+
+        self.assertEqual(extract_image(r"C:\Windows\notepad.exe /a"),
+                         r"C:\Windows\notepad.exe")
+        self.assertEqual(extract_image(r"rundll32.exe C:\x\evil.dll,Entry"),
+                         "rundll32.exe")
+
+    def test_environment_variable_paths_survive(self):
+        from candy.persistence import extract_image
+
+        self.assertEqual(extract_image(r"%APPDATA%\My App\thing.exe"),
+                         r"%APPDATA%\My App\thing.exe")
+
+    def test_com_hijack_requires_an_actual_machine_wide_entry(self):
+        """The finding said "this shadows the system-wide registration" without
+        ever looking at HKLM. Every Electron app registers per-user COM, so on
+        a clean machine that was ten high-severity lies."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "persistence.py").read_text(encoding="utf-8")
+        self.assertIn("def _clsid_in_hklm", source)
+        start = source.index("def _enumerate_com_hijacks")
+        self.assertIn("_clsid_in_hklm(clsid, server)", source[start:])
+
+    def test_unknown_platform_state_is_not_reported_as_healthy(self):
+        """VBS/HVCI came back None — unreadable without administrator — and the
+        advice line still said the platform looked correctly configured."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "integrity.py").read_text(encoding="utf-8")
+        self.assertIn("unknown rather than confirmed", source)
+
+
 class RestoreTargetTests(unittest.TestCase):
     """Restore writes a file to whatever the metadata names."""
 

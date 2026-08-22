@@ -215,5 +215,14 @@ def platform_trust() -> dict[str, Any]:
         "secure_boot": secure_boot,
         "tpm": tpm,
         "virtualisation_based_security": vbs,
-        "advice": advice or ["platform protections look correctly configured"],
+        # "No advice" is not the same as "all good". When VBS/HVCI could not be
+        # read at all — the registry key is absent, or the query needs rights we
+        # do not have — saying the platform looks correctly configured is a
+        # claim about something that was never checked.
+        "advice": advice or ([
+            "Secure Boot and TPM look correct. Virtualisation-based security "
+            "could not be read (it usually needs administrator), so that part "
+            "is unknown rather than confirmed."]
+            if vbs.get("vbs") is None and vbs.get("hvci") is None
+            else ["platform protections look correctly configured"]),
     }
