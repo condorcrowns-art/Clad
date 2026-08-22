@@ -140,10 +140,24 @@ def cmd_verify_log(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
+
+
 def cmd_log(args: argparse.Namespace) -> int:
     config = Config.load(args.config)
     path = Path(args.path) if args.path else config.log_dir() / "candy.jsonl"
-    records = [r for r in iter_records(path) if not args.detections_only or r.get("event") == "detection"]
+    records = [r for r in iter_records(path)
+               if not args.detections_only or r.get("event") == "detection"]
+
+    if getattr(args, "severity", None):
+        floor = SEVERITY_ORDER.index(args.severity)
+        records = [r for r in records
+                   if r.get("severity") in SEVERITY_ORDER
+                   and SEVERITY_ORDER.index(r["severity"]) >= floor]
+        if not records:
+            print(f"Nothing at {args.severity} or above in {path}.")
+            return 0
+
     for record in records[-args.limit:]:
         if args.json:
             print(json.dumps(record))
@@ -1662,6 +1676,9 @@ def build_parser() -> argparse.ArgumentParser:
     log.add_argument("--limit", type=int, default=40)
     log.add_argument("--json", action="store_true")
     log.add_argument("--detections-only", action="store_true")
+    log.add_argument("--severity", choices=list(SEVERITY_ORDER),
+                     help="show only records at this severity or above — the usual "
+                          "reason for opening a log at all")
     log.set_defaults(func=cmd_log)
 
     quarantine = sub.add_parser("quarantine", help="manage quarantined files")
