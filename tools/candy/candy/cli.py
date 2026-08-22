@@ -1595,9 +1595,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     for key, values in report.items():
         for value in values:
             lines.append(f"{key:<12}: {value}")
+    print(f"  (letting the monitors run for {args.seconds:.0f}s — a first pass over "
+          f"every process and autostart entry is not instant)", flush=True)
     time.sleep(float(args.seconds))
     status = engine.status()
-    section("live status")
+    section(f"live status after {args.seconds:.0f}s")
     lines.append(json.dumps(status, indent=2))
     engine.stop()
 
@@ -1886,8 +1888,11 @@ def build_parser() -> argparse.ArgumentParser:
     revert.set_defaults(func=cmd_revert)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
-    doctor.add_argument("--seconds", type=float, default=6.0,
-                        help="how long to let the monitors run before reporting (default 6)")
+    doctor.add_argument("--seconds", type=float, default=20.0,
+                        help="how long to let the monitors run before reporting (default 20). "
+                             "A first full pass over processes and autostart entries takes "
+                             "longer than it sounds, and a short window reports zeros that "
+                             "look like breakage")
     doctor.add_argument("--out", help="also write the report to this file")
     doctor.set_defaults(func=cmd_doctor)
 
