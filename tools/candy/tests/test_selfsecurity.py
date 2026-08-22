@@ -212,6 +212,20 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertEqual(bits_host("https://dl.google.com:8443/x"), "dl.google.com")
         self.assertEqual(bits_host("not a url"), "")
 
+    def test_sysmon_status_distinguishes_the_reasons(self):
+        """"NOT installed" is the wrong answer when the truth is "installed but
+        the channel needs administrator" — the two want different things from
+        the user."""
+        from candy.winevents import SYSMON_SERVICE_NAMES, sysmon_status
+
+        status = sysmon_status()
+        for key in ("installed", "channel", "service", "detail"):
+            self.assertIn(key, status)
+        self.assertTrue(status["detail"], "a status with no reason helps nobody")
+        # 64-bit installs register Sysmon64, older and 32-bit ones Sysmon.
+        self.assertIn("Sysmon64", SYSMON_SERVICE_NAMES)
+        self.assertIn("Sysmon", SYSMON_SERVICE_NAMES)
+
     def test_com_hijack_requires_an_actual_machine_wide_entry(self):
         """The finding said "this shadows the system-wide registration" without
         ever looking at HKLM. Every Electron app registers per-user COM, so on

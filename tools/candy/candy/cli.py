@@ -17,7 +17,7 @@ from .events import Detection
 from .threatdb import ThreatDB, VALID_TARGETS, make_submission
 from .util import IS_WINDOWS, app_dir, expand_path
 from .winapi import is_admin
-from .winevents import sysmon_installed
+from .winevents import sysmon_installed, sysmon_status
 
 BANNER = rf"""
   Candy {VERSION} — Roblox executor & malware tripwire
@@ -1549,10 +1549,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             lines.append(f"{module:<12}: MISSING ({exc.__class__.__name__}) — {why}")
 
     section("kernel telemetry")
-    lines.append(f"sysmon        : {'installed' if sysmon_installed() else 'NOT installed'}")
-    if not sysmon_installed() and IS_WINDOWS:
-        lines.append("                install it free from Microsoft Sysinternals for "
-                     "kernel-level injection and driver-load detection")
+    # Asked once — it shells out twice — and reported with the reason, because
+    # "NOT installed" is the wrong answer when the truth is "installed, but the
+    # channel needs administrator".
+    sysmon = sysmon_status()
+    lines.append(f"sysmon        : {'installed' if sysmon['installed'] else 'NOT readable'}")
+    lines.append(f"                {sysmon['detail']}")
+    if sysmon.get("service"):
+        lines.append(f"                service: {sysmon['service']}"
+                     + (" (running)" if sysmon.get("running") else " (NOT running)"))
+    if not sysmon["installed"] and IS_WINDOWS and not sysmon.get("service"):
+        lines.append("                get it free from Microsoft Sysinternals — it is "
+                     "the difference between seeing injection and guessing")
 
     section("blocking")
     from .netblock import HostsBlocker, hosts_path_for_platform

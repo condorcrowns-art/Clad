@@ -527,15 +527,67 @@ class WindowsEventMonitor:
         }
 
 
-def sysmon_installed() -> bool:
-    """True if the Sysmon channel can be read (i.e. Sysmon is installed)."""
-    if not IS_WINDOWS or not shutil.which("wevtutil"):
-        return False
+# Sysmon has been shipped under several service names over the years, and the
+# 64-bit installer registers a different one from the 32-bit build.
+SYSMON_SERVICE_NAMES = ("Sysmon64", "Sysmon", "SysmonDrv")
+
+
+def sysmon_status() -> dict[str, Any]:
+    """Whether Sysmon is installed, and — when it is not readable — why.
+
+    Reporting a bare "NOT installed" is unhelpful when the truth might be
+    "installed, but the channel needs administrator" or "the service is there
+    and the driver failed to load". Those three want completely different
+    things from the user, so they are distinguished rather than collapsed.
+    """
+    result: dict[str, Any] = {"installed": False, "channel": False,
+                              "service": None, "detail": ""}
+    if not IS_WINDOWS:
+        result["detail"] = "not Windows"
+        return result
+    if not shutil.which("wevtutil"):
+        result["detail"] = "wevtutil is not on PATH, so no channel can be read"
+        return result
+
     try:
         completed = subprocess.run(
             ["wevtutil", "gl", SYSMON_CHANNEL], capture_output=True, text=True,
             timeout=15, check=False, creationflags=0x08000000,
         )
-        return completed.returncode == 0
-    except Exception:  # noqa: BLE001
-        return False
+        result["channel"] = completed.returncode == 0
+        channel_error = ((completed.stderr or "") + (completed.stdout or "")).strip()
+    except Exception as exc:  # noqa: BLE001
+        channel_error = str(exc)
+
+    for name in SYSMON_SERVICE_NAMES:
+        try:
+            query = subprocess.run(["sc", "query", name], capture_output=True, text=True,
+                                   timeout=15, check=False, creationflags=0x08000000)
+        except Exception:  # noqa: BLE001
+            continue
+        if query.returncode == 0:
+            result["service"] = name
+            result["running"] = "RUNNING" in (query.stdout or "").upper()
+            break
+
+    if result["channel"]:
+        result["installed"] = True
+        result["detail"] = (f"installed ({result['service'] or 'service name not found'})"
+                            if result["service"] else "channel readable")
+    elif result["service"]:
+        result["detail"] = (
+            f"the {result['service']} service exists but its event channel could not be "
+            f"read. Run Candy as administrator; if it still fails the driver may not "
+            f"have loaded — 'sc query {result['service']}' will say."
+            + (f" [{channel_error[:120]}]" if channel_error else ""))
+    else:
+        result["detail"] = (
+            "no Sysmon service and no readable channel. Extracting the download is not "
+            "enough — it has to be installed with 'Sysmon64.exe -accepteula -i' from an "
+            "administrator prompt.")
+    return result
+
+
+def sysmon_installed() -> bool:
+    """True if the Sysmon channel can be read (i.e. Sysmon is installed)."""
+    return bool(sysmon_status()["installed"])
