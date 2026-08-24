@@ -1,0 +1,14 @@
+# Working folders for the conversion pipeline. Same rule as the store: nothing
+# here is a deliverable, and masters must never reach a public repo.
+refs/
+prepped/
+raw/
+generated/
+finished/
+*.glb
+*.gltf
+*.fbx
+*.obj
+*.ply
+*.blend
+*.blend1
