@@ -50,9 +50,20 @@ player holding it. Ask the user roughly how big the real object is; do not guess
 ### 0. Setup, once
 
 ```bash
-bash pipeline/setup.sh
-python3 pipeline/tools/gpu_check.py
+python pipeline/setup.py
 ```
+
+Cross-platform — works in PowerShell, Terminal, anything. It installs the
+dependencies, creates the `work/` folders, and finishes by running `gpu_check.py`.
+
+**On Windows the interpreter is usually `python`, not `python3`.** Commands in
+this file are written as `python3`; substitute `python` if that is what the
+machine has. `setup.py` prints the exact interpreter path to use at the end —
+use that one consistently, because `bpy` is installed into that specific
+interpreter and will not be visible from another.
+
+(`pipeline/setup.sh` is the bash equivalent, for anyone who prefers it. It does
+the same thing but will not run in PowerShell without Git Bash or WSL.)
 
 Installs Pillow, rembg, and the `bpy` Blender module. Blender does not need to
 be installed separately — `bpy` is Blender as a Python library. Verify with

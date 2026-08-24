@@ -68,9 +68,14 @@ reconciles the difference by *inventing* geometry — that is where melted faces
 and lopsided shoulders come from.
 
 ```bash
-pip install Pillow rembg onnxruntime
+python pipeline/setup.py                       # once — installs everything
 python3 pipeline/tools/prep_views.py refs/ -o prepped/
 ```
+
+> **Windows:** use `python` rather than `python3` throughout. `setup.py` prints
+> the exact interpreter to use — stick to it, since `bpy` installs into that
+> specific interpreter. `setup.sh` is the bash equivalent and needs Git Bash or
+> WSL; `setup.py` needs neither.
 
 This cuts the backgrounds out, rescales every view so the character is exactly
 the same height in each, aligns them vertically, pads to a square canvas, and
