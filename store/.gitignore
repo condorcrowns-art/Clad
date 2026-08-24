@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------------------
+# NEVER commit master/deliverable files. Anything in this repo is public the
+# moment the site deploys — a file does not need to be linked to be downloaded.
+# Keep masters in a folder OUTSIDE the repo and upload them to your checkout
+# platform (itch.io / Ko-fi / Payhip) instead.
+# ---------------------------------------------------------------------------
+
+# Source & deliverable meshes
+*.blend
+*.blend1
+*.fbx
+*.obj
+*.mtl
+*.ma
+*.mb
+*.max
+*.ztl
+*.zpr
+*.spp
+*.sbs
+*.sbsar
+
+# Full-resolution texture sets
+*_basecolor.*
+*_normal.*
+*_roughness.*
+*_metallic.*
+*_orm.*
+*_height.*
+*.exr
+*.tga
+*.psd
+
+# Packaged deliverables
+*.zip
+*.rar
+*.7z
+
+# Un-watermarked renders staged for processing
+raw_renders/
+masters/
+
+# Preview GLBs are allowed — they are produced by tools/make_preview.py and are
+# intentionally degraded. If you did not generate it with that script, it does
+# not belong here.
+!assets/characters/**/preview.glb
