@@ -44,6 +44,61 @@ def column_is_empty(img, x, bg, tolerance, sample_rows):
     return True
 
 
+def column_background_fraction(img, tolerance=30, sample_rows=200):
+    """For each column, the fraction of sampled rows that are background.
+
+    This is the measure that separates a panel boundary from a gap *inside* a
+    figure. A boundary between panels is background down essentially the whole
+    image; the gap between an A-posed arm and the torso is background only
+    across the torso band. Raw pixel density cannot tell those apart -- both are
+    simply "low" -- so it splits figures at their own armpits.
+    """
+    rgb = img.convert("RGB")
+    bg = background_colour(rgb)
+    w, h = rgb.size
+    step = max(1, h // sample_rows)
+    rows = list(range(0, h, step))
+
+    fractions = []
+    for x in range(w):
+        empty = 0
+        for y in rows:
+            px = rgb.getpixel((x, y))
+            if sum(abs(px[i] - bg[i]) for i in range(3)) <= tolerance * 3:
+                empty += 1
+        fractions.append(empty / len(rows))
+    return fractions
+
+
+def find_valleys(img, expected=None, tolerance=30, min_background=0.93):
+    """Panel boundaries: columns that are background for nearly their full height.
+
+    Tolerating a few non-background rows (rather than demanding every row be
+    clean) is what survives stray hair strands or a faint band bridging the gap.
+    """
+    w = img.width
+    fractions = column_background_fraction(img, tolerance)
+    if not fractions:
+        return []
+
+    valleys, start = [], None
+    for x, f in enumerate(fractions):
+        if f >= min_background and start is None:
+            start = x
+        elif f < min_background and start is not None:
+            valleys.append((start, x))
+            start = None
+    if start is not None:
+        valleys.append((start, w))
+
+    valleys = [v for v in valleys if v[0] > w * 0.02 and v[1] < w * 0.98]
+
+    if expected and len(valleys) > expected - 1:
+        valleys = sorted(sorted(valleys, key=lambda v: v[1] - v[0],
+                                reverse=True)[:expected - 1])
+    return valleys
+
+
 def find_gaps(img, tolerance=30, sample_rows=120, min_panel_fraction=0.05):
     """Return x-ranges of background-only columns wide enough to be real gaps."""
     img = img.convert("RGB")
@@ -67,6 +122,43 @@ def find_gaps(img, tolerance=30, sample_rows=120, min_panel_fraction=0.05):
     # A real gap is a meaningful slice of the image, not a few stray columns.
     min_width = max(2, int(w * 0.004))
     return [g for g in gaps if g[1] - g[0] >= min_width]
+
+
+def consolidate(ranges, min_fraction=0.55):
+    """Merge away panels far narrower than their peers.
+
+    Panels on a reference sheet are roughly equal width. A boundary detected
+    inside a figure -- between a raised arm and the torso, say -- produces a
+    sliver instead, so anything well under the median width is not a panel and
+    gets merged back into the neighbour it was split from.
+    """
+    ranges = list(ranges)
+    while len(ranges) > 1:
+        widths = sorted(b - a for a, b in ranges)
+        median = widths[len(widths) // 2]
+        narrowest = min(range(len(ranges)), key=lambda i: ranges[i][1] - ranges[i][0])
+        if (ranges[narrowest][1] - ranges[narrowest][0]) >= median * min_fraction:
+            break
+
+        # Merge into whichever neighbour is itself narrower, so slivers on the
+        # edge of a wide panel rejoin that panel rather than bloating a small one.
+        left = narrowest - 1 if narrowest > 0 else None
+        right = narrowest + 1 if narrowest < len(ranges) - 1 else None
+        if left is None:
+            target = right
+        elif right is None:
+            target = left
+        else:
+            lw = ranges[left][1] - ranges[left][0]
+            rw = ranges[right][1] - ranges[right][0]
+            target = left if lw <= rw else right
+
+        a = min(ranges[narrowest][0], ranges[target][0])
+        b = max(ranges[narrowest][1], ranges[target][1])
+        for i in sorted((narrowest, target), reverse=True):
+            ranges.pop(i)
+        ranges.insert(min(narrowest, target), (a, b))
+    return ranges
 
 
 def panels_from_gaps(width, gaps):
@@ -121,10 +213,15 @@ def main():
         print(f"  splitting into {args.panels} equal columns")
     else:
         gaps = find_gaps(img)
-        ranges = panels_from_gaps(img.width, gaps)
-        print(f"  detected {len(ranges)} panel(s) from {len(gaps)} gap(s)")
+        if len(gaps) < 1:
+            gaps = find_valleys(img)
+            source = "density valleys"
+        else:
+            source = "background gaps"
+        ranges = consolidate(panels_from_gaps(img.width, gaps))
+        print(f"  detected {len(ranges)} panel(s) from {len(gaps)} {source}")
         if len(ranges) == 1:
-            print("  ! no gaps found — panels probably touch. "
+            print("  ! could not find panel boundaries. "
                   "Re-run with --panels N to split evenly.")
 
     names = [n.strip() for n in args.names.split(",") if n.strip()]

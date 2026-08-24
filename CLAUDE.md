@@ -71,6 +71,31 @@ be installed separately — `bpy` is Blender as a Python library. Verify with
 
 ### 1. Prepare the reference views
 
+Reference art usually arrives as one composite sheet, and rarely matches the
+spec a multi-view model wants. Start here:
+
+```bash
+python3 pipeline/tools/fix_views.py <their-sheet>.png -o work/prepped/
+```
+
+This splits the sheet, measures every panel (symmetry, crop damage, limb
+separation, hair mass), and **chooses between multi-view and single-view
+generation**. That choice is the important part: when the panels disagree —
+different poses, missing back view, three-quarter angles — one clean view beats
+four contradictory ones, because the model then invents the unseen sides
+consistently instead of trying to satisfy inputs that cannot all be true.
+
+**Check the panel count it reports on the first run.** Auto-detection is
+best-effort; if the count is wrong, pass `--panels N`. Every measurement depends
+on the panels being cut correctly.
+
+Report its findings to the user in plain terms — "three of your four panels are
+the same front angle and there's no back view, so I'm generating from the single
+best one" — not as a table of numbers.
+
+If the views are already clean and consistent, the older narrower tool still
+works:
+
 ```bash
 python3 pipeline/tools/prep_views.py <their-images-folder>/ -o work/prepped/
 ```
