@@ -133,6 +133,18 @@ move fast, so expect the first run to need a fix in `CHECKPOINTS` or
 > OptiX on an Nvidia RTX card, then CUDA, then fall back to CPU. Baking and QA
 > renders are substantially faster on a GPU; nothing needs configuring.
 
+## Works for props too, not just characters
+
+Nothing here is character-specific except the defaults. For a weapon, a crate,
+a piece of furniture — same commands, two changes:
+
+- set `--height` to the object's **real size in metres** (a sword `1.1`, a crate
+  `0.8`, a mug `0.12`). Everything exports at 1 unit = 1 metre, so getting this
+  wrong is what produces a sword taller than the character holding it.
+- ignore the A-pose advice; just shoot the object clearly from four sides.
+
+`--faces 2000` to `4000` is usually plenty for a prop.
+
 ## Step 3 — Finish the mesh (fully automatic)
 
 **If you don't know Blender, this is the step that used to stop you. It doesn't

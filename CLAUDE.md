@@ -30,6 +30,21 @@ That means:
 If a step genuinely cannot be automated, say so plainly and offer the nearest
 automated alternative. Do not push the work back onto them.
 
+## Characters or props — same pipeline
+
+The tools work on anything, not just characters. The only difference is scale
+and posing:
+
+| | Characters | Props / items / weapons |
+|---|---|---|
+| `--height` | `1.8` (metres, humanoid) | real size of the object — a sword `1.1`, a crate `0.8`, a mug `0.12` |
+| Pose | A-pose or T-pose, limbs away from the body | irrelevant, just show it clearly |
+| `--faces` | `6000`+ | `2000`–`4000` is usually plenty |
+
+Getting `--height` right matters more than it sounds. Everything exports at
+1 unit = 1 metre, so a sword built at 1.8m arrives in the engine taller than the
+player holding it. Ask the user roughly how big the real object is; do not guess.
+
 ## The workflow
 
 ### 0. Setup, once
