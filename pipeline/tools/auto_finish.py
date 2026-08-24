@@ -40,6 +40,12 @@ try:
 except ImportError:
     sys.exit("Needs Blender:  pip install bpy   (or run through: blender -b -P ...)")
 
+# Import the shared helper whether this is run as a plain script or through
+# `blender -b -P`, where the script's directory is not on sys.path.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from blender_util import configure_cycles_device
+
+
 
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
@@ -185,8 +191,7 @@ def make_bake_target(obj, name, size, non_color=False):
 
 def bake_pass(high, low, bake_type, samples, cage, **bake_kw):
     scene = bpy.context.scene
-    scene.render.engine = "CYCLES"
-    scene.cycles.device = "CPU"
+    configure_cycles_device(scene, verbose=False)
     scene.cycles.samples = samples
     scene.render.bake.use_selected_to_active = True
     scene.render.bake.cage_extrusion = cage

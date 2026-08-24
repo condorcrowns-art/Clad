@@ -23,6 +23,12 @@ try:
 except ImportError:
     sys.exit("Needs Blender:  pip install bpy   (or: blender -b -P ...)")
 
+# Import the shared helper whether this is run as a plain script or through
+# `blender -b -P`, where the script's directory is not on sys.path.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from blender_util import configure_cycles_device
+
+
 
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
@@ -132,8 +138,7 @@ def place_camera(angle_deg, framing=1.0, target_z_fraction=0.5):
 
 def render_to(path, size, samples):
     scene = bpy.context.scene
-    scene.render.engine = "CYCLES"
-    scene.cycles.device = "CPU"
+    configure_cycles_device(scene, verbose=False)
     scene.cycles.samples = samples
     scene.render.resolution_x = scene.render.resolution_y = size
     scene.render.resolution_percentage = 100

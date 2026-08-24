@@ -36,6 +36,7 @@ automated alternative. Do not push the work back onto them.
 
 ```bash
 bash pipeline/setup.sh
+python3 pipeline/tools/gpu_check.py
 ```
 
 Installs Pillow, rembg, and the `bpy` Blender module. Blender does not need to
@@ -58,17 +59,33 @@ point where their input genuinely helps, because only they can reshoot.
 
 ### 2. Generate the mesh
 
-This is the only step that needs a GPU, so it depends on the machine:
+The user has an **RTX 4060**, so this runs locally. Confirm the machine first:
 
-- **Has an Nvidia GPU (~12GB+ VRAM)** — install a local image-to-3D model and
-  run it. Check with `nvidia-smi` first.
-- **No GPU** — the user runs `pipeline/generate_colab.ipynb` on Colab's free T4,
-  or a Hugging Face Space in the browser, and drops the resulting `.glb` back
-  into `work/`. This is the one step you may have to hand over; make it a
-  copy-paste-simple instruction, not a tutorial.
+```bash
+python3 pipeline/tools/gpu_check.py
+```
 
-Prefer a **multi-view** checkpoint. They shot four views; a single-view model
-throws three of them away.
+That reports GPU, VRAM, torch/CUDA and Blender, and prints the settings to use.
+A 4060 is 8GB (16GB on the Ti), which is below what the full-size checkpoints
+need — so use the mini/multi-view checkpoint with offloading, which is what
+`generate_local.py` selects automatically.
+
+```bash
+python3 pipeline/tools/generate_local.py work/prepped/ -o work/generated.glb
+```
+
+**This script has never been run on real hardware.** The image-to-3D projects
+change their entry points between releases, so expect the first run to need
+fixing. When it breaks, the fault is almost certainly in `CHECKPOINTS` or
+`load_pipeline` — check the project's current README and correct it. Everything
+downstream is independent of that file, so a failure there blocks nothing else.
+
+If it runs out of VRAM the error names the knob to turn. Escalate in that order,
+and fall back to `pipeline/generate_colab.ipynb` on Colab's free T4 only if the
+local route genuinely cannot be made to work.
+
+Always prefer a **multi-view** checkpoint. They shot four views; a single-view
+model throws three of them away.
 
 ### 3. Finish it — fully automatic
 
@@ -133,6 +150,9 @@ the pixels. The CSS overlay on the site is decoration and protects nothing.
 **Be honest about quality.** Automatic 2D→3D produces good geometry and soft
 textures. If a result is not good enough to sell, say so directly rather than
 shipping it with a caveat. The user is putting their name on these.
+
+**The GPU is used automatically.** `auto_finish.py` and `render_check.py` select
+OptiX on an RTX card and fall back to CPU on their own. Nothing to configure.
 
 **Check the model licence before anything gets sold.** Free tiers of commercial
 generators often grant commercial rights only on paid plans. `pipeline/README.md`

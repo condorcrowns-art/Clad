@@ -109,12 +109,29 @@ few characters rather than batch work.
 your prepped views, run the cells. Best free option if you don't have an Nvidia card.
 
 ### C. Local, your own GPU
-Fastest and unlimited if you have ~12GB+ VRAM. Follow the model repo's own
-install instructions; the notebook's cells show the shape of it.
+Fastest and unlimited. Check what you have first:
+
+```bash
+python3 pipeline/tools/gpu_check.py          # reports GPU, VRAM, torch, Blender
+python3 pipeline/tools/generate_local.py work/prepped/ -o work/generated.glb
+```
+
+`generate_local.py` picks the checkpoint from your actual VRAM and enables fp16,
+CPU offload and attention slicing on cards under 12GB — which is what makes an
+8GB card (RTX 4060, 3070, 2080) viable. On out-of-memory it tells you which knob
+to turn instead of just failing.
+
+Note this script has not been run on real hardware yet; the generator projects
+move fast, so expect the first run to need a fix in `CHECKPOINTS` or
+`load_pipeline`. Nothing downstream depends on it.
 
 > The notebook targets Hunyuan3D's multi-view checkpoint, which conditions on
 > several views at once — the whole reason you shot four. A single-view model
 > would discard three of your references.
+
+> **GPU acceleration is automatic.** `auto_finish.py` and `render_check.py` pick
+> OptiX on an Nvidia RTX card, then CUDA, then fall back to CPU. Baking and QA
+> renders are substantially faster on a GPU; nothing needs configuring.
 
 ## Step 3 — Finish the mesh (fully automatic)
 
@@ -197,7 +214,10 @@ Rough numbers buyers expect. Not rules, but you'll get refund requests outside t
 | `tools/finish_mesh.py` | Yes — verified against a deliberately broken mesh; output re-imported and checked |
 | `../store/tools/watermark.py` | Yes — tiling, rotation and coverage checked on a 2200×2750 source |
 | `../store/tools/make_preview.py` | Yes — verified rig, weights, shape keys, animation and extra texture maps are all stripped |
+| `tools/gpu_check.py` | Yes — correct detection and recommendation on a machine with no GPU |
+| `tools/blender_util.py` | Yes — backend probing and CPU fallback verified |
 | `generate_colab.ipynb` | **No** — needs a GPU. Valid notebook JSON, but run it once before relying on it |
+| `tools/generate_local.py` | **No** — needs a GPU. Handles the no-GPU path correctly; the generation call itself is unverified |
 
 Blender scripts were tested against the `bpy` module (Blender 5.x) and include
 compatibility branches for the Blender 4.x API where it differs.

@@ -60,5 +60,8 @@ CHECK
 
 mkdir -p work/{refs,prepped,generated,finished,qa,renders}
 echo
+echo "-- machine check --"
+"$PY" pipeline/tools/gpu_check.py 2>/dev/null || true
+
 echo "ready. working folders created under work/ (gitignored)."
 echo "next: put your reference images in work/refs/ and ask Claude to build the character."
