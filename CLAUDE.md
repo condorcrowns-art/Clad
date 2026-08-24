@@ -108,6 +108,27 @@ fail. If it reports a large height mismatch or an over-wide side view, tell the
 user what will suffer and ask whether they have a better shot — this is the one
 point where their input genuinely helps, because only they can reshoot.
 
+### 1a. Separate the arms (when they're against the body)
+
+If `fix_views.py` reports `limbs` below 3, the arms are touching the torso and
+will fuse into one mass in the generated mesh. This is fixable — do not tell the
+user it needs different source art.
+
+```bash
+python3 pipeline/tools/repose_arms.py work/prepped/front.png -o work/posed/front.png
+```
+
+It finds the arm boundary (by colour where the arm and clothing differ, by
+geometry otherwise), cuts each arm out, swings it outward about the shoulder,
+and expands the canvas so nothing clips.
+
+**Verify it worked** by re-running `fix_views.py` on the output: `limbs` should
+read 3. That number is the count of separate masses across the chest, so it is a
+direct measure of whether the arms now read as detached. If it still reads 1,
+raise `--angle`.
+
+Then continue from `work/posed/` rather than `work/prepped/`.
+
 ### 1b. Synthesise the missing views (when the sheet is incomplete)
 
 If `fix_views.py` chose SINGLE-VIEW, the reference art was missing a real back
@@ -131,9 +152,9 @@ Then generate from `work/synth/` instead of `work/prepped/`.
 
 Two things to be honest with the user about:
 
-- **It cannot re-pose the character.** Arms down against the body stay down in
-  every synthesised view and will still fuse to the torso in the mesh. Only
-  different source art fixes that. Do not imply otherwise.
+- **It does not re-pose the character.** Run `repose_arms.py` (step 1a) *before*
+  this step if the arms need separating — synthesis will faithfully reproduce
+  whatever pose it is given from every new angle.
 - **The front stays real.** The tool keeps the user's actual view for the front
   and only invents the rest, so real pixels are never replaced by guesses.
 

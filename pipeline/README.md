@@ -99,6 +99,22 @@ You said your references have no close-ups. That's fine for geometry. It does
 mean facial and hand detail will be weak — those are exactly the areas to plan
 on hand-finishing.
 
+## Step 1a — Separate the arms
+
+If `fix_views.py` reports `limbs` below 3, the arms touch the torso and will fuse
+into a single mass in the mesh.
+
+```bash
+python pipeline/tools/repose_arms.py work/prepped/front.png -o work/posed/front.png
+```
+
+Finds each arm's boundary — by colour where arm and clothing differ, geometrically
+where they don't — cuts it out, swings it outward about the shoulder, and expands
+the canvas so nothing clips.
+
+Re-run `fix_views.py` on the output to confirm: `limbs` should read 3. Raise
+`--angle` if it doesn't.
+
 ## Step 1b — Synthesise what the art never had
 
 When the sheet has no back view, the 3D generator invents one anyway — silently,
@@ -116,9 +132,8 @@ view is kept as the front; only the missing angles are invented.
 The value is inspectability: you can look at the invented back, re-roll it with
 a different `--seed`, or hand-edit it — all before any geometry exists.
 
-**It does not re-pose the character.** Arms held against the body stay that way
-in every synthesised view, and will still fuse to the torso in the mesh. Camera
-rotation is not re-posing. Only different source art fixes a pose problem.
+**Run step 1a first if the arms need separating.** Synthesis reproduces whatever
+pose it is given from every new angle — it rotates the camera, not the character.
 
 ## Step 2 — Generate the mesh
 

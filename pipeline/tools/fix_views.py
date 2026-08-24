@@ -368,9 +368,11 @@ def main():
         notes.append("large hair mass — expect it to come back fused to the head "
                      "and shoulders as one solid volume; loose flowing hair is "
                      "separate alpha-carded geometry in real game assets")
-    if any(m["limb_runs"] < 3 for m in chosen if not m["empty"]):
-        notes.append("arms are against the body — they will likely fuse to the "
-                     "torso. An A-pose with arms held away fixes this at source")
+    arms_pinned = any(m["limb_runs"] < 3 for m in chosen if not m["empty"])
+    if arms_pinned:
+        notes.append("arms are against the body — they will fuse to the torso "
+                     "unless moved. repose_arms.py can swing them outward "
+                     "automatically (see the command below)")
     if strategy == "single-view":
         notes.append("the unseen sides will be invented by the model. That is "
                      "the correct trade here: it invents them consistently, "
@@ -380,6 +382,13 @@ def main():
         print("\n  expect:")
         for n in notes:
             print(f"    ! {n}")
+
+    if arms_pinned:
+        first = out / ("front.png" if (out / "front.png").exists() else "front.png")
+        print("\n  FIRST — separate the arms from the body, or they fuse in the mesh:")
+        print(f"    python pipeline/tools/repose_arms.py {first} "
+              f"-o work/posed/front.png")
+        print("    then re-run this tool on work/posed/ to confirm limbs reads 3.")
 
     if strategy == "single-view":
         print("\n  RECOMMENDED — synthesise the missing views instead of letting")
