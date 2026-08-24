@@ -179,4 +179,9 @@ Rough numbers buyers expect. Not rules, but you'll get refund requests outside t
 |---|---|
 | `tools/prep_views.py` | Yes — both matte paths, normalisation verified exact, warnings confirmed firing |
 | `tools/finish_mesh.py` | Yes — verified against a deliberately broken mesh; output re-imported and checked |
+| `../store/tools/watermark.py` | Yes — tiling, rotation and coverage checked on a 2200×2750 source |
+| `../store/tools/make_preview.py` | Yes — verified rig, weights, shape keys, animation and extra texture maps are all stripped |
 | `generate_colab.ipynb` | **No** — needs a GPU. Valid notebook JSON, but run it once before relying on it |
+
+Blender scripts were tested against the `bpy` module (Blender 5.x) and include
+compatibility branches for the Blender 4.x API where it differs.

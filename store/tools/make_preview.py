@@ -145,7 +145,9 @@ def watermark_image(img, text, size):
 def degrade_materials(text, size):
     kept = 0
     for mat in bpy.data.materials:
-        if not mat.use_nodes:
+        # Checking node_tree rather than use_nodes: the latter is slated for
+        # removal, and the node tree is what we actually need either way.
+        if not getattr(mat, "node_tree", None):
             continue
         nodes = mat.node_tree.nodes
         bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
