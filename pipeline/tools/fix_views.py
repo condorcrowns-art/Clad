@@ -381,8 +381,21 @@ def main():
         for n in notes:
             print(f"    ! {n}")
 
-    print(f"\n  next: python pipeline/tools/generate_local.py {out} "
-          f"-o work/generated.glb\n")
+    if strategy == "single-view":
+        print("\n  RECOMMENDED — synthesise the missing views instead of letting")
+        print("  the 3D model invent them silently inside the mesh:")
+        print(f"    python pipeline/tools/synth_views.py {out / 'front.png'} "
+              f"-o work/synth/")
+        print("  That produces a full front/back/left/right set you can actually")
+        print("  look at and re-roll before any geometry exists. Then:")
+        print("    python pipeline/tools/generate_local.py work/synth/ "
+              "-o work/generated.glb")
+        print(f"\n  or skip it and go straight from the one view:")
+        print(f"    python pipeline/tools/generate_local.py {out} "
+              f"-o work/generated.glb\n")
+    else:
+        print(f"\n  next: python pipeline/tools/generate_local.py {out} "
+              f"-o work/generated.glb\n")
 
 
 if __name__ == "__main__":

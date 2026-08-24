@@ -99,6 +99,27 @@ You said your references have no close-ups. That's fine for geometry. It does
 mean facial and hand detail will be weak — those are exactly the areas to plan
 on hand-finishing.
 
+## Step 1b — Synthesise what the art never had
+
+When the sheet has no back view, the 3D generator invents one anyway — silently,
+inside the mesh, where you cannot inspect or reject it. This moves that guess
+into 2D first:
+
+```bash
+python pipeline/tools/synth_views.py work/prepped/front.png -o work/synth/
+```
+
+A novel-view diffusion model takes your one good view and produces a complete,
+mutually consistent front/back/left/right set, plus a contact sheet. Your real
+view is kept as the front; only the missing angles are invented.
+
+The value is inspectability: you can look at the invented back, re-roll it with
+a different `--seed`, or hand-edit it — all before any geometry exists.
+
+**It does not re-pose the character.** Arms held against the body stay that way
+in every synthesised view, and will still fuse to the torso in the mesh. Camera
+rotation is not re-posing. Only different source art fixes a pose problem.
+
 ## Step 2 — Generate the mesh
 
 Three free routes, easiest first:

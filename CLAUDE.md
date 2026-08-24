@@ -108,6 +108,38 @@ fail. If it reports a large height mismatch or an over-wide side view, tell the
 user what will suffer and ask whether they have a better shot — this is the one
 point where their input genuinely helps, because only they can reshoot.
 
+### 1b. Synthesise the missing views (when the sheet is incomplete)
+
+If `fix_views.py` chose SINGLE-VIEW, the reference art was missing a real back
+or front. The 3D model will invent those surfaces regardless — the only question
+is whether it does so silently inside the mesh, or visibly in 2D where you can
+check it first.
+
+```bash
+python3 pipeline/tools/synth_views.py work/prepped/front.png -o work/synth/
+```
+
+This runs a novel-view diffusion model to produce a complete front/back/left/
+right set from the one good view, and writes a contact sheet.
+
+**Look at the contact sheet and judge it.** That is the entire point of this
+step. If the invented back contradicts the design, re-run with a different
+`--seed`, or hand-edit that one image. It is far cheaper to reject a bad
+invented view here than after it has become geometry.
+
+Then generate from `work/synth/` instead of `work/prepped/`.
+
+Two things to be honest with the user about:
+
+- **It cannot re-pose the character.** Arms down against the body stay down in
+  every synthesised view and will still fuse to the torso in the mesh. Only
+  different source art fixes that. Do not imply otherwise.
+- **The front stays real.** The tool keeps the user's actual view for the front
+  and only invents the rest, so real pixels are never replaced by guesses.
+
+If synthesis fails or runs out of VRAM, generating straight from the single view
+still works — the 3D model then does the same invention internally.
+
 ### 2. Generate the mesh
 
 The user has an **RTX 4060**, so this runs locally. Confirm the machine first:
