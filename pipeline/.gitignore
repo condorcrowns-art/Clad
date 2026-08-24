@@ -12,3 +12,7 @@ finished/
 *.ply
 *.blend
 *.blend1
+
+# Character pipeline working files — never commit these.
+# Masters, raw generations, and un-watermarked renders all live here.
+work/

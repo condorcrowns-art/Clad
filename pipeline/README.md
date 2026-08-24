@@ -23,15 +23,17 @@ What they do badly is everything a buyer notices at close range:
 | Baked-in lighting | Shading painted into the base colour, so it fights the engine's lighting. |
 | Invented surfaces | Anything your four views didn't show is guesswork, and it's always the first thing to fall apart. |
 
-So the working split is: **the model does the sculpting, you do the finishing.**
-The scripts here automate every mechanical step so your hand-time goes only
-where judgement is actually required. Expect roughly 30 minutes to a few hours
-per character depending on your quality bar. Anyone selling character assets is
-doing this — it isn't a limitation of the free tools specifically.
+The single highest-leverage fix is to **retopologise and bake a normal map** —
+crisp silhouette plus baked high-frequency detail is most of what "holds up when
+you zoom in" actually means. That step, plus de-lighting the texture and
+generating clean UVs, is exactly what `auto_finish.py` does for you. It is fully
+automatic and needs no Blender knowledge.
 
-If you want the single highest-leverage manual step: **retopologise and bake a
-normal map.** Crisp silhouette plus baked high-frequency detail is most of what
-"holds up when you zoom in" actually means.
+What stays manual is genuine art direction: splitting fused geometry, and
+repainting a face the generator got wrong. Those need judgement, not a script.
+So the realistic picture is: the pipeline gets you a clean, properly baked,
+correctly scaled asset in minutes, and your remaining time goes on the handful
+of things only a person can decide.
 
 ---
 
@@ -114,42 +116,54 @@ install instructions; the notebook's cells show the shape of it.
 > several views at once — the whole reason you shot four. A single-view model
 > would discard three of your references.
 
-## Step 3 — Finish the mesh
+## Step 3 — Finish the mesh (fully automatic)
+
+**If you don't know Blender, this is the step that used to stop you. It doesn't
+any more.** Everything below runs headless — you never open the application.
 
 ```bash
-pip install bpy      # or use a normal Blender install
-python3 pipeline/tools/finish_mesh.py \
-    --input generated.glb \
-    --output-dir finished/ \
-    --height 1.8 \
-    --lods 2
+python3 pipeline/tools/auto_finish.py \
+    --input generated.glb --output-dir finished/ \
+    --faces 6000 --texture-size 2048 --lods 2
 ```
 
-Fixes everything mechanical: joins the separate chunks generators emit, welds
-duplicate vertices, deletes loose and degenerate geometry, recalculates normals
-outward, scales to a real-world height, drops the feet to Z=0, centres on the
-origin, applies angle-based smoothing, builds LODs, and exports GLB + FBX with
-textures packed in.
+Retopologises to clean quads with QuadriFlow, UV unwraps, bakes the dense mesh's
+detail down as a **normal map** (this is what makes a low-poly model hold up when
+someone zooms in), bakes a **de-lit base colour** with the lighting passes
+disabled, bakes AO, wires them into a PBR material, normalises scale and origin,
+and exports GLB + FBX + LODs.
 
-With Blender installed instead of the `bpy` module:
+The two dials that matter:
+
+| Flag | Raise it when |
+|---|---|
+| `--faces` | silhouette looks faceted or blocky |
+| `--texture-size` | surface detail looks soft up close |
+
+## Step 4 — Look at it
 
 ```bash
-blender -b -P pipeline/tools/finish_mesh.py -- --input generated.glb --output-dir finished/
+python3 pipeline/tools/render_check.py --input finished/char.glb -o qa/
 ```
 
-## Step 4 — The hand-finishing
+Renders a turntable plus a close-up and combines them into one contact sheet.
+Triangle counts tell you nothing about whether a model *looks* right — this does.
+Claude Code can read the contact sheet directly and judge it.
 
-The part no script does for you, roughly in order of impact:
+## Manual finishing (only if you want to)
 
-1. **Retopologise.** Blender's QuadriFlow (free, built in) gets you most of the
-   way; Quad Remesher is better if you ever want to spend money.
-2. **Bake a normal map** from the dense generated mesh onto the clean one. This
-   is what makes close-up detail survive.
-3. **Split fused geometry** — hair from head, weapon from hand, fingers apart.
-4. **UV unwrap** the retopologised mesh properly.
-5. **Fix the textures.** De-light the base colour, repaint the mushy areas.
-   Faces and hands first — that's where buyers zoom.
-6. **Rig.** Mixamo or AccuRig, both free, both humanoid.
+Everything above is automatic. If you do know Blender and want to push quality
+further, this is where hand-work pays off, in order of impact:
+
+1. **Split fused geometry** — hair from head, weapon from hand, fingers apart.
+   Needs judgement; no script does this reliably.
+2. **Hand-place UV seams** instead of Smart Project, for a tighter texel budget.
+3. **Repaint weak texture areas.** Faces and hands first — that's where buyers zoom.
+4. **Rig.** Mixamo or AccuRig, both free, both humanoid.
+
+`finish_mesh.py` is also still there. It does the mechanical cleanup *without*
+retopology or baking — useful when your source mesh is already clean and you only
+need scale, origin, smoothing and export sorted.
 
 ## Step 5 — List it
 
@@ -178,6 +192,8 @@ Rough numbers buyers expect. Not rules, but you'll get refund requests outside t
 | Tool | Tested |
 |---|---|
 | `tools/prep_views.py` | Yes — both matte paths, normalisation verified exact, warnings confirmed firing |
+| `tools/auto_finish.py` | Yes — full run on a 63k-tri textured mesh: retopo to 6.2k quads, UVs, normal/colour/AO bakes all verified as carrying real data |
+| `tools/render_check.py` | Yes — renders inspected visually; exposure and framing corrected as a result |
 | `tools/finish_mesh.py` | Yes — verified against a deliberately broken mesh; output re-imported and checked |
 | `../store/tools/watermark.py` | Yes — tiling, rotation and coverage checked on a 2200×2750 source |
 | `../store/tools/make_preview.py` | Yes — verified rig, weights, shape keys, animation and extra texture maps are all stripped |

@@ -1,0 +1,145 @@
+# Working in this repo
+
+Two unrelated projects share this repo:
+
+- **`/` (root)** — GLITCHTOPIA, a 2D canvas game. See `README.md`.
+- **`pipeline/` + `store/`** — a 3D character business: turn reference images into
+  sellable game-ready character models, and a storefront to sell them from.
+
+Most requests here are about the character business. What follows is for that.
+
+---
+
+# Making a character (read this before starting)
+
+## The one thing that matters most
+
+**The user does not know Blender and does not want to learn it.** They have said
+so explicitly. This is not a soft preference to work around.
+
+That means:
+
+- **Never** tell them to open Blender, click something, or "just adjust the mesh".
+- **Never** hand back a step that requires modelling knowledge to complete.
+- Every Blender operation goes through the scripts in `pipeline/tools/`, run by
+  you, headless. They never see the application.
+- If something needs artistic judgement, **you** make the call, render it, look
+  at the result, and iterate. Describe outcomes in plain terms ("the face came
+  out soft, I re-ran it at higher detail"), not Blender vocabulary.
+
+If a step genuinely cannot be automated, say so plainly and offer the nearest
+automated alternative. Do not push the work back onto them.
+
+## The workflow
+
+### 0. Setup, once
+
+```bash
+bash pipeline/setup.sh
+```
+
+Installs Pillow, rembg, and the `bpy` Blender module. Blender does not need to
+be installed separately — `bpy` is Blender as a Python library. Verify with
+`python3 -c "import bpy; print(bpy.app.version_string)"`.
+
+### 1. Prepare the reference views
+
+```bash
+python3 pipeline/tools/prep_views.py <their-images-folder>/ -o work/prepped/
+```
+
+Cuts backgrounds, normalises every view to identical subject height, aligns them
+vertically, squares the canvas.
+
+**Read the warnings it prints and act on them.** They predict how the mesh will
+fail. If it reports a large height mismatch or an over-wide side view, tell the
+user what will suffer and ask whether they have a better shot — this is the one
+point where their input genuinely helps, because only they can reshoot.
+
+### 2. Generate the mesh
+
+This is the only step that needs a GPU, so it depends on the machine:
+
+- **Has an Nvidia GPU (~12GB+ VRAM)** — install a local image-to-3D model and
+  run it. Check with `nvidia-smi` first.
+- **No GPU** — the user runs `pipeline/generate_colab.ipynb` on Colab's free T4,
+  or a Hugging Face Space in the browser, and drops the resulting `.glb` back
+  into `work/`. This is the one step you may have to hand over; make it a
+  copy-paste-simple instruction, not a tutorial.
+
+Prefer a **multi-view** checkpoint. They shot four views; a single-view model
+throws three of them away.
+
+### 3. Finish it — fully automatic
+
+```bash
+python3 pipeline/tools/auto_finish.py \
+    --input work/generated.glb \
+    --output-dir work/finished/ \
+    --faces 6000 --texture-size 2048 --height 1.8 --lods 2
+```
+
+Retopologises to clean quads, UV unwraps, bakes normal/colour/AO from the dense
+mesh onto the clean one, de-lights the colour, normalises scale and origin,
+exports GLB + FBX + LODs.
+
+This replaces every manual Blender step. Do not substitute manual instructions
+for it.
+
+### 4. Look at the result — do not skip this
+
+```bash
+python3 pipeline/tools/render_check.py --input work/finished/<name>.glb -o work/qa/
+```
+
+Then **actually read the contact sheet image**. Numbers do not tell you whether a
+model looks right. Judge it:
+
+| What you see | What to do |
+|---|---|
+| Melted or fused face | Input views were inconsistent — back to step 1 |
+| Soft, detail-free surface | Re-run `auto_finish` with higher `--faces` and `--texture-size` |
+| Faceted, blocky silhouette | Raise `--faces` |
+| Colour looks flat or washed out | Check the base map baked correctly; inspect `<name>_base.png` |
+| Limbs fused to the body | Source pose problem — the character needs arms away from the torso |
+| Looks good | Move to step 5 |
+
+Iterate here. Re-running is cheap; a refunded sale is not.
+
+### 5. List it
+
+```bash
+python3 store/tools/watermark.py work/renders/ store/assets/characters/<id>/
+python3 store/tools/make_preview.py -- --input work/finished/<name>.glb \
+    --output store/assets/characters/<id>/preview.glb --tris 8000
+```
+
+Then add the entry to `store/js/data.js`. See `store/README.md`.
+
+---
+
+## Hard rules
+
+**Master files never enter this repo.** A static site serves every file it
+contains, linked or not. Keep masters in `work/` (gitignored) and upload them to
+the checkout platform. Only watermarked renders and the degraded preview GLB are
+committed.
+
+**Never commit anything from `work/`.** It is gitignored; keep it that way.
+
+**Watermark before committing renders.** `store/tools/watermark.py` burns it into
+the pixels. The CSS overlay on the site is decoration and protects nothing.
+
+**Be honest about quality.** Automatic 2D→3D produces good geometry and soft
+textures. If a result is not good enough to sell, say so directly rather than
+shipping it with a caveat. The user is putting their name on these.
+
+**Check the model licence before anything gets sold.** Free tiers of commercial
+generators often grant commercial rights only on paid plans. `pipeline/README.md`
+covers what to look for.
+
+## Costs
+
+Everything here is free and must stay that way — the user has been explicit.
+Blender, Python, Colab's free tier, GitHub Pages: no subscriptions. Do not
+propose a paid tool without flagging the cost and asking first.
