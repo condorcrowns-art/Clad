@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "protection": {
+    "process_monitor": true,
+    "file_watcher": true,
+    "network_monitor": true,
+    "behavior_engine": true,
+    "self_protection": true,
+    "kernel_events": true,
+    "persistence_auditor": true,
+    "anomaly_engine": true
+  },
+  "response": {
+    "mode": "observe",
+    "auto_kill": false,
+    "auto_quarantine": false,
+    "auto_firewall": false,
+    "auto_block_domains": false,
+    "action_threshold": 75,
+    "protected_processes": [
+      "explorer.exe",
+      "csrss.exe",
+      "wininit.exe",
+      "winlogon.exe",
+      "services.exe",
+      "lsass.exe",
+      "smss.exe",
+      "svchost.exe",
+      "system",
+      "registry",
+      "dwm.exe",
+      "fontdrvhost.exe",
+      "sihost.exe",
+      "ctfmon.exe",
+      "msmpeng.exe",
+      "securityhealthservice.exe"
+    ]
+  },
+  "paths": {
+    "watch": [
+      "%USERPROFILE%\\Downloads",
+      "%USERPROFILE%\\Desktop",
+      "%USERPROFILE%\\Documents",
+      "%USERPROFILE%\\AppData\\Local\\Temp",
+      "%APPDATA%",
+      "%LOCALAPPDATA%\\Roblox",
+      "%PUBLIC%\\Downloads"
+    ],
+    "quarantine": "quarantine",
+    "logs": "logs",
+    "data": "data"
+  },
+  "filewatch": {
+    "extensions": [
+      ".exe",
+      ".dll",
+      ".sys",
+      ".tmp",
+      ".scr",
+      ".bat",
+      ".cmd",
+      ".ps1",
+      ".vbs",
+      ".js",
+      ".jar",
+      ".zip",
+      ".rar",
+      ".7z"
+    ],
+    "max_hash_bytes": 134217728,
+    "recursive": true,
+    "poll_interval_seconds": 4
+  },
+  "network": {
+    "poll_interval_seconds": 5,
+    "suspicious_local_ports": [
+      6969,
+      7777,
+      8080,
+      9090,
+      13337,
+      27015
+    ],
+    "alert_on_private_ranges": false
+  },
+  "behavior": {
+    "poll_interval_seconds": 6,
+    "cpu_threshold_percent": 80.0,
+    "cpu_sustained_samples": 3,
+    "handle_threshold": 4000,
+    "protected_targets": [
+      "robloxplayerbeta.exe",
+      "robloxstudiobeta.exe"
+    ],
+    "check_module_signatures": true
+  },
+  "winevents": {
+    "channels": {
+      "sysmon": true,
+      "defender": true,
+      "security": true
+    },
+    "poll_interval_seconds": 8,
+    "max_events_per_poll": 200
+  },
+  "persistence": {
+    "interval_minutes": 15,
+    "audit_on_start": true
+  },
+  "quarantine": {
+    "encrypt": true,
+    "encrypt_max_bytes": 33554432
+  },
+  "prevent": {
+    "stub_program": "%SystemRoot%\\System32\\systray.exe",
+    "auto_block_execution": false,
+    "auto_contain_network": false
+  },
+  "anomaly": {
+    "sample_interval_seconds": 15,
+    "max_beacon_jitter": 0.2,
+    "fanout_hosts": 25
+  },
+  "download_guard": {
+    "policy": "balanced",
+    "reject_score": 60,
+    "triage": true
+  },
+  "dns": {
+    "enabled": false,
+    "listen": "127.0.0.1",
+    "port": 53,
+    "upstream_resolver": "quad9",
+    "upstream": [],
+    "upstream_timeout_seconds": 3.0,
+    "cache_seconds": 300,
+    "phishing_analysis": true,
+    "phishing_block_score": 70,
+    "set_system_dns": true
+  },
+  "adblock": {
+    "enabled": false,
+    "categories": [
+      "ads",
+      "trackers",
+      "malvertising",
+      "fake_download"
+    ],
+    "allow": [],
+    "max_entries": 60000,
+    "lists": []
+  },
+  "phishing": {
+    "enabled": true,
+    "block_score": 70
+  },
+  "web": {
+    "hosts_file": "",
+    "resolve_and_block_ips": true
+  },
+  "pe": {
+    "inspect": true
+  },
+  "notifications": {
+    "tray_icon": true,
+    "toasts": true,
+    "min_severity": "high",
+    "min_interval_seconds": 20
+  },
+  "intel": {
+    "enable_lookups": false,
+    "virustotal_api_key": "",
+    "abuseipdb_api_key": "",
+    "cache_ttl_hours": 24,
+    "request_timeout_seconds": 10,
+    "min_vt_detections": 3
+  },
+  "updates": {
+    "threat_feed_url": "",
+    "auto_update": false,
+    "interval_hours": 12,
+    "trusted_public_key": "",
+    "require_signature": false,
+    "self_update_url": "",
+    "signing_key": "",
+    "require_self_signature": true,
+    "allow_downgrade": false
+  },
+  "clipboard": {
+    "enabled": false,
+    "poll_seconds": 0.8
+  },
+  "credguard": {
+    "enabled": false,
+    "canaries": true,
+    "allow_processes": [],
+    "extra_stores": []
+  },
+  "scan": {
+    "on_start": false,
+    "on_schedule": false,
+    "interval_minutes": 120,
+    "profile": "light",
+    "budget_minutes": 20,
+    "paths": []
+  },
+  "logging": {
+    "max_log_bytes": 10485760,
+    "keep_rotations": 5,
+    "hash_chain": true
+  },
+  "whitelist": {
+    "names": [],
+    "domains": [],
+    "paths": [
+      "%SystemRoot%",
+      "%ProgramFiles%",
+      "%ProgramFiles(x86)%",
+      "%LOCALAPPDATA%\\Roblox"
+    ],
+    "hashes": [],
+    "ips": []
+  },
+  "blacklist": {
+    "names": [],
+    "hashes": [],
+    "ips": [],
+    "domains": [],
+    "patterns": []
+  },
+  "ui": {
+    "start_minimized": false,
+    "refresh_ms": 800,
+    "max_rows": 500
+  }
+}
