@@ -13,8 +13,11 @@
        to it. Without this Ollama refuses the request and Parla falls back to
        its scripted partner.
     3. Restarts Ollama so it picks that variable up
-    4. Pulls a model sized to your RAM
-    5. Starts the local web server and opens the app
+    4. Detects your GPU and picks a model sized to VRAM (not system RAM -
+       VRAM is what decides whether replies feel instant or sluggish)
+    5. Pulls it, then times one real generation and tells you if it is too
+       slow to hold a conversation with
+    6. Starts the local web server and opens the app
 
 .EXAMPLE
   .\setup-windows.ps1
