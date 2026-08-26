@@ -837,11 +837,18 @@ def _read_signer_detail(path: str | os.PathLike) -> tuple[str | None, str]:
         ok = crypt32.CryptQueryObject(
             CERT_QUERY_OBJECT_FILE, ctypes.c_wchar_p(target),
             # A PE carries its signature embedded; a .cat file is a standalone
-            # signed message wrapping a trust list. Ask about all three rather
-            # than assuming which kind of file this is.
+            # signed message whose *content* is a trust list.
+            #
+            # CERT_QUERY_CONTENT_FLAG_CTL is deliberately not requested. The
+            # content types are an ordered enum — CTL is 2, PKCS7_SIGNED is 8
+            # — and CryptQueryObject returns the first kind it matches. Asking
+            # about CTL as well made every catalog match as a trust list,
+            # which yields no message and an empty certificate store: exactly
+            # the "certificate store held no certificates (content type 2)"
+            # that notepad.exe reported. Asking only about the signed message
+            # is what makes the signer readable.
             CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED
-            | CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED
-            | CERT_QUERY_CONTENT_FLAG_CTL,
+            | CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED,
             CERT_QUERY_FORMAT_FLAG_ALL,
             0, ctypes.byref(encoding), ctypes.byref(content_type),
             ctypes.byref(format_type), ctypes.byref(store), ctypes.byref(message), None)

@@ -233,6 +233,24 @@ class WindowsRegressionTests(unittest.TestCase):
                 self.assertEqual(getattr(winapi, f"CERT_QUERY_CONTENT_FLAG_{name}"),
                                  1 << value)
 
+    def test_the_catalog_query_does_not_ask_about_trust_lists(self):
+        """CryptQueryObject's content types are an ordered enum and it returns
+        the first kind it matches. CTL is 2, PKCS7_SIGNED is 8 — so asking
+        about CTL as well made every catalog match as a trust list, which
+        yields no message and an empty certificate store. That is exactly what
+        notepad.exe reported: "the certificate store held no certificates
+        (content type 2)". The signer lives on the signed message."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "winapi.py").read_text(encoding="utf-8")
+        query = source[source.index("ok = crypt32.CryptQueryObject("):]
+        query = query[:query.index("if not ok:")]
+        # Comments explain the choice; the call is what makes it.
+        code = "\n".join(line for line in query.splitlines()
+                         if not line.strip().startswith("#"))
+        self.assertIn("CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED", code)
+        self.assertIn("CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED,", code)
+        self.assertNotIn("CERT_QUERY_CONTENT_FLAG_CTL", code)
+
     def test_the_signer_certificate_is_not_rebuilt_by_hand(self):
         """The real CERT_INFO has SignatureAlgorithm between SerialNumber and
         Issuer. The code declared it without, so Issuer landed at the wrong
