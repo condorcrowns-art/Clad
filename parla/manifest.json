@@ -1,0 +1,19 @@
+{
+  "name": "Parla — learn Spanish by talking",
+  "short_name": "Parla",
+  "description": "Speak Spanish out loud and get corrected. Free, private, no subscription.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf7f2",
+  "theme_color": "#c8542a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%23c8542a'/%3E%3Ctext x='256' y='352' font-size='280' text-anchor='middle' fill='%23fff'%3E%F0%9F%97%A3%EF%B8%8F%3C/text%3E%3C/svg%3E",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
