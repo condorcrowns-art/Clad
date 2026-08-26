@@ -193,43 +193,53 @@ def assess_swap(before: str, after: str, *, seconds_apart: float = 0.0,
 # its two opening lines and then the interpreter died mid-call, so neither the
 # clean result nor a finding was ever reached. Declaring the types is the
 # whole fix, and it is the same bug that was already fixed once in notify.py.
-_WIN32_READY = False
+# The declared libraries are cached, not the fact that declaring happened.
+# ctypes.WinDLL("user32") constructs a *new* library object every call, so a
+# "have we declared yet" flag protects nothing: the first caller declares on
+# its object, the flag goes true, and the second caller gets a fresh object
+# with every restype back at the default c_int. That is precisely what
+# happened — read_clipboard ran first and worked, write_clipboard got the
+# undeclared copy, and `clipboard probe` reported that it could not write.
+_LIBRARIES: tuple[Any, Any] | None = None
 
 
 def _win32() -> tuple[Any, Any] | None:  # pragma: no cover - Windows only
     """user32 and kernel32 with every handle-returning function declared."""
-    global _WIN32_READY
+    global _LIBRARIES
     if not IS_WINDOWS:
         return None
+    if _LIBRARIES is not None:
+        return _LIBRARIES
     import ctypes
     from ctypes import wintypes
 
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    if not _WIN32_READY:
-        user32.OpenClipboard.argtypes = [wintypes.HWND]
-        user32.OpenClipboard.restype = wintypes.BOOL
-        user32.CloseClipboard.argtypes = []
-        user32.CloseClipboard.restype = wintypes.BOOL
-        user32.EmptyClipboard.argtypes = []
-        user32.EmptyClipboard.restype = wintypes.BOOL
-        user32.GetClipboardData.argtypes = [wintypes.UINT]
-        user32.GetClipboardData.restype = wintypes.HANDLE
-        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-        user32.SetClipboardData.restype = wintypes.HANDLE
-        user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
-        user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
 
-        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-        kernel32.GlobalLock.restype = wintypes.LPVOID
-        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-        kernel32.GlobalUnlock.restype = wintypes.BOOL
-        kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
-        kernel32.GlobalFree.restype = wintypes.HGLOBAL
-        _WIN32_READY = True
-    return user32, kernel32
+    user32.OpenClipboard.argtypes = [wintypes.HWND]
+    user32.OpenClipboard.restype = wintypes.BOOL
+    user32.CloseClipboard.argtypes = []
+    user32.CloseClipboard.restype = wintypes.BOOL
+    user32.EmptyClipboard.argtypes = []
+    user32.EmptyClipboard.restype = wintypes.BOOL
+    user32.GetClipboardData.argtypes = [wintypes.UINT]
+    user32.GetClipboardData.restype = wintypes.HANDLE
+    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+    user32.SetClipboardData.restype = wintypes.HANDLE
+    user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+    user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+
+    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalLock.restype = wintypes.LPVOID
+    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalUnlock.restype = wintypes.BOOL
+    kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalFree.restype = wintypes.HGLOBAL
+
+    _LIBRARIES = (user32, kernel32)
+    return _LIBRARIES
 
 
 def _open_clipboard(user32: Any, *, attempts: int = 10) -> bool:  # pragma: no cover

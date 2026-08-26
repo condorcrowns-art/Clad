@@ -151,6 +151,46 @@ class WindowsRegressionTests(unittest.TestCase):
                                   f"its return type — on 64-bit Windows the handle "
                                   f"it returns is truncated")
 
+    def test_declared_libraries_are_cached_not_a_flag(self):
+        """ctypes.WinDLL(name) builds a NEW library object every call, so a
+        "have we declared yet" flag protects nothing: the first caller
+        declares on its object, the flag goes true, and the next caller gets a
+        fresh object with every restype back at the default c_int. That is
+        what made `clipboard probe` report it could not write — read_clipboard
+        ran first and got the declared copy, write_clipboard got the bare one."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "clipboard.py").read_text(encoding="utf-8")
+        self.assertIn("_LIBRARIES", source)
+        self.assertNotIn("_WIN32_READY", source)
+        # The cache has to hold the libraries themselves, and be consulted
+        # before anything is constructed.
+        declare = source[source.index("def _win32("):source.index("def _open_clipboard(")]
+        self.assertIn("if _LIBRARIES is not None:", declare)
+        self.assertLess(declare.index("if _LIBRARIES is not None:"),
+                        declare.index('ctypes.WinDLL("user32"'))
+
+    def test_the_window_building_calls_are_declared_too(self):
+        """Declaring DefWindowProcW fixed the flood of OverflowErrors inside
+        the callback and left the same hole in the calls that build the
+        window: an undeclared CreateWindowExW raised "argument 11:
+        OverflowError" on the HINSTANCE, so the tray icon was skipped on every
+        64-bit machine."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "notify.py").read_text(encoding="utf-8")
+        for name in ("CreateWindowExW", "GetModuleHandleW", "RegisterClassW",
+                     "LoadIconW", "Shell_NotifyIconW", "DispatchMessageW"):
+            with self.subTest(function=name):
+                self.assertIn(f"{name}.argtypes", source)
+                self.assertIn(f"{name}.restype", source)
+
+    def test_load_icon_accepts_an_integer_resource_id(self):
+        """IDI_SHIELD is a MAKEINTRESOURCE integer, not a string. Declared as
+        LPCWSTR the call would reject it and take the tray down a second way."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "notify.py").read_text(encoding="utf-8")
+        start = source.index("user32.LoadIconW.argtypes")
+        self.assertIn("c_void_p", source[start:start + 120])
+
     def test_the_probe_reports_whether_it_ran(self):
         """probe() returned None both for "the decoy survived" and for "the
         clipboard could not be written". The strongest result and the absence

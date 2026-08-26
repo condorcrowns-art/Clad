@@ -45,7 +45,8 @@ class PostureTests(unittest.TestCase):
             (config.data_dir() / "autostart-baseline.json").write_text("{}")
             verdict = posture.assess(
                 config, adblock_domains=73,
-                credguard_status={"stores_present": ["a"], "verified_audited": ["p"]})
+                credguard_status={"stores_present": ["a"], "verified_audited": ["p"],
+                                  "paths_checked": ["p"]})
             self.assertEqual(verdict.state, posture.PROTECTED)
             self.assertIn("PROTECTED", posture.format_banner(verdict))
 
@@ -57,7 +58,8 @@ class PostureTests(unittest.TestCase):
             (config.data_dir() / "autostart-baseline.json").write_text("{}")
             verdict = posture.assess(
                 config, adblock_domains=73,
-                credguard_status={"stores_present": ["a", "b"], "verified_audited": []})
+                credguard_status={"stores_present": ["a", "b"], "verified_audited": [],
+                                  "paths_checked": ["p", "q"]})
             self.assertEqual(verdict.state, posture.UNPROTECTED)
 
     def test_a_machine_with_no_credential_stores_is_not_penalised(self):
@@ -66,7 +68,8 @@ class PostureTests(unittest.TestCase):
             (config.data_dir() / "autostart-baseline.json").write_text("{}")
             verdict = posture.assess(
                 config, adblock_domains=73,
-                credguard_status={"stores_present": [], "verified_audited": []})
+                credguard_status={"stores_present": [], "verified_audited": [],
+                                  "paths_checked": []})
             self.assertEqual(verdict.state, posture.PROTECTED)
 
     def test_a_missing_baseline_is_partial_not_fatal(self):
@@ -80,6 +83,19 @@ class PostureTests(unittest.TestCase):
             self.assertIn("candy level standard", text)
             self.assertIn("candy baseline save", text)
 
+    def test_watched_files_are_counted_against_files(self):
+        """`stores_present` counts credential stores and `verified_audited`
+        counts audited paths — which includes the four decoys. One over the
+        other printed "11 of 7 watched"."""
+        with tempfile.TemporaryDirectory() as tmp:
+            verdict = posture.assess(
+                config_for(tmp),
+                credguard_status={"stores_present": ["a"] * 7,
+                                  "verified_audited": ["p"] * 11,
+                                  "paths_checked": ["p"] * 11})
+            detail = [c.detail for c in verdict.checks if c.name == "credential stores"][0]
+            self.assertIn("11 of 11", detail)
+
     def test_a_verified_count_beats_the_recorded_one(self):
         """config.json's note said 11 armed while the rules were gone. The
         note must never be what the verdict is built on."""
@@ -87,7 +103,7 @@ class PostureTests(unittest.TestCase):
             verdict = posture.assess(
                 config_for(tmp),
                 credguard_status={"stores_present": ["a"], "armed": ["a"] * 11,
-                                  "verified_audited": []})
+                                  "verified_audited": [], "paths_checked": ["p"]})
             names = [c.name for c in verdict.critical_failures]
             self.assertIn("credential stores", names)
 
@@ -139,12 +155,63 @@ class ImportTests(unittest.TestCase):
         (root / "data" / "trust-pins.json").write_text("{}")
         return root
 
+    def test_each_file_comes_from_the_newest_folder_that_has_it(self):
+        """Three older folders on a real machine: the newest had a config but
+        no startup baseline, because the baseline had been saved two versions
+        back. Importing from the newest alone left it behind and reported
+        success."""
+        with tempfile.TemporaryDirectory() as tmp:
+            new = Path(tmp) / "v10"
+            new.mkdir()
+            v9 = Path(tmp) / "v9"
+            (v9 / "config").mkdir(parents=True)
+            (v9 / "config" / "config.json").write_text('{"response": {"mode": "enforce"}}')
+            v8 = self.make_install(Path(tmp) / "v8", mode="observe")
+
+            written = posture.apply_import(posture.plan_import([v9, v8], new))
+            self.assertIn("config/config.json", written)
+            self.assertIn("data/autostart-baseline.json", written)
+            # The config came from v9, the baseline from v8.
+            self.assertEqual(
+                json.loads((new / "config" / "config.json").read_text())["response"]["mode"],
+                "enforce")
+            self.assertIn("427", (new / "data" / "autostart-baseline.json").read_text())
+
+    def test_nothing_is_pending_once_it_has_been_imported(self):
+        """The banner kept saying settings "did not come with this copy"
+        immediately after they had."""
+        with tempfile.TemporaryDirectory() as tmp:
+            old = self.make_install(Path(tmp) / "old")
+            new = Path(tmp) / "new"
+            new.mkdir()
+            self.assertTrue(posture.pending_import(new, [old]))
+            posture.apply_import(posture.plan_import([old], new))
+            self.assertEqual(posture.pending_import(new, [old]), [])
+
+    def test_a_default_config_still_counts_as_pending(self):
+        from candy.config import DEFAULTS
+
+        with tempfile.TemporaryDirectory() as tmp:
+            old = self.make_install(Path(tmp) / "old")
+            new = Path(tmp) / "new"
+            (new / "config").mkdir(parents=True)
+            (new / "config" / "config.json").write_text(json.dumps(DEFAULTS))
+            self.assertIn("config/config.json", posture.pending_import(new, [old]))
+
+    def test_the_plan_names_which_folder_each_file_came_from(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = self.make_install(Path(tmp) / "old")
+            new = Path(tmp) / "new"
+            new.mkdir()
+            text = posture.format_import_plan(posture.plan_import([old], new))
+            self.assertIn(str(old), text)
+
     def test_the_plan_changes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             old = self.make_install(Path(tmp) / "old")
             new = Path(tmp) / "new"
             new.mkdir()
-            plan = posture.plan_import(old, new)
+            plan = posture.plan_import([old], new)
             self.assertEqual(len(plan.available), 3)
             self.assertFalse((new / "config" / "config.json").exists())
             self.assertIn("would copy", posture.format_import_plan(plan))
@@ -154,7 +221,7 @@ class ImportTests(unittest.TestCase):
             old = self.make_install(Path(tmp) / "old")
             new = Path(tmp) / "new"
             new.mkdir()
-            written = posture.apply_import(posture.plan_import(old, new))
+            written = posture.apply_import(posture.plan_import([old], new))
             self.assertIn("config/config.json", written)
             self.assertIn("data/autostart-baseline.json", written)
             self.assertEqual(
@@ -167,7 +234,7 @@ class ImportTests(unittest.TestCase):
             new = Path(tmp) / "new"
             (new / "config").mkdir(parents=True)
             (new / "config" / "config.json").write_text('{"mine": true}')
-            written = posture.apply_import(posture.plan_import(old, new))
+            written = posture.apply_import(posture.plan_import([old], new))
             self.assertNotIn("config/config.json", written)
             self.assertIn("mine", (new / "config" / "config.json").read_text())
 
@@ -183,7 +250,7 @@ class ImportTests(unittest.TestCase):
             new = Path(tmp) / "new"
             (new / "config").mkdir(parents=True)
             (new / "config" / "config.json").write_text(json.dumps(DEFAULTS, indent=2))
-            written = posture.apply_import(posture.plan_import(old, new))
+            written = posture.apply_import(posture.plan_import([old], new))
             self.assertIn("config/config.json", written)
             self.assertEqual(
                 json.loads((new / "config" / "config.json").read_text())["response"]["mode"],
@@ -201,7 +268,7 @@ class ImportTests(unittest.TestCase):
             edited["whitelist"]["names"] = ["something the user added"]
             (new / "config" / "config.json").write_text(json.dumps(edited))
             self.assertNotIn("config/config.json",
-                             posture.apply_import(posture.plan_import(old, new)))
+                             posture.apply_import(posture.plan_import([old], new)))
 
     def test_overwrite_replaces_them_when_asked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -209,7 +276,7 @@ class ImportTests(unittest.TestCase):
             new = Path(tmp) / "new"
             (new / "config").mkdir(parents=True)
             (new / "config" / "config.json").write_text('{"mine": true}')
-            written = posture.apply_import(posture.plan_import(old, new),
+            written = posture.apply_import(posture.plan_import([old], new),
                                            overwrite=True)
             self.assertIn("config/config.json", written)
 
@@ -223,7 +290,7 @@ class ImportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             empty = Path(tmp) / "empty"
             empty.mkdir()
-            plan = posture.plan_import(empty, Path(tmp))
+            plan = posture.plan_import([empty], Path(tmp))
             self.assertIn("no Candy settings", posture.format_import_plan(plan))
 
 

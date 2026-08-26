@@ -395,15 +395,20 @@ def _posture_for(config: Config, *, verify: bool = True):
     except Exception:  # noqa: BLE001
         domains = None
 
-    previous = None
+    previous, pending = None, []
     if config.path:
+        destination = Path(config.path).parent.parent
         try:
-            candidates = posture_mod.find_previous_installs(Path(config.path).parent.parent)
-            previous = candidates[0] if candidates else None
+            candidates = posture_mod.find_previous_installs(destination)
+            # Offer the upgrade only when an older folder holds something this
+            # one has not taken — otherwise the banner keeps telling you your
+            # settings "did not come with this copy" right after they did.
+            pending = posture_mod.pending_import(destination, candidates)
+            previous = candidates[0] if candidates and pending else None
         except Exception:  # noqa: BLE001
-            previous = None
+            previous, pending = None, []
     return posture_mod.assess(config, credguard_status=cred, adblock_domains=domains,
-                              previous_install=previous)
+                              previous_install=previous, upgrade_pending=pending)
 
 
 def cmd_posture(args: argparse.Namespace) -> int:
@@ -433,27 +438,28 @@ def cmd_import(args: argparse.Namespace) -> int:
     destination = Path(config.path).parent.parent if config.path else Path.cwd()
 
     if args.source:
-        source = Path(expand_path(args.source))
-        if not posture_mod.looks_like_install(source):
-            print(f"{source} does not look like a Candy folder "
+        sources = [Path(expand_path(args.source))]
+        if not posture_mod.looks_like_install(sources[0]):
+            print(f"{sources[0]} does not look like a Candy folder "
                   f"(no config{os.sep}config.json inside).")
             return 2
     else:
-        found = posture_mod.find_previous_installs(destination)
-        if not found:
+        sources = posture_mod.find_previous_installs(destination)
+        if not sources:
             print("No other Candy folder found in Downloads, Desktop, Documents or "
                   "your user folder.")
             print("If it is somewhere else, name it:  candy import --from <folder>")
             return 1
-        source = found[0]
-        if len(found) > 1:
-            print(f"Found {len(found)} other Candy folders; using the most recently "
-                  f"configured one. The others:")
-            for other in found[1:4]:
+        if len(sources) > 1:
+            # Every folder, newest first — not just the newest. The newest one
+            # had a config but no baseline; the baseline was two versions back,
+            # because that is where it had been saved.
+            print(f"Reading {len(sources)} older Candy folders, newest first:")
+            for other in sources:
                 print(f"  {other}")
             print()
 
-    plan = posture_mod.plan_import(source, destination)
+    plan = posture_mod.plan_import(sources, destination)
     if not args.yes:
         print(posture_mod.format_import_plan(plan))
         return 0

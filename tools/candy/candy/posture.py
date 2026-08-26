@@ -48,6 +48,9 @@ class Check:
 class Posture:
     checks: list[Check] = field(default_factory=list)
     upgrade_from: str | None = None
+    # What an older folder still holds that this one has not taken. Empty
+    # means there is nothing to offer, however many old folders exist.
+    upgrade_pending: list[str] = field(default_factory=list)
 
     @property
     def failures(self) -> list[Check]:
@@ -65,18 +68,21 @@ class Posture:
 
     def to_dict(self) -> dict[str, Any]:
         return {"state": self.state, "upgrade_from": self.upgrade_from,
+                "upgrade_pending": list(self.upgrade_pending),
                 "checks": [check.to_dict() for check in self.checks]}
 
 
 def assess(config: Config, *, credguard_status: dict[str, Any] | None = None,
            adblock_domains: int | None = None,
-           previous_install: Path | None = None) -> Posture:
+           previous_install: Path | None = None,
+           upgrade_pending: list[str] | None = None) -> Posture:
     """Judge the whole posture from configuration and verified state.
 
     The inputs that cost a subprocess are passed in rather than fetched, so
     this stays a pure function and every branch is testable.
     """
-    posture = Posture(upgrade_from=str(previous_install) if previous_install else None)
+    posture = Posture(upgrade_from=str(previous_install) if previous_install else None,
+                      upgrade_pending=list(upgrade_pending or []))
 
     mode = str(config.get("response.mode", "observe") or "observe")
     posture.checks.append(Check(
@@ -95,12 +101,15 @@ def assess(config: Config, *, credguard_status: dict[str, Any] | None = None,
 
     if credguard_status is not None:
         verified = credguard_status.get("verified_audited")
-        present = len(credguard_status.get("stores_present") or [])
+        # Count paths against paths. `stores_present` counts credential stores
+        # and `verified_audited` counts audited paths, which includes the four
+        # decoys — so putting one over the other printed "11 of 7 watched".
+        checked = len(credguard_status.get("paths_checked") or [])
         count = len(verified) if verified is not None else len(
             credguard_status.get("armed") or [])
         posture.checks.append(Check(
-            "credential stores", bool(count) or not present,
-            f"{count} of {present} watched" if present
+            "credential stores", bool(count) or not checked,
+            f"{count} of {checked} file(s) watched" if checked
             else "no credential stores found on this machine",
             "candy credguard arm   (as administrator)", weight=3))
 
@@ -215,12 +224,13 @@ def format_banner(posture: Posture) -> str:
         lines.append("To turn the missing pieces on:")
         for fix in dict.fromkeys(check.fix for check in posture.failures if check.fix):
             lines.append(f"  {fix}")
-    if posture.upgrade_from:
+    if posture.upgrade_from and posture.upgrade_pending:
         lines.append("")
-        lines.append(f"An earlier Candy folder is on this machine:")
+        lines.append("An earlier Candy folder still holds settings this copy has not "
+                     "taken:")
         lines.append(f"  {posture.upgrade_from}")
-        lines.append("Its settings, baseline and trusted programs did not come with "
-                     "this copy.")
+        for relative in posture.upgrade_pending:
+            lines.append(f"    {relative}")
         lines.append("  candy import   — bring them across")
     return "\n".join(lines)
 
@@ -241,25 +251,65 @@ IMPORT_FILES = (
 
 @dataclass
 class ImportPlan:
-    source: Path
+    """What would be carried across, and out of which folder each file comes.
+
+    Deliberately not "the previous install" singular. On a real machine there
+    were three older folders, the newest of which had a config but no startup
+    baseline — the baseline was two versions back, because that is where it
+    had been saved. Importing from the newest folder alone silently left it
+    behind and reported success. Each file is taken from the newest folder
+    that actually has it.
+    """
+    sources: list[Path]
     destination: Path
-    items: list[tuple[str, str, bool]] = field(default_factory=list)
+    items: list[tuple[str, str, Path | None]] = field(default_factory=list)
 
     @property
-    def available(self) -> list[tuple[str, str, bool]]:
-        return [item for item in self.items if item[2]]
+    def source(self) -> Path | None:
+        """The folder most of this is coming from, for one-line messages."""
+        return self.sources[0] if self.sources else None
+
+    @property
+    def available(self) -> list[tuple[str, str, Path | None]]:
+        return [item for item in self.items if item[2] is not None]
 
     def to_dict(self) -> dict[str, Any]:
-        return {"source": str(self.source), "destination": str(self.destination),
-                "items": [{"file": f, "what": w, "present": p} for f, w, p in self.items]}
+        return {"sources": [str(path) for path in self.sources],
+                "destination": str(self.destination),
+                "items": [{"file": f, "what": w,
+                           "source": str(src) if src else None}
+                          for f, w, src in self.items]}
 
 
-def plan_import(source: Path, destination: Path) -> ImportPlan:
+def plan_import(sources: Path | list[Path], destination: Path) -> ImportPlan:
     """What would be carried across, without touching anything."""
-    plan = ImportPlan(source=source, destination=destination)
+    ordered = [sources] if isinstance(sources, Path) else list(sources)
+    plan = ImportPlan(sources=ordered, destination=destination)
     for relative, description in IMPORT_FILES:
-        plan.items.append((relative, description, (source / relative).is_file()))
+        found = next((source for source in ordered
+                      if (source / relative).is_file()), None)
+        plan.items.append((relative, description, found))
     return plan
+
+
+def would_overwrite(relative: str, target: Path) -> bool:
+    """Whether importing this file would replace something worth keeping."""
+    if not target.is_file():
+        return False
+    return not (relative.endswith("config.json") and is_untouched_default(target))
+
+
+def pending_import(destination: Path, sources: list[Path]) -> list[str]:
+    """Files an older folder still holds that this one would take.
+
+    The banner used to offer `candy import` whenever any older folder existed,
+    which meant it kept saying settings "did not come with this copy"
+    immediately after they had. Ask what is actually still missing.
+    """
+    plan = plan_import(sources, destination)
+    return [relative for relative, _description, source in plan.items
+            if source is not None
+            and not would_overwrite(relative, destination / relative)]
 
 
 def is_untouched_default(path: Path) -> bool:
@@ -295,16 +345,15 @@ def apply_import(plan: ImportPlan, *, overwrite: bool = False) -> list[str]:
     import shutil
 
     written: list[str] = []
-    for relative, _description, present in plan.items:
-        if not present:
+    for relative, _description, source in plan.items:
+        if source is None:
             continue
         target = plan.destination / relative
-        if target.is_file() and not overwrite:
-            if not (relative.endswith("config.json") and is_untouched_default(target)):
-                continue
+        if not overwrite and would_overwrite(relative, target):
+            continue
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(plan.source / relative, target)
+            shutil.copy2(source / relative, target)
         except OSError:
             continue
         written.append(relative)
@@ -312,18 +361,19 @@ def apply_import(plan: ImportPlan, *, overwrite: bool = False) -> list[str]:
 
 
 def format_import_plan(plan: ImportPlan, *, applied: list[str] | None = None) -> str:
-    lines = [f"From : {plan.source}", f"To   : {plan.destination}", ""]
+    lines = [f"To   : {plan.destination}", ""]
     if not plan.available:
-        lines.append("That folder has no Candy settings to bring across.")
+        lines.append("Those folders have no Candy settings to bring across.")
         return "\n".join(lines)
-    for relative, description, present in plan.items:
-        if not present:
+    for relative, description, source in plan.items:
+        if source is None:
             continue
         mark = "copied " if applied is not None and relative in applied else (
             "kept   " if applied is not None else "would copy")
         lines.append(f"  [{mark}] {relative:<34} {description}")
-    skipped = [f for f, _w, p in plan.items
-               if p and applied is not None and f not in applied]
+        lines.append(f"{'':13}from {source}")
+    skipped = [f for f, _w, src in plan.items
+               if src is not None and applied is not None and f not in applied]
     if skipped:
         lines.append("")
         lines.append("Files already present here were left alone. Use --overwrite to "

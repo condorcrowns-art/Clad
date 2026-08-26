@@ -84,6 +84,58 @@ if IS_WINDOWS:  # pragma: no cover - Windows only
 
 
 
+def _declare_window_api(user32: Any, kernel32: Any) -> None:  # pragma: no cover
+    """Give every window and shell call its real argument and return types.
+
+    Without this ctypes assumes a 32-bit int for every argument and return
+    value, and the failures are neither loud nor consistent. Declaring
+    DefWindowProcW alone fixed the flood of "int too long to convert" inside
+    the callback but left the same hole in the calls that *build* the window:
+    GetModuleHandleW returned a truncated HINSTANCE, the struct field widened
+    it back out to a full pointer, and passing that to an undeclared
+    CreateWindowExW raised `argument 11: OverflowError: int too long to
+    convert` — so the tray icon was skipped on every 64-bit machine.
+
+    ctypes.windll caches its library objects by name, so declaring on them is
+    permanent for the process. (ctypes.WinDLL(name) does not — it builds a new
+    object each call, and declarations made on one do not reach the next.)
+    """
+    user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT,
+                                      wintypes.WPARAM, wintypes.LPARAM]
+    user32.DefWindowProcW.restype = LRESULT
+    user32.RegisterClassW.argtypes = [ctypes.c_void_p]
+    user32.RegisterClassW.restype = wintypes.ATOM
+    user32.CreateWindowExW.argtypes = [
+        wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID,
+    ]
+    user32.CreateWindowExW.restype = wintypes.HWND
+    user32.DestroyWindow.argtypes = [wintypes.HWND]
+    user32.DestroyWindow.restype = wintypes.BOOL
+    # IDI_SHIELD and the rest are MAKEINTRESOURCE integers rather than
+    # strings, so the second parameter has to accept an int — LPCWSTR would
+    # reject it and take the tray icon down a second way.
+    user32.LoadIconW.argtypes = [wintypes.HINSTANCE, ctypes.c_void_p]
+    user32.LoadIconW.restype = wintypes.HICON
+    user32.PostQuitMessage.argtypes = [ctypes.c_int]
+    user32.PostQuitMessage.restype = None
+    user32.GetMessageW.argtypes = [ctypes.c_void_p, wintypes.HWND,
+                                   wintypes.UINT, wintypes.UINT]
+    user32.GetMessageW.restype = ctypes.c_int
+    user32.TranslateMessage.argtypes = [ctypes.c_void_p]
+    user32.TranslateMessage.restype = wintypes.BOOL
+    user32.DispatchMessageW.argtypes = [ctypes.c_void_p]
+    user32.DispatchMessageW.restype = LRESULT
+
+    kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+    kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+
+    shell32 = ctypes.windll.shell32
+    shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
+    shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+
+
 class TrayIcon:
     """A notification-area icon that can raise toasts.
 
@@ -129,14 +181,7 @@ class TrayIcon:
         try:
             user32 = ctypes.windll.user32
             kernel32 = ctypes.windll.kernel32
-
-            # Without explicit types ctypes assumes 32-bit ints for every
-            # argument, and the very first message carrying a real pointer in
-            # lparam raises OverflowError inside the callback — which Python
-            # can only print, so it repeats for every message forever.
-            user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT,
-                                              wintypes.WPARAM, wintypes.LPARAM]
-            user32.DefWindowProcW.restype = LRESULT
+            _declare_window_api(user32, kernel32)
 
             def window_proc(hwnd, message, wparam, lparam):
                 try:
