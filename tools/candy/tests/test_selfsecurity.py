@@ -220,6 +220,34 @@ class WindowsRegressionTests(unittest.TestCase):
         # the wrong union member.
         self.assertIn("WTD_CHOICE_CATALOG", source)
 
+    def test_the_cert_query_flags_match_their_content_types(self):
+        """CryptQueryObject's content types are an enum and each flag is
+        1 << that value. PKCS7_SIGNED is 8; the code had 1 << 9, which is
+        PKCS7_UNSIGNED — asking about a different kind of object entirely,
+        so a .cat file was never recognised."""
+        from candy import winapi
+
+        content_type = {"CTL": 2, "PKCS7_SIGNED": 8, "PKCS7_SIGNED_EMBED": 10}
+        for name, value in content_type.items():
+            with self.subTest(name=name):
+                self.assertEqual(getattr(winapi, f"CERT_QUERY_CONTENT_FLAG_{name}"),
+                                 1 << value)
+
+    def test_the_signer_certificate_is_not_rebuilt_by_hand(self):
+        """The real CERT_INFO has SignatureAlgorithm between SerialNumber and
+        Issuer. The code declared it without, so Issuer landed at the wrong
+        offset and CertFindCertificateInStore could never match — the signer
+        came back unknown for every signed file on the machine.
+
+        Asking for CMSG_SIGNER_CERT_INFO_PARAM makes Windows lay the struct
+        out, which removes the class of mistake rather than this instance."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "winapi.py").read_text(encoding="utf-8")
+        self.assertIn("CMSG_SIGNER_CERT_INFO_PARAM", source)
+        reader = source[source.index("def _read_signer_name("):]
+        self.assertNotIn("class CERT_INFO", reader)
+        self.assertNotIn("info.Issuer = signer.Issuer", reader)
+
     def test_the_signer_falls_back_to_the_catalog_too(self):
         """drift.py scores a changed signer at 110, its highest single score.
         A signer that can never be read is a defence that can never fire."""

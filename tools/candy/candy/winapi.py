@@ -628,7 +628,15 @@ _signer_cache: dict[tuple[str, float, int], str | None] = {}
 _signer_lock = threading.Lock()
 
 CERT_QUERY_OBJECT_FILE = 0x00000001
-CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED = 1 << 9
+# Content types are an enum; each flag is 1 << that value. PKCS7_SIGNED is
+# 8, PKCS7_UNSIGNED is 9 and PKCS7_SIGNED_EMBED is 10 — so 1 << 9 asked about
+# unsigned messages, which is not what a .cat file is.
+CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED = 1 << 8
+CERT_QUERY_CONTENT_FLAG_CTL = 1 << 2
+CERT_QUERY_FORMAT_FLAG_ALL = (1 << 1) | (1 << 2) | (1 << 3)
+# The signer's certificate, ready-made. Asking for this instead of
+# CMSG_SIGNER_INFO_PARAM means Windows builds the CERT_INFO rather than us.
+CMSG_SIGNER_CERT_INFO_PARAM = 7
 CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED = 1 << 10
 CERT_QUERY_FORMAT_FLAG_BINARY = 1 << 1
 CMSG_SIGNER_INFO_PARAM = 6
@@ -667,6 +675,8 @@ def _declare_crypt32() -> Any:  # pragma: no cover - Windows only
     crypt32.CertFreeCertificateContext.restype = wintypes.BOOL
     crypt32.CertCloseStore.argtypes = [ctypes.c_void_p, wintypes.DWORD]
     crypt32.CertCloseStore.restype = wintypes.BOOL
+    crypt32.CryptMsgClose.argtypes = [ctypes.c_void_p]
+    crypt32.CryptMsgClose.restype = wintypes.BOOL
     return crypt32
 
 
@@ -726,47 +736,38 @@ def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cove
 
         ok = crypt32.CryptQueryObject(
             CERT_QUERY_OBJECT_FILE, ctypes.c_wchar_p(str(path)),
-            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED | CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED,
-            CERT_QUERY_FORMAT_FLAG_BINARY,
+            # A PE carries its signature embedded; a .cat file is a standalone
+            # signed message wrapping a trust list. Ask about all three rather
+            # than assuming which kind of file this is.
+            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED
+            | CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED
+            | CERT_QUERY_CONTENT_FLAG_CTL,
+            CERT_QUERY_FORMAT_FLAG_ALL,
             0, ctypes.byref(encoding), ctypes.byref(content_type),
             ctypes.byref(format_type), ctypes.byref(store), ctypes.byref(message), None)
-        if not ok:
+        if not ok or not message:
             return None
 
         try:
+            # CMSG_SIGNER_CERT_INFO_PARAM hands back a CERT_INFO that Windows
+            # laid out itself. The previous code asked for CMSG_SIGNER_INFO
+            # and rebuilt a CERT_INFO by hand from the issuer and serial — but
+            # the real CERT_INFO has SignatureAlgorithm between SerialNumber
+            # and Issuer, so Issuer was written at the wrong offset and the
+            # certificate lookup could never match. Letting Windows produce
+            # the struct removes the whole class of mistake.
             size = wintypes.DWORD()
-            if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_INFO_PARAM, 0, None,
-                                            ctypes.byref(size)):
+            if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_CERT_INFO_PARAM, 0,
+                                            None, ctypes.byref(size)) or not size.value:
                 return None
             buffer = ctypes.create_string_buffer(size.value)
-            if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_INFO_PARAM, 0, buffer,
-                                            ctypes.byref(size)):
+            if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_CERT_INFO_PARAM, 0,
+                                            buffer, ctypes.byref(size)):
                 return None
-
-            class CRYPT_INTEGER_BLOB(ctypes.Structure):
-                _fields_ = [("cbData", wintypes.DWORD),
-                            ("pbData", ctypes.POINTER(ctypes.c_byte))]
-
-            class CERT_INFO(ctypes.Structure):
-                _fields_ = [("dwVersion", wintypes.DWORD),
-                            ("SerialNumber", CRYPT_INTEGER_BLOB),
-                            ("Issuer", CRYPT_INTEGER_BLOB)]
-
-            # The signer info's first two members after the version are the
-            # issuer and serial, which together identify the certificate.
-            class CMSG_SIGNER_INFO(ctypes.Structure):
-                _fields_ = [("dwVersion", wintypes.DWORD),
-                            ("Issuer", CRYPT_INTEGER_BLOB),
-                            ("SerialNumber", CRYPT_INTEGER_BLOB)]
-
-            signer = ctypes.cast(buffer, ctypes.POINTER(CMSG_SIGNER_INFO)).contents
-            info = CERT_INFO()
-            info.Issuer = signer.Issuer
-            info.SerialNumber = signer.SerialNumber
 
             CERT_FIND_SUBJECT_CERT = 0x000B0000
             context = crypt32.CertFindCertificateInStore(
-                store, ENCODING, 0, CERT_FIND_SUBJECT_CERT, ctypes.byref(info), None)
+                store, ENCODING, 0, CERT_FIND_SUBJECT_CERT, buffer, None)
             if not context:
                 return None
             try:
