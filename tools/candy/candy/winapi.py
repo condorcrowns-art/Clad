@@ -19,11 +19,19 @@ from .util import IS_WINDOWS
 WTD_UI_NONE = 2
 WTD_REVOKE_NONE = 0
 WTD_CHOICE_FILE = 1
+WTD_CHOICE_CATALOG = 2
 WTD_STATEACTION_VERIFY = 1
 WTD_STATEACTION_CLOSE = 2
 WTD_SAFER_FLAG = 0x100
 WTD_CACHE_ONLY_URL_RETRIEVAL = 0x1000
 TRUST_E_NOSIGNATURE = 0x800B0100
+# CreateFileW, for handing the catalog API an open handle to hash.
+GENERIC_READ = 0x80000000
+FILE_SHARE_READ = 0x00000001
+FILE_SHARE_WRITE = 0x00000002
+OPEN_EXISTING = 3
+INVALID_HANDLE_VALUE = -1
+BCRYPT_SHA256_ALGORITHM = "SHA256"
 ERROR_ALREADY_EXISTS = 183
 
 PROCESS_EXTENSION_POINT_DISABLE_POLICY = 8
@@ -65,11 +73,41 @@ if IS_WINDOWS:  # pragma: no cover - exercised only on Windows
             ("pSignatureSettings", ctypes.c_void_p),
         ]
 
+    class WINTRUST_CATALOG_INFO(ctypes.Structure):
+        """The other half of Authenticode, and the half Candy could not see.
+
+        Most of Windows is not signed in the file at all. The signature lives
+        in a catalog — a .cat file in the system catalog store that lists a
+        hash per member file — and a WinVerifyTrust call carrying only a
+        WINTRUST_FILE_INFO never looks there. It answers TRUST_E_NOSIGNATURE,
+        "no signature at all", which for notepad.exe is simply wrong.
+        """
+        _fields_ = [
+            ("cbStruct", wintypes.DWORD),
+            ("dwCatalogVersion", wintypes.DWORD),
+            ("pcwszCatalogFilePath", wintypes.LPCWSTR),
+            ("pcwszMemberTag", wintypes.LPCWSTR),
+            ("pcwszMemberFilePath", wintypes.LPCWSTR),
+            ("hMemberFile", wintypes.HANDLE),
+            ("pbCalculatedFileHash", ctypes.POINTER(ctypes.c_ubyte)),
+            ("cbCalculatedFileHash", wintypes.DWORD),
+            ("pcCatalogContext", ctypes.c_void_p),
+            ("hCatAdmin", wintypes.HANDLE),
+        ]
+
+    class CATALOG_INFO(ctypes.Structure):
+        _fields_ = [("cbStruct", wintypes.DWORD),
+                    ("wszCatalogFile", ctypes.c_wchar * 260)]
+
     # {00AAC56B-CD44-11d0-8CC2-00C04FC295EE}
     WINTRUST_ACTION_GENERIC_VERIFY_V2 = GUID(
         0x00AAC56B, 0xCD44, 0x11D0,
         (ctypes.c_ubyte * 8)(0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE),
     )
+
+
+class _Done(Exception):
+    """Internal: the catalog path already settled the answer."""
 
 
 _sig_cache: dict[tuple[str, float, int], bool | None] = {}
@@ -193,12 +231,153 @@ def signature_status(path: str | os.PathLike) -> dict[str, Any]:
         "signed": verdict,
         "status": code,
         "status_hex": None if code is None else f"0x{code:08X}",
-        "meaning": TRUST_STATUS.get(code or -1,
-                                    detail or ("the check could not run"
-                                               if code is None else
-                                               "an unlisted WinVerifyTrust status")),
+        # `code or -1` turned a status of 0 — success, the one that matters
+        # most — into -1, so "signed and trusted" printed as "an unlisted
+        # WinVerifyTrust status". Zero is a value, not an absence.
+        "meaning": (("the check could not run" + (f": {detail}" if detail else ""))
+                    if code is None else
+                    TRUST_STATUS.get(code, "an unlisted WinVerifyTrust status")
+                    + (f" ({detail})" if detail else "")),
         "signer": signer_name(path),
     }
+
+
+def _declare_catalog_api() -> Any | None:  # pragma: no cover - Windows only
+    """wintrust's catalog functions, with every handle type declared.
+
+    Undeclared ctypes calls have caused six bugs in this codebase; the catalog
+    API is nothing but handles and pointers, so it gets declared up front.
+    """
+    from ctypes import wintypes
+
+    wintrust = ctypes.windll.wintrust
+    kernel32 = ctypes.windll.kernel32
+
+    kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                     ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                                     wintypes.HANDLE]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    wintrust.CryptCATAdminAcquireContext2.argtypes = [
+        ctypes.POINTER(wintypes.HANDLE), ctypes.c_void_p, wintypes.LPCWSTR,
+        ctypes.c_void_p, wintypes.DWORD]
+    wintrust.CryptCATAdminAcquireContext2.restype = wintypes.BOOL
+    wintrust.CryptCATAdminCalcHashFromFileHandle2.argtypes = [
+        wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(ctypes.c_ubyte), wintypes.DWORD]
+    wintrust.CryptCATAdminCalcHashFromFileHandle2.restype = wintypes.BOOL
+    wintrust.CryptCATAdminEnumCatalogFromHash.argtypes = [
+        wintypes.HANDLE, ctypes.POINTER(ctypes.c_ubyte), wintypes.DWORD,
+        wintypes.DWORD, ctypes.c_void_p]
+    wintrust.CryptCATAdminEnumCatalogFromHash.restype = wintypes.HANDLE
+    wintrust.CryptCATCatalogInfoFromContext.argtypes = [
+        wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+    wintrust.CryptCATCatalogInfoFromContext.restype = wintypes.BOOL
+    wintrust.CryptCATAdminReleaseCatalogContext.argtypes = [
+        wintypes.HANDLE, wintypes.HANDLE, wintypes.DWORD]
+    wintrust.CryptCATAdminReleaseCatalogContext.restype = wintypes.BOOL
+    wintrust.CryptCATAdminReleaseContext.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    wintrust.CryptCATAdminReleaseContext.restype = wintypes.BOOL
+    return wintrust
+
+
+def _catalog_for(path: str) -> tuple[str, str] | None:  # pragma: no cover - Windows only
+    """Find the catalog that vouches for this file.
+
+    Returns ``(catalog file path, member tag)`` or None when no catalog lists
+    it. The member tag is the file's hash as an uppercase hex string, which is
+    how a catalog names its members.
+    """
+    from ctypes import wintypes
+
+    wintrust = _declare_catalog_api()
+    kernel32 = ctypes.windll.kernel32
+
+    handle = kernel32.CreateFileW(str(path), GENERIC_READ,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE, None,
+                                  OPEN_EXISTING, 0, None)
+    if not handle or handle == ctypes.c_void_p(INVALID_HANDLE_VALUE).value:
+        return None
+
+    admin = wintypes.HANDLE()
+    catalog_context = None
+    try:
+        if not wintrust.CryptCATAdminAcquireContext2(
+                ctypes.byref(admin), None, BCRYPT_SHA256_ALGORITHM, None, 0):
+            return None
+        try:
+            size = wintypes.DWORD(0)
+            # First call sizes the hash, second fills it — the usual Win32
+            # two-call idiom.
+            wintrust.CryptCATAdminCalcHashFromFileHandle2(
+                admin, handle, ctypes.byref(size), None, 0)
+            if not size.value:
+                return None
+            digest = (ctypes.c_ubyte * size.value)()
+            if not wintrust.CryptCATAdminCalcHashFromFileHandle2(
+                    admin, handle, ctypes.byref(size), digest, 0):
+                return None
+
+            catalog_context = wintrust.CryptCATAdminEnumCatalogFromHash(
+                admin, digest, size.value, 0, None)
+            if not catalog_context:
+                return None
+
+            info = CATALOG_INFO()
+            info.cbStruct = ctypes.sizeof(CATALOG_INFO)
+            if not wintrust.CryptCATCatalogInfoFromContext(
+                    catalog_context, ctypes.byref(info), 0):
+                return None
+            tag = "".join(f"{byte:02X}" for byte in digest)
+            return info.wszCatalogFile, tag
+        finally:
+            if catalog_context:
+                wintrust.CryptCATAdminReleaseCatalogContext(admin, catalog_context, 0)
+            wintrust.CryptCATAdminReleaseContext(admin, 0)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _verify_catalog(path: str) -> int | None:  # pragma: no cover - Windows only
+    """WinVerifyTrust against the catalog that lists this file.
+
+    Returns the status, or None when no catalog vouches for it at all — which
+    is the honest answer for a file that really is unsigned.
+    """
+    from ctypes import wintypes
+
+    found = _catalog_for(path)
+    if not found:
+        return None
+    catalog_file, tag = found
+
+    catalog_info = WINTRUST_CATALOG_INFO()
+    catalog_info.cbStruct = ctypes.sizeof(WINTRUST_CATALOG_INFO)
+    catalog_info.pcwszCatalogFilePath = catalog_file
+    catalog_info.pcwszMemberTag = tag
+    catalog_info.pcwszMemberFilePath = str(path)
+
+    data = WINTRUST_DATA()
+    data.cbStruct = ctypes.sizeof(WINTRUST_DATA)
+    data.dwUIChoice = WTD_UI_NONE
+    data.fdwRevocationChecks = WTD_REVOKE_NONE
+    data.dwUnionChoice = WTD_CHOICE_CATALOG
+    data.pFile = ctypes.cast(ctypes.pointer(catalog_info),
+                             ctypes.POINTER(WINTRUST_FILE_INFO))
+    data.dwStateAction = WTD_STATEACTION_VERIFY
+    data.dwProvFlags = WTD_SAFER_FLAG | WTD_CACHE_ONLY_URL_RETRIEVAL
+
+    wintrust = ctypes.windll.wintrust
+    wintrust.WinVerifyTrust.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p]
+    wintrust.WinVerifyTrust.restype = wintypes.LONG
+    status = wintrust.WinVerifyTrust(
+        None, ctypes.byref(WINTRUST_ACTION_GENERIC_VERIFY_V2), ctypes.byref(data))
+    data.dwStateAction = WTD_STATEACTION_CLOSE
+    wintrust.WinVerifyTrust(
+        None, ctypes.byref(WINTRUST_ACTION_GENERIC_VERIFY_V2), ctypes.byref(data))
+    return status
 
 
 def verify_signature(path: str | os.PathLike) -> bool | None:
@@ -251,8 +430,21 @@ def verify_signature(path: str | os.PathLike) -> bool | None:
         data.dwStateAction = WTD_STATEACTION_CLOSE
         wintrust.WinVerifyTrust(None, ctypes.byref(WINTRUST_ACTION_GENERIC_VERIFY_V2),
                                 ctypes.byref(data))
+        if (status & 0xFFFFFFFF) == TRUST_E_NOSIGNATURE:
+            # No signature *in the file* is not the same as no signature. Most
+            # of Windows is catalog-signed, and asking only about the embedded
+            # one reports notepad.exe as unsigned — which then feeds every
+            # heuristic that rests on a file being unsigned.
+            catalog_status = _verify_catalog(str(path))
+            if catalog_status is not None:
+                status = catalog_status
+                _remember_status(path, status, "verified against a catalog")
+                result = status == 0
+                raise _Done
         _remember_status(path, status)
         result = status == 0
+    except _Done:
+        pass
     except Exception as exc:  # noqa: BLE001 - never let a trust check crash a monitor
         _remember_status(path, None, str(exc))
         result = None
@@ -436,6 +628,7 @@ _signer_cache: dict[tuple[str, float, int], str | None] = {}
 _signer_lock = threading.Lock()
 
 CERT_QUERY_OBJECT_FILE = 0x00000001
+CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED = 1 << 9
 CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED = 1 << 10
 CERT_QUERY_FORMAT_FLAG_BINARY = 1 << 1
 CMSG_SIGNER_INFO_PARAM = 6
@@ -443,6 +636,38 @@ CERT_NAME_SIMPLE_DISPLAY_TYPE = 4
 X509_ASN_ENCODING = 0x00000001
 PKCS_7_ASN_ENCODING = 0x00010000
 ENCODING = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+
+
+def _declare_crypt32() -> Any:  # pragma: no cover - Windows only
+    """crypt32 with its pointer-returning functions declared.
+
+    CertFindCertificateInStore returns a PCCERT_CONTEXT. Left at ctypes'
+    default c_int it came back truncated, and every CertGetNameStringW call
+    that followed was reading a wild pointer — which is why the signer came
+    back "none read" for files that are plainly signed. Sixth instance of
+    this bug in this codebase.
+    """
+    from ctypes import wintypes
+
+    crypt32 = ctypes.windll.crypt32
+    crypt32.CryptQueryObject.restype = wintypes.BOOL
+    crypt32.CryptMsgGetParam.argtypes = [ctypes.c_void_p, wintypes.DWORD,
+                                         wintypes.DWORD, ctypes.c_void_p,
+                                         ctypes.POINTER(wintypes.DWORD)]
+    crypt32.CryptMsgGetParam.restype = wintypes.BOOL
+    crypt32.CertFindCertificateInStore.argtypes = [
+        ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+        ctypes.c_void_p, ctypes.c_void_p]
+    crypt32.CertFindCertificateInStore.restype = ctypes.c_void_p
+    crypt32.CertGetNameStringW.argtypes = [ctypes.c_void_p, wintypes.DWORD,
+                                           wintypes.DWORD, ctypes.c_void_p,
+                                           wintypes.LPWSTR, wintypes.DWORD]
+    crypt32.CertGetNameStringW.restype = wintypes.DWORD
+    crypt32.CertFreeCertificateContext.argtypes = [ctypes.c_void_p]
+    crypt32.CertFreeCertificateContext.restype = wintypes.BOOL
+    crypt32.CertCloseStore.argtypes = [ctypes.c_void_p, wintypes.DWORD]
+    crypt32.CertCloseStore.restype = wintypes.BOOL
+    return crypt32
 
 
 def signer_name(path: str | os.PathLike) -> str | None:
@@ -468,6 +693,18 @@ def signer_name(path: str | os.PathLike) -> str | None:
             return _signer_cache[key]
 
     name = _read_signer_name(path)
+    if name is None:
+        # A catalog-signed file carries no signature of its own; the signer is
+        # on the catalog that lists it. Without this, every Windows system
+        # binary reports an unknown signer — and drift.py scores a *changed*
+        # signer at 110, its highest single score, so a signer it can never
+        # read is a defence that can never fire.
+        try:
+            found = _catalog_for(str(path))
+        except Exception:  # noqa: BLE001
+            found = None
+        if found:
+            name = _read_signer_name(found[0])
     with _signer_lock:
         if len(_signer_cache) > 4096:
             _signer_cache.clear()
@@ -480,7 +717,7 @@ def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cove
         import ctypes
         from ctypes import wintypes
 
-        crypt32 = ctypes.windll.crypt32
+        crypt32 = _declare_crypt32()
         encoding = wintypes.DWORD()
         content_type = wintypes.DWORD()
         format_type = wintypes.DWORD()
@@ -489,7 +726,8 @@ def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cove
 
         ok = crypt32.CryptQueryObject(
             CERT_QUERY_OBJECT_FILE, ctypes.c_wchar_p(str(path)),
-            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED, CERT_QUERY_FORMAT_FLAG_BINARY,
+            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED | CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED,
+            CERT_QUERY_FORMAT_FLAG_BINARY,
             0, ctypes.byref(encoding), ctypes.byref(content_type),
             ctypes.byref(format_type), ctypes.byref(store), ctypes.byref(message), None)
         if not ok:

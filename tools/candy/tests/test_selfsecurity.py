@@ -135,6 +135,8 @@ class WindowsRegressionTests(unittest.TestCase):
     POINTER_RETURNING = (
         "GetClipboardData", "SetClipboardData", "GlobalAlloc", "GlobalLock",
         "GlobalFree", "GetForegroundWindow", "GetCurrentProcess", "CreateMutexW",
+        "CertFindCertificateInStore", "CryptCATAdminEnumCatalogFromHash",
+        "CreateFileW", "GetModuleHandleW", "CreateWindowExW", "LoadIconW",
     )
 
     def test_no_handle_returning_call_is_left_at_the_default_int(self):
@@ -191,6 +193,40 @@ class WindowsRegressionTests(unittest.TestCase):
                   / "candy" / "notify.py").read_text(encoding="utf-8")
         start = source.index("user32.LoadIconW.argtypes")
         self.assertIn("c_void_p", source[start:start + 120])
+
+    def test_a_zero_status_is_not_treated_as_no_status(self):
+        """`code or -1` turned WinVerifyTrust's success status — 0, the one
+        that matters most — into a lookup miss, so "signed and trusted"
+        printed as "an unlisted WinVerifyTrust status"."""
+        from candy.winapi import TRUST_STATUS
+
+        self.assertIn(0x00000000, TRUST_STATUS)
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "winapi.py").read_text(encoding="utf-8")
+        self.assertNotIn("TRUST_STATUS.get(code or -1", source)
+
+    def test_no_signature_in_the_file_falls_through_to_the_catalog(self):
+        """Most of Windows is not signed in the file at all — the signature
+        is in a catalog. Asking only about the embedded one reports
+        notepad.exe as TRUST_E_NOSIGNATURE, "no signature at all", which is
+        simply false and feeds every heuristic resting on unsigned files."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "winapi.py").read_text(encoding="utf-8")
+        verify = source[source.index("def verify_signature("):
+                        source.index("# ------------------------------------------------------------------ anti-debug")]
+        self.assertIn("TRUST_E_NOSIGNATURE", verify)
+        self.assertIn("_verify_catalog", verify)
+        # And the catalog choice has to be selected, or the struct is read as
+        # the wrong union member.
+        self.assertIn("WTD_CHOICE_CATALOG", source)
+
+    def test_the_signer_falls_back_to_the_catalog_too(self):
+        """drift.py scores a changed signer at 110, its highest single score.
+        A signer that can never be read is a defence that can never fire."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "winapi.py").read_text(encoding="utf-8")
+        block = source[source.index("    name = _read_signer_name(path)"):]
+        self.assertIn("_catalog_for", block[:900])
 
     def test_the_probe_reports_whether_it_ran(self):
         """probe() returned None both for "the decoy survived" and for "the
