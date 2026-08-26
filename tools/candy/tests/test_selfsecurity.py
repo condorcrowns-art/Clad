@@ -232,42 +232,77 @@ class FalsePositiveTests(unittest.TestCase):
                         root / "config.json")
         return Analyzer(config, ThreatDB(), signature_checker=signature_checker)
 
+    @staticmethod
+    def _renamed_sample(tmp: str):
+        """A PE named python.exe declaring an original name of py.exe —
+        exactly what CPython's interpreter does, because the launcher and the
+        interpreter come out of one source tree."""
+        from candy.pesample import build_test_pe
+
+        exe = pathlib.Path(tmp) / "python.exe"
+        exe.write_bytes(build_test_pe(original_filename="py.exe"))
+        return exe
+
+    def _findings_for(self, tmp, signature_checker):
+        exe = self._renamed_sample(tmp)
+        analyzer = self._analyzer(signature_checker)
+        found = []
+        analyzer.inspect_pe(str(exe), "python.exe",
+                            lambda kind, message, severity, **kw:
+                            found.append((severity, kind, message)))
+        return found
+
     def test_a_signed_binary_is_not_a_rename_evasion(self):
-        """python.exe declares an original name of py.exe — the launcher and
-        the interpreter come out of one source tree — and it is signed. The
-        finding's own argument is that renaming dodges signature checks, and
-        a signature that verifies is that argument failing."""
-        vouches = lambda signed: self._analyzer(  # noqa: E731
-            lambda _path: signed)._signature_vouches("C:/x/python.exe")
-        self.assertTrue(vouches(True))
-        self.assertFalse(vouches(False))
-        self.assertFalse(vouches(None))
+        """The finding's own argument is that renaming dodges signature
+        checks. A signature that verifies is that argument failing."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._findings_for(tmp, lambda _p: True), [])
 
-    def test_the_rename_finding_requires_an_unsigned_file(self):
-        source = (Path(__file__).resolve().parent.parent
-                  / "candy" / "detect.py").read_text(encoding="utf-8")
-        self.assertIn("elif not self._signature_vouches(path):", source)
+    def test_an_unsigned_rename_is_still_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            found = self._findings_for(tmp, lambda _p: False)
+            self.assertEqual([(severity, kind) for severity, kind, _m in found],
+                             [("medium", "renamed_binary")])
+            self.assertIn("carries no signature", found[0][2])
 
-    def test_the_missing_version_finding_requires_an_unsigned_file(self):
-        """Riot's crash handler and services ship with no version resource
-        and are signed. "Unusual for released software" is the whole claim,
-        and a publisher's signature settles it."""
-        source = (Path(__file__).resolve().parent.parent
-                  / "candy" / "detect.py").read_text(encoding="utf-8")
-        clause = source[source.index("elif (not info.has_version_info"):]
-        self.assertIn("not self._signature_vouches(path)",
-                      clause[:clause.index("emit(")])
+    def test_an_unknown_signature_is_reported_without_claiming_it_is_unsigned(self):
+        """Collapsing "unknown" into "not signed" makes Candy state something
+        it does not know. Riot's binaries and CPython are signed, and they
+        were reported as "is not signed" on a real machine — inventing
+        evidence, which is the one thing a security tool must never do."""
+        for checker in (lambda _p: None, None):
+            with self.subTest(checker=checker):
+                with tempfile.TemporaryDirectory() as tmp:
+                    found = self._findings_for(tmp, checker)
+                    self.assertEqual(len(found), 1)
+                    severity, kind, message = found[0]
+                    self.assertEqual(kind, "renamed_binary")
+                    self.assertNotIn("is not signed", message)
+                    self.assertNotIn("no signature", message)
+                    self.assertIn("could not be checked", message)
+                    # Still medium: the rename is the finding, the signature
+                    # is context. Demoting it would weaken the heuristic on
+                    # every platform without Authenticode.
+                    self.assertEqual(severity, "medium")
 
     def test_a_signature_read_that_raises_does_not_break_a_scan(self):
         def explode(_path):
             raise OSError("cannot read")
 
-        self.assertFalse(self._analyzer(explode)._signature_vouches("C:/x/a.exe"))
+        with tempfile.TemporaryDirectory() as tmp:
+            found = self._findings_for(tmp, explode)
+            self.assertEqual(len(found), 1)
+            self.assertIn("could not be checked", found[0][2])
 
-    def test_no_checker_means_the_signature_does_not_vouch(self):
-        """Absent evidence is not evidence of a signature. Off Windows, and
-        anywhere the check is unavailable, the finding is still raised."""
-        self.assertFalse(self._analyzer(None)._signature_vouches("C:/x/a.exe"))
+    def test_the_status_table_names_the_common_verdicts(self):
+        """When a machine calls signed software unsigned, the raw
+        WinVerifyTrust code is the only thing that says which of a dozen
+        reasons applies."""
+        from candy.winapi import TRUST_STATUS
+
+        for code in (0x00000000, 0x800B0100, 0x800B0109, 0x80096010):
+            self.assertIn(code, TRUST_STATUS)
+
 
     def test_a_program_files_path_is_not_truncated(self):
         """\\S+? cannot cross the space in "Program Files", so an unquoted path

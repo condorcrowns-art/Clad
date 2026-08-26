@@ -286,27 +286,41 @@ class Analyzer:
         return out
 
     # ------------------------------------------------------------------ PE
+    def _signature_state(self, path: str) -> bool | None:
+        """True (signed and trusted), False (not signed), None (unknown).
+
+        Three states, and the difference between the last two is the
+        difference between a fact about the file and a fact about the check.
+        Collapsing them lets Candy print "this file is not signed" when the
+        truth is "the signature could not be read", which is inventing
+        evidence — the one thing a security tool must never do.
+        """
+        if not self.signature_checker or not path:
+            return None
+        try:
+            return self.signature_checker(path)
+        except Exception:  # noqa: BLE001 - a signature read must never break a scan
+            return None
+
     def _signature_vouches(self, path: str) -> bool:
         """Whether a valid Authenticode signature stands behind this file.
 
         The rename finding argues that renaming is how signature checks get
         dodged. Where the signature verifies, that argument does not hold:
         the signature is intact, it still names the publisher, and renaming
-        the file changed neither. Python's own python.exe declares an original
-        name of py.exe — the launcher and the interpreter are built from one
-        source tree — and it is signed, so it was reported as a MEDIUM
-        evasion finding on a clean machine every single run.
+        the file changed neither.
 
-        This is the same mistake as the twenty-two false persistence findings
-        and the five false extension criticals: stating that a property is
-        present rather than that it is unexplained.
+        Unknown does not vouch. Absent evidence is not evidence, so off
+        Windows and anywhere the check cannot run, the finding still stands —
+        it simply must not claim the file is unsigned.
         """
-        if not self.signature_checker or not path:
-            return False
-        try:
-            return self.signature_checker(path) is True
-        except Exception:  # noqa: BLE001 - a signature read must never break a scan
-            return False
+        return self._signature_state(path) is True
+
+    @staticmethod
+    def _signature_clause(state: bool | None) -> str:
+        return ("and this file carries no signature to dodge them with"
+                if state is False else
+                "and this file's signature could not be checked")
 
     def inspect_pe(self, path: str, name: str, emit) -> None:
         """Look inside a Windows binary for what its file name hides.
@@ -345,17 +359,25 @@ class Analyzer:
                     evidence={"original_filename": declared, "matched": hits[0].id,
                               "company": info.company, "product": info.product},
                 )
-            elif not self._signature_vouches(path):
-                emit(
-                    "renamed_binary",
-                    (f"File is named '{name}' but declares its original name as "
-                     f"'{declared}'. Renaming is how signature checks get dodged, "
-                     f"and this file carries no valid signature to dodge them with."),
-                    "medium",
-                    signature_id="pe.renamed",
-                    evidence={"original_filename": declared, "company": info.company,
-                              "signed": False},
-                )
+            else:
+                state = self._signature_state(path)
+                if state is not True:
+                    emit(
+                        "renamed_binary",
+                        (f"File is named '{name}' but declares its original name as "
+                         f"'{declared}'. Renaming is how signature checks get dodged, "
+                         f"{self._signature_clause(state)}."),
+                        # Medium either way. The rename is the finding; the
+                        # signature is context for it. Ranking "could not
+                        # check" below "confirmed unsigned" would quietly
+                        # demote every rename on any platform without
+                        # Authenticode, which is where this heuristic is the
+                        # fallback rather than the extra.
+                        "medium",
+                        signature_id="pe.renamed",
+                        evidence={"original_filename": declared,
+                                  "company": info.company, "signed": state},
+                    )
 
         for field_name, value in (("company", info.company), ("product", info.product)):
             for sig in self.db.match_any({"file_name": value or ""}):
@@ -377,20 +399,22 @@ class Analyzer:
                 signature_id="pe.packed",
                 evidence={"entropy": round(info.max_code_entropy, 2)},
             )
-        elif (not info.has_version_info and name.lower().endswith(".exe")
-                and not self._signature_vouches(path)):
+        elif not info.has_version_info and name.lower().endswith(".exe"):
             # "Unusual for released software" is the whole claim, and a valid
             # signature settles it: released software is exactly what a
-            # publisher signs. Riot's crash handler and services ship without
-            # a version resource and are signed, so this fired on them every
-            # run and said nothing.
-            emit(
-                "no_version_info",
-                "Executable carries no version information and is not signed — "
-                "unusual for released software.",
-                "info",
-                signature_id="pe.no_version_info",
-            )
+            # publisher signs.
+            state = self._signature_state(path)
+            if state is not True:
+                emit(
+                    "no_version_info",
+                    "Executable carries no version information"
+                    + (" and is not signed" if state is False
+                       else " and its signature could not be checked")
+                    + " — unusual for released software.",
+                    "info",
+                    signature_id="pe.no_version_info",
+                    evidence={"signed": state},
+                )
 
     # -------------------------------------------------------------- domain
     def analyze_domain(self, domain: str, *, pid: int | None = None,

@@ -140,6 +140,67 @@ def is_admin() -> bool:
         return False
 
 
+# WinVerifyTrust status codes worth naming. Everything else is reported as a
+# raw code rather than guessed at.
+TRUST_STATUS: dict[int, str] = {
+    0x00000000: "signed, and the chain is trusted",
+    0x800B0100: "no signature at all (TRUST_E_NOSIGNATURE)",
+    0x800B0101: "the certificate has expired (CERT_E_EXPIRED)",
+    0x800B0109: "signed, but the root certificate is not trusted "
+                "(CERT_E_UNTRUSTEDROOT)",
+    0x800B010A: "signed, but no chain to a trusted root could be built "
+                "(CERT_E_CHAINING)",
+    0x800B0111: "the certificate is explicitly distrusted (CERT_E_UNTRUSTEDTESTROOT)",
+    0x80092003: "an error occurred reading or writing the file "
+                "(CRYPT_E_FILE_ERROR)",
+    0x80096010: "the file's digest does not match its signature — the file was "
+                "changed after signing (TRUST_E_BAD_DIGEST)",
+    0x800B0004: "the subject is not trusted for the requested action "
+                "(TRUST_E_SUBJECT_NOT_TRUSTED)",
+    0x8009200E: "no signature was found in the subject (CRYPT_E_NO_MATCH)",
+}
+
+# The last status seen per path, so `candy signature <file>` can say *why*
+# rather than only yes or no. A trust check that answers "unknown" is a fact
+# about the check, not about the file, and the difference matters: reporting
+# "this file is not signed" when the truth is "the check could not run" is
+# Candy inventing evidence.
+_status_cache: dict[str, tuple[int | None, str]] = {}
+
+
+def _remember_status(path: Any, status: int | None, detail: str = "") -> None:
+    key = str(path).lower()
+    with _sig_lock:
+        if len(_status_cache) > 4096:
+            _status_cache.clear()
+        _status_cache[key] = (status, detail)
+
+
+def signature_status(path: str | os.PathLike) -> dict[str, Any]:
+    """The full answer for one file: verdict, raw status code, and meaning.
+
+    Split out because "is it signed" has three answers and the monitors only
+    ever needed one of them. When a machine reports signed software as
+    unsigned, the raw code is the only thing that says which of the dozen
+    possible reasons applies.
+    """
+    verdict = verify_signature(path)
+    with _sig_lock:
+        status, detail = _status_cache.get(str(path).lower(), (None, ""))
+    code = None if status is None else (status & 0xFFFFFFFF)
+    return {
+        "path": str(path),
+        "signed": verdict,
+        "status": code,
+        "status_hex": None if code is None else f"0x{code:08X}",
+        "meaning": TRUST_STATUS.get(code or -1,
+                                    detail or ("the check could not run"
+                                               if code is None else
+                                               "an unlisted WinVerifyTrust status")),
+        "signer": signer_name(path),
+    }
+
+
 def verify_signature(path: str | os.PathLike) -> bool | None:
     """Authenticode check via WinVerifyTrust.
 
@@ -181,14 +242,19 @@ def verify_signature(path: str | os.PathLike) -> bool | None:
         data.dwProvFlags = WTD_SAFER_FLAG | WTD_CACHE_ONLY_URL_RETRIEVAL
 
         wintrust = ctypes.windll.wintrust
+        wintrust.WinVerifyTrust.argtypes = [wintypes.HWND, ctypes.c_void_p,
+                                            ctypes.c_void_p]
+        wintrust.WinVerifyTrust.restype = wintypes.LONG
         status = wintrust.WinVerifyTrust(None, ctypes.byref(WINTRUST_ACTION_GENERIC_VERIFY_V2),
                                          ctypes.byref(data))
         # Always release the state data, even on failure, or WinVerifyTrust leaks.
         data.dwStateAction = WTD_STATEACTION_CLOSE
         wintrust.WinVerifyTrust(None, ctypes.byref(WINTRUST_ACTION_GENERIC_VERIFY_V2),
                                 ctypes.byref(data))
+        _remember_status(path, status)
         result = status == 0
-    except Exception:  # noqa: BLE001 - never let a trust check crash a monitor
+    except Exception as exc:  # noqa: BLE001 - never let a trust check crash a monitor
+        _remember_status(path, None, str(exc))
         result = None
 
     with _sig_lock:

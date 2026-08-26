@@ -411,6 +411,42 @@ def _posture_for(config: Config, *, verify: bool = True):
                               previous_install=previous, upgrade_pending=pending)
 
 
+def cmd_signature(args: argparse.Namespace) -> int:
+    """Why does Candy think this file is or is not signed?
+
+    Added because a real machine reported Riot's binaries and CPython as
+    unsigned. "Signed: no" is not a diagnosis — WinVerifyTrust has a dozen
+    ways to say no, and the raw status code is the only thing that
+    distinguishes "there is no signature" from "the root is not trusted" from
+    "the check could not run at all".
+    """
+    from .winapi import signature_status
+
+    target = Path(expand_path(args.file))
+    if not target.exists():
+        print(f"{target} does not exist.")
+        return 2
+
+    result = signature_status(str(target))
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return 0
+
+    verdict = {True: "signed and trusted", False: "NOT trusted",
+               None: "unknown — the check could not run"}[result["signed"]]
+    print(f"File    : {result['path']}")
+    print(f"Verdict : {verdict}")
+    print(f"Status  : {result['status_hex'] or 'none recorded'}")
+    print(f"Meaning : {result['meaning']}")
+    print(f"Signer  : {result['signer'] or 'none read'}")
+    if result["signed"] is not True:
+        print()
+        print("Candy treats 'unknown' as unknown, not as unsigned — findings that "
+              "rest on a file being unsigned say so only when the answer was "
+              "actually no.")
+    return 0 if result["signed"] else 1
+
+
 def cmd_posture(args: argparse.Namespace) -> int:
     """Is this machine actually being defended, in one screen."""
     from . import posture as posture_mod
@@ -2056,6 +2092,12 @@ def build_parser() -> argparse.ArgumentParser:
     revert.add_argument("--yes", action="store_true",
                         help="actually revert (without this it is a dry run)")
     revert.set_defaults(func=cmd_revert)
+
+    signature_p = sub.add_parser(
+        "signature", help="why Candy thinks a file is or is not signed")
+    signature_p.add_argument("file", help="the file to check")
+    signature_p.add_argument("--json", action="store_true", help="machine-readable output")
+    signature_p.set_defaults(func=cmd_signature)
 
     posture_p = sub.add_parser("posture", help="one answer: is this machine protected?")
     posture_p.add_argument("--json", action="store_true", help="machine-readable output")
