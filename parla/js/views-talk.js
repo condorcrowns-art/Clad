@@ -18,6 +18,9 @@ window.PARLA = window.PARLA || {};
     main.appendChild(el('p.muted',
       'Pick a situation. You speak, your partner answers in Spanish, and you get corrected as you go.'));
 
+    var bb = ui.brainBanner();
+    if (bb) main.appendChild(bb);
+
     if (!PARLA.speech.supported) {
       main.appendChild(ui.banner('warn',
         '<strong>Speech recognition is not available in this browser.</strong> ' +
@@ -285,6 +288,9 @@ window.PARLA = window.PARLA || {};
 
         if (out.degraded && !session.warned) {
           session.warned = true;
+          // The backend died after boot said it was fine — refresh the health
+          // state so the status chip stops claiming everything is well.
+          if (PARLA.app.checkBrainHealth) PARLA.app.checkBrainHealth();
           thread.appendChild(ui.banner('warn',
             'Could not reach the ' + st.settings.brain + ' backend, so this is the built-in ' +
             'scripted partner. Practice continues either way. <br><span class="small">' +

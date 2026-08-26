@@ -4,7 +4,7 @@ window.PARLA = window.PARLA || {};
 (function () {
   'use strict';
 
-  var appEl, navEl, current = null, currentView = '';
+  var appEl, navEl, current = null, currentView = '', currentParams = {};
 
   /* Views reachable from the bottom nav. */
   var NAV = ['home', 'scenarios', 'review', 'conjugate', 'challenge', 'progress'];
@@ -26,8 +26,18 @@ window.PARLA = window.PARLA || {};
     var brain = document.getElementById('chipBrain');
     if (brain) {
       var names = { scripted: 'built-in', ollama: 'ollama', gemini: 'gemini' };
-      brain.textContent = names[st.settings.brain] || st.settings.brain;
-      brain.className = 'chip' + (st.settings.brain === 'scripted' ? '' : ' good');
+      var h = PARLA.brain.health;
+      var label = names[st.settings.brain] || st.settings.brain;
+      var cls = 'chip';
+
+      if (st.settings.brain !== 'scripted') {
+        if (!h.checked)      { label += ' …'; }
+        else if (!h.ok)      { label = label + ' ✕'; cls += ' bad'; }
+        else                 { cls += ' good'; }
+      }
+      brain.textContent = label;
+      brain.className = cls;
+      brain.title = h.detail || 'Conversation engine — click to change';
     }
   }
 
@@ -52,7 +62,8 @@ window.PARLA = window.PARLA || {};
     PARLA.speech.cancel();
 
     currentView = view;
-    var node = fn(params || {});
+    currentParams = params || {};
+    var node = fn(currentParams);
     PARLA.ui.clear(appEl);
     appEl.appendChild(node);
     current = node;
@@ -115,6 +126,8 @@ window.PARLA = window.PARLA || {};
       go(h ? h.view : 'home', h ? h.params : {});
     }
 
+    checkBrainHealth();
+
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('sw.js').catch(function () {
         // Offline support is a bonus, not a requirement.
@@ -122,7 +135,66 @@ window.PARLA = window.PARLA || {};
     }
   }
 
-  PARLA.app = { go: go, applyTheme: applyTheme, paintChips: paintChips };
+  /* Health arrives asynchronously, after the first view has already rendered.
+   * Views that surface a backend warning therefore need re-rendering once the
+   * verdict lands. Never refresh 'talk' — that would wipe a live conversation. */
+  function refreshIfBannerView() {
+    if (currentView === 'home' || currentView === 'scenarios') {
+      go(currentView, currentParams);
+    }
+  }
+
+  /* Probe the selected AI backend once at boot, so the app can tell the user
+   * their partner is unavailable *before* they start a conversation with it —
+   * rather than silently degrading mid-sentence. */
+  function checkBrainHealth() {
+    var s = PARLA.store.state.settings;
+    var h = PARLA.brain.health;
+    var was = h.checked ? h.ok : null;
+
+    if (s.brain === 'scripted') {
+      h.checked = true; h.ok = true; h.detail = '';
+      paintChips();
+      if (h.ok !== was) refreshIfBannerView();
+      return Promise.resolve(h);
+    }
+
+    if (s.brain === 'ollama') {
+      return PARLA.brain.detectOllama(s).then(function (d) {
+        h.checked = true;
+        h.ok = d.ok && d.models.length > 0;
+        if (!d.ok) {
+          h.detail = 'Ollama is not reachable. Either it is not running, or it is running ' +
+                     'but blocking the browser because OLLAMA_ORIGINS is not set to *.';
+        } else if (!d.models.length) {
+          h.detail = 'Ollama is running but has no models installed.';
+        } else {
+          h.detail = '';
+          // Adopt the best installed model unless the user pinned one.
+          if (!s.ollamaModel || d.models.indexOf(s.ollamaModel) === -1) {
+            s.ollamaModel = d.best;
+            PARLA.store.save();
+          }
+        }
+        paintChips();
+        if (h.ok !== was) refreshIfBannerView();
+        return h;
+      });
+    }
+
+    // Gemini: a key is the only thing we can cheaply verify without spending quota.
+    h.checked = true;
+    h.ok = !!s.geminiKey;
+    h.detail = h.ok ? '' : 'No Gemini API key set.';
+    paintChips();
+    if (h.ok !== was) refreshIfBannerView();
+    return Promise.resolve(h);
+  }
+
+  PARLA.app = {
+    go: go, applyTheme: applyTheme, paintChips: paintChips,
+    checkBrainHealth: checkBrainHealth
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

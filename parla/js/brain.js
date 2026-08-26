@@ -133,10 +133,16 @@ window.PARLA = window.PARLA || {};
       for (var k = 0; k < keys.length; k++) {
         var key = normalise(keys[k]);
         if (!key) continue;
-        // Multi-word keys match as a phrase; single words match whole tokens.
+        // Multi-word keys match as a phrase; single words match whole tokens,
+        // or on a shared stem so conjugations and plurals still land
+        // (quiero/quería/querría, cafe/cafes, tomar/tomamos).
         if (key.indexOf(' ') !== -1) {
-          if (said.indexOf(key) !== -1) score += 2;
+          if (said.indexOf(key) !== -1) score += 3;
         } else if (saidWords.indexOf(key) !== -1) {
+          score += 2;
+        } else if (key.length >= 5 && saidWords.some(function (w) {
+          return w.length >= 4 && (w.indexOf(key.slice(0, 4)) === 0 || key.indexOf(w.slice(0, 4)) === 0);
+        })) {
           score += 1;
         }
       }
@@ -175,26 +181,47 @@ window.PARLA = window.PARLA || {};
       style === 'strict' ? 'Correct every grammatical error, including small ones.' :
                            'Correct only errors that would confuse a native speaker or that repeat. Let small slips go.';
 
+    var register = /usted|formal|receptionist|clerk|doctor|manager|agent|dispatcher|employee/i
+      .test(sc.role) ? 'Use "usted" — this is a formal situation.'
+                     : 'Use "tú" — this is an informal situation.';
+
     return [
-      'You are a Spanish conversation partner in a language-learning app.',
-      'ROLE: You are ' + sc.role + '.',
-      'SETTING: ' + sc.setting,
-      'The learner is at CEFR level ' + lvl + '. Match your Spanish to that level:',
-      'short sentences, common vocabulary, and speak like a real person, not a textbook.',
+      'You role-play ONE character in a Spanish conversation. You are not an assistant,',
+      'not a tutor, and not a chatbot. You are a person with your own goals and mood.',
       '',
-      'RULES:',
-      '1. Reply in Spanish, IN CHARACTER, in 1-2 sentences. Never break character.',
-      '2. Always move the conversation forward — ask a question or react, never just acknowledge.',
-      '3. ' + correctionRule,
-      '4. Never lecture. Never write in English inside "reply_es".',
-      '5. If the learner writes in English, respond in Spanish and gently steer them back.',
+      'YOU ARE: ' + sc.role,
+      'WHERE: ' + sc.setting,
+      'REGISTER: ' + register,
       '',
-      'The learner is trying to: ' + (sc.goals || []).join('; ') + '.',
+      'HOW TO SPEAK',
+      '- 1-2 sentences. Never more. Real people do not monologue.',
+      '- Sound like spoken Spanish, not written Spanish. Use "pues", "vale", "oye",',
+      '  "mira", "bueno", "es que", contractions, and half-sentences where natural.',
+      '- Stay at CEFR ' + lvl + ': common words, simple clauses. Do not show off.',
+      '- ALWAYS hand the turn back: ask something, offer something, or react with an',
+      '  opinion. Never reply with bare acknowledgement like "Muy bien." and stop.',
+      '- React to what they ACTUALLY said. Do not run a script. If they surprise you,',
+      '  go with it and stay in character.',
+      '- Never explain grammar inside your spoken reply. Never write English there.',
+      '- If they speak English, answer in Spanish anyway and pull them back gently.',
       '',
-      'Respond with ONLY a JSON object, no markdown fence, in this exact shape:',
-      '{"reply_es":"<your Spanish reply>",',
-      ' "reply_en":"<literal English translation of your reply>",',
-      ' "correction":null or {"original":"<what they said>","fixed":"<corrected Spanish>","note":"<one short English sentence explaining why>"}}'
+      'THEIR GOAL IN THIS SCENE: ' + ((sc.goals || []).join('; ') || 'just talk'),
+      'Steer toward that goal without announcing it.',
+      '',
+      'CORRECTIONS',
+      correctionRule,
+      'Correct only their SPANISH. Never "correct" a fact, an opinion, or a choice.',
+      'If their Spanish was fine, correction MUST be null. Do not invent errors.',
+      '',
+      'OUTPUT',
+      'Return ONLY a JSON object. No prose, no markdown fence, no commentary.',
+      '{"reply_es": string, "reply_en": string, "correction": null | {"original": string, "fixed": string, "note": string}}',
+      '',
+      'EXAMPLES OF THE SHAPE (not of this scene):',
+      '{"reply_es":"¡Pues claro! ¿Y para beber algo?","reply_en":"Of course! And something to drink?","correction":null}',
+      '{"reply_es":"Vale, marchando. ¿Algo más?","reply_en":"Okay, coming up. Anything else?",' +
+        '"correction":{"original":"Yo quiero un cafe y soy cansado","fixed":"Quiero un café y estoy cansado",' +
+        '"note":"Tiredness is a temporary state, so it takes estar, not ser."}}'
     ].join('\n');
   }
 
@@ -239,11 +266,60 @@ window.PARLA = window.PARLA || {};
 
   /* ── Ollama backend ─────────────────────────────────────── */
 
-  function ollamaReply(ctx) {
+  /* Installed models ranked by how well they actually hold a Spanish
+   * conversation, best first. The app picks the best one you have rather than
+   * making you know which to choose. */
+  var MODEL_RANK = [
+    /^qwen2\.5[:-].*(32b|14b)/i,
+    /^qwen3[:-]/i,
+    /^qwen2\.5[:-].*7b/i,
+    /^qwen2\.5(:latest)?$/i,
+    /^llama3\.1[:-].*8b/i,
+    /^gemma2[:-].*9b/i,
+    /^mistral[:-]/i,
+    /^llama3\.1/i,
+    /^qwen2\.5[:-].*3b/i,
+    /^gemma2/i,
+    /^llama3\.2/i,
+    /^phi3/i
+  ];
+
+  function bestModel(names) {
+    for (var i = 0; i < MODEL_RANK.length; i++) {
+      for (var j = 0; j < names.length; j++) {
+        if (MODEL_RANK[i].test(names[j])) return names[j];
+      }
+    }
+    return names[0] || '';
+  }
+
+  /* Ask Ollama what it has. Resolves {ok, models, best} or {ok:false, detail}. */
+  function detectOllama(settings) {
+    var base = (settings.ollamaUrl || 'http://localhost:11434').replace(/\/+$/, '');
+    // no-store matters: the browser will happily serve a stale model list, so a
+    // model you just pulled (or an Ollama you just started) would not show up.
+    return fetch(base + '/api/tags', { cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (d) {
+        var names = (d.models || []).map(function (m) { return m.name; });
+        return { ok: true, models: names, best: bestModel(names) };
+      })
+      .catch(function (e) {
+        // A browser CORS block and a dead server both surface as a TypeError
+        // here, so name both possibilities rather than guessing wrong.
+        return { ok: false, models: [], best: '', detail: e.message || String(e) };
+      });
+  }
+
+  function ollamaCall(ctx, model, extraSystem) {
     var s = ctx.settings;
     var url = (s.ollamaUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/api/chat';
 
-    var messages = [{ role: 'system', content: systemPrompt(ctx) }];
+    var sys = systemPrompt(ctx) + (extraSystem ? '\n\n' + extraSystem : '');
+    var messages = [{ role: 'system', content: sys }];
     historyPairs(ctx.history).forEach(function (m) {
       messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text });
     });
@@ -253,20 +329,62 @@ window.PARLA = window.PARLA || {};
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: s.ollamaModel || 'llama3.2',
+        model: model,
         messages: messages,
         stream: false,
         format: 'json',
-        options: { temperature: 0.8 }
+        // Keep the model resident so the second turn is not another cold start.
+        keep_alive: '30m',
+        options: {
+          temperature: 0.85,
+          top_p: 0.9,
+          repeat_penalty: 1.15,   // small models loop on stock phrases without this
+          num_predict: 220,
+          num_ctx: 4096
+        }
       })
     }).then(function (r) {
-      if (!r.ok) throw new Error('Ollama returned ' + r.status);
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          throw new Error('Ollama returned ' + r.status + (t ? ': ' + t.slice(0, 160) : ''));
+        });
+      }
       return r.json();
     }).then(function (data) {
-      var content = data && data.message && data.message.content;
-      var out = parseLLM(content, ctx.text);
-      out.source = 'ollama';
-      return out;
+      return data && data.message && data.message.content;
+    });
+  }
+
+  function ollamaReply(ctx) {
+    var s = ctx.settings;
+    var model = s.ollamaModel;
+
+    var ready = model
+      ? Promise.resolve(model)
+      : detectOllama(s).then(function (d) {
+          if (!d.ok) throw new Error(d.detail || 'Ollama unreachable');
+          if (!d.best) throw new Error('Ollama is running but has no models. Run: ollama pull qwen2.5:7b');
+          s.ollamaModel = d.best;          // remember what we picked
+          return d.best;
+        });
+
+    return ready.then(function (m) {
+      return ollamaCall(ctx, m).then(function (content) {
+        var out = parseLLM(content, ctx.text);
+        if (out.source !== 'llm-raw' && out.es) { out.source = 'ollama'; out.model = m; return out; }
+
+        // The model ignored the JSON contract. Give it exactly one blunter try
+        // before falling back — small models often comply on the retry.
+        return ollamaCall(ctx, m,
+          'YOUR LAST REPLY WAS REJECTED. Output raw JSON only. Start with { and end with }. ' +
+          'No prose before or after. Keys: reply_es, reply_en, correction.'
+        ).then(function (retry) {
+          var out2 = parseLLM(retry, ctx.text);
+          out2.source = 'ollama';
+          out2.model = m;
+          return out2;
+        });
+      });
     });
   }
 
@@ -334,6 +452,15 @@ window.PARLA = window.PARLA || {};
       return Promise.resolve(scriptedReply(ctx));
     }
 
+    // Boot-time probe already found the backend dead — go straight to scripted
+    // rather than making every single turn wait on a failing request.
+    if (PARLA.brain.health.checked && !PARLA.brain.health.ok) {
+      var quick = scriptedReply(ctx);
+      quick.degraded = true;
+      quick.error = PARLA.brain.health.detail;
+      return Promise.resolve(quick);
+    }
+
     return Promise.resolve()
       .then(function () { return fn(ctx); })
       .then(function (out) {
@@ -351,28 +478,24 @@ window.PARLA = window.PARLA || {};
   /* Connection check used by the settings screen. */
   function testBackend(settings) {
     if (settings.brain === 'ollama') {
-      var base = (settings.ollamaUrl || '').replace(/\/+$/, '');
-      return fetch(base + '/api/tags')
-        .then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .then(function (d) {
-          var names = (d.models || []).map(function (m) { return m.name; });
-          return {
-            ok: true,
-            detail: names.length
-              ? 'Connected. Models: ' + names.slice(0, 6).join(', ')
-              : 'Connected, but no models installed. Run: ollama pull llama3.2'
-          };
-        })
-        .catch(function (e) {
+      return detectOllama(settings).then(function (d) {
+        if (!d.ok) {
           return {
             ok: false,
-            detail: 'Could not reach Ollama (' + e.message + '). Is it running, and did you ' +
-                    'start it with OLLAMA_ORIGINS="*" so the browser is allowed to call it?'
+            detail: 'Could not reach Ollama (' + d.detail + '). Two usual causes: it is not ' +
+                    'running (start it), or it is running but refusing the browser because ' +
+                    'OLLAMA_ORIGINS is not set to *.'
           };
-        });
+        }
+        if (!d.models.length) {
+          return { ok: false, detail: 'Ollama is running but has no models. Run: ollama pull qwen2.5:7b' };
+        }
+        return {
+          ok: true,
+          detail: 'Connected. Using ' + (settings.ollamaModel || d.best) +
+                  '. Installed: ' + d.models.slice(0, 6).join(', ')
+        };
+      });
     }
 
     if (settings.brain === 'gemini') {
@@ -393,10 +516,15 @@ window.PARLA = window.PARLA || {};
   PARLA.brain = {
     reply: reply,
     testBackend: testBackend,
+    detectOllama: detectOllama,
+    bestModel: bestModel,
     normalise: normalise,
     words: words,
     correctOffline: correctOffline,
+    // Set at boot by app.js so views can explain why the AI partner is not in use.
+    health: { checked: false, ok: false, detail: '' },
     _scripted: scriptedReply,
-    _parseLLM: parseLLM
+    _parseLLM: parseLLM,
+    _systemPrompt: systemPrompt
   };
 })();

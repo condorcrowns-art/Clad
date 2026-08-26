@@ -24,9 +24,11 @@ window.PARLA = window.PARLA || {};
         dailyGoal: 1          // sessions per day
       },
       settings: {
-        brain: 'scripted',    // scripted | ollama | gemini
+        // Default to a real AI partner. If Ollama is not there, the app detects
+        // that at boot, says so, and falls back to the scripted engine.
+        brain: 'ollama',      // scripted | ollama | gemini
         ollamaUrl: 'http://localhost:11434',
-        ollamaModel: 'llama3.2',
+        ollamaModel: '',      // empty = auto-pick the best model installed
         geminiKey: '',
         geminiModel: 'gemini-2.5-flash-lite',
         voiceURI: '',         // chosen TTS voice

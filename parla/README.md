@@ -6,8 +6,28 @@ corrected as you go. Then the words you fumbled come back as flashcards until th
 Free, private, offline-capable, no account, no subscription, no server. Zero dependencies —
 pure HTML, CSS and vanilla JS.
 
+## Windows: one command
+
+Open **PowerShell as Administrator** and paste this. It downloads Parla, installs
+Ollama, configures it for the browser, pulls a model matched to your RAM, and opens the app.
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+$z="$env:TEMP\parla.zip"; $d="$HOME\Parla"
+Invoke-WebRequest "https://github.com/condorcrowns-art/Clad/archive/refs/heads/claude/victor-ai-familiarity-rf2730.zip" -OutFile $z
+Expand-Archive $z $d -Force
+cd (Get-ChildItem "$d\*\parla" -Directory | Select-Object -First 1).FullName
+Get-ChildItem -Recurse | Unblock-File
+.\setup-windows.ps1
+```
+
+Re-running it is safe - every step skips itself if already done. Afterwards, to just
+start the app again: `cd $HOME\Parla\*\parla; .\serve.ps1`
+
+## macOS / Linux
+
 ```bash
-# from this folder — any static server works
+# from this folder - any static server works
 python3 -m http.server 8000
 # then open http://localhost:8000
 ```
@@ -50,30 +70,43 @@ Every part that normally costs money has a free native equivalent:
 
 Settings → **Conversation partner**. All three are free; they trade off differently.
 
-### Built-in (default)
-Keyword matching over each scenario's own script, plus a rule-based corrector that catches the
-classic English-speaker mistakes (`soy cansado` → `estoy cansado`, `yo soy 25 años` →
-`tengo 25 años`, `buenos noches` → `buenas noches`, and ~25 more).
-
-No setup, no network, no cost, ever. Conversations follow the scenario rather than going
-anywhere you like — but pronunciation, vocabulary and verb practice are identical.
-
-### Ollama — recommended if your machine can run it
+### Ollama - the default
 Unlimited, private, genuinely free forever. A real open-ended conversation partner.
+
+On Windows the setup script above does all of this. Manually:
 
 ```bash
 # install from https://ollama.com, then:
-ollama pull llama3.2
-
-# IMPORTANT: the browser has to be allowed to call it
+ollama pull qwen2.5:7b        # or qwen2.5:3b on 8GB machines
 OLLAMA_ORIGINS="*" ollama serve
 ```
 
-That last part matters. Ollama refuses cross-origin browser requests by default, so without
-`OLLAMA_ORIGINS` the app will silently fall back to the built-in partner. Settings →
-**Test connection** tells you which is happening.
+`OLLAMA_ORIGINS` is the part everyone misses. Ollama refuses cross-origin browser
+requests by default, so without it Parla cannot reach a perfectly healthy Ollama and
+falls back to the scripted partner. The app detects this at startup and says so
+rather than degrading silently.
 
-Needs roughly 8 GB of RAM for a 3B model. `qwen2.5` and `mistral` also handle Spanish well.
+**Model choice matters a lot.** `qwen2.5` holds a Spanish conversation noticeably
+better than `llama3.2` at the same size - llama3.2:3b tends to drift into English and
+repeat stock phrases. Parla ranks whatever you have installed and picks the best one
+automatically; you never have to type a model name.
+
+| Your RAM | Model | Roughly |
+|---|---|---|
+| 32 GB+ | `qwen2.5:14b` | best quality |
+| 16 GB | `qwen2.5:7b` | the sweet spot |
+| 8 GB | `qwen2.5:3b` | usable |
+| under 8 GB | `qwen2.5:1.5b` | rough, but talks |
+
+### Built-in scripted
+Keyword matching over each scenario's own script, plus a rule-based corrector that
+catches the classic English-speaker mistakes (`soy cansado` -> `estoy cansado`,
+`yo soy 25 anos` -> `tengo 25 anos`, `buenos noches` -> `buenas noches`, ~25 more).
+
+No setup, no network, no cost, ever. Conversations follow the scenario rather than
+going anywhere you like - but pronunciation, vocabulary and verb practice are
+identical. This is the automatic fallback whenever an AI backend is unreachable, so
+practice never stops.
 
 ### Gemini free tier
 No install and no credit card — get a key at
@@ -93,6 +126,8 @@ why. Practice never stops because a server is down.
 
 ```
 index.html            shell + script tags
+setup-windows.ps1     one-shot Windows setup (Ollama + config + model + run)
+serve.ps1             dependency-free static server (.NET HttpListener)
 manifest.json         PWA metadata
 sw.js                 offline cache
 css/style.css         design system (light + dark)
@@ -105,7 +140,8 @@ js/
   store.js            localStorage, profile, XP, streaks, export/import
   speech.js           Web Speech wrappers (ASR + TTS), voice selection
   srs.js              SM-2 spaced repetition
-  brain.js            the three backends behind one interface + offline corrector
+  brain.js            three backends behind one interface, model auto-pick,
+                      JSON retry, and the offline corrector
   ui.js               tiny DOM toolkit
   views-talk.js       scenario picker, conversation, session summary
   views-drill.js      flashcard review, conjugation trainer

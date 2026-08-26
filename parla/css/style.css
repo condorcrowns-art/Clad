@@ -477,3 +477,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   text-align: center; padding: 40px 20px; color: var(--ink-faint);
 }
 .empty .big-emoji { font-size: 2.6rem; display: block; margin-bottom: 8px; }
+
+.chip.bad { background: var(--bad-soft); border-color: transparent; color: var(--bad); }
+.chip { cursor: pointer; }

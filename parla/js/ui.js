@@ -149,7 +149,34 @@ window.PARLA = window.PARLA || {};
     }, 2400);
   }
 
+  /* Explains, before a conversation starts, that the chosen AI partner is not
+   * reachable and the scripted engine will answer instead. Returns null when
+   * everything is fine. */
+  function brainBanner() {
+    var s = PARLA.store.state.settings;
+    var h = PARLA.brain.health;
+    if (s.brain === 'scripted' || !h.checked || h.ok) return null;
+
+    var b = banner('warn', '');
+    b.appendChild(el('div', el('strong', 'Your AI partner is not connected.'),
+      ' ' + h.detail + ' Conversations will use the built-in scripted partner until it is fixed.'));
+
+    if (s.brain === 'ollama') {
+      b.appendChild(el('div.small', { style: { marginTop: '6px' } },
+        'Fix: make sure Ollama is running, and that OLLAMA_ORIGINS is set to * so the browser is allowed to reach it.'));
+    }
+    b.appendChild(el('div', { style: { marginTop: '8px' } },
+      el('button', { style: { padding: '4px 10px', fontSize: '.78rem' },
+        onclick: function () {
+          PARLA.app.checkBrainHealth().then(function () { PARLA.app.go('scenarios'); });
+        } }, 'Retry'),
+      el('button', { style: { padding: '4px 10px', fontSize: '.78rem', marginLeft: '6px' },
+        onclick: function () { PARLA.app.go('settings'); } }, 'Settings')));
+    return b;
+  }
+
   PARLA.ui = {
+    brainBanner: brainBanner,
     el: el, clear: clear, say: say, speakBtn: speakBtn, levelTag: levelTag,
     stat: stat, bar: bar, banner: banner, empty: empty, sectionTitle: sectionTitle,
     segmented: segmented, field: field, dur: dur, toast: toast

@@ -93,6 +93,9 @@ window.PARLA = window.PARLA || {};
       ? 'You have already practised today — anything more is a bonus.'
       : 'You have not spoken Spanish yet today.'));
 
+    var bb = ui.brainBanner();
+    if (bb) main.appendChild(bb);
+
     /* today's challenge */
     var card = el('div.card', { style: { borderColor: 'var(--accent)', borderWidth: '1px' } },
       el('div.row',
@@ -361,7 +364,14 @@ window.PARLA = window.PARLA || {};
         ['scripted', 'Built-in'],
         ['ollama', 'Ollama'],
         ['gemini', 'Gemini']
-      ], s.brain, function (v) { s.brain = v; PARLA.store.save(); renderBrain(); PARLA.app.paintChips(); }),
+      ], s.brain, function (v) {
+        s.brain = v;
+        PARLA.brain.health.checked = false;
+        PARLA.store.save();
+        renderBrain();
+        PARLA.app.paintChips();
+        PARLA.app.checkBrainHealth();
+      }),
       'All three are free. Built-in works offline with no setup; the other two give you a real AI partner.'));
     brainCard.appendChild(brainBody);
 
@@ -384,18 +394,59 @@ window.PARLA = window.PARLA || {};
       ui.clear(brainBody);
       if (s.brain === 'ollama') {
         var url = el('input', { type: 'url', value: s.ollamaUrl });
-        url.onchange = function () { s.ollamaUrl = url.value.trim(); PARLA.store.save(); };
-        var model = el('input', { type: 'text', value: s.ollamaModel });
-        model.onchange = function () { s.ollamaModel = model.value.trim(); PARLA.store.save(); };
+        url.onchange = function () {
+          s.ollamaUrl = url.value.trim(); PARLA.store.save(); loadModels();
+        };
 
         brainBody.appendChild(ui.banner('info',
-          '<strong>Unlimited and completely private.</strong> Install Ollama, then run ' +
-          '<code>ollama pull llama3.2</code>. Because this page runs in a browser, Ollama has to be ' +
-          'told to accept it — start it with <code>OLLAMA_ORIGINS="*" ollama serve</code>, ' +
-          'or set that variable permanently. Otherwise the browser is blocked by CORS.'));
+          '<strong>Unlimited, private, and free forever.</strong> Because this page runs in a ' +
+          'browser, Ollama must be told to accept it — it needs <code>OLLAMA_ORIGINS</code> set to ' +
+          '<code>*</code>. Without that the browser is blocked by CORS and Parla silently falls ' +
+          'back to the scripted partner.'));
         brainBody.appendChild(ui.field('Ollama URL', url));
-        brainBody.appendChild(ui.field('Model', model,
-          'llama3.2 is a good default. qwen2.5 and mistral also handle Spanish well.'));
+
+        var modelSel = el('select');
+        var modelNote = el('div.hint', 'Looking for installed models…');
+        brainBody.appendChild(ui.field('Model', modelSel));
+        brainBody.appendChild(modelNote);
+
+        modelSel.onchange = function () {
+          s.ollamaModel = modelSel.value;
+          PARLA.store.save();
+          PARLA.app.paintChips();
+        };
+
+        function loadModels() {
+          ui.clear(modelSel);
+          modelNote.textContent = 'Looking for installed models…';
+          PARLA.brain.detectOllama(s).then(function (d) {
+            ui.clear(modelSel);
+            if (!d.ok) {
+              modelSel.appendChild(el('option', { value: '' }, 'Ollama not reachable'));
+              modelNote.textContent = 'Could not reach Ollama at ' + s.ollamaUrl +
+                '. Start it, and make sure OLLAMA_ORIGINS is "*".';
+              return;
+            }
+            if (!d.models.length) {
+              modelSel.appendChild(el('option', { value: '' }, 'No models installed'));
+              modelNote.textContent = 'Ollama is running but empty. Run: ollama pull qwen2.5:7b';
+              return;
+            }
+            d.models.forEach(function (m) {
+              modelSel.appendChild(el('option', {
+                value: m, selected: m === s.ollamaModel ? true : null
+              }, m + (m === d.best ? '  ★ best for Spanish' : '')));
+            });
+            if (!s.ollamaModel || d.models.indexOf(s.ollamaModel) === -1) {
+              s.ollamaModel = d.best;
+              modelSel.value = d.best;
+              PARLA.store.save();
+            }
+            modelNote.textContent = 'Bigger models speak better Spanish but reply more slowly. ' +
+              'qwen2.5 handles Spanish notably better than llama3.2 at the same size.';
+          });
+        }
+        loadModels();
       } else if (s.brain === 'gemini') {
         var key = el('input', { type: 'password', value: s.geminiKey, placeholder: 'AIza…' });
         key.onchange = function () { s.geminiKey = key.value.trim(); PARLA.store.save(); };
