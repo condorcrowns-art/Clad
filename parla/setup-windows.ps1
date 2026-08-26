@@ -83,22 +83,102 @@ if (-not $SkipOllama) {
   Start-Sleep -Seconds 4
   Ok "restarted"
 
-  Step 4 "Choosing and pulling a model"
-  if (-not $Model) {
-    $ramGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
-    Note "detected ${ramGB} GB RAM"
-    # Leave headroom for Windows itself - a model that swaps is unusable.
-    if     ($ramGB -ge 32) { $Model = 'qwen2.5:14b' }
-    elseif ($ramGB -ge 16) { $Model = 'qwen2.5:7b'  }
-    elseif ($ramGB -ge 8)  { $Model = 'qwen2.5:3b'  }
-    else                   { $Model = 'qwen2.5:1.5b' }
+  Step 4 "Choosing a model"
+
+  # What decides conversation speed is VRAM, not system RAM. A 14B model on a
+  # GPU answers in ~2s; the same model on CPU takes 15-20s per reply, which is
+  # unusable when you are standing there waiting to speak.
+  $vramGB = 0
+  $gpuName = ''
+
+  # 1. nvidia-smi is the most reliable source when it exists.
+  $smi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+  if ($smi) {
+    try {
+      $out = & nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1
+      if ($out) {
+        $parts = $out -split ','
+        $gpuName = $parts[0].Trim()
+        $vramGB  = [math]::Round([double]($parts[1].Trim()) / 1024)
+      }
+    } catch { }
   }
-  Note "using $Model  (qwen2.5 handles Spanish better than llama3.2 at the same size)"
-  Note "this downloads a few GB the first time - it is a one-off"
+
+  # 2. Fall back to the registry, which reports VRAM above 4GB correctly
+  #    (Win32_VideoController.AdapterRAM is a 32-bit field and silently caps).
+  if ($vramGB -le 0) {
+    try {
+      $keys = Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction SilentlyContinue
+      foreach ($k in $keys) {
+        $qw = (Get-ItemProperty $k.PSPath -Name 'HardwareInformation.qwMemorySize' -ErrorAction SilentlyContinue).'HardwareInformation.qwMemorySize'
+        if ($qw) {
+          $g = [math]::Round($qw / 1GB)
+          if ($g -gt $vramGB) {
+            $vramGB = $g
+            $gpuName = (Get-ItemProperty $k.PSPath -Name 'DriverDesc' -ErrorAction SilentlyContinue).DriverDesc
+          }
+        }
+      }
+    } catch { }
+  }
+
+  $ramGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+  Note "system RAM: ${ramGB} GB"
+  if ($vramGB -gt 0) { Note "GPU: $gpuName (${vramGB} GB VRAM)" }
+  else               { Note "no dedicated GPU detected - will run on CPU" }
+
+  if (-not $Model) {
+    if     ($vramGB -ge 10) { $Model = 'qwen2.5:14b' }
+    elseif ($vramGB -ge 6)  { $Model = 'qwen2.5:7b'  }
+    elseif ($vramGB -ge 4) { $Model = 'qwen2.5:3b'  }
+    elseif ($ramGB -ge 16) { $Model = 'qwen2.5:7b'  }   # CPU: tolerable, not fast
+    else                   { $Model = 'qwen2.5:3b'  }
+  }
+
+  Note "choosing $Model"
+  Note "(qwen2.5 speaks better Spanish than llama3.2 at the same size)"
+
+  Step 5 "Pulling $Model - a few GB the first time, one-off"
   ollama pull $Model
   Ok "$Model ready"
 
-  Step 5 "Verifying"
+  Step 6 "Measuring how fast it actually replies on your machine"
+  try {
+    $body = @{
+      model  = $Model
+      prompt = 'Responde en espanol en una frase corta: como estas?'
+      stream = $false
+      options = @{ num_predict = 40 }
+    } | ConvertTo-Json -Depth 5
+
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $gen = Invoke-RestMethod -Uri 'http://localhost:11434/api/generate' -Method Post `
+             -Body $body -ContentType 'application/json' -TimeoutSec 300
+    $sw.Stop()
+
+    $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+    if ($gen.eval_count -and $gen.eval_duration) {
+      $tps = [math]::Round($gen.eval_count / ($gen.eval_duration / 1e9), 1)
+      Note "$tps tokens/sec"
+    }
+    Ok "first reply took ${secs}s"
+    Note ("it said: " + $gen.response.Trim())
+
+    # A typical Parla reply is ~40 tokens, so this timing is representative.
+    if ($secs -gt 12) {
+      Warn "That is slow enough to be annoying in conversation."
+      Warn "Drop to a smaller model with:  .\setup-windows.ps1 -Model qwen2.5:7b"
+      Warn "(or qwen2.5:3b if 7b is still slow)"
+    } elseif ($secs -gt 6) {
+      Note "Usable, but a smaller model would feel snappier: -Model qwen2.5:7b"
+    } else {
+      Ok "That is comfortably fast for conversation."
+    }
+  } catch {
+    Warn "Could not time a generation: $($_.Exception.Message)"
+  }
+
+  Step 7 "Verifying"
   try {
     $tags = Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 10
     Ok ("Ollama responding, models: " + (($tags.models | ForEach-Object { $_.name }) -join ', '))
@@ -107,7 +187,7 @@ if (-not $SkipOllama) {
   }
 }
 
-Step 6 "Starting Parla"
+Step 8 "Starting Parla"
 $serve = Join-Path $PSScriptRoot 'serve.ps1'
 if (-not (Test-Path $serve)) {
   Write-Host "    Could not find serve.ps1 next to this script." -ForegroundColor Red

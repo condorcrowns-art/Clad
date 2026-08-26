@@ -197,9 +197,24 @@ window.PARLA = window.PARLA || {};
     }
 
     function addThinking() {
-      var t = el('div.bubble.them.thinking', el('div.body', 'pensando…'));
+      // A local model can take several seconds on the first turn while it loads.
+      // Counting up makes that read as "working" rather than "frozen".
+      var body = el('div.body', 'pensando…');
+      var t = el('div.bubble.them.thinking', body);
       thread.appendChild(t);
       scrollDown();
+
+      var started = Date.now();
+      var tick = setInterval(function () {
+        var secs = Math.floor((Date.now() - started) / 1000);
+        if (secs >= 2) body.textContent = 'pensando… ' + secs + 's';
+        if (secs === 12) {
+          body.textContent += '  (first reply is slow while the model loads)';
+        }
+      }, 500);
+
+      var remove = t.remove.bind(t);
+      t.remove = function () { clearInterval(tick); remove(); };
       return t;
     }
 

@@ -91,12 +91,20 @@ better than `llama3.2` at the same size - llama3.2:3b tends to drift into Englis
 repeat stock phrases. Parla ranks whatever you have installed and picks the best one
 automatically; you never have to type a model name.
 
-| Your RAM | Model | Roughly |
-|---|---|---|
-| 32 GB+ | `qwen2.5:14b` | best quality |
-| 16 GB | `qwen2.5:7b` | the sweet spot |
-| 8 GB | `qwen2.5:3b` | usable |
-| under 8 GB | `qwen2.5:1.5b` | rough, but talks |
+**VRAM decides speed, not system RAM.** A 14B model on a GPU answers in ~2 seconds;
+the same model on CPU takes 15-20 seconds per reply, which is unusable when you are
+standing there waiting to speak. The setup script detects your GPU, picks accordingly,
+then actually times a generation and tells you if it is too slow.
+
+| Your GPU VRAM | Model |
+|---|---|
+| 10 GB+ | `qwen2.5:14b` |
+| 6-10 GB | `qwen2.5:7b` |
+| 4-6 GB | `qwen2.5:3b` |
+| no GPU, 16 GB+ RAM | `qwen2.5:7b` (slow but workable) |
+| no GPU, less RAM | `qwen2.5:3b` |
+
+Override at any time: `.\setup-windows.ps1 -Model qwen2.5:7b`
 
 ### Built-in scripted
 Keyword matching over each scenario's own script, plus a rule-based corrector that
