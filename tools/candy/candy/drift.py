@@ -705,6 +705,9 @@ def profile_of(path: str | Path) -> tuple[list[str], list[str]]:
     try:
         from .triage import triage as run_triage
 
+        # No checker on purpose: only the capability and exfil lists are
+        # read below, and neither depends on the signature. Drift tracks
+        # the signer separately, through signer_name.
         report = run_triage(Path(path), signature_checker=None)
     except Exception:  # noqa: BLE001
         return [], []

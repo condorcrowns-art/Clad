@@ -394,7 +394,12 @@ class FullScanner:
             if spec["triage"] and (score or suspicious_location):
                 from .triage import triage
 
-                assessment = triage(path, signature_checker=None)
+                # The checker is passed now that catalog verification
+                # works. Before that it would have added an "unsigned binary"
+                # point to every catalog-signed Windows file, so withholding
+                # it was masking the catalog bug rather than avoiding it.
+                assessment = triage(
+                    path, signature_checker=self.signature_checker)
                 if assessment.score >= 45:
                     findings.append(f"static triage: {assessment.verdict} — "
                                     f"{', '.join(assessment.capabilities) or 'suspicious strings'}")

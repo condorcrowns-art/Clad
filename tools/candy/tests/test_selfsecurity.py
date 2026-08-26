@@ -233,6 +233,20 @@ class WindowsRegressionTests(unittest.TestCase):
                 self.assertEqual(getattr(winapi, f"CERT_QUERY_CONTENT_FLAG_{name}"),
                                  1 << value)
 
+    def test_the_acting_paths_get_a_real_signature_checker(self):
+        """A signature fix only matters where something acts on it. The
+        download guard and the full scan handed triage signature_checker=None,
+        so its "unsigned binary" point never applied — under-detection that
+        also happened to mask the catalog bug, since passing the checker
+        before the fix would have scored every Windows binary as unsigned."""
+        root = Path(__file__).resolve().parent.parent / "candy"
+        for name in ("guard.py", "fullscan.py"):
+            source = (root / name).read_text(encoding="utf-8")
+            start = source.index("run_triage(" if name == "guard.py" else "assessment = triage(")
+            call = source[start:start + 200]
+            with self.subTest(module=name):
+                self.assertIn("signature_checker=self.signature_checker", call)
+
     def test_the_catalog_query_does_not_ask_about_trust_lists(self):
         """CryptQueryObject's content types are an ordered enum and it returns
         the first kind it matches. CTL is 2, PKCS7_SIGNED is 8 — so asking

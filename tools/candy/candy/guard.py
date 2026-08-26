@@ -235,7 +235,8 @@ class DownloadGuard:
         from .triage import triage as run_triage
 
         try:
-            return run_triage(target, signature_checker=None)
+            return run_triage(target,
+                              signature_checker=self.signature_checker)
         except Exception:  # noqa: BLE001 - a triage failure is not a verdict
             return None
 
