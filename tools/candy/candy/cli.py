@@ -439,6 +439,10 @@ def cmd_signature(args: argparse.Namespace) -> int:
     print(f"Status  : {result['status_hex'] or 'none recorded'}")
     print(f"Meaning : {result['meaning']}")
     print(f"Signer  : {result['signer'] or 'none read'}")
+    if result.get("catalog"):
+        print(f"Catalog : {result['catalog']}")
+    if not result["signer"] and result.get("signer_detail"):
+        print(f"          why: {result['signer_detail']}")
     if result["signed"] is not True:
         print()
         print("Candy treats 'unknown' as unknown, not as unsigned — findings that "

@@ -106,6 +106,19 @@ if IS_WINDOWS:  # pragma: no cover - exercised only on Windows
     )
 
 
+# Why the last signer read ended as it did, per path. Same reasoning as the
+# trust-status cache: "none read" is not a diagnosis.
+_signer_detail: dict[str, tuple[str, str | None]] = {}
+
+
+def _remember_signer_detail(path: Any, why: str, catalog: str | None) -> None:
+    key = str(path).lower()
+    with _signer_lock:
+        if len(_signer_detail) > 4096:
+            _signer_detail.clear()
+        _signer_detail[key] = (why, catalog)
+
+
 class _Done(Exception):
     """Internal: the catalog path already settled the answer."""
 
@@ -239,6 +252,8 @@ def signature_status(path: str | os.PathLike) -> dict[str, Any]:
                     TRUST_STATUS.get(code, "an unlisted WinVerifyTrust status")
                     + (f" ({detail})" if detail else "")),
         "signer": signer_name(path),
+        "signer_detail": _signer_detail.get(str(path).lower(), ("", None))[0],
+        "catalog": _signer_detail.get(str(path).lower(), ("", None))[1],
     }
 
 
@@ -641,6 +656,7 @@ CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED = 1 << 10
 CERT_QUERY_FORMAT_FLAG_BINARY = 1 << 1
 CMSG_SIGNER_INFO_PARAM = 6
 CERT_NAME_SIMPLE_DISPLAY_TYPE = 4
+CERT_NAME_ISSUER_FLAG = 0x1
 X509_ASN_ENCODING = 0x00000001
 PKCS_7_ASN_ENCODING = 0x00010000
 ENCODING = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
@@ -677,6 +693,8 @@ def _declare_crypt32() -> Any:  # pragma: no cover - Windows only
     crypt32.CertCloseStore.restype = wintypes.BOOL
     crypt32.CryptMsgClose.argtypes = [ctypes.c_void_p]
     crypt32.CryptMsgClose.restype = wintypes.BOOL
+    crypt32.CertEnumCertificatesInStore.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    crypt32.CertEnumCertificatesInStore.restype = ctypes.c_void_p
     return crypt32
 
 
@@ -702,7 +720,8 @@ def signer_name(path: str | os.PathLike) -> str | None:
         if key in _signer_cache:
             return _signer_cache[key]
 
-    name = _read_signer_name(path)
+    name, why = _read_signer_detail(path)
+    catalog = None
     if name is None:
         # A catalog-signed file carries no signature of its own; the signer is
         # on the catalog that lists it. Without this, every Windows system
@@ -711,10 +730,13 @@ def signer_name(path: str | os.PathLike) -> str | None:
         # read is a defence that can never fire.
         try:
             found = _catalog_for(str(path))
-        except Exception:  # noqa: BLE001
-            found = None
+        except Exception as exc:  # noqa: BLE001
+            found, why = None, f"catalog lookup raised {exc.__class__.__name__}: {exc}"
         if found:
-            name = _read_signer_name(found[0])
+            catalog = found[0]
+            name, catalog_why = _read_signer_detail(found[0])
+            why = f"via catalog {catalog}: {catalog_why}"
+    _remember_signer_detail(path, why, catalog)
     with _signer_lock:
         if len(_signer_cache) > 4096:
             _signer_cache.clear()
@@ -722,7 +744,78 @@ def signer_name(path: str | os.PathLike) -> str | None:
     return name
 
 
-def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cover - Windows only
+def pick_leaf(subjects: list[str], issuers: Any) -> str | None:
+    """The leaf of a certificate chain: the one nothing else was issued by.
+
+    Pure, so the choice is testable without a certificate store. Falls back
+    to the first subject when every certificate issued another — which should
+    not happen, but returning nothing there would discard a real answer.
+    """
+    issued_by = set(issuers)
+    for name in subjects:
+        if name not in issued_by:
+            return name
+    return subjects[0] if subjects else None
+
+
+def _signer_from_store(crypt32: Any, store: Any,
+                      content_type: int) -> tuple[str | None, str]:  # pragma: no cover
+    """The signing certificate out of a store, when there is no message.
+
+    Walks the chain and keeps the leaf — the certificate that signed nothing
+    else in the store. Naming an intermediate CA instead would be worse than
+    naming nothing: drift.py compares signers between builds, and a signer
+    that reads as "Microsoft Root Certificate Authority" for half the disk
+    tells it nothing while looking like an answer.
+    """
+    subjects: list[str] = []
+    issuers: set[str] = set()
+    context = None
+    while True:
+        context = crypt32.CertEnumCertificatesInStore(store, context)
+        if not context:
+            break
+        subject = _name_string(crypt32, context, CERT_NAME_SIMPLE_DISPLAY_TYPE)
+        issuer = _name_string(crypt32, context, CERT_NAME_SIMPLE_DISPLAY_TYPE,
+                              issuer=True)
+        if subject:
+            subjects.append(subject)
+        if issuer:
+            issuers.add(issuer)
+
+    leaf = pick_leaf(subjects, issuers)
+    if leaf is not None:
+        certain = leaf in subjects and leaf not in issuers
+        return leaf, ("read from the certificate store" if certain else
+                      "read from the certificate store, chain leaf unclear") + \
+            f" (content type {content_type})"
+    return None, f"the certificate store held no certificates (content type {content_type})"
+
+
+def _name_string(crypt32: Any, context: Any, name_type: int,
+                 *, issuer: bool = False) -> str | None:  # pragma: no cover
+    flag = CERT_NAME_ISSUER_FLAG if issuer else 0
+    length = crypt32.CertGetNameStringW(context, name_type, flag, None, None, 0)
+    if length <= 1:
+        return None
+    buffer = ctypes.create_unicode_buffer(length)
+    crypt32.CertGetNameStringW(context, name_type, flag, None, buffer, length)
+    return (buffer.value or "").strip() or None
+
+
+def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cover
+    return _read_signer_detail(path)[0]
+
+
+def _read_signer_detail(path: str | os.PathLike) -> tuple[str | None, str]:
+    """(signer, which step ended it). Windows only.
+
+    Returning a bare None told us a signer could not be read and nothing
+    about why — and "why" is the only thing that distinguishes a file with no
+    signature from six different API calls that can each fail on their own.
+    """
+    if not IS_WINDOWS:
+        return None, "not windows"
     try:
         import ctypes
         from ctypes import wintypes
@@ -734,8 +827,15 @@ def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cove
         store = ctypes.c_void_p()
         message = ctypes.c_void_p()
 
+        # CryptCATCatalogInfoFromContext can hand back an extended-length
+        # path. Most of the crypt32 surface accepts one, but not all of it
+        # does, and a prefix is cheaper to strip than to diagnose.
+        target = str(path)
+        if target.startswith("\\\\?\\"):
+            target = target[4:]
+
         ok = crypt32.CryptQueryObject(
-            CERT_QUERY_OBJECT_FILE, ctypes.c_wchar_p(str(path)),
+            CERT_QUERY_OBJECT_FILE, ctypes.c_wchar_p(target),
             # A PE carries its signature embedded; a .cat file is a standalone
             # signed message wrapping a trust list. Ask about all three rather
             # than assuming which kind of file this is.
@@ -745,8 +845,18 @@ def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cove
             CERT_QUERY_FORMAT_FLAG_ALL,
             0, ctypes.byref(encoding), ctypes.byref(content_type),
             ctypes.byref(format_type), ctypes.byref(store), ctypes.byref(message), None)
-        if not ok or not message:
-            return None
+        if not ok:
+            return None, f"CryptQueryObject failed ({ctypes.GetLastError():#010x})"
+        if not message:
+            # A catalog can come back as a trust list rather than a signed
+            # message, and then there is no message to read a signer from —
+            # only the certificate store. Bailing here is what left every
+            # catalog-signed file, meaning most of Windows, with no signer.
+            try:
+                return _signer_from_store(crypt32, store, content_type.value)
+            finally:
+                if store:
+                    crypt32.CertCloseStore(store, 0)
 
         try:
             # CMSG_SIGNER_CERT_INFO_PARAM hands back a CERT_INFO that Windows
@@ -759,26 +869,28 @@ def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cove
             size = wintypes.DWORD()
             if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_CERT_INFO_PARAM, 0,
                                             None, ctypes.byref(size)) or not size.value:
-                return None
+                return None, "CryptMsgGetParam could not size the signer certificate"
             buffer = ctypes.create_string_buffer(size.value)
             if not crypt32.CryptMsgGetParam(message, CMSG_SIGNER_CERT_INFO_PARAM, 0,
                                             buffer, ctypes.byref(size)):
-                return None
+                return None, "CryptMsgGetParam could not read the signer certificate"
 
             CERT_FIND_SUBJECT_CERT = 0x000B0000
             context = crypt32.CertFindCertificateInStore(
                 store, ENCODING, 0, CERT_FIND_SUBJECT_CERT, buffer, None)
             if not context:
-                return None
+                return None, ("CertFindCertificateInStore found no certificate "
+                              f"matching the signer (content type {content_type.value})")
             try:
                 length = crypt32.CertGetNameStringW(
                     context, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, None, None, 0)
                 if length <= 1:
-                    return None
+                    return None, "the certificate has no display name"
                 out = ctypes.create_unicode_buffer(length)
                 crypt32.CertGetNameStringW(context, CERT_NAME_SIMPLE_DISPLAY_TYPE,
                                            0, None, out, length)
-                return (out.value or "").strip() or None
+                value = (out.value or "").strip()
+                return (value or None), ("read" if value else "the display name was empty")
             finally:
                 crypt32.CertFreeCertificateContext(context)
         finally:
@@ -786,8 +898,8 @@ def _read_signer_name(path: str | os.PathLike) -> str | None:  # pragma: no cove
                 crypt32.CryptMsgClose(message)
             if store:
                 crypt32.CertCloseStore(store, 0)
-    except Exception:  # noqa: BLE001 - an API failure is not a verdict
-        return None
+    except Exception as exc:  # noqa: BLE001 - an API failure is not a verdict
+        return None, f"{exc.__class__.__name__}: {exc}"
 
 
 def signer_changed(before: str | None, after: str | None) -> bool:

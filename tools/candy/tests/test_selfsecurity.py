@@ -253,8 +253,53 @@ class WindowsRegressionTests(unittest.TestCase):
         A signer that can never be read is a defence that can never fire."""
         source = (Path(__file__).resolve().parent.parent
                   / "candy" / "winapi.py").read_text(encoding="utf-8")
-        block = source[source.index("    name = _read_signer_name(path)"):]
+        block = source[source.index("    name, why = _read_signer_detail(path)"):]
         self.assertIn("_catalog_for", block[:900])
+
+    def test_the_chain_leaf_is_the_publisher_not_the_root(self):
+        """Naming an intermediate CA would be worse than naming nothing:
+        drift.py compares signers between builds, and a signer reading as
+        "Microsoft Root Certificate Authority" for half the disk tells it
+        nothing while looking like an answer."""
+        from candy.winapi import pick_leaf
+
+        subjects = ["Microsoft Windows",
+                    "Microsoft Windows Production PCA 2011",
+                    "Microsoft Root Certificate Authority 2010"]
+        issuers = ["Microsoft Windows Production PCA 2011",
+                   "Microsoft Root Certificate Authority 2010",
+                   "Microsoft Root Certificate Authority 2010"]
+        self.assertEqual(pick_leaf(subjects, issuers), "Microsoft Windows")
+
+    def test_the_leaf_is_found_whatever_order_the_store_returns(self):
+        from candy.winapi import pick_leaf
+
+        subjects = ["Root CA", "Intermediate CA", "Riot Games, Inc."]
+        issuers = ["Intermediate CA", "Root CA", "Root CA"]
+        self.assertEqual(pick_leaf(subjects, issuers), "Riot Games, Inc.")
+
+    def test_an_empty_store_yields_no_signer(self):
+        from candy.winapi import pick_leaf
+
+        self.assertIsNone(pick_leaf([], []))
+
+    def test_a_signer_is_still_returned_when_the_chain_is_circular(self):
+        """Discarding a real answer because the chain looks odd is worse
+        than reporting it with a caveat."""
+        from candy.winapi import pick_leaf
+
+        self.assertEqual(pick_leaf(["A"], ["A"]), "A")
+
+    def test_a_failed_signer_read_says_which_step_ended_it(self):
+        """"none read" is not a diagnosis. Six API calls can each fail on
+        their own, and the catalog signer needed three rounds to narrow down
+        because a bare None was all it ever reported."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "winapi.py").read_text(encoding="utf-8")
+        self.assertIn("def _read_signer_detail(", source)
+        for step in ("CryptQueryObject failed", "CryptMsgGetParam could not",
+                     "CertFindCertificateInStore found no certificate"):
+            self.assertIn(step, source)
 
     def test_the_probe_reports_whether_it_ran(self):
         """probe() returned None both for "the decoy survived" and for "the
