@@ -205,6 +205,9 @@ Candy.exe credguard status                       # what is watched, and what dec
 Candy.exe baseline save                          # snapshot what runs at startup
 Candy.exe baseline diff                          # what has been added since
 Candy.exe clipboard probe                        # bait a clipboard hijacker
+Candy.exe posture                                # one answer: is this machine protected?
+Candy.exe import                                 # bring settings over from an older Candy folder
+Candy.exe import --yes                           # actually copy them
 Candy.exe selfupdate check                       # is there a newer Candy?
 Candy.exe selfcheck                              # Candy's own security posture
 Candy.exe selfcheck --fix                        # lock its folders to SYSTEM + Administrators

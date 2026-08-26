@@ -130,9 +130,35 @@ class App(ttk.Frame):
     def _build_status_tab(self) -> None:
         frame = ttk.Frame(self.tabs, padding=6)
         self.tabs.add(frame, text="Status")
+
+        # The window has the same problem the doctor report had: every piece
+        # reports its own state somewhere, and an install that is defending
+        # nothing looks exactly like one that is. The verdict goes first.
+        self.posture_label = tk.Label(frame, text="", font=("Segoe UI", 10, "bold"),
+                                      anchor="w", justify="left")
+        self.posture_label.pack(fill="x", pady=(0, 4))
+        ttk.Button(frame, text="Re-check protection",
+                   command=self.refresh_posture).pack(anchor="w", pady=(0, 6))
+
         self.status_text = tk.Text(frame, wrap="none", font=("Consolas", 9))
         self.status_text.pack(fill="both", expand=True)
         self.status_text.configure(state="disabled")
+        self.refresh_posture()
+
+    def refresh_posture(self) -> None:
+        """Ask the same question the CLI's `posture` command answers."""
+        def work() -> str:
+            from .cli import _posture_for
+            from . import posture as posture_mod
+
+            verdict = _posture_for(self.config_obj, verify=False)
+            colour = {posture_mod.PROTECTED: "#1a7f37",
+                      posture_mod.PARTIAL: "#9a6700"}.get(verdict.state, "#cf222e")
+            headline = posture_mod.format_banner(verdict).splitlines()[1]
+            self.after(0, lambda: self.posture_label.configure(text=headline, fg=colour))
+            return ""
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _build_log_tab(self) -> None:
         frame = ttk.Frame(self.tabs, padding=6)
@@ -1209,12 +1235,16 @@ class App(ttk.Frame):
             from .clipboard import ClipboardMonitor
 
             monitor = ClipboardMonitor(self.config_obj, self.engine.handle_detection)
-            finding = monitor.probe()
-            if finding is None:
+            result = monitor.probe()
+            if not result.ran:
+                return (f"The probe did not run: {result.detail}\n\n"
+                        "Nothing was tested, so this is not a clean result.")
+            if result.finding is None:
                 return ("The decoy came back unchanged — nothing is rewriting the "
                         "clipboard right now.\n"
                         "This is a spot check: it proves nothing about a clipper that "
                         "is not running yet, or one that only acts on real addresses.")
+            finding = result.finding
             return f"[{finding.severity.upper()}] " + "\n".join(finding.reasons)
 
         self._run(work, busy="Baiting a clipboard hijacker…")
@@ -1497,15 +1527,20 @@ class App(ttk.Frame):
     def _extensions_done(self, verdicts) -> None:
         self.extension_verdicts = list(verdicts)
         self._render_extensions()
-        risky = sum(1 for v in self.extension_verdicts if v.score >= 65)
-        self.set_status(f"{len(self.extension_verdicts)} extension(s) read, {risky} worth a look.")
+        risky = sum(1 for v in self.extension_verdicts if v.can_take_account)
+        self.set_status(
+            f"{len(self.extension_verdicts)} extension(s) read, "
+            + (f"{risky} can read session cookies for sites you have accounts on."
+               if risky else "none can read your session cookies."))
 
     def _render_extensions(self) -> None:
         for item in self.extensions_tree.get_children():
             self.extensions_tree.delete(item)
         shown = [(index, verdict) for index, verdict in enumerate(self.extension_verdicts)
                  if self.extensions_all.get() or verdict.score >= 25]
-        shown.sort(key=lambda pair: -pair[1].score)
+        # Account risk first, exactly as the CLI report orders it — a second
+        # ranking here is a second chance to bury the one that matters.
+        shown.sort(key=lambda pair: (not pair[1].can_take_account, -pair[1].score))
         for index, verdict in shown:
             extension = verdict.extension
             self.extensions_tree.insert(
@@ -1513,22 +1548,12 @@ class App(ttk.Frame):
                 values=(verdict.score, verdict.severity.upper(), extension.browser,
                         truncate(extension.name or "(unnamed)", 70),
                         truncate(extension.extension_id, 60)),
-                tags=(self._extension_tag(verdict.score),))
+                tags=(verdict.severity,))
         for severity, color in SEVERITY_COLORS.items():
             self.extensions_tree.tag_configure(severity, foreground=color)
         hidden = len(self.extension_verdicts) - len(shown)
         self.extensions_summary.configure(
             text=f"{len(shown)} shown" + (f", {hidden} low-risk hidden" if hidden else ""))
-
-    @staticmethod
-    def _extension_tag(score: int) -> str:
-        if score >= 120:
-            return "critical"
-        if score >= 65:
-            return "high"
-        if score >= 40:
-            return "medium"
-        return "low"
 
     def _on_extension_select(self, _event=None) -> None:
         selection = self.extensions_tree.selection()
@@ -1543,7 +1568,7 @@ class App(ttk.Frame):
                  f"id      : {extension.extension_id}",
                  f"version : {extension.version}",
                  f"path    : {extension.path}",
-                 f"source  : {'SIDELOADED — not from a store' if extension.sideloaded else 'store install'}",
+                 f"source  : {extension.origin}",
                  "",
                  f"score {verdict.score} ({verdict.severity})", ""]
         lines.extend(f"  • {reason}" for reason in verdict.reasons)

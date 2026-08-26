@@ -18,8 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from candy import levels  # noqa: E402
 from candy.config import Config  # noqa: E402
 from candy.credguard import (AUDIT_EVENTS, CANARY_MARKER, OBJECT_ACCESS_EVENT,  # noqa: E402
-                             STORES, CredentialGuard, audit_command, is_canary,
-                             known_stores, match_store)
+                             STORES, CredentialGuard, audit_command,
+                             audit_query_script, format_status, is_canary,
+                             known_stores, match_store, parse_audit_query)
 from candy.winevents import SECURITY_CHANNEL, WindowsEventAnalyzer  # noqa: E402
 
 
@@ -417,6 +418,67 @@ class LevelTests(unittest.TestCase):
             text = levels.format_plan(levels.plan(config_for(tmp), "fortress"))
             self.assertIn("fortress", text)
             self.assertIn("administrator", text.lower())
+
+
+
+
+class ArmedStateIsVerifiedTests(unittest.TestCase):
+    """`credguard.armed` in config.json is a note Candy wrote to itself. On a
+    real machine it came apart from the truth the first time the folder moved:
+    every audit rule still on the files, and the report saying nothing was
+    watched. The reverse — a note saying "armed" over rules that have been
+    stripped — is the same bug pointing at the user's account."""
+
+    def test_the_query_asks_about_every_path(self):
+        script = audit_query_script([r"C:\a\b.db", r"C:\c\d.db"])
+        self.assertIn(r"'C:\a\b.db'", script)
+        self.assertIn(r"'C:\c\d.db'", script)
+        self.assertIn("Get-Acl", script)
+        self.assertIn("-Audit", script)
+
+    def test_the_query_quotes_paths_with_apostrophes(self):
+        script = audit_query_script([r"C:\Users\O'Brien\cookies"])
+        self.assertIn("O''Brien", script)
+
+    def test_output_is_matched_back_case_insensitively(self):
+        """Windows returns paths in the filesystem's case, not the case they
+        were asked in. Comparing exactly reports an armed machine as bare."""
+        paths = [r"C:\Users\Condo\AppData\Local\Roblox"]
+        found = parse_audit_query("c:\\users\\condo\\appdata\\local\\roblox\n", paths)
+        self.assertEqual(found, set(paths))
+
+    def test_unlisted_paths_are_not_counted(self):
+        paths = [r"C:\a", r"C:\b"]
+        self.assertEqual(parse_audit_query("C:\\a\n", paths), {r"C:\a"})
+
+    def test_empty_output_means_nothing_is_audited(self):
+        self.assertEqual(parse_audit_query("", [r"C:\a"]), set())
+
+    def test_the_report_prefers_the_machine_over_the_note(self):
+        status = {"platform": "windows", "stores_known": 12,
+                  "stores_present": ["Roblox session storage"],
+                  "canaries_planted": [], "audit_enabled": True,
+                  "armed": [], "verified_audited": [r"C:\a", r"C:\b"],
+                  "paths_checked": [r"C:\a", r"C:\b"]}
+        text = format_status(status)
+        self.assertIn("2 path(s)", text)
+        self.assertIn("earlier install", text)
+
+    def test_a_stripped_rule_is_reported_not_hidden(self):
+        status = {"platform": "windows", "stores_known": 12,
+                  "stores_present": ["Roblox session storage"],
+                  "canaries_planted": [], "audit_enabled": True,
+                  "armed": ["a", "b", "c"], "verified_audited": [r"C:\a"],
+                  "paths_checked": [r"C:\a", r"C:\b", r"C:\c"]}
+        text = format_status(status)
+        self.assertIn("no longer carry the rule", text)
+
+    def test_nothing_audited_says_what_to_run(self):
+        status = {"platform": "windows", "stores_known": 12,
+                  "stores_present": ["Roblox session storage"],
+                  "canaries_planted": [], "audit_enabled": True,
+                  "armed": [], "verified_audited": [], "paths_checked": [r"C:\a"]}
+        self.assertIn("credguard arm", format_status(status))
 
 
 if __name__ == "__main__":

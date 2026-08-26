@@ -76,6 +76,56 @@ _sig_cache: dict[tuple[str, float, int], bool | None] = {}
 _sig_lock = threading.Lock()
 
 
+
+# --------------------------------------------------------------- handle types
+#
+# ctypes assumes every function returns ``c_int``. On a 64-bit build that
+# silently truncates the top half off every HANDLE, HWND and pointer that
+# comes back from Win32, and the failure is quiet: a truncated HWND makes
+# ``GetWindowTextLengthW`` return 0, so ``foreground_window_title()` reported
+# "no window" on every 64-bit machine; a truncated mutex handle gets closed by
+# number, which is somebody else's handle. The same bug killed the clipboard
+# probe outright.
+#
+# Declaring the types is the fix, and it belongs in one place so a new call
+# site cannot reintroduce it quietly.
+_declared = False
+
+
+def _declare() -> None:  # pragma: no cover - Windows only
+    """Give every handle-returning function used here its real return type."""
+    global _declared
+    if _declared or not IS_WINDOWS:
+        return
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.CheckRemoteDebuggerPresent.argtypes = [wintypes.HANDLE,
+                                                    ctypes.POINTER(wintypes.BOOL)]
+    kernel32.CheckRemoteDebuggerPresent.restype = wintypes.BOOL
+    kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND,
+                                                ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    _declared = True
+
+
 def is_windows() -> bool:
     return IS_WINDOWS
 
@@ -162,7 +212,10 @@ def is_remote_debugger_present() -> bool:
     if not IS_WINDOWS:
         return False
     try:
-        present = ctypes.c_int(0)
+        from ctypes import wintypes
+
+        _declare()
+        present = wintypes.BOOL(0)
         handle = ctypes.windll.kernel32.GetCurrentProcess()
         ok = ctypes.windll.kernel32.CheckRemoteDebuggerPresent(handle, ctypes.byref(present))
         return bool(ok and present.value)
@@ -176,6 +229,7 @@ def has_debug_port() -> bool:
     if not IS_WINDOWS:
         return False
     try:
+        _declare()
         port = ctypes.c_void_p(0)
         status = ctypes.windll.ntdll.NtQueryInformationProcess(
             ctypes.windll.kernel32.GetCurrentProcess(), 7,
@@ -239,6 +293,7 @@ class SingleInstance:
         self.already_running = False
         if IS_WINDOWS:
             try:
+                _declare()
                 self._handle = ctypes.windll.kernel32.CreateMutexW(None, False, name)
                 self.already_running = ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS
             except Exception:  # noqa: BLE001
@@ -259,6 +314,7 @@ def foreground_window_title() -> str | None:
     if not IS_WINDOWS:
         return None
     try:
+        _declare()
         user32 = ctypes.windll.user32
         handle = user32.GetForegroundWindow()
         if not handle:
@@ -280,6 +336,7 @@ def window_titles() -> list[tuple[int, str]]:
     try:
         from ctypes import wintypes
 
+        _declare()
         user32 = ctypes.windll.user32
         results: list[tuple[int, str]] = []
         callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)

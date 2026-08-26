@@ -53,7 +53,7 @@ python run.py selftest
 python run.py coverage
 ```
 
-Expect 506 tests passing and 34/34 on the coverage self-test. If the unit tests
+Expect 590 tests passing and 34/34 on the coverage self-test. If the unit tests
 fail on Windows, **stop and send me the output** — they pass on Linux, so a
 failure here is a real platform bug and not something you did.
 
@@ -65,6 +65,7 @@ Run these in a **normal** (non-administrator) prompt first. None of them change
 anything on the machine.
 
 ```powershell
+python run.py posture                # the short one: is this machine actually protected?
 python run.py doctor                 # the big one: full diagnostic, includes selfcheck
 python run.py selfcheck              # Candy's own file permissions
 python run.py status                 # what is configured
@@ -80,6 +81,32 @@ python run.py explain "C:\path\to\some.exe"
 **Please paste me the output of `doctor`, `selfcheck` and `coverage`.** Those
 three tell me more about whether this actually works than anything I can do from
 here.
+
+## 5b. Upgrading from an earlier Candy
+
+Candy is portable, so a new version means a new folder — and a new folder
+starts from defaults. Your response mode, whitelist, startup baseline and
+pinned builds all live in the **old** folder.
+
+```powershell
+python run.py import              # shows what it would bring across
+python run.py import --yes        # actually copy it
+```
+
+It finds the old folder in Downloads, Desktop, Documents or your user folder
+on its own; `--from "C:\path\to\old\Candy"` if it is somewhere else. Files
+you have already edited in the new folder are left alone unless you pass
+`--overwrite`.
+
+Two things cannot travel in a file, because they are settings on the machine
+rather than in Candy. Re-run them after importing:
+
+```powershell
+python run.py level standard      # as administrator
+python run.py credguard arm       # as administrator
+```
+
+`python run.py posture` afterwards tells you whether it took.
 
 ## 6. The GUI
 

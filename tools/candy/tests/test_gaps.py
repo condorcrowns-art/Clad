@@ -213,9 +213,39 @@ class ClipboardTests(unittest.TestCase):
                 return True
 
             monitor = ClipboardMonitor(config_for(tmp), reader=reader, writer=writer)
-            finding = monitor.probe(settle=0.2)
-            self.assertIsNotNone(finding)
-            self.assertTrue(finding.probe)
+            result = monitor.probe(settle=0.2)
+            self.assertTrue(result.ran)
+            self.assertIsNotNone(result.finding)
+            self.assertTrue(result.finding.probe)
+
+    def test_a_probe_that_could_not_write_is_not_reported_as_clean(self):
+        """The old signature returned None both when the decoy survived and
+        when the clipboard could not be written, so a probe that never ran
+        printed as a clean bill of health — and on 64-bit Windows it printed
+        as nothing at all."""
+        with tempfile.TemporaryDirectory() as tmp:
+            monitor = ClipboardMonitor(config_for(tmp), reader=lambda: "",
+                                       writer=lambda text: False)
+            result = monitor.probe(settle=0.2)
+            self.assertFalse(result.ran)
+            self.assertIsNone(result.finding)
+            self.assertTrue(result.detail)
+
+    def test_a_probe_that_could_not_read_back_is_not_reported_as_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            monitor = ClipboardMonitor(config_for(tmp), reader=lambda: None,
+                                       writer=lambda text: True)
+            self.assertFalse(monitor.probe(settle=0.2).ran)
+
+    def test_an_untouched_decoy_is_a_clean_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = {"value": "notes"}
+            monitor = ClipboardMonitor(
+                config_for(tmp), reader=lambda: state["value"],
+                writer=lambda text: state.__setitem__("value", text) or True)
+            result = monitor.probe(settle=0.2)
+            self.assertTrue(result.ran)
+            self.assertIsNone(result.finding)
 
     def test_the_monitor_is_off_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -330,16 +330,35 @@ class CredentialGuard:
         )
 
     # ------------------------------------------------------------------ arming
-    def status(self) -> dict[str, Any]:
+    def status(self, *, verify: bool = True) -> dict[str, Any]:
+        """What is actually being watched, checked against the machine.
+
+        ``armed`` used to be read straight out of config.json. That is a note
+        Candy wrote to itself, not a fact about the machine, and the two come
+        apart in the ordinary case: copy Candy to a new folder for an upgrade
+        and the note is gone while every audit rule is still sitting on the
+        files. The report then said "0 store(s)" over a fully armed machine —
+        and it would just as happily have said "11" over a machine whose
+        rules had been stripped, which is the direction that gets someone
+        robbed.
+
+        So the SACLs are read back. ``verify=False`` skips that for callers
+        that cannot afford a PowerShell round trip.
+        """
         present = present_stores(self.config)
         canaries = [path for path in self._canary_paths() if path.is_file()]
+        recorded = [str(label) for label in (self.config.get("credguard.armed") or [])]
+        paths = [path for _store, path in present] + canaries
+        verified = verified_audited_paths(paths) if (verify and IS_WINDOWS) else None
         return {
             "platform": "windows" if IS_WINDOWS else "not windows (arming is inert)",
             "stores_known": len(known_stores(self.config)),
             "stores_present": [store.label for store, _path in present],
             "canaries_planted": [str(path) for path in canaries],
             "audit_enabled": self._audit_enabled(),
-            "armed": list(self.config.get("credguard.armed") or []),
+            "armed": recorded,
+            "verified_audited": (sorted(verified) if verified is not None else None),
+            "paths_checked": [str(path) for path in paths],
         }
 
     def _audit_enabled(self) -> bool | None:
@@ -551,6 +570,53 @@ def _clear_audit_ace(path: Path) -> bool:  # pragma: no cover - Windows only
     return ok
 
 
+def audit_query_script(paths: list[str]) -> str:
+    """PowerShell that reports which of these paths carry a read-audit rule.
+
+    One invocation for every path, because twelve PowerShell starts is most
+    of a second each and this runs inside ``doctor``. Prints one line per
+    audited path and stays silent about the rest; a path that cannot be read
+    is simply not audited as far as anyone can tell from here.
+    """
+    literals = ", ".join(ps_literal(path) for path in paths)
+    return (
+        "$ErrorActionPreference='SilentlyContinue'; "
+        f"foreach ($p in @({literals})) {{ "
+        "  $acl = Get-Acl -LiteralPath $p -Audit; "
+        "  if ($acl -eq $null) { continue } "
+        "  $rules = $acl.GetAuditRules($true,$true,"
+        "[System.Security.Principal.NTAccount]); "
+        "  foreach ($r in $rules) { "
+        "    if ($r.FileSystemRights.ToString() -match 'Read' -and "
+        "        $r.AuditFlags.ToString() -match 'Success') { "
+        "      Write-Output $p; break } } }"
+    )
+
+
+def parse_audit_query(output: str, paths: list[str]) -> set[str]:
+    """Match the script's output back to the paths that were asked about.
+
+    Compared case-insensitively: Windows hands paths back in whatever case
+    the filesystem stored them, which is not always the case they were asked
+    in, and a case mismatch here would report a fully armed machine as bare.
+    """
+    listed = {line.strip().strip('"').lower()
+              for line in (output or "").splitlines() if line.strip()}
+    return {path for path in paths if str(path).lower() in listed}
+
+
+def verified_audited_paths(paths: list[Path] | list[str]) -> set[str]:  # pragma: no cover
+    """The subset of these paths that really carry a read-audit rule."""
+    wanted = [str(path) for path in paths]
+    if not wanted:
+        return set()
+    output = _run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy",
+                   "Bypass", "-Command", audit_query_script(wanted)], timeout=90)
+    if output is None:
+        return set()
+    return parse_audit_query(output, wanted)
+
+
 def format_status(status: dict[str, Any]) -> str:
     lines = [f"Platform        : {status['platform']}",
              f"Stores known    : {status['stores_known']}",
@@ -560,7 +626,23 @@ def format_status(status: dict[str, Any]) -> str:
     audit = status["audit_enabled"]
     lines.append("File auditing   : "
                  + {True: "ON", False: "OFF", None: "unknown"}[audit])
-    lines.append(f"Audited now     : {len(status['armed'])} store(s)")
+    verified = status.get("verified_audited")
+    if verified is None:
+        lines.append(f"Audited now     : {len(status['armed'])} recorded "
+                     f"(not verified against the machine)")
+    else:
+        lines.append(f"Audited now     : {len(verified)} path(s), read back from the "
+                     f"files themselves")
+        recorded = len(status.get("armed") or [])
+        if not verified and status.get("paths_checked"):
+            lines.append("                  nothing is being watched — run "
+                         "'candy credguard arm' as administrator")
+        elif recorded and len(verified) < recorded:
+            lines.append(f"                  {recorded} were armed earlier; "
+                         f"{recorded - len(verified)} no longer carry the rule")
+        elif not recorded and verified:
+            lines.append("                  armed by an earlier install — the rules "
+                         "are on the files, this copy of Candy just had no record")
     lines.append(f"Decoys planted  : {len(status['canaries_planted'])}")
     for path in status["canaries_planted"]:
         lines.append(f"                  {path}")

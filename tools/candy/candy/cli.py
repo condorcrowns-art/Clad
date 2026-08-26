@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from .config import Config
 from .drift import DRIFTABLE_FIELDS
@@ -327,13 +329,19 @@ def cmd_clipboard(args: argparse.Namespace) -> int:
     if args.action == "probe":
         print("Putting a decoy payment address on the clipboard and reading it back…")
         print("Your clipboard contents are restored afterwards.\n")
-        finding = monitor.probe()
-        if finding is None:
+        result = monitor.probe()
+        if not result.ran:
+            print(f"The probe did not run: {result.detail}")
+            print("\nNothing was tested, so this is not a clean result. Close anything "
+                  "that watches the clipboard and try again.")
+            return 2
+        if result.finding is None:
             print("The decoy came back unchanged. Nothing is rewriting the clipboard "
                   "right now.")
             print("\nThis proves nothing about a clipper that only acts on real "
                   "addresses, or one that is not running yet. It is a spot check.")
             return 0
+        finding = result.finding
         print(f"[{finding.severity.upper()}] {finding.summary()}")
         for reason in finding.reasons:
             print(f"  {reason}")
@@ -370,6 +378,94 @@ def cmd_selfupdate(args: argparse.Namespace) -> int:
     for check in staged.checks:
         print(f"  {check}")
     return 0 if staged.ok else 1
+
+
+def _posture_for(config: Config, *, verify: bool = True):
+    """Assemble a posture verdict, fetching the two facts that cost a subprocess."""
+    from .adblock import AdBlocker
+    from .credguard import CredentialGuard
+    from . import posture as posture_mod
+
+    try:
+        cred = CredentialGuard(config).status(verify=verify)
+    except Exception:  # noqa: BLE001 - a posture report must not fail to print
+        cred = None
+    try:
+        domains = len(AdBlocker(config).blocked())
+    except Exception:  # noqa: BLE001
+        domains = None
+
+    previous = None
+    if config.path:
+        try:
+            candidates = posture_mod.find_previous_installs(Path(config.path).parent.parent)
+            previous = candidates[0] if candidates else None
+        except Exception:  # noqa: BLE001
+            previous = None
+    return posture_mod.assess(config, credguard_status=cred, adblock_domains=domains,
+                              previous_install=previous)
+
+
+def cmd_posture(args: argparse.Namespace) -> int:
+    """Is this machine actually being defended, in one screen."""
+    from . import posture as posture_mod
+
+    config = Config.load(args.config)
+    verdict = _posture_for(config, verify=not args.fast)
+    if args.json:
+        print(json.dumps(verdict.to_dict(), indent=2))
+    else:
+        print(posture_mod.format_banner(verdict))
+    return 0 if verdict.state == posture_mod.PROTECTED else 1
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    """Carry settings, baseline and trusted programs over from an older copy.
+
+    Candy is portable, so upgrading means unpacking a new folder — and a new
+    folder starts from defaults. Somebody who had spent an evening arming
+    credential stores and saving a baseline got a fresh install in observe
+    mode with nothing armed, and no indication that anything had been lost.
+    """
+    from . import posture as posture_mod
+
+    config = Config.load(args.config)
+    destination = Path(config.path).parent.parent if config.path else Path.cwd()
+
+    if args.source:
+        source = Path(expand_path(args.source))
+        if not posture_mod.looks_like_install(source):
+            print(f"{source} does not look like a Candy folder "
+                  f"(no config{os.sep}config.json inside).")
+            return 2
+    else:
+        found = posture_mod.find_previous_installs(destination)
+        if not found:
+            print("No other Candy folder found in Downloads, Desktop, Documents or "
+                  "your user folder.")
+            print("If it is somewhere else, name it:  candy import --from <folder>")
+            return 1
+        source = found[0]
+        if len(found) > 1:
+            print(f"Found {len(found)} other Candy folders; using the most recently "
+                  f"configured one. The others:")
+            for other in found[1:4]:
+                print(f"  {other}")
+            print()
+
+    plan = posture_mod.plan_import(source, destination)
+    if not args.yes:
+        print(posture_mod.format_import_plan(plan))
+        return 0
+    written = posture_mod.apply_import(plan, overwrite=args.overwrite)
+    print(posture_mod.format_import_plan(plan, applied=written))
+    if written:
+        print()
+        print("Settings are in place. Two things do not travel in a file — re-apply "
+              "them on this machine:")
+        print("  candy level standard   (as administrator)")
+        print("  candy credguard arm    (as administrator)")
+    return 0
 
 
 def cmd_level(args: argparse.Namespace) -> int:
@@ -1543,6 +1639,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         lines.append(f"--- {title} " + "-" * max(0, 60 - len(title)))
 
     lines.append(f"Candy {VERSION} doctor report")
+
+    # First, before the two hundred lines of detail. The report used to open
+    # with the platform string and mention the response mode a hundred lines
+    # in, next to the threat-database counts — so a completely unarmed install
+    # read exactly like a fully armed one unless you knew which line to look
+    # for. If Candy is not defending the machine, that is the headline.
+    from . import posture as posture_mod
+
+    verdict = _posture_for(config)
+    lines.append("")
+    lines.append(posture_mod.format_banner(verdict))
+
     section("system")
     lines.append(f"platform      : {platform.platform()}")
     lines.append(f"python        : {platform.python_version()} ({_sys.executable})")
@@ -1591,8 +1699,21 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     from .adblock import AdBlocker
 
     ad_status = AdBlocker(config).status()
-    lines.append(f"ad blocking   : {'ON' if ad_status.get('enabled') else 'off'} — "
-                 f"{ad_status.get('blocked_domains', 0)} domain(s), categories: "
+    ad_domains = int(ad_status.get("blocked_domains", 0) or 0)
+    # What is in the hosts file is the fact; the config flag is only a note
+    # about intent. Reading them off in that order matters — "off — 73
+    # domain(s)" is the report arguing with itself, and it happens for real
+    # every time Candy is unpacked into a new folder while the entries it
+    # wrote last time are still blocking.
+    lines.append(f"ad blocking   : {ad_domains} domain(s) blocked in the hosts file"
+                 + ("" if ad_domains else " (none)"))
+    if ad_status.get("enabled") and not ad_domains:
+        lines.append("                configured on, but nothing is actually blocked — "
+                     "run 'candy adblock on' as administrator")
+    elif ad_domains and not ad_status.get("enabled"):
+        lines.append("                blocked by an earlier install; this copy of Candy "
+                     "has no record of it and will not maintain the list")
+    lines.append(f"                categories: "
                  f"{', '.join(ad_status.get('categories', [])) or 'none'}")
 
     lines.append(f"firewall      : {'available' if IS_WINDOWS else 'Windows only'}"
@@ -1611,7 +1732,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     trust = platform_trust()
     lines.append(f"secure boot   : {trust['secure_boot']}")
     lines.append(f"tpm           : {trust['tpm'].get('present')} {trust['tpm'].get('version', '')}")
-    lines.append(f"vbs / hvci    : {trust['virtualisation_based_security']}")
+    # A raw dict repr — {'vbs': None, 'hvci': None} — is the report leaking its
+    # own data structure at the person reading it.
+    vbs = trust["virtualisation_based_security"]
+
+    def _tri(value: Any) -> str:
+        return "unknown" if value is None else ("on" if value else "off")
+
+    lines.append(f"vbs / hvci    : vbs {_tri(vbs.get('vbs'))}, "
+                 f"hvci {_tri(vbs.get('hvci'))}")
     for note in trust["advice"]:
         lines.append(f"                {note}")
 
@@ -1921,6 +2050,20 @@ def build_parser() -> argparse.ArgumentParser:
     revert.add_argument("--yes", action="store_true",
                         help="actually revert (without this it is a dry run)")
     revert.set_defaults(func=cmd_revert)
+
+    posture_p = sub.add_parser("posture", help="one answer: is this machine protected?")
+    posture_p.add_argument("--json", action="store_true", help="machine-readable output")
+    posture_p.add_argument("--fast", action="store_true",
+                           help="skip reading audit rules back off the files")
+    posture_p.set_defaults(func=cmd_posture)
+
+    import_p = sub.add_parser("import", help="bring settings over from an older Candy folder")
+    import_p.add_argument("--from", dest="source",
+                          help="the older Candy folder (found automatically if omitted)")
+    import_p.add_argument("--yes", action="store_true", help="actually copy the files")
+    import_p.add_argument("--overwrite", action="store_true",
+                          help="replace files that already exist here")
+    import_p.set_defaults(func=cmd_import)
 
     doctor = sub.add_parser("doctor", help="collect a full diagnostic report for troubleshooting")
     doctor.add_argument("--seconds", type=float, default=20.0,

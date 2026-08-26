@@ -11,9 +11,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from candy import coverage  # noqa: E402
-from candy.browserscan import (BROAD_HOSTS, RISKY_PERMISSIONS, assess,  # noqa: E402
+from candy.browserscan import (BROAD_HOSTS, RISKY_PERMISSIONS, SIDELOADED,  # noqa: E402
+                               STORE, UNKNOWN_UPDATER, assess,
                                find_chromium_extensions, format_report,
-                               parse_chromium_manifest)
+                               parse_chromium_manifest, resolve_localised,
+                               update_origin)
 from candy.config import Config  # noqa: E402
 from candy.detect import Analyzer  # noqa: E402
 from candy.persistence import analyze_entry, parse_bits_jobs  # noqa: E402
@@ -67,6 +69,86 @@ class ManifestParsingTests(unittest.TestCase):
         self.assertIn("__MSG_appName__", extension.name)
 
 
+class LocalisedNameTests(unittest.TestCase):
+    """Four of the extensions on a real machine reported as
+    __MSG_manifest_name__ — including the one flagged for reading
+    .ROBLOSECURITY. A finding you cannot match to a row in your browser's
+    extensions page is not actionable."""
+
+    def write(self, root: Path, locale: str, messages: dict) -> None:
+        directory = root / "_locales" / locale
+        directory.mkdir(parents=True)
+        (directory / "messages.json").write_text(json.dumps(messages))
+
+    def test_the_real_name_is_read_out_of_locales(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write(root, "en", {"manifest_name": {"message": "Roblox Helper"}})
+            self.assertEqual(
+                resolve_localised("__MSG_manifest_name__", str(root)), "Roblox Helper")
+
+    def test_the_declared_default_locale_is_tried_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write(root, "de", {"n": {"message": "Deutsch"}})
+            self.write(root, "en", {"n": {"message": "English"}})
+            self.assertEqual(resolve_localised("__MSG_n__", str(root), "de"), "Deutsch")
+
+    def test_keys_are_matched_case_insensitively(self):
+        """Chrome does, and manifests in the wild disagree with their own
+        _locales about capitalisation."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.write(root, "en", {"appName": {"message": "Real Name"}})
+            self.assertEqual(resolve_localised("__MSG_appname__", str(root)), "Real Name")
+
+    def test_an_ordinary_name_is_left_alone(self):
+        self.assertEqual(resolve_localised("uBlock Origin", "/nope"), "uBlock Origin")
+
+    def test_a_missing_locales_folder_still_says_something_useful(self):
+        resolved = resolve_localised("__MSG_x__", "/definitely/not/here")
+        self.assertIn("__MSG_x__", resolved)
+        self.assertIn("not in _locales", resolved)
+
+    def test_broken_locale_files_do_not_raise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            directory = root / "_locales" / "en"
+            directory.mkdir(parents=True)
+            (directory / "messages.json").write_text("not json at all")
+            self.assertIn("__MSG_x__", resolve_localised("__MSG_x__", str(root)))
+
+
+class OriginTests(unittest.TestCase):
+    def test_the_real_stores_are_recognised(self):
+        for url in ("https://clients2.google.com/service/update2/crx",
+                    "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
+                    "https://api.opera.com/updater/x",
+                    "https://addons.mozilla.org/x"):
+            self.assertEqual(update_origin(url), STORE, url)
+
+    def test_no_update_url_is_sideloaded(self):
+        self.assertEqual(update_origin(None), SIDELOADED)
+        self.assertEqual(update_origin(""), SIDELOADED)
+
+    def test_a_third_party_update_host_is_neither(self):
+        """Self-updating from an address the attacker owns is how a benign
+        extension becomes a malicious one after you have already trusted it."""
+        self.assertEqual(update_origin("https://cdn.example.ru/u.xml"), UNKNOWN_UPDATER)
+
+    def test_a_lookalike_host_is_not_treated_as_a_store(self):
+        self.assertEqual(update_origin("https://clients2.google.com.evil.tld/x"),
+                         UNKNOWN_UPDATER)
+
+    def test_a_third_party_updater_outscores_the_same_store_extension(self):
+        store = assess(parsed(permissions=["tabs"],
+                              update_url="https://clients2.google.com/x"))
+        rogue = assess(parsed(permissions=["tabs"],
+                              update_url="https://cdn.example.ru/u.xml"))
+        self.assertGreater(rogue.score, store.score)
+        self.assertIn("silently", " ".join(rogue.reasons))
+
+
 class ExtensionScoringTests(unittest.TestCase):
     def test_roblox_cookie_stealer_is_critical(self):
         verdict = assess(parsed(permissions=["cookies", "tabs", "webRequest"],
@@ -116,6 +198,63 @@ class ExtensionScoringTests(unittest.TestCase):
                                   update_url="https://clients2.google.com/x"))]
         self.assertIn("Nothing scored above", format_report(verdicts))
         self.assertNotIn("Nothing scored above", format_report(verdicts, show_all=True))
+
+    def test_a_store_ad_blocker_is_not_a_critical_finding(self):
+        """uBlock Origin scored 95 and reported HIGH on a real machine. It
+        cannot block a request it is not allowed to see — the permission is
+        the product, and scoring it for working is the same mistake that
+        produced twenty-two false persistence findings."""
+        verdict = assess(parsed(
+            permissions=["privacy", "tabs", "webRequest", "webRequestBlocking"],
+            host_permissions=["<all_urls>"],
+            update_url="https://api.opera.com/updater/x"))
+        self.assertNotIn(verdict.severity, ("critical", "high"))
+        self.assertFalse(verdict.can_take_account)
+
+    def test_a_powerful_store_assistant_never_reaches_critical(self):
+        """Bundled assistants hold debugger and nativeMessaging. Powerful is
+        not the same as stealing, and critical has to mean something."""
+        verdict = assess(parsed(
+            permissions=["debugger", "downloads", "nativeMessaging", "scripting", "tabs"],
+            host_permissions=["<all_urls>"],
+            update_url="https://clients2.google.com/x"))
+        self.assertNotEqual(verdict.severity, "critical")
+
+    def test_a_store_extension_reading_roblox_cookies_is_still_critical(self):
+        """Being listed on a store is not a clean bill of health — malicious
+        extensions get listed. Cookie access to Roblox is the attack itself."""
+        verdict = assess(parsed(permissions=["cookies", "webRequest"],
+                                host_permissions=["*://*.roblox.com/*"],
+                                update_url="https://clients2.google.com/x"))
+        self.assertEqual(verdict.severity, "critical")
+        self.assertTrue(verdict.can_take_account)
+
+    def test_account_theft_outranks_a_bigger_permission_pile(self):
+        """The whole reason for the rewrite: the Roblox cookie reader was
+        listed fourth, below three extensions that could not touch a session."""
+        stealer = assess(parsed(permissions=["cookies"],
+                                host_permissions=["*://*.roblox.com/*"],
+                                update_url="https://clients2.google.com/x"))
+        powerful = assess(parsed(
+            permissions=["debugger", "nativeMessaging", "management", "history",
+                         "downloads", "scripting", "tabs"],
+            host_permissions=["<all_urls>"],
+            update_url="https://clients2.google.com/x"))
+        ordered = sorted([powerful, stealer],
+                         key=lambda v: (not v.can_take_account, -v.score))
+        self.assertIs(ordered[0], stealer)
+
+    def test_the_report_puts_account_risk_in_its_own_section(self):
+        stealer = assess(parsed(permissions=["cookies"],
+                                host_permissions=["*://*.roblox.com/*"]))
+        blocker = assess(parsed(permissions=["webRequest", "webRequestBlocking"],
+                                host_permissions=["<all_urls>"],
+                                update_url="https://clients2.google.com/x"))
+        text = format_report([stealer, blocker])
+        self.assertIn("CAN SIGN IN AS YOU", text)
+        self.assertIn("DID NOT ASK FOR YOUR SESSIONS", text)
+        self.assertLess(text.index("CAN SIGN IN AS YOU"),
+                        text.index("DID NOT ASK FOR YOUR SESSIONS"))
 
     def test_discovery_is_safe_when_no_browser_is_installed(self):
         self.assertEqual(find_chromium_extensions({"Nope": "/definitely/not/here"}), [])

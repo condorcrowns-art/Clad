@@ -123,6 +123,46 @@ class WindowsRegressionTests(unittest.TestCase):
                   / "candy" / "procmon.py").read_text(encoding="utf-8")
         self.assertNotIn('self.mode = "wmi+poll" if started_wmi else "poll"', source)
 
+    # Every one of these returns a HANDLE, HWND or pointer. ctypes defaults
+    # the return type to c_int, which on a 64-bit build throws away the top
+    # half of it. The failures are silent and varied: a truncated HWND makes
+    # GetWindowTextLengthW return 0, a truncated HGLOBAL makes
+    # SetClipboardData fail, and a truncated GlobalLock result is a wild
+    # pointer that memmove kills the process writing through. That last one
+    # is what made `clipboard probe` print its opening lines and then die
+    # with no traceback at all.
+    POINTER_RETURNING = (
+        "GetClipboardData", "SetClipboardData", "GlobalAlloc", "GlobalLock",
+        "GlobalFree", "GetForegroundWindow", "GetCurrentProcess", "CreateMutexW",
+    )
+
+    def test_no_handle_returning_call_is_left_at_the_default_int(self):
+        """The class, not the instance: any module that calls one of these
+        must also declare its return type somewhere in the same module."""
+        root = Path(__file__).resolve().parent.parent / "candy"
+        for module in sorted(root.glob("*.py")):
+            source = module.read_text(encoding="utf-8")
+            for name in self.POINTER_RETURNING:
+                if f".{name}(" not in source:
+                    continue
+                with self.subTest(module=module.name, function=name):
+                    self.assertIn(f"{name}.restype", source,
+                                  f"{module.name} calls {name} without declaring "
+                                  f"its return type — on 64-bit Windows the handle "
+                                  f"it returns is truncated")
+
+    def test_the_probe_reports_whether_it_ran(self):
+        """probe() returned None both for "the decoy survived" and for "the
+        clipboard could not be written". The strongest result and the absence
+        of any result printed the same sentence."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "clipboard.py").read_text(encoding="utf-8")
+        self.assertIn("class ProbeResult", source)
+        self.assertIn("ran: bool", source)
+        cli = (Path(__file__).resolve().parent.parent
+               / "candy" / "cli.py").read_text(encoding="utf-8")
+        self.assertIn("if not result.ran:", cli)
+
     def test_the_window_class_uses_the_same_proc_type(self):
         """The struct field had its own c_long copy of the signature. A struct
         that disagrees with the callback is the same truncation bug wearing a

@@ -69,6 +69,10 @@ PROBE_VALUES: dict[str, str] = {
 SWAP_SCORE = 95
 PROBE_SCORE = 130
 
+# Win32 clipboard constants.
+CF_UNICODETEXT = 13
+GMEM_MOVEABLE = 0x0002
+
 
 def classify(value: str) -> str | None:
     """Which kind of payment destination this text is, if any."""
@@ -102,6 +106,30 @@ class SwapFinding:
     def summary(self) -> str:
         return (f"clipboard {self.kind} destination changed from "
                 f"{_short(self.before)} to {_short(self.after)}")
+
+
+@dataclass
+class ProbeResult:
+    """What the active probe actually did, separate from what it found.
+
+    ``ran`` is the question the old return value could not answer: did the
+    check happen at all? A probe that could not touch the clipboard proves
+    nothing, and must never be reported as "nothing is rewriting it".
+    """
+    ran: bool
+    decoy: str = ""
+    observed: str = ""
+    finding: SwapFinding | None = None
+    detail: str = ""
+
+    @property
+    def hijacked(self) -> bool:
+        return self.finding is not None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"ran": self.ran, "decoy": self.decoy, "observed": self.observed,
+                "detail": self.detail,
+                "finding": self.finding.to_dict() if self.finding else None}
 
 
 def assess_swap(before: str, after: str, *, seconds_apart: float = 0.0,
@@ -152,18 +180,85 @@ def assess_swap(before: str, after: str, *, seconds_apart: float = 0.0,
     return finding
 
 
-def read_clipboard() -> str | None:  # pragma: no cover - Windows only
-    """Read the clipboard as text, or None when it holds nothing readable."""
+# --------------------------------------------------------------- Win32 glue
+#
+# Every one of these returns a HANDLE or a pointer. ctypes assumes a function
+# returns ``c_int`` unless told otherwise, and on 64-bit Windows that silently
+# truncates the top 32 bits off every one of them. A truncated HGLOBAL makes
+# ``SetClipboardData`` fail; a truncated ``GlobalLock`` result is a wild
+# pointer, and ``memmove`` writing through it kills the process outright — no
+# exception, no traceback, just a missing exit code and the next prompt.
+#
+# That is exactly what ``clipboard probe`` did on 64-bit Windows: it printed
+# its two opening lines and then the interpreter died mid-call, so neither the
+# clean result nor a finding was ever reached. Declaring the types is the
+# whole fix, and it is the same bug that was already fixed once in notify.py.
+_WIN32_READY = False
+
+
+def _win32() -> tuple[Any, Any] | None:  # pragma: no cover - Windows only
+    """user32 and kernel32 with every handle-returning function declared."""
+    global _WIN32_READY
     if not IS_WINDOWS:
         return None
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    if not _WIN32_READY:
+        user32.OpenClipboard.argtypes = [wintypes.HWND]
+        user32.OpenClipboard.restype = wintypes.BOOL
+        user32.CloseClipboard.argtypes = []
+        user32.CloseClipboard.restype = wintypes.BOOL
+        user32.EmptyClipboard.argtypes = []
+        user32.EmptyClipboard.restype = wintypes.BOOL
+        user32.GetClipboardData.argtypes = [wintypes.UINT]
+        user32.GetClipboardData.restype = wintypes.HANDLE
+        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+        user32.SetClipboardData.restype = wintypes.HANDLE
+        user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+        user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+
+        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalLock.restype = wintypes.LPVOID
+        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalUnlock.restype = wintypes.BOOL
+        kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalFree.restype = wintypes.HGLOBAL
+        _WIN32_READY = True
+    return user32, kernel32
+
+
+def _open_clipboard(user32: Any, *, attempts: int = 10) -> bool:  # pragma: no cover
+    """Take the clipboard, retrying briefly.
+
+    Only one process may hold the clipboard at a time, so a browser or a
+    password manager sampling it makes ``OpenClipboard`` fail for a few
+    milliseconds. Giving up on the first refusal reports "could not read the
+    clipboard" on a perfectly healthy machine.
+    """
+    for attempt in range(attempts):
+        if user32.OpenClipboard(None):
+            return True
+        time.sleep(0.02 * (attempt + 1))
+    return False
+
+
+def read_clipboard() -> str | None:  # pragma: no cover - Windows only
+    """Read the clipboard as text, or None when it holds nothing readable."""
+    handles = _win32()
+    if handles is None:
+        return None
+    user32, kernel32 = handles
     try:
         import ctypes
-        from ctypes import wintypes
 
-        user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
-        CF_UNICODETEXT = 13
-        if not user32.OpenClipboard(None):
+        if not user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+            return None
+        if not _open_clipboard(user32):
             return None
         try:
             handle = user32.GetClipboardData(CF_UNICODETEXT)
@@ -183,28 +278,34 @@ def read_clipboard() -> str | None:  # pragma: no cover - Windows only
 
 
 def write_clipboard(text: str) -> bool:  # pragma: no cover - Windows only
-    if not IS_WINDOWS:
+    handles = _win32()
+    if handles is None:
         return False
+    user32, kernel32 = handles
     try:
         import ctypes
 
-        user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
-        GMEM_MOVEABLE = 0x0002
-        CF_UNICODETEXT = 13
         data = ctypes.create_unicode_buffer(text)
         size = ctypes.sizeof(data)
         handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, size)
         if not handle:
             return False
         pointer = kernel32.GlobalLock(handle)
+        if not pointer:
+            kernel32.GlobalFree(handle)
+            return False
         ctypes.memmove(pointer, data, size)
         kernel32.GlobalUnlock(handle)
-        if not user32.OpenClipboard(None):
+        if not _open_clipboard(user32):
+            kernel32.GlobalFree(handle)
             return False
         try:
             user32.EmptyClipboard()
-            user32.SetClipboardData(CF_UNICODETEXT, handle)
+            # On success the system owns the block and freeing it is a
+            # use-after-free; on failure nobody does and it leaks.
+            if not user32.SetClipboardData(CF_UNICODETEXT, handle):
+                kernel32.GlobalFree(handle)
+                return False
         finally:
             user32.CloseClipboard()
         return True
@@ -288,29 +389,49 @@ class ClipboardMonitor:
             self.sink(self.to_detection(finding))
         return finding
 
-    def probe(self, kind: str = "bitcoin", *, settle: float = 1.5) -> SwapFinding | None:
+    def probe(self, kind: str = "bitcoin", *, settle: float = 1.5) -> ProbeResult:
         """Actively bait a clipper: write a decoy address, read it back.
 
         Restores whatever was on the clipboard before, because silently eating
         someone's clipboard is not an acceptable cost of a security check.
+
+        Returns a :class:`ProbeResult` rather than an optional finding. The
+        earlier signature returned ``None`` both when the decoy came back
+        untouched *and* when the clipboard could not be written at all, so a
+        probe that never ran was indistinguishable from a clean one — the
+        strongest possible result reported as the weakest.
         """
         decoy = PROBE_VALUES.get(kind) or PROBE_VALUES["bitcoin"]
         saved = self.reader()
         if not self.writer(decoy):
-            return None
+            return ProbeResult(
+                ran=False, decoy=decoy,
+                detail="the clipboard could not be written, so nothing was tested. "
+                       "Another program may be holding it open, or this is a session "
+                       "without a desktop (a service, or a remote shell).")
         try:
             time.sleep(max(0.2, settle))
-            observed = (self.reader() or "").strip()
+            observed = self.reader()
         finally:
             if saved is not None:
                 self.writer(saved)
 
+        if observed is None:
+            return ProbeResult(
+                ran=False, decoy=decoy,
+                detail="the decoy was written but could not be read back, so nothing "
+                       "was tested. Another program may be holding the clipboard open.")
+
+        observed = observed.strip()
         if not observed or observed == decoy:
-            return None
+            return ProbeResult(ran=True, decoy=decoy, observed=observed,
+                               detail="the decoy came back unchanged")
+
         finding = assess_swap(decoy, observed, seconds_apart=settle, probe=True)
         if finding and self.sink:
             self.sink(self.to_detection(finding))
-        return finding
+        return ProbeResult(ran=True, decoy=decoy, observed=observed, finding=finding,
+                           detail="the decoy was rewritten")
 
     def to_detection(self, finding: SwapFinding) -> Detection:
         return Detection(
