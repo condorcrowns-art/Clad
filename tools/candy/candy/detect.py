@@ -286,6 +286,28 @@ class Analyzer:
         return out
 
     # ------------------------------------------------------------------ PE
+    def _signature_vouches(self, path: str) -> bool:
+        """Whether a valid Authenticode signature stands behind this file.
+
+        The rename finding argues that renaming is how signature checks get
+        dodged. Where the signature verifies, that argument does not hold:
+        the signature is intact, it still names the publisher, and renaming
+        the file changed neither. Python's own python.exe declares an original
+        name of py.exe — the launcher and the interpreter are built from one
+        source tree — and it is signed, so it was reported as a MEDIUM
+        evasion finding on a clean machine every single run.
+
+        This is the same mistake as the twenty-two false persistence findings
+        and the five false extension criticals: stating that a property is
+        present rather than that it is unexplained.
+        """
+        if not self.signature_checker or not path:
+            return False
+        try:
+            return self.signature_checker(path) is True
+        except Exception:  # noqa: BLE001 - a signature read must never break a scan
+            return False
+
     def inspect_pe(self, path: str, name: str, emit) -> None:
         """Look inside a Windows binary for what its file name hides.
 
@@ -323,14 +345,16 @@ class Analyzer:
                     evidence={"original_filename": declared, "matched": hits[0].id,
                               "company": info.company, "product": info.product},
                 )
-            else:
+            elif not self._signature_vouches(path):
                 emit(
                     "renamed_binary",
                     (f"File is named '{name}' but declares its original name as "
-                     f"'{declared}'. Renaming is how signature checks get dodged."),
+                     f"'{declared}'. Renaming is how signature checks get dodged, "
+                     f"and this file carries no valid signature to dodge them with."),
                     "medium",
                     signature_id="pe.renamed",
-                    evidence={"original_filename": declared, "company": info.company},
+                    evidence={"original_filename": declared, "company": info.company,
+                              "signed": False},
                 )
 
         for field_name, value in (("company", info.company), ("product", info.product)):
@@ -353,10 +377,17 @@ class Analyzer:
                 signature_id="pe.packed",
                 evidence={"entropy": round(info.max_code_entropy, 2)},
             )
-        elif not info.has_version_info and name.lower().endswith(".exe"):
+        elif (not info.has_version_info and name.lower().endswith(".exe")
+                and not self._signature_vouches(path)):
+            # "Unusual for released software" is the whole claim, and a valid
+            # signature settles it: released software is exactly what a
+            # publisher signs. Riot's crash handler and services ship without
+            # a version resource and are signed, so this fired on them every
+            # run and said nothing.
             emit(
                 "no_version_info",
-                "Executable carries no version information — unusual for released software.",
+                "Executable carries no version information and is not signed — "
+                "unusual for released software.",
                 "info",
                 signature_id="pe.no_version_info",
             )

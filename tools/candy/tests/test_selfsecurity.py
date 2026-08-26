@@ -12,6 +12,7 @@ import stat
 import sys
 import tempfile
 import unittest
+import pathlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -216,6 +217,57 @@ class WindowsRegressionTests(unittest.TestCase):
 class FalsePositiveTests(unittest.TestCase):
     """Found by running against a real, clean Windows 11 machine: 42 detections
     with 11 highs, none of them real. A tool that cries wolf gets closed."""
+
+    @staticmethod
+    def _analyzer(signature_checker):
+        import tempfile
+
+        from candy.config import Config
+        from candy.detect import Analyzer
+        from candy.threatdb import ThreatDB
+
+        root = pathlib.Path(tempfile.mkdtemp())
+        config = Config({"paths": {"data": str(root / "d"), "logs": str(root / "l"),
+                                   "quarantine": str(root / "q")}},
+                        root / "config.json")
+        return Analyzer(config, ThreatDB(), signature_checker=signature_checker)
+
+    def test_a_signed_binary_is_not_a_rename_evasion(self):
+        """python.exe declares an original name of py.exe — the launcher and
+        the interpreter come out of one source tree — and it is signed. The
+        finding's own argument is that renaming dodges signature checks, and
+        a signature that verifies is that argument failing."""
+        vouches = lambda signed: self._analyzer(  # noqa: E731
+            lambda _path: signed)._signature_vouches("C:/x/python.exe")
+        self.assertTrue(vouches(True))
+        self.assertFalse(vouches(False))
+        self.assertFalse(vouches(None))
+
+    def test_the_rename_finding_requires_an_unsigned_file(self):
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "detect.py").read_text(encoding="utf-8")
+        self.assertIn("elif not self._signature_vouches(path):", source)
+
+    def test_the_missing_version_finding_requires_an_unsigned_file(self):
+        """Riot's crash handler and services ship with no version resource
+        and are signed. "Unusual for released software" is the whole claim,
+        and a publisher's signature settles it."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "candy" / "detect.py").read_text(encoding="utf-8")
+        clause = source[source.index("elif (not info.has_version_info"):]
+        self.assertIn("not self._signature_vouches(path)",
+                      clause[:clause.index("emit(")])
+
+    def test_a_signature_read_that_raises_does_not_break_a_scan(self):
+        def explode(_path):
+            raise OSError("cannot read")
+
+        self.assertFalse(self._analyzer(explode)._signature_vouches("C:/x/a.exe"))
+
+    def test_no_checker_means_the_signature_does_not_vouch(self):
+        """Absent evidence is not evidence of a signature. Off Windows, and
+        anywhere the check is unavailable, the finding is still raised."""
+        self.assertFalse(self._analyzer(None)._signature_vouches("C:/x/a.exe"))
 
     def test_a_program_files_path_is_not_truncated(self):
         """\\S+? cannot cross the space in "Program Files", so an unquoted path
