@@ -51,13 +51,45 @@ window.PARLA = window.PARLA || {};
     else voiceWaiters.push(fn);
   }
 
-  /* Voices whose language matches the target, best first. */
+  /* Rank voices by how good they actually sound.
+   *
+   * This used to prefer localService voices for offline capability, which was
+   * a mistake: on Windows the local Spanish voices are decade-old SAPI ones
+   * (Helena, Sabina) that sound robotic, while Chrome ships genuinely good
+   * network voices for free. Optimising for offline handed people the worst
+   * voice on the machine. Quality wins; offline is the tiebreak.
+   */
+  function voiceScore(v) {
+    var n = String(v.name || '');
+    var s = 0;
+    if (/^Google/i.test(n))            s += 100;  // Chrome's own, clearly the best free option
+    if (/natural|neural/i.test(n))     s += 90;   // Windows 11 / Edge neural voices
+    if (/premium|enhanced/i.test(n))   s += 60;   // macOS upgraded voices
+    if (/online/i.test(n))             s += 40;
+    if (/desktop/i.test(n))            s -= 40;   // legacy SAPI desktop entries
+    if (v.localService && /^Microsoft/i.test(n)) s -= 30;  // old SAPI
+    if (v.default)                     s += 5;
+    return s;
+  }
+
+  /* A coarse label for the settings screen, so the choice is not a guess. */
+  function voiceQuality(v) {
+    var s = voiceScore(v);
+    if (s >= 90) return 'best';
+    if (s >= 40) return 'good';
+    if (s < 0)   return 'basic';
+    return 'ok';
+  }
+
+  /* Voices whose language matches the target, best-sounding first. */
   function voicesFor(lang) {
     var prefix = (LANGS[lang] || LANGS.es).code.slice(0, 2);
     return voices.filter(function (v) {
       return (v.lang || '').toLowerCase().indexOf(prefix) === 0;
     }).sort(function (a, b) {
-      // Prefer local (offline) voices — they are faster and work with no network.
+      var d = voiceScore(b) - voiceScore(a);
+      if (d) return d;
+      // Same quality tier: prefer local, which is faster and needs no network.
       return (b.localService ? 1 : 0) - (a.localService ? 1 : 0);
     });
   }
@@ -183,6 +215,7 @@ window.PARLA = window.PARLA || {};
     cancel: cancelSpeech,
     listen: listen,
     voicesFor: voicesFor,
+    voiceQuality: voiceQuality,
     pickVoice: pickVoice,
     onVoicesReady: onVoicesReady,
     isSpeaking: function () { return speaking; }

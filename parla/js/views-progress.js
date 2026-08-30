@@ -486,28 +486,38 @@ window.PARLA = window.PARLA || {};
     main.appendChild(ui.sectionTitle('Voice'));
     var voiceCard = el('div.card');
     var voiceSel = el('select');
-    voiceCard.appendChild(ui.field('Spanish voice', voiceSel,
-      'Voices come from your operating system. If the list is short, install more Spanish ' +
-      'voices in your OS speech settings.'));
+    var voiceNote = el('div.hint');
+    voiceCard.appendChild(ui.field('Spanish voice', voiceSel));
+    voiceCard.appendChild(voiceNote);
 
     PARLA.speech.onVoicesReady(function () {
       var list = PARLA.speech.voicesFor(st.profile.target || 'es');
       ui.clear(voiceSel);
       if (!list.length) {
         voiceSel.appendChild(el('option', { value: '' }, 'No Spanish voice found'));
-      } else {
-        list.forEach(function (v) {
-          voiceSel.appendChild(el('option', {
-            value: v.voiceURI,
-            selected: v.voiceURI === s.voiceURI ? true : null
-          }, v.name + ' (' + v.lang + ')' + (v.localService ? '' : ' — online')));
-        });
+        voiceNote.textContent = 'Your system has no Spanish voice installed. See the note below.';
+        return;
       }
+      // Listed best-sounding first, and labelled, because the names alone
+      // ("Microsoft Helena Desktop") say nothing about how they sound.
+      var LABEL = { best: 'best', good: 'good', ok: '', basic: 'robotic' };
+      list.forEach(function (v) {
+        var q = PARLA.speech.voiceQuality(v);
+        var tag = LABEL[q] ? '  [' + LABEL[q] + ']' : '';
+        voiceSel.appendChild(el('option', {
+          value: v.voiceURI,
+          selected: v.voiceURI === s.voiceURI ? true : null
+        }, v.name + ' (' + v.lang + ')' + tag));
+      });
+      if (!s.voiceURI) voiceSel.value = list[0].voiceURI;
+      voiceNote.textContent = PARLA.speech.voiceQuality(list[0]) === 'basic'
+        ? 'Everything installed here is an old robotic voice. Install a better one - see below.'
+        : 'Sorted best-sounding first. Picking one plays a sample.';
     });
     voiceSel.onchange = function () {
       s.voiceURI = voiceSel.value;
       PARLA.store.save();
-      ui.say('Hola, así sueno yo.');
+      ui.say('Hola, así sueno yo. ¿Te gusta esta voz?');
     };
 
     var rate = el('input', { type: 'range', min: '0.5', max: '1.3', step: '0.05', value: String(s.rate) });
@@ -521,7 +531,25 @@ window.PARLA = window.PARLA || {};
       'Slower is easier to follow. 0.9 is a good place to start.'));
 
     voiceCard.appendChild(el('div.btn-row',
-      el('button', { onclick: function () { ui.say('Buenos días. ¿Qué tal estás hoy?'); } }, '🔊 Test voice')));
+      el('button', { onclick: function () { ui.say('Buenos días. ¿Qué tal estás hoy?'); } }, '🔊 Test voice'),
+      el('button', {
+        onclick: function () {
+          var list = PARLA.speech.voicesFor(st.profile.target || 'es');
+          if (!list.length) return;
+          s.voiceURI = list[0].voiceURI;
+          voiceSel.value = s.voiceURI;
+          PARLA.store.save();
+          ui.say('Hola, así sueno yo.');
+        }
+      }, 'Use the best available')));
+
+    voiceCard.appendChild(ui.banner('info',
+      '<strong>Voice sounding robotic?</strong> That is your operating system, not the app. ' +
+      'Chrome ships far better Spanish voices than the ones Windows installs by default — ' +
+      'they appear in this list as <code>Google español</code>. If you do not see one, open ' +
+      '<code>Settings → Time &amp; language → Speech → Manage voices</code> in Windows and add ' +
+      'Spanish; on Windows 11 pick a voice whose name contains <em>Natural</em>. ' +
+      'Restart the browser afterwards so the new voices appear here.'));
     main.appendChild(voiceCard);
 
     /* — practice — */
