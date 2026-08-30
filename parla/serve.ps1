@@ -60,7 +60,18 @@ if (-not $NoBrowser) { Start-Process $prefix }
 
 try {
   while ($listener.IsListening) {
-    $context  = $listener.GetContext()
+    # GetContext() blocks inside .NET, where PowerShell cannot see a Ctrl+C -
+    # the server would ignore it until the next HTTP request arrived, which
+    # meant the only way out was closing the window. Waiting on the async
+    # version in short slices gives the pipeline a checkpoint between each one,
+    # so Ctrl+C lands immediately.
+    $ctxTask = $listener.GetContextAsync()
+    while (-not $ctxTask.Wait(250)) {
+      if (-not $listener.IsListening) { break }
+    }
+    if (-not $ctxTask.IsCompleted) { break }
+
+    $context  = $ctxTask.Result
     $request  = $context.Request
     $response = $context.Response
 
