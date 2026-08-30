@@ -1,0 +1,5 @@
+# Downloaded by setup-windows.ps1 - hundreds of megabytes of binaries and
+# voice models that have no business in a git repository.
+piper/
+voices/
+node_modules/

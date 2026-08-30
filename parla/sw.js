@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'parla-v2';
+var CACHE = 'parla-v3';
 
 var ASSETS = [
   './',
@@ -52,6 +52,11 @@ self.addEventListener('fetch', function (e) {
   // Never cache the AI backends — Ollama and Gemini must always go to the network.
   if (url.origin !== location.origin) return;
   if (e.request.method !== 'GET') return;
+
+  // Nor the speech endpoints. /tts/voices is a GET and would otherwise be
+  // cached, which would freeze "no neural voice installed" in place forever —
+  // including for the person who then goes and installs one.
+  if (/\/tts(\/|$)/.test(url.pathname)) return;
 
   e.respondWith(
     caches.match(e.request).then(function (hit) {

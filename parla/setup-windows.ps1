@@ -17,18 +17,26 @@
        VRAM is what decides whether replies feel instant or sluggish)
     5. Pulls it, then times one real generation and tells you if it is too
        slow to hold a conversation with
-    6. Starts the local web server and opens the app
+    6. Installs Piper, a neural text-to-speech voice that runs on this machine.
+       Windows' own Spanish voices are decade-old SAPI ones that sound robotic;
+       Piper sounds like a person. Also free, also local, also offline.
+    7. Starts the local web server and opens the app
+
+  Everything here is free and stays on this machine. Nothing is billed, no
+  account is created, and no audio or text is sent anywhere.
 
 .EXAMPLE
   .\setup-windows.ps1
   .\setup-windows.ps1 -Model qwen2.5:3b     # force a smaller model
   .\setup-windows.ps1 -SkipOllama           # just run the app
+  .\setup-windows.ps1 -SkipVoice            # do not install the neural voice
 #>
 [CmdletBinding()]
 param(
   [string]$Model = '',
   [int]$Port = 8000,
-  [switch]$SkipOllama
+  [switch]$SkipOllama,
+  [switch]$SkipVoice
 )
 
 $ErrorActionPreference = 'Stop'
@@ -220,7 +228,7 @@ if (-not $SkipOllama) {
     Warn "Could not time a generation: $($_.Exception.Message)"
   }
 
-  Step 7 "Verifying"
+  Step 7 "Verifying Ollama"
   try {
     $tags = Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 10
     Ok ("Ollama responding, models: " + (($tags.models | ForEach-Object { $_.name }) -join ', '))
@@ -229,7 +237,127 @@ if (-not $SkipOllama) {
   }
 }
 
-Step 8 "Starting Parla"
+Step 8 "Installing the neural voice (Piper)"
+
+# Downloads are quiet and fast only if the progress renderer is off - in
+# Windows PowerShell it repaints per chunk and can triple the time for a 60 MB
+# file. Also force TLS 1.2: 5.1 still negotiates SSL3/TLS1 by default and both
+# GitHub and Hugging Face refuse those.
+$oldProgress = $ProgressPreference
+$ProgressPreference = 'SilentlyContinue'
+try {
+  [Net.ServicePointManager]::SecurityProtocol =
+    [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch { }
+
+$piperDir  = Join-Path $PSScriptRoot 'piper'
+$voicesDir = Join-Path $PSScriptRoot 'voices'
+$piperExe  = Join-Path $piperDir 'piper.exe'
+
+if ($SkipVoice) {
+  Note "skipped (-SkipVoice) - the app will use your browser's voices"
+} else {
+  try {
+    if (Test-Path $piperExe -PathType Leaf) {
+      Ok "piper already installed"
+    } else {
+      # Resolve the download from the releases API rather than hardcoding a
+      # version that will rot. The pinned URL below is only the parachute.
+      $url = ''
+      try {
+        $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/rhasspy/piper/releases/latest' `
+                 -Headers @{ 'User-Agent' = 'parla-setup' } -TimeoutSec 30
+        $hit = $rel.assets | Where-Object { $_.name -match 'windows.*amd64.*\.zip$' } | Select-Object -First 1
+        if ($hit) { $url = $hit.browser_download_url }
+      } catch { }
+      if (-not $url) {
+        Note "releases API unreachable - using the last known good build"
+        $url = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip'
+      }
+
+      $zip = Join-Path $env:TEMP 'parla-piper.zip'
+      Note "downloading piper (about 20 MB)"
+      Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 600
+
+      if (Test-Path $piperDir) { Remove-Item $piperDir -Recurse -Force -ErrorAction SilentlyContinue }
+      # The archive already contains a top-level piper\ folder, so expand into
+      # the app folder rather than into piper\ or you get piper\piper\.
+      Expand-Archive -Path $zip -DestinationPath $PSScriptRoot -Force
+      Remove-Item $zip -Force -ErrorAction SilentlyContinue
+
+      if (-not (Test-Path $piperExe -PathType Leaf)) {
+        # Some builds nest it one deeper; find it wherever it landed.
+        $found = Get-ChildItem $PSScriptRoot -Filter 'piper.exe' -Recurse -File -ErrorAction SilentlyContinue |
+                   Select-Object -First 1
+        if ($found) { $piperExe = $found.FullName }
+      }
+      if (Test-Path $piperExe -PathType Leaf) { Ok "piper installed" }
+      else { throw "the archive did not contain piper.exe" }
+    }
+
+    # Voice models. es_ES first because the app listens in es-ES; the Mexican
+    # voice is there so Latin American Spanish is one dropdown away.
+    if (-not (Test-Path $voicesDir -PathType Container)) {
+      New-Item -ItemType Directory -Path $voicesDir -Force | Out-Null
+    }
+    $hfBase = 'https://huggingface.co/rhasspy/piper-voices/resolve/main'
+    $wanted = @(
+      @{ id = 'es_ES-davefx-medium';  path = 'es/es_ES/davefx/medium';  label = 'Spanish (Spain)'  },
+      @{ id = 'es_MX-claude-high';    path = 'es/es_MX/claude/high';    label = 'Spanish (Mexico)' }
+    )
+
+    $installed = 0
+    foreach ($v in $wanted) {
+      $onnx = Join-Path $voicesDir ($v.id + '.onnx')
+      $json = Join-Path $voicesDir ($v.id + '.onnx.json')
+      if ((Test-Path $onnx -PathType Leaf) -and (Test-Path $json -PathType Leaf)) {
+        Ok ("voice already present: " + $v.label)
+        $installed++
+        continue
+      }
+      try {
+        Note ("downloading voice: " + $v.label + " (about 60 MB)")
+        Invoke-WebRequest -Uri ("$hfBase/" + $v.path + '/' + $v.id + '.onnx') `
+          -OutFile $onnx -UseBasicParsing -TimeoutSec 900
+        Invoke-WebRequest -Uri ("$hfBase/" + $v.path + '/' + $v.id + '.onnx.json') `
+          -OutFile $json -UseBasicParsing -TimeoutSec 300
+        Ok ("voice ready: " + $v.label)
+        $installed++
+      } catch {
+        Warn ("could not download " + $v.label + ": " + $_.Exception.Message)
+        Remove-Item $onnx, $json -Force -ErrorAction SilentlyContinue
+      }
+    }
+
+    # Prove it actually speaks, rather than assuming the files are enough.
+    if ($installed -gt 0 -and (Test-Path $piperExe -PathType Leaf)) {
+      $testVoice = Get-ChildItem $voicesDir -Filter '*.onnx' -File | Select-Object -First 1
+      $inTxt = Join-Path $env:TEMP 'parla-tts-check.txt'
+      $outWav = Join-Path $env:TEMP 'parla-tts-check.wav'
+      [System.IO.File]::WriteAllText($inTxt, 'Hola, buenos dias.',
+        (New-Object System.Text.UTF8Encoding($false)))
+      Remove-Item $outWav -Force -ErrorAction SilentlyContinue
+      $p = Start-Process -FilePath $piperExe `
+             -ArgumentList @('--model', ('"' + $testVoice.FullName + '"'),
+                             '--output_file', ('"' + $outWav + '"')) `
+             -RedirectStandardInput $inTxt -NoNewWindow -Wait -PassThru
+      if ($p.ExitCode -eq 0 -and (Test-Path $outWav -PathType Leaf)) {
+        Ok "neural voice working - Parla will use it instead of the Windows voices"
+      } else {
+        Warn "piper is installed but did not produce audio; the app will use browser voices"
+      }
+      Remove-Item $inTxt, $outWav -Force -ErrorAction SilentlyContinue
+    } elseif ($installed -eq 0) {
+      Warn "no voice models installed - the app will use your browser's voices"
+    }
+  } catch {
+    Warn "Neural voice setup failed: $($_.Exception.Message)"
+    Warn "Not fatal - Parla falls back to your browser's voices. Re-run this to retry."
+  }
+}
+$ProgressPreference = $oldProgress
+
+Step 9 "Starting Parla"
 $serve = Join-Path $PSScriptRoot 'serve.ps1'
 if (-not (Test-Path $serve)) {
   Write-Host "    Could not find serve.ps1 next to this script." -ForegroundColor Red
@@ -243,6 +371,13 @@ Write-Host @"
 
   In the app: the chip in the top-right should read 'ollama' in green.
   If it reads 'ollama X' in red, go to Settings -> Test connection.
+
+  Under Settings -> Voice, the top entry should be marked [neural - best].
+  That is Piper speaking from this machine. If it is not there, re-run this
+  script - the voice download is the only part that can fail on its own.
+
+  Nothing here costs money: the model, the voice and the server all run
+  locally, and nothing you say leaves this computer.
 
   Leave this window open while you use Parla. Ctrl+C stops it.
 

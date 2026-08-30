@@ -490,29 +490,34 @@ window.PARLA = window.PARLA || {};
     voiceCard.appendChild(ui.field('Spanish voice', voiceSel));
     voiceCard.appendChild(voiceNote);
 
+    /* Neural voices from Piper come first: they are the reason the app stopped
+     * sounding like a 2009 satnav, so they should be the obvious pick. The
+     * browser's own voices stay listed underneath as the fallback. */
     PARLA.speech.onVoicesReady(function () {
-      var list = PARLA.speech.voicesFor(st.profile.target || 'es');
+      var list = PARLA.speech.allVoicesFor(st.profile.target || 'es');
       ui.clear(voiceSel);
       if (!list.length) {
         voiceSel.appendChild(el('option', { value: '' }, 'No Spanish voice found'));
         voiceNote.textContent = 'Your system has no Spanish voice installed. See the note below.';
         return;
       }
-      // Listed best-sounding first, and labelled, because the names alone
-      // ("Microsoft Helena Desktop") say nothing about how they sound.
-      var LABEL = { best: 'best', good: 'good', ok: '', basic: 'robotic' };
+      // Labelled, because the names alone ("Microsoft Helena Desktop") say
+      // nothing at all about how they sound.
+      var LABEL = { neural: 'neural — best', best: 'best', good: 'good', ok: '', basic: 'robotic' };
       list.forEach(function (v) {
-        var q = PARLA.speech.voiceQuality(v);
-        var tag = LABEL[q] ? '  [' + LABEL[q] + ']' : '';
+        var tag = LABEL[v.quality] ? '  [' + LABEL[v.quality] + ']' : '';
         voiceSel.appendChild(el('option', {
-          value: v.voiceURI,
-          selected: v.voiceURI === s.voiceURI ? true : null
-        }, v.name + ' (' + v.lang + ')' + tag));
+          value: v.id,
+          selected: v.id === s.voiceURI ? true : null
+        }, v.label + tag));
       });
-      if (!s.voiceURI) voiceSel.value = list[0].voiceURI;
-      voiceNote.textContent = PARLA.speech.voiceQuality(list[0]) === 'basic'
-        ? 'Everything installed here is an old robotic voice. Install a better one - see below.'
-        : 'Sorted best-sounding first. Picking one plays a sample.';
+      if (!s.voiceURI) voiceSel.value = list[0].id;
+      voiceNote.textContent =
+        list[0].quality === 'neural'
+          ? 'Neural voice running on this machine. No internet needed, nothing to pay.'
+          : list[0].quality === 'basic'
+            ? 'Everything installed here is an old robotic voice. See the note below.'
+            : 'Sorted best-sounding first. Picking one plays a sample.';
     });
     voiceSel.onchange = function () {
       s.voiceURI = voiceSel.value;
@@ -534,22 +539,28 @@ window.PARLA = window.PARLA || {};
       el('button', { onclick: function () { ui.say('Buenos días. ¿Qué tal estás hoy?'); } }, '🔊 Test voice'),
       el('button', {
         onclick: function () {
-          var list = PARLA.speech.voicesFor(st.profile.target || 'es');
+          var list = PARLA.speech.allVoicesFor(st.profile.target || 'es');
           if (!list.length) return;
-          s.voiceURI = list[0].voiceURI;
+          s.voiceURI = list[0].id;
           voiceSel.value = s.voiceURI;
           PARLA.store.save();
           ui.say('Hola, así sueno yo.');
         }
       }, 'Use the best available')));
 
-    voiceCard.appendChild(ui.banner('info',
-      '<strong>Voice sounding robotic?</strong> That is your operating system, not the app. ' +
-      'Chrome ships far better Spanish voices than the ones Windows installs by default — ' +
-      'they appear in this list as <code>Google español</code>. If you do not see one, open ' +
-      '<code>Settings → Time &amp; language → Speech → Manage voices</code> in Windows and add ' +
-      'Spanish; on Windows 11 pick a voice whose name contains <em>Natural</em>. ' +
-      'Restart the browser afterwards so the new voices appear here.'));
+    // Two different problems wear the same symptom, so say which one it is.
+    voiceCard.appendChild(PARLA.speech.piper.available
+      ? ui.banner('good',
+          '<strong>Neural voice installed.</strong> Speech is generated on this machine by ' +
+          'Piper — no account, no internet, no cost, and nothing you say or hear leaves the ' +
+          'computer. The browser voices below it are only a fallback.')
+      : ui.banner('info',
+          '<strong>Voice sounding robotic?</strong> The good one is not installed yet. Run ' +
+          '<code>.\\setup-windows.ps1</code> again and it will fetch Piper, a neural voice that ' +
+          'runs locally and free. Until then this list only has your operating system\'s own ' +
+          'voices; on Windows the least bad are <code>Google español</code> (from Chrome) or ' +
+          'any whose name contains <em>Natural</em>, which you can add under ' +
+          '<code>Settings → Time &amp; language → Speech</code>.'));
     main.appendChild(voiceCard);
 
     /* — practice — */

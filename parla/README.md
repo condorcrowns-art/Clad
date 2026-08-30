@@ -59,10 +59,40 @@ Every part that normally costs money has a free native equivalent:
 | Piece | Usually | Here |
 |---|---|---|
 | Speech → text | paid ASR API | `SpeechRecognition` — built into the browser |
-| Text → speech | paid TTS | `speechSynthesis` — your OS's own Spanish voices |
+| Text → speech | paid TTS | Piper — a neural voice running on your own machine |
 | AI conversation | someone's servers | Ollama on your machine, or Gemini's free tier, or no AI at all |
 | Progress storage | an account | `localStorage` — never leaves your device |
 | Hosting | App Store | a static folder |
+
+---
+
+## The voice
+
+The single biggest thing separating this from a paid app used to be how it sounded.
+Windows' built-in Spanish voices are decade-old SAPI ones — Helena, Sabina — and they
+sound like a satnav reading a receipt. So the app doesn't use them if it can help it.
+
+`setup-windows.ps1` installs **Piper**, a neural text-to-speech engine, plus two Spanish
+voices (Castilian and Mexican). It runs on your CPU, takes about 150 MB on disk, needs no
+account and no internet, and costs nothing. `serve.ps1` fronts it at `POST /tts` on the
+same origin as the page, so there is no CORS to configure and nothing to expose.
+
+Repeated phrases are cached as WAVs under `voices/cache/`, so drilling the same fifty
+words does not re-synthesise them fifty times.
+
+If Piper is missing — you skipped it, the download failed, the server isn't running — the
+app falls back to the browser's own voices silently and keeps working. Settings → **Voice**
+tells you which one you're on:
+
+| Label | What it is |
+|---|---|
+| `[neural — best]` | Piper, running locally. This is the one you want. |
+| `[best]` | Chrome's `Google español`, or a Windows 11 *Natural* voice. Decent. |
+| `[good]` / `[ok]` | Serviceable OS voices. |
+| `[robotic]` | Legacy SAPI. Only shown because something has to be. |
+
+The list prefers the accent the recogniser is listening in (`es-ES`), so both halves of the
+conversation stay in one accent rather than drifting between Madrid and Mexico City.
 
 ---
 
@@ -155,7 +185,8 @@ js/
     scenarios-es.js   23 scenarios: LLM briefing + offline script beats
     challenge-es.js   the 60-day plan
   store.js            localStorage, profile, XP, streaks, export/import
-  speech.js           Web Speech wrappers (ASR + TTS), voice selection
+  speech.js           speech in (Web Speech ASR) and out (Piper, falling back
+                      to the browser's voices), plus voice ranking
   srs.js              SM-2 spaced repetition
   brain.js            three backends behind one interface, model auto-pick,
                       JSON retry, and the offline corrector
@@ -164,7 +195,15 @@ js/
   views-drill.js      flashcard review, conjugation trainer
   views-progress.js   home, 60-day grid, stats, mistake journal, settings
   app.js              router + bootstrap
-test/harness.js       loads the plain scripts into Node for testing
+serve.ps1             dependency-free static server + the /tts endpoint
+setup-windows.ps1     one-shot installer: Ollama, a model, Piper, a voice
+piper/  voices/       downloaded by setup, git-ignored
+test/
+  harness.js          loads the plain scripts into Node for testing
+  voice-ranking.test.js   voice ordering against a real Windows voice list
+  piper-tts.test.js       neural routing, fallback, cancellation
+  mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
+  piper-browser.test.js   the whole thing in a real browser
 ```
 
 ## Adding content
@@ -182,15 +221,32 @@ Bump `CACHE` in `sw.js` whenever you change a shipped file, or browsers will ser
 
 ## Testing
 
+No dependencies for the unit tests:
+
 ```bash
+node test/voice-ranking.test.js     # which voice wins, and why
+node test/piper-tts.test.js         # neural routing, fallback, cancel semantics
+
 node -e "const{makeSandbox,load}=require('./test/harness');
   const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').PARLA.data.es;
   console.log(d.vocab.length, d.verbs.conjugate('tener','presente'));"
 ```
 
+The end-to-end test needs Playwright, and stands the `/tts` contract up without Windows:
+
+```bash
+npm i playwright
+node test/mock-tts-server.js 8765            # or: 8765 nopiper
+node test/piper-browser.test.js 8765         # or: 8765 nopiper
+```
+
+`serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
+synthesises a test phrase at the end and tells you if it failed.
+
 ## Privacy
 
 Nothing you say or save leaves your device — except your typed/spoken turns when you
-deliberately choose the Gemini backend, which sends them to Google. Built-in and Ollama send
+deliberately choose the Gemini backend, which sends them to Google. Speech synthesis is
+local too: the text is never sent anywhere to be spoken. Built-in and Ollama send
 nothing anywhere. There is no analytics, no account, and no network call the app makes on its
 own. Clearing site data wipes your progress, so use Settings → Export if you care about it.
