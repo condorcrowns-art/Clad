@@ -96,13 +96,22 @@ the same model on CPU takes 15-20 seconds per reply, which is unusable when you 
 standing there waiting to speak. The setup script detects your GPU, picks accordingly,
 then actually times a generation and tells you if it is too slow.
 
-| Your GPU VRAM | Model |
-|---|---|
-| 10 GB+ | `qwen2.5:14b` |
-| 6-10 GB | `qwen2.5:7b` |
-| 4-6 GB | `qwen2.5:3b` |
-| no GPU, 16 GB+ RAM | `qwen2.5:7b` (slow but workable) |
-| no GPU, less RAM | `qwen2.5:3b` |
+Thresholds are on **usable** VRAM. Windows holds ~1.5 GB for the desktop, and a model
+needs its weights plus context and compute buffers. If the whole thing does not fit,
+Ollama silently spills layers to the CPU and the CPU half sets the pace — measured on a
+12 GB RTX 4070, the 9 GB `qwen2.5:14b` ran at **4.1 tok/s**, i.e. CPU speed, while the
+4.7 GB `7b` fits entirely and is roughly ten times faster despite being the smaller model.
+
+| Your GPU VRAM | Model | Weights |
+|---|---|---|
+| 16 GB+ | `qwen2.5:14b` | 9.0 GB |
+| 8-16 GB | `qwen2.5:7b` | 4.7 GB |
+| 5-8 GB | `qwen2.5:3b` | 1.9 GB |
+| no GPU, 16 GB+ RAM | `qwen2.5:7b` (slow but workable) | |
+| no GPU, less RAM | `qwen2.5:3b` | |
+
+The speed check reports what fraction of the model actually landed in VRAM, so a spill is
+named rather than guessed at.
 
 Override at any time: `.\setup-windows.ps1 -Model qwen2.5:7b`
 

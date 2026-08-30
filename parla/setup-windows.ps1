@@ -130,12 +130,18 @@ if (-not $SkipOllama) {
   if ($vramGB -gt 0) { Note "GPU: $gpuName (${vramGB} GB VRAM)" }
   else               { Note "no dedicated GPU detected - will run on CPU" }
 
+  # Thresholds are on USABLE VRAM, not total. Windows holds ~1.5 GB for the
+  # desktop, and a model needs its weights PLUS context and compute buffers.
+  # If the whole thing does not fit, Ollama silently spills layers to the CPU
+  # and the CPU half sets the pace - a 12 GB card running the 9 GB 14b model
+  # measured 4.1 tok/s, which is CPU speed. Weights: 14b=9.0GB, 7b=4.7GB,
+  # 3b=1.9GB; leave roughly 3 GB of headroom above the weights.
   if (-not $Model) {
-    if     ($vramGB -ge 10) { $Model = 'qwen2.5:14b' }
-    elseif ($vramGB -ge 6)  { $Model = 'qwen2.5:7b'  }
-    elseif ($vramGB -ge 4) { $Model = 'qwen2.5:3b'  }
-    elseif ($ramGB -ge 16) { $Model = 'qwen2.5:7b'  }   # CPU: tolerable, not fast
-    else                   { $Model = 'qwen2.5:3b'  }
+    if     ($vramGB -ge 16) { $Model = 'qwen2.5:14b' }
+    elseif ($vramGB -ge 8)  { $Model = 'qwen2.5:7b'  }
+    elseif ($vramGB -ge 5)  { $Model = 'qwen2.5:3b'  }
+    elseif ($ramGB -ge 16)  { $Model = 'qwen2.5:7b'  }   # CPU: tolerable, not fast
+    else                    { $Model = 'qwen2.5:3b'  }
   }
 
   Note "choosing $Model"
@@ -166,6 +172,23 @@ if (-not $SkipOllama) {
     }
     Ok "first reply took ${secs}s"
     Note ("it said: " + $gen.response.Trim())
+
+    # /api/ps reports how much of the model is actually resident in VRAM.
+    # Anything under ~99% means layers spilled to the CPU, which is the single
+    # most common reason a capable GPU still feels slow.
+    try {
+      $ps = Invoke-RestMethod -Uri 'http://localhost:11434/api/ps' -TimeoutSec 10
+      $m  = $ps.models | Where-Object { $_.name -eq $Model } | Select-Object -First 1
+      if ($m -and $m.size -gt 0) {
+        $pct = [math]::Round(100 * $m.size_vram / $m.size)
+        if ($pct -ge 99) {
+          Ok "fully on the GPU (${pct}% of the model in VRAM)"
+        } else {
+          Warn "only ${pct}% of the model fits in VRAM - the rest runs on your CPU"
+          Warn "That spill is why it is slow, not the model being 'big'."
+        }
+      }
+    } catch { }
 
     # A typical Parla reply is ~40 tokens, so this timing is representative.
     if ($secs -gt 12) {
