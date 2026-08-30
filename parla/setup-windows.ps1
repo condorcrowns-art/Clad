@@ -166,11 +166,24 @@ if (-not $SkipOllama) {
     $sw.Stop()
 
     $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+
+    # The first call also loads the model from disk, which can dominate the
+    # wall clock and has nothing to do with conversation speed - keep_alive
+    # keeps the model resident, so only the very first turn ever pays it.
+    # Ollama reports the split, so judge on the warm number, not the total.
+    $loadSecs = 0
+    $warmSecs = $secs
+    if ($gen.load_duration -and $gen.total_duration) {
+      $loadSecs = [math]::Round($gen.load_duration / 1e9, 1)
+      $warmSecs = [math]::Round(($gen.total_duration - $gen.load_duration) / 1e9, 1)
+    }
+
     if ($gen.eval_count -and $gen.eval_duration) {
       $tps = [math]::Round($gen.eval_count / ($gen.eval_duration / 1e9), 1)
       Note "$tps tokens/sec"
     }
-    Ok "first reply took ${secs}s"
+    Ok "first reply took ${secs}s (${loadSecs}s of that was loading the model)"
+    Ok "every later reply: about ${warmSecs}s - the model stays loaded"
     Note ("it said: " + $gen.response.Trim())
 
     # /api/ps reports how much of the model is actually resident in VRAM.
@@ -191,6 +204,9 @@ if (-not $SkipOllama) {
     } catch { }
 
     # A typical Parla reply is ~40 tokens, so this timing is representative.
+    # Judged on the warm number: a slow disk can add seconds to the first load
+    # without saying anything about how the conversation will feel.
+    $secs = $warmSecs
     if ($secs -gt 12) {
       Warn "That is slow enough to be annoying in conversation."
       Warn "Drop to a smaller model with:  .\setup-windows.ps1 -Model qwen2.5:7b"
