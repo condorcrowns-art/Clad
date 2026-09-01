@@ -54,6 +54,13 @@ window.PARLA = window.PARLA || {};
           corrections: 0, reviews: 0, conjugations: 0
         }
       },
+      // What the partner knows about you, carried between sessions. Telling it
+      // your name on Monday and being asked again on Tuesday is the fastest way
+      // to make a conversation partner feel like a machine.
+      memory: {
+        name: '',             // extracted deterministically, so it survives model failures
+        facts: []             // short English statements: "They are from Chicago"
+      },
       srs: {},                // word -> { ease, interval, due, reps, lapses }
       mistakes: [],           // { es, fix, note, when, scenario }
       history: []             // { when, scenarioId, turns, xp }
@@ -108,6 +115,67 @@ window.PARLA = window.PARLA || {};
     }
   }
 
+  /* Facts are short English sentences the partner wrote about you. Kept few and
+   * recent: a long list crowds the prompt and small models start ignoring all
+   * of it. Newest wins on a near-duplicate, so "They live in Chicago" replaces
+   * an older "They are from Chicago" instead of stacking beside it. */
+  var MAX_FACTS = 14;
+
+  /* The thing a fact is ABOUT, when it is about one thing: "their name",
+   * "their job". Used to recognise a revision rather than a new fact.
+   *
+   * A first attempt compared the first three words, which quietly merged
+   * "They like the beach" into "They like the mountains" and lost one of them.
+   * So the subject has to be a named attribute - a bare pronoun ("they are...")
+   * is far too broad to treat two statements as the same one.
+   */
+  function factSubject(normalised) {
+    var m = String(normalised || '').match(/^(.+?)\s+(?:is|are|was|were|lives|live|works|work)\b/);
+    if (!m) return '';
+    var subject = m[1].trim();
+    return subject.split(' ').length >= 2 ? subject : '';
+  }
+
+
+  function remember(facts) {
+    if (!facts || !facts.length) return false;
+    var mem = state.memory || (state.memory = { name: '', facts: [] });
+    var changed = false;
+
+    facts.forEach(function (f) {
+      var text = String(f || '').trim().replace(/\s+/g, ' ');
+      if (!text || text.length > 120) return;
+      var key = text.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+      var subject = factSubject(key);
+      var dup = mem.facts.filter(function (existing) {
+        var k = String(existing.text || '').toLowerCase().replace(/[^a-z0-9 ]/g, '');
+        if (k === key) return true;
+        // Same subject, new value: "their name is x" becomes "their name is y".
+        return subject && factSubject(k) === subject;
+      })[0];
+      if (dup) {
+        if (dup.text === text) return;
+        dup.text = text;
+        dup.when = Date.now();
+      } else {
+        mem.facts.push({ text: text, when: Date.now() });
+      }
+      changed = true;
+    });
+
+    if (mem.facts.length > MAX_FACTS) {
+      mem.facts.sort(function (a, b) { return (b.when || 0) - (a.when || 0); });
+      mem.facts = mem.facts.slice(0, MAX_FACTS);
+    }
+    if (changed) save();
+    return changed;
+  }
+
+  function forgetAll() {
+    state.memory = { name: '', facts: [] };
+    save();
+  }
+
   /* Record that a practice session happened today: streak + XP bookkeeping. */
   function creditDay(xp) {
     var p = state.progress;
@@ -145,6 +213,8 @@ window.PARLA = window.PARLA || {};
     get state() { return state; },
     today: today,
     creditDay: creditDay,
+    remember: remember,
+    forgetAll: forgetAll,
     level: level,
     levelProgress: levelProgress,
     reset: function () { state = defaults(); save(); },

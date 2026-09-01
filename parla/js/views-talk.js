@@ -300,7 +300,7 @@ window.PARLA = window.PARLA || {};
           partial = t;
           if (!errored) micLabel.textContent = t || 'Listening…';
         },
-        onfinal: function (t, conf) { submit(t, conf); },
+        onfinal: function (t, conf, alts) { submit(t, conf, alts); },
         onerror: function (kind) {
           errored = true;
           if (kind === 'not-allowed' || kind === 'service-not-allowed') {
@@ -331,9 +331,39 @@ window.PARLA = window.PARLA || {};
       }, 500);
     }
 
+    /* The words this person is currently failing to retain, so the partner can
+     * put them in front of them in a real sentence. Conversation is a better
+     * drill than a flashcard, and the deck already knows what is not sticking. */
+    function weakWords() {
+      var deck = st.srs || {};
+      var vocab = (PARLA.data[st.profile.target || 'es'] || {}).vocab || [];
+      var now = Date.now();
+      var scored = [];
+
+      vocab.forEach(function (row) {
+        var card = deck[row[0]];
+        if (!card) return;                       // never seen it: not weak, just new
+        var lapses = card.lapses || 0;
+        var overdue = card.due ? (now - card.due) / 86400000 : 0;
+        if (lapses === 0 && overdue < 1) return; // sticking fine, leave it alone
+        scored.push({ es: row[0], score: lapses * 3 + Math.min(overdue, 10) });
+      });
+
+      scored.sort(function (a, b) { return b.score - a.score; });
+      return scored.slice(0, 6).map(function (x) { return x.es; });
+    }
+
+    /* Their own recurring errors. Corrections they were given and evidently did
+     * not absorb are worth catching again rather than letting slide. */
+    function recentMistakes() {
+      return (st.mistakes || []).slice(0, 4).map(function (m) {
+        return m.fix ? (m.es + '  ->  ' + m.fix) : m.es;
+      }).filter(Boolean);
+    }
+
     /* ── the turn ── */
 
-    function submit(text, confidence) {
+    function submit(text, confidence, alternatives) {
       text = (text || '').trim();
       if (!text || session.ended) return;
       if (listenHandle) { listenHandle.abort(); listenHandle = null; }
@@ -343,6 +373,14 @@ window.PARLA = window.PARLA || {};
       setMic('thinking', 'Thinking…');
       var thinking = addThinking();
 
+      // A name is worth catching ourselves rather than trusting the model to,
+      // since it is the one fact whose absence makes the partner feel broken.
+      var spokenName = PARLA.brain.extractName(text);
+      if (spokenName && st.memory.name !== spokenName) {
+        st.memory.name = spokenName;
+        PARLA.store.save();
+      }
+
       PARLA.brain.reply({
         scenario: sc,
         history: session.history.slice(0, -1),
@@ -350,6 +388,12 @@ window.PARLA = window.PARLA || {};
         // How much the recogniser trusted its own transcript, so the partner
         // can ask instead of confidently answering something never said.
         confidence: confidence || 0,
+        alternatives: alternatives || [],
+        // Carried between sessions: who this person is, what they keep getting
+        // wrong, and which words they are currently failing to retain.
+        memory: st.memory,
+        targetWords: weakWords(),
+        pastMistakes: recentMistakes(),
         settings: Object.assign({}, st.settings, { level: st.profile.level }),
         scriptState: session.scriptState
       }).then(function (out) {
@@ -372,6 +416,9 @@ window.PARLA = window.PARLA || {};
         // Being asked to repeat yourself is not a turn of conversation, so it
         // must not earn XP or tick off a challenge day.
         if (out.askedToRepeat) session.turns = Math.max(0, session.turns - 1);
+
+        // Anything it learned about this person outlives the session.
+        if (out.remember && out.remember.length) PARLA.store.remember(out.remember);
 
         if (session.turns >= minTurns && !session.hinted) {
           session.hinted = true;

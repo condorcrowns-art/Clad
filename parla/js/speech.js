@@ -421,6 +421,10 @@ window.PARLA = window.PARLA || {};
     var sessionFinal = '';   // finals from the current one
     var interim = '';
     var scores = [];
+    // The engine's runner-up guesses. When it is unsure, one of these is often
+    // the sentence the person actually said, and the partner has the context to
+    // work out which - so they are passed along rather than thrown away.
+    var alts = [];
     var heard = false;
 
     var settled = false;     // callbacks already delivered
@@ -443,6 +447,17 @@ window.PARLA = window.PARLA || {};
       return sum / scores.length;
     }
 
+    /* The whole-sentence alternatives, best first, with the winner at [0].
+     * Only meaningful for a single-result utterance - stitching every
+     * combination across several results would be noise, not options. */
+    function alternatives(chosen) {
+      var out = [chosen];
+      alts.forEach(function (a) {
+        if (a && out.indexOf(a) === -1) out.push(a);
+      });
+      return out.slice(0, 3);
+    }
+
     function clearTimers() {
       if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
       if (hardTimer) { clearTimeout(hardTimer); hardTimer = null; }
@@ -454,7 +469,7 @@ window.PARLA = window.PARLA || {};
       clearTimers();
       if (killed) return;
       var t = fullText();
-      if (t && opts.onfinal) opts.onfinal(t, confidence());
+      if (t && opts.onfinal) opts.onfinal(t, confidence(), alternatives(t));
       if (opts.onend) opts.onend();
     }
 
@@ -483,11 +498,19 @@ window.PARLA = window.PARLA || {};
         // every result of this session, and a result can stop being interim.
         var fin = '', itm = '';
         scores = [];
+        alts = [];
         for (var i = 0; i < e.results.length; i++) {
-          var r0 = e.results[i][0];
-          if (e.results[i].isFinal) {
+          var res = e.results[i];
+          var r0 = res[0];
+          if (res.isFinal) {
             fin += r0.transcript + ' ';
             if (typeof r0.confidence === 'number' && r0.confidence > 0) scores.push(r0.confidence);
+            // Only one final result: its alternatives describe the whole thing.
+            if (e.results.length === 1 && !committed) {
+              for (var j = 1; j < res.length; j++) {
+                if (res[j] && res[j].transcript) alts.push(res[j].transcript.trim());
+              }
+            }
           } else {
             itm += r0.transcript + ' ';
           }

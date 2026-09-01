@@ -563,6 +563,42 @@ window.PARLA = window.PARLA || {};
           '<code>Settings → Time &amp; language → Speech</code>.'));
     main.appendChild(voiceCard);
 
+    /* — what it remembers — */
+    main.appendChild(ui.sectionTitle('What your partner remembers'));
+    var memCard = el('div.card');
+
+    function drawMemory() {
+      ui.clear(memCard);
+      var mem = st.memory || { name: '', facts: [] };
+      var lines = [];
+      if (mem.name) lines.push('Your name is ' + mem.name + '.');
+      (mem.facts || []).forEach(function (f) { if (f && f.text) lines.push(f.text); });
+
+      if (!lines.length) {
+        memCard.appendChild(el('div.hint',
+          'Nothing yet. Tell your partner about yourself while you talk — your name, ' +
+          'where you live, what you do — and it will still know next time you open the app.'));
+      } else {
+        memCard.appendChild(el('div.hint',
+          'Carried into every conversation, so you are not introducing yourself twice a week.'));
+        var list = el('ul', { style: { margin: '8px 0 0', paddingLeft: '18px' } });
+        lines.forEach(function (t) {
+          list.appendChild(el('li', { style: { fontSize: '.86rem', marginBottom: '3px' } }, t));
+        });
+        memCard.appendChild(list);
+        memCard.appendChild(el('div.btn-row', { style: { marginTop: '10px' } },
+          el('button', { onclick: function () {
+            PARLA.store.forgetAll();
+            drawMemory();
+            ui.toast('Forgotten. Your partner starts fresh.', 'good');
+          } }, 'Forget everything')));
+      }
+      memCard.appendChild(el('div.hint', { style: { marginTop: '8px' } },
+        'This never leaves your machine — it lives in this browser alongside your progress.'));
+    }
+    drawMemory();
+    main.appendChild(memCard);
+
     /* — practice — */
     main.appendChild(ui.sectionTitle('Practice'));
     var pause = el('input', { type: 'range', min: '800', max: '4000', step: '200',

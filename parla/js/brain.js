@@ -227,6 +227,14 @@ window.PARLA = window.PARLA || {};
                  'answering something they did not say.');
     }
 
+    // When the recogniser was unsure, its runner-up guesses are often the right
+    // one - and the model has the context to tell which sentence makes sense.
+    if (lowConfidence && ctx.alternatives && ctx.alternatives.length > 1) {
+      notes.push('The recogniser also considered: "' +
+                 ctx.alternatives.slice(1, 3).join('", "') +
+                 '". If one of those fits the conversation better, answer that instead.');
+    }
+
     // Small models re-ask the same question for several turns running.
     var mine = (ctx.history || []).filter(function (m) { return m.role === 'partner'; })
                                   .slice(-3).map(function (m) { return m.text; });
@@ -235,7 +243,63 @@ window.PARLA = window.PARLA || {};
                  'again:\n- ' + mine.join('\n- '));
     }
 
+    // Conversation is the best drill there is, so point it at the words this
+    // person keeps forgetting instead of whatever the model felt like saying.
+    var targets = (ctx.targetWords || []).slice(0, 6).filter(Boolean);
+    if (targets.length) {
+      notes.push('They are currently weak on these words. Work one or two in where it ' +
+                 'fits naturally - never all of them, and never in a list: ' +
+                 targets.join(', '));
+    }
+
+    // Their own recurring errors, so a repeat offence gets caught rather than
+    // waved through as "close enough".
+    var watch = (ctx.pastMistakes || []).slice(0, 4).filter(Boolean);
+    if (watch.length) {
+      notes.push('They have made these mistakes before. If one happens again, correct it ' +
+                 'even if you would normally let it go:\n- ' + watch.join('\n- '));
+    }
+
     return notes.length ? '\n\nTHIS TURN\n' + notes.join('\n') : '';
+  }
+
+  /* Pull a name out of the learner's own words. The model is asked to do this
+   * too, but a name is the one fact worth having even when there is no model
+   * running, or when the model returns something unparseable. */
+  var NAME_PATTERNS = [
+    /\bme llamo\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ'-]{1,20})/i,
+    /\bmi nombre es\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ'-]{1,20})/i,
+    /\b[Ss]oy\s+([A-ZÀ-Ý][a-zA-ZÀ-ÿ'-]{1,20})\b/  // the NAME must be capitalised: "soy alto" is not one
+  ];
+  // Words that follow "soy" far more often than any name does.
+  var NOT_NAMES = /^(de|un|una|el|la|muy|mas|bien|mal|alto|bajo|joven|viejo|nuevo|americano|americana|ingles|inglesa|estudiante|profesor|profesora|feliz|triste|cansado|cansada)$/i;
+
+  function extractName(text) {
+    var t = String(text || '').trim();
+    for (var i = 0; i < NAME_PATTERNS.length; i++) {
+      var m = t.match(NAME_PATTERNS[i]);
+      if (m && m[1] && !NOT_NAMES.test(m[1])) {
+        return m[1].charAt(0).toUpperCase() + m[1].slice(1);
+      }
+    }
+    return '';
+  }
+
+  /* What the partner already knows about this person, from earlier sessions.
+   * Kept short on purpose: a wall of remembered trivia crowds out the rules
+   * above it, and small models start ignoring the lot. */
+  function knownBlock(ctx) {
+    var mem = ctx.memory || {};
+    var lines = [];
+    if (mem.name) lines.push('Their name is ' + mem.name + '.');
+    (mem.facts || []).slice(0, 8).forEach(function (f) {
+      var t = typeof f === 'string' ? f : (f && f.text);
+      if (t && lines.indexOf(t) === -1) lines.push(t);
+    });
+    if (!lines.length) return '';
+    return '\nYOU ALREADY KNOW THIS ABOUT THEM, from talking before:\n- ' +
+           lines.join('\n- ') +
+           '\nUse it. Greet them by name if you have one. Do not ask for any of it again.';
   }
 
   function systemPrompt(ctx) {
@@ -289,10 +353,15 @@ window.PARLA = window.PARLA || {};
       '  assuming everything.',
       '',
       'REMEMBER WHAT THEY TOLD YOU',
-      'Everything they have already said in this conversation is true and yours',
-      'to use: their name, their order, what they like, where they are from. Use',
-      'it naturally. Never ask twice for something they already told you, and',
-      'never contradict it.',
+      'Everything they have already said is true and yours to use: their name,',
+      'their order, what they like, where they are from. Use it naturally. Never',
+      'ask twice for something they already told you, and never contradict it.',
+      knownBlock(ctx),
+      '',
+      'If they tell you something worth remembering for next time - their name,',
+      'where they live, their job, what they like or hate - put it in "remember"',
+      'as a short English sentence: ["Their name is Ana", "They hate coffee"].',
+      'Only things THEY said. Leave it empty otherwise. Never guess.',
       '',
       'THEIR GOAL IN THIS SCENE: ' + ((sc.goals || []).join('; ') || 'just talk'),
       'Steer toward that goal without announcing it.',
@@ -306,24 +375,24 @@ window.PARLA = window.PARLA || {};
       'OUTPUT',
       'Return ONLY a JSON object. No prose, no markdown fence, no commentary.',
       '{"reply_es": string, "reply_en": string, "asked_to_repeat": boolean,',
-      ' "correction": null | {"original": string, "fixed": string, "note": string}}',
+      ' "remember": string[], "correction": null | {"original": string, "fixed": string, "note": string}}',
       '"asked_to_repeat" is true when your reply is you asking them to supply or',
       'repeat something you did not get. Otherwise false.',
       '',
       'EXAMPLES OF THE SHAPE (not of this scene):',
       '{"reply_es":"!Pues claro! ?Y para beber algo?","reply_en":"Of course! And something to drink?",' +
-        '"asked_to_repeat":false,"correction":null}',
+        '"asked_to_repeat":false,"remember":[],"correction":null}',
       // The failure this rule exists for: an unfinished sentence must not be
       // silently accepted as a complete one.
       'They said "Me llamo" and nothing more:',
       '{"reply_es":"Perdona, no te he oido. ?Como te llamas?","reply_en":"Sorry, I didn\'t catch that. What\'s your name?",' +
-        '"asked_to_repeat":true,"correction":null}',
+        '"asked_to_repeat":true,"remember":[],"correction":null}',
       'They said "Quiero un" and nothing more:',
       '{"reply_es":"?Un que? Tenemos cafe, te y zumo.","reply_en":"A what? We have coffee, tea and juice.",' +
-        '"asked_to_repeat":true,"correction":null}',
+        '"asked_to_repeat":true,"remember":[],"correction":null}',
       'They made a real mistake but were clear:',
       '{"reply_es":"Vale, marchando. ?Algo mas?","reply_en":"Okay, coming up. Anything else?",' +
-        '"asked_to_repeat":false,' +
+        '"asked_to_repeat":false,"remember":[],' +
         '"correction":{"original":"Yo quiero un cafe y soy cansado","fixed":"Quiero un cafe y estoy cansado",' +
         '"note":"Tiredness is a temporary state, so it takes estar, not ser."}}'
     ].join('\n');
@@ -356,10 +425,21 @@ window.PARLA = window.PARLA || {};
     var asked = obj.asked_to_repeat === true;
     if (asked) corr = null;
 
+    // Only keep facts that look like facts. A model asked for an array will
+    // sometimes hand back a sentence, an object, or its own reply again.
+    var remember = [];
+    if (Array.isArray(obj.remember)) {
+      remember = obj.remember
+        .map(function (f) { return typeof f === 'string' ? f.trim() : ''; })
+        .filter(function (f) { return f && f.length <= 120; })
+        .slice(0, 4);
+    }
+
     return {
       es: obj.reply_es || obj.es || '',
       en: obj.reply_en || obj.en || '',
       askedToRepeat: asked,
+      remember: remember,
       correction: corr ? {
         original: corr.original || original || '',
         fixed: corr.fixed || '',
@@ -640,6 +720,7 @@ window.PARLA = window.PARLA || {};
     _scripted: scriptedReply,
     _parseLLM: parseLLM,
     _systemPrompt: systemPrompt,
-    _turnNotes: turnNotes
+    _turnNotes: turnNotes,
+    extractName: extractName
   };
 })();
