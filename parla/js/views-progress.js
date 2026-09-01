@@ -551,6 +551,83 @@ window.PARLA = window.PARLA || {};
     voiceCard.appendChild(ui.field('Speaking speed', el('div', rate, rateOut),
       'Slower is easier to follow. 0.9 is a good place to start.'));
 
+    /* — casting —
+     * Which installed voice plays women and which plays men. The app cannot
+     * hear its own voices, and Piper's model cards do not record a speaker's
+     * gender, so this is asked rather than guessed. Two taps, once. */
+    var castCard = el('div.card');
+    function drawCast() {
+      ui.clear(castCard);
+      var voices = PARLA.speech.piper.available
+        ? PARLA.speech.piperVoicesFor(st.profile.target || 'es') : [];
+
+      if (!voices.length) {
+        castCard.appendChild(el('div.hint',
+          'Casting needs the neural voices. Run setup again to install them.'));
+        return;
+      }
+
+      castCard.appendChild(el('div.hint',
+        'Your partner is a different person in every scenario — Marta the barista, ' +
+        'Javi at the party. Tell Parla which of your installed voices sounds like ' +
+        'a woman and which sounds like a man, and it will cast them accordingly. ' +
+        'Press play to hear each one.'));
+
+      [['f', 'Women'], ['m', 'Men']].forEach(function (pair) {
+        var key = pair[0];
+        var sel = el('select');
+        sel.appendChild(el('option', { value: '' }, 'No preference'));
+        voices.forEach(function (v) {
+          sel.appendChild(el('option', {
+            value: v.id,
+            selected: st.settings.voiceRoles[key] === v.id ? true : null
+          }, v.name.charAt(0).toUpperCase() + v.name.slice(1) +
+             ' (' + String(v.locale || '').replace('_', '-') + ')'));
+        });
+        sel.onchange = function () {
+          st.settings.voiceRoles[key] = sel.value;
+          PARLA.store.save();
+          PARLA.speech.speak(
+            key === 'f' ? 'Hola, soy yo. ¿Te suena bien mi voz?'
+                        : 'Hola, ¿qué tal? Soy yo el que habla.',
+            { lang: 'es', voiceRoles: st.settings.voiceRoles,
+              pitchScale: st.settings.voicePitch, rate: st.settings.rate,
+              character: { gender: key, age: 'adult' } });
+        };
+        castCard.appendChild(ui.field(pair[1] + ' sound like', sel));
+      });
+
+      castCard.appendChild(el('div.hint',
+        'If only one voice fits, leave the other on “No preference” — Parla will ' +
+        'shift the pitch instead. Not perfect, but better than everyone sounding ' +
+        'like the same person.'));
+    }
+    drawCast();
+
+    var pitch = el('input', { type: 'range', min: '0.85', max: '1.2', step: '0.01',
+                              value: String(st.settings.voicePitch || 1) });
+    var pitchOut = el('span.small.muted', pitchLabel(st.settings.voicePitch || 1));
+    function pitchLabel(v) {
+      if (v >= 1.09) return 'younger';
+      if (v >= 1.03) return 'a bit younger';
+      if (v <= 0.91) return 'older';
+      if (v <= 0.97) return 'a bit older';
+      return 'as recorded';
+    }
+    pitch.oninput = function () {
+      st.settings.voicePitch = parseFloat(pitch.value);
+      pitchOut.textContent = pitchLabel(st.settings.voicePitch);
+    };
+    pitch.onchange = function () {
+      PARLA.store.save();
+      ui.say('Así sueno con esta edad de voz.', null, { gender: '', age: 'adult' });
+    };
+    castCard.appendChild(ui.field('Voice age', el('div', pitch, pitchOut),
+      'Shifts every voice up or down. Each character still sits younger or older ' +
+      'than the others within that — a student sounds younger than a doctor either way.'));
+
+    voiceCard.appendChild(el('div.hint', { style: { marginTop: '10px' } }, ''));
+
     voiceCard.appendChild(el('div.btn-row',
       el('button', { onclick: function () { ui.say('Buenos días. ¿Qué tal estás hoy?'); } }, '🔊 Test voice'),
       el('button', {
@@ -578,6 +655,7 @@ window.PARLA = window.PARLA || {};
           'any whose name contains <em>Natural</em>, which you can add under ' +
           '<code>Settings → Time &amp; language → Speech</code>.'));
     main.appendChild(voiceCard);
+    main.appendChild(castCard);
 
     /* — what it remembers — */
     main.appendChild(ui.sectionTitle('What your partner remembers'));

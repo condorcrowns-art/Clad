@@ -172,14 +172,16 @@ window.PARLA = window.PARLA || {};
         el('div.body.es', es),
         st.settings.showTranslations && en ? el('div.trans', en) : null,
         el('div.tools',
-          el('button', { onclick: function () { ui.say(es); } }, '🔊 Again'),
-          el('button', { onclick: function () { ui.say(es); } , title: 'Repeat slowly'}, '🐢')
+          el('button', { onclick: function () { ui.say(es, null, sc.voice); } }, '🔊 Again'),
+          el('button', { onclick: function () { ui.say(es, null, sc.voice); } , title: 'Repeat slowly'}, '🐢')
         )
       );
       // The slow button re-speaks at a reduced rate.
       b.querySelector('.tools').lastChild.onclick = function () {
         PARLA.speech.speak(es, {
           lang: 'es', voiceURI: st.settings.voiceURI,
+          voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch,
+          character: sc.voice,
           rate: Math.max(0.5, (st.settings.rate || 0.9) - 0.3)
         });
       };
@@ -187,7 +189,7 @@ window.PARLA = window.PARLA || {};
       scrollDown();
 
       session.history.push({ role: 'partner', text: es });
-      if (autoSpeak !== false) ui.say(es, maybeAutoListen);
+      if (autoSpeak !== false) ui.say(es, maybeAutoListen, sc.voice);
     }
 
     function addUser(text) {
@@ -216,6 +218,30 @@ window.PARLA = window.PARLA || {};
       session.history.push({ role: 'user', text: text });
       session.turns++;
       session.words += PARLA.brain.words(text).length;
+    }
+
+    /* "Here is how you say what you just said." Distinct from a correction:
+     * a correction fixes Spanish they attempted, this supplies Spanish they
+     * did not have. Same card shape so it reads as part of the same thread. */
+    function addSayThis(s2) {
+      var card = el('div.correction.say-this',
+        el('div.lead', 'Say it like this'),
+        el('div.now.es', s2.es),
+        s2.en ? el('div.note', s2.en) : null,
+        el('div.btn-row', { style: { marginTop: '6px' } },
+          el('button', { style: { padding: '3px 9px', fontSize: '.75rem' },
+            onclick: function () { ui.say(s2.es, null, sc.voice); } }, '🔊 Hear it'),
+          el('button', { style: { padding: '3px 9px', fontSize: '.75rem' },
+            onclick: function () {
+              typeInput.value = s2.es;
+              typeInput.focus();
+              typeInput.setSelectionRange(s2.es.length, s2.es.length);
+            } }, 'Try saying it'))
+      );
+      thread.appendChild(card);
+      // It is a phrase they clearly could not produce, so it belongs in the deck.
+      if (PARLA.store.rememberPhrase) PARLA.store.rememberPhrase(s2.es, s2.en);
+      scrollDown();
     }
 
     function addCorrection(c) {
@@ -404,7 +430,7 @@ window.PARLA = window.PARLA || {};
           var row = el('div.help-opt',
             el('button.help-say', { title: 'Hear it', onclick: function (e) {
               e.stopPropagation();
-              ui.say(o.es);
+              ui.say(o.es, null, sc.voice);
             } }, '🔊'),
             el('div.help-text',
               el('div.es', o.es),
@@ -472,6 +498,11 @@ window.PARLA = window.PARLA || {};
             'scripted partner. Practice continues either way. <br><span class="small">' +
             (out.error || '') + '</span>'));
         }
+
+        // They reached for something and had to use English to get there. Hand
+        // them the Spanish before the partner's reply, so it reads as the thing
+        // they should have said rather than an afterthought.
+        if (out.sayThis && out.sayThis.es) addSayThis(out.sayThis);
 
         addPartner(out.es, out.en, out.correction);
 

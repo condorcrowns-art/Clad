@@ -145,6 +145,21 @@ window.PARLA = window.PARLA || {};
     var cut = cutOffReply(ctx.text);
     if (cut) return cut;
 
+    // English, with no model to translate it. Answering as though it were
+    // Spanish would be a lie; the honest move is to hand them the phrases this
+    // scene actually needs and let them try again.
+    if (detectLanguage(ctx.text) === 'en') {
+      var phrase = (sc.phrases || [])[0];
+      return {
+        es: 'Perdona, en espanol si puedes. ' + (phrase ? 'Prueba: "' + phrase + '".' : ''),
+        en: 'Sorry, in Spanish if you can. ' + (phrase ? 'Try: "' + phrase + '".' : ''),
+        askedToRepeat: true,
+        sayThis: phrase ? { es: phrase, en: '' } : null,
+        correction: null,
+        source: 'scripted'
+      };
+    }
+
     var script = sc.script || [];
     var said = normalise(ctx.text);
     var saidWords = words(ctx.text);
@@ -218,6 +233,12 @@ window.PARLA = window.PARLA || {};
     var DANGLING = /\b(me llamo|se llama|quiero|quiero un|quiero una|necesito|voy a|tengo|soy|estoy|hay|es|un|una|el|la|los|las|de|con|para|por|mi|tu|y|o|que|muy|mas)$/i;
     var lowConfidence = ctx.confidence > 0 && ctx.confidence < 0.6;
 
+    if (detectLanguage(t) === 'en') {
+      notes.push('THEY ANSWERED IN ENGLISH. Stay in character, reply in Spanish, and ' +
+                 'put the Spanish they were reaching for in "say_this" so they can read ' +
+                 'it out loud. Do not comment on the fact that they used English.');
+    }
+
     if (DANGLING.test(t.replace(/[.,!?¿¡]+$/, ''))) {
       notes.push('WARNING: their sentence ends on a word that needs something after it. ' +
                  'It was almost certainly cut off. Do NOT guess the missing part - ask for it.');
@@ -261,6 +282,51 @@ window.PARLA = window.PARLA || {};
     }
 
     return notes.length ? '\n\nTHIS TURN\n' + notes.join('\n') : '';
+  }
+
+  /* ── Which language did they just speak? ──────────────────
+   *
+   * A learner who falls back to English has not failed, they have hit a wall
+   * and told you exactly where it is. That is the single most useful moment in
+   * a lesson, and it was being thrown away: the old rule was "answer in
+   * Spanish anyway and pull them back gently", which leaves them still not
+   * knowing how to say the thing they wanted to say.
+   *
+   * Counting function words is crude, but function words are what a learner
+   * cannot avoid using, and it needs no model - so the offline partner catches
+   * it too.
+   */
+  var EN_WORDS = /\b(the|and|is|are|was|were|am|be|been|i|you|he|she|it|we|they|to|of|in|on|at|for|with|from|what|how|why|when|where|who|do|does|did|can|could|would|should|will|my|your|his|her|our|their|this|that|these|those|there|here|not|dont|cant|want|wanted|need|needed|like|liked|have|has|had|about|because|but|if|so|just|really|very|please|sorry|thanks|thank|yes|no|okay|ok)\b/g;
+
+  var ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|de|del|al|que|y|o|es|son|soy|eres|somos|estoy|esta|estas|estan|estamos|no|si|por|para|con|sin|me|te|se|nos|le|les|mi|tu|su|sus|mis|tus|como|donde|cuando|cuanto|quien|quiero|quieres|quiere|necesito|tengo|tiene|hay|muy|mas|menos|pero|porque|tambien|gracias|hola|adios|bien|mal|aqui|alli|ahora|hoy|manana|ayer|puedo|puede|voy|vas|va|hacer|ser|estar|senor|senora|favor|vale|pues|claro)\b/g;
+
+  function countMatches(text, re) {
+    re.lastIndex = 0;
+    var n = 0;
+    while (re.exec(text) !== null) n++;
+    return n;
+  }
+
+  /* 'en', 'es', or '' when it is too short or too mixed to call. */
+  function detectLanguage(text) {
+    var t = normalise(text);
+    if (!t) return '';
+    var en = countMatches(t, EN_WORDS);
+    var es = countMatches(t, ES_WORDS);
+
+    // Spanish-only letters settle it outright: no English word has them.
+    if (/[ñáéíóúü¿¡]/i.test(String(text))) return 'es';
+
+    if (en >= 2 && en > es) return 'en';
+    if (es >= 2 && es > en) return 'es';
+
+    // Very short utterances: one unmistakable marker is enough either way.
+    var words = t.split(/\s+/).filter(Boolean);
+    if (words.length <= 4) {
+      if (en >= 1 && es === 0) return 'en';
+      if (es >= 1 && en === 0) return 'es';
+    }
+    return '';
   }
 
   /* Pull a name out of the learner's own words. The model is asked to do this
@@ -332,7 +398,18 @@ window.PARLA = window.PARLA || {};
       '- Hand the turn back: ask something, offer something, or react with an',
       '  opinion. Never reply with bare acknowledgement like "Muy bien." and stop.',
       '- Never explain grammar inside your spoken reply. Never write English there.',
-      '- If they speak English, answer in Spanish anyway and pull them back gently.',
+      '',
+      'WHEN THEY ANSWER IN ENGLISH',
+      'They have not failed - they have shown you the exact sentence they cannot',
+      'say yet. That is the most useful thing that happens in a lesson.',
+      '- Stay in character and keep replying in Spanish.',
+      '- Never scold them. Never switch to English yourself. Never break the',
+      '  scene to teach - the lesson goes in "say_this", not in your reply.',
+      '- Put the Spanish they were reaching for in "say_this": what THEY were',
+      '  trying to say, at their level, ready to read out loud. Not your reply.',
+      '- Then answer as though they had said it, so the scene keeps moving.',
+      '- If they only threw in one English word, give them the whole sentence',
+      '  in Spanish anyway - the word alone is no use without the sentence.',
       '',
       'UNDERSTAND BEFORE YOU ANSWER  --  this is the most important rule.',
       'Their words reach you through speech recognition, so sentences arrive cut',
@@ -375,7 +452,10 @@ window.PARLA = window.PARLA || {};
       'OUTPUT',
       'Return ONLY a JSON object. No prose, no markdown fence, no commentary.',
       '{"reply_es": string, "reply_en": string, "asked_to_repeat": boolean,',
-      ' "remember": string[], "correction": null | {"original": string, "fixed": string, "note": string}}',
+      ' "remember": string[], "say_this": null | {"es": string, "en": string},',
+      ' "correction": null | {"original": string, "fixed": string, "note": string}}',
+      '"say_this" is ONLY for when they spoke English: the Spanish they wanted.',
+      'Leave it null every other turn.',
       '"asked_to_repeat" is true when your reply is you asking them to supply or',
       'repeat something you did not get. Otherwise false.',
       '',
@@ -384,6 +464,11 @@ window.PARLA = window.PARLA || {};
         '"asked_to_repeat":false,"remember":[],"correction":null}',
       // The failure this rule exists for: an unfinished sentence must not be
       // silently accepted as a complete one.
+      'They answered in English - "I would like a coffee please":',
+      '{"reply_es":"Marchando. ?Solo o con leche?","reply_en":"Coming up. Black or with milk?",' +
+        '"asked_to_repeat":false,"remember":[],' +
+        '"say_this":{"es":"Quer\u00eda un caf\u00e9, por favor.","en":"I would like a coffee, please."},' +
+        '"correction":null}',
       'They said "Me llamo" and nothing more:',
       '{"reply_es":"Perdona, no te he oido. ?Como te llamas?","reply_en":"Sorry, I didn\'t catch that. What\'s your name?",' +
         '"asked_to_repeat":true,"remember":[],"correction":null}',
@@ -435,11 +520,17 @@ window.PARLA = window.PARLA || {};
         .slice(0, 4);
     }
 
+    var sayThis = null;
+    if (obj.say_this && typeof obj.say_this === 'object' && obj.say_this.es) {
+      sayThis = { es: String(obj.say_this.es).trim(), en: String(obj.say_this.en || '').trim() };
+    }
+
     return {
       es: obj.reply_es || obj.es || '',
       en: obj.reply_en || obj.en || '',
       askedToRepeat: asked,
       remember: remember,
+      sayThis: sayThis,
       correction: corr ? {
         original: corr.original || original || '',
         fixed: corr.fixed || '',
@@ -842,6 +933,7 @@ window.PARLA = window.PARLA || {};
     _parseLLM: parseLLM,
     _systemPrompt: systemPrompt,
     _turnNotes: turnNotes,
-    extractName: extractName
+    extractName: extractName,
+    detectLanguage: detectLanguage
   };
 })();

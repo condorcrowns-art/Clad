@@ -8,14 +8,79 @@ window.PARLA = window.PARLA || {};
 
   /* ── Vocabulary review (SRS) ────────────────────────────── */
 
+  /* Strip a word down to what actually matters for a typed answer: no case, no
+   * accents, no punctuation, no leading article. Someone who types "cuenta"
+   * for "la cuenta" knows the word; failing them teaches nothing except that
+   * the app is fussy. Accents are flagged separately rather than failed,
+   * because they DO matter and a near miss is worth naming. */
+  function bare(text) {
+    return String(text || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9ñ ]/g, ' ')
+      .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /* Same, but accents kept — so "cafe" and "café" can be told apart. */
+  function bareAccented(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[^a-záéíóúüñ0-9 ]/g, ' ')
+      .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function judge(typed, want) {
+    var a = bare(typed), b = bare(want);
+    if (!a) return 'empty';
+    if (a === b) {
+      return bareAccented(typed) === bareAccented(want) ? 'right' : 'accents';
+    }
+    // One transposition, insertion or deletion away: a slip, not a gap.
+    if (Math.abs(a.length - b.length) <= 1 && editDistance(a, b) <= 1) return 'close';
+    return 'wrong';
+  }
+
+  function editDistance(a, b) {
+    var prev = [], cur = [], i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur[0] = i;
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1,
+                          prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = cur.slice();
+    }
+    return prev[b.length];
+  }
+
+  /* ── Vocabulary review (SRS) ────────────────────────────── */
+
   function viewReview() {
     init();
     var st = PARLA.store.state;
     var vocab = PARLA.data.es.vocab;
-    var byKey = {};
-    vocab.forEach(function (v) { byKey[v[0]] = v; });
 
-    var keys = vocab.map(function (v) { return v[0]; });
+    /* The deck is the word list PLUS the phrases you reached for in
+     * conversation and could not produce. Those are the best review candidates
+     * there are: you have already demonstrated you wanted them. */
+    var items = {};
+    vocab.forEach(function (v) {
+      items[v[0]] = { es: v[0], en: v[1], pos: v[2], exEs: v[3], exEn: v[4] };
+    });
+    (st.phrases || []).forEach(function (p) {
+      if (!items[p.es]) {
+        items[p.es] = { es: p.es, en: p.en, pos: 'your phrase', exEs: '', exEn: '', mine: true };
+      }
+    });
+
+    var keys = Object.keys(items);
+    // Phrases you personally got stuck on go to the front of the new-card pile.
+    keys.sort(function (a, b) { return (items[b].mine ? 1 : 0) - (items[a].mine ? 1 : 0); });
     var queue = PARLA.srs.buildQueue(keys, st.srs, { maxNew: 12, maxTotal: 40 });
 
     var main = el('main');
@@ -36,22 +101,69 @@ window.PARLA = window.PARLA || {};
       return main;
     }
 
-    var i = 0, revealed = false, correctCount = 0;
-    var mode = 'recall';   // recall | produce | speak
+    var i = 0, revealed = false, correctCount = 0, streak = 0, bestStreak = 0;
+    var pref = 'auto';          // auto | recall | produce | cloze | listen | speak
     var listenHandle = null;
+    var typedState = null;      // null | 'right' | 'accents' | 'close' | 'wrong'
+    var typedText = '';         // what they actually wrote, for the verdict
 
-    var head = el('div.row', { style: { marginBottom: '12px' } });
+    /* Which drill suits this card right now.
+     *
+     * Recognising a word is the easy half and stops teaching you anything once
+     * you can do it. So the drill escalates as a card matures: see it, then
+     * hear it, then produce it, then produce it inside a sentence. A word you
+     * have lapsed on drops back to the easy end rather than being hammered. */
+    function modeFor(key) {
+      if (pref !== 'auto') return pref;
+      var c = st.srs[key];
+      var it = items[key];
+      if (!c || (c.reps || 0) === 0) return 'recall';
+      if (PARLA.srs.isLeech(c)) return 'recall';
+      if ((c.reps || 0) <= 2) return 'listen';
+      if (it.exEs && clozeOf(it) && (c.reps % 2 === 0)) return 'cloze';
+      if ((c.reps || 0) >= 5 && c.reps % 3 === 0 && PARLA.speech.supported) return 'speak';
+      return 'produce';
+    }
+
+    /* The example sentence with the target word punched out of it. Returns null
+     * when the word does not literally appear — plenty of examples use a
+     * conjugated or plural form, and a blank you cannot fill is just cruel. */
+    function clozeOf(it) {
+      if (!it.exEs) return null;
+      var target = bare(it.es);
+      if (!target) return null;
+      var words = target.split(' ');
+      var head = words[words.length - 1];      // "la cuenta" -> "cuenta"
+      var re = new RegExp('(^|[^a-zA-Zá-úñ])(' + head + ')([^a-zA-Zá-úñ]|$)', 'i');
+      var m = it.exEs.normalize('NFC').match(re);
+      if (!m) return null;
+      return {
+        before: it.exEs.slice(0, m.index + m[1].length),
+        answer: m[2],
+        after: it.exEs.slice(m.index + m[1].length + m[2].length)
+      };
+    }
+
+    var head = el('div.row', { style: { marginBottom: '10px' } });
     var counter = el('span.chip');
+    var streakChip = el('span.chip.good', { hidden: true });
     head.appendChild(counter);
+    head.appendChild(streakChip);
     head.appendChild(el('div.spacer'));
     head.appendChild(ui.segmented([
-      ['recall', 'ES → EN'],
-      ['produce', 'EN → ES'],
-      ['speak', '🎙 Say it']
-    ], mode, function (m) {
-      mode = m; revealed = false; render();
+      ['auto', '✨ Mixed'],
+      ['recall', 'ES→EN'],
+      ['produce', 'EN→ES'],
+      ['cloze', 'Fill in'],
+      ['listen', '👂'],
+      ['speak', '🎙']
+    ], pref, function (m) {
+      pref = m; revealed = false; typedState = null; typedText = ''; render();
     }));
     main.appendChild(head);
+
+    var bar = el('div.progress-bar', el('div.fill'));
+    main.appendChild(bar);
 
     var cardWrap = el('div');
     main.appendChild(cardWrap);
@@ -60,9 +172,10 @@ window.PARLA = window.PARLA || {};
       var key = queue[i];
       st.srs[key] = PARLA.srs.grade(st.srs[key], q);
       st.progress.totals.reviews++;
-      if (q >= 3) correctCount++;
+      if (q >= 3) { correctCount++; streak++; if (streak > bestStreak) bestStreak = streak; }
+      else streak = 0;
       PARLA.store.save();
-      i++; revealed = false;
+      i++; revealed = false; typedState = null; typedText = '';
       if (listenHandle) { listenHandle.abort(); listenHandle = null; }
       if (i >= queue.length) return done();
       render();
@@ -70,12 +183,15 @@ window.PARLA = window.PARLA || {};
 
     function done() {
       PARLA.store.creditDay(queue.length * 3);
+      if (PARLA.decor && correctCount === queue.length) PARLA.decor.confetti(90);
       ui.clear(cardWrap);
       ui.clear(head);
+      bar.remove();
       cardWrap.appendChild(el('h1', 'Review done'));
-      cardWrap.appendChild(el('div.grid.three',
+      cardWrap.appendChild(el('div.grid.four',
         ui.stat(queue.length, 'cards'),
         ui.stat(correctCount, 'right'),
+        ui.stat(bestStreak, 'best run'),
         ui.stat('+' + queue.length * 3, 'xp')
       ));
       cardWrap.appendChild(el('div.btn-row', { style: { marginTop: '18px' } },
@@ -84,63 +200,150 @@ window.PARLA = window.PARLA || {};
       ));
     }
 
+    /* Shared by every typed mode.
+     *
+     * The verdict is rebuilt from state on each render rather than written
+     * once into the DOM: answering triggers a re-render, and a verdict that
+     * only existed as a mutated node was thrown away by it - it flashed on
+     * screen for one frame and vanished. */
+    function verdictNode(want) {
+      if (!typedState) return null;
+      if (typedState === 'right') {
+        return el('div.answer-state.ok', '✓ ' + want);
+      }
+      if (typedState === 'accents') {
+        return el('div.answer-state.near', '≈ ' + want + ' — right word, watch the accents');
+      }
+      if (typedState === 'close') {
+        return el('div.answer-state.near', '≈ ' + want + ' — one letter out');
+      }
+      return el('div.answer-state.no',
+        '✗ ' + want + (typedText ? ' — you wrote “' + typedText + '”' : ''));
+    }
+
+    function typedAnswer(card, want, onDone) {
+      var input = el('input.answer-input', {
+        type: 'text', autocomplete: 'off', autocorrect: 'off',
+        autocapitalize: 'none', spellcheck: 'false',
+        placeholder: 'type it in Spanish'
+      });
+
+      function submit() {
+        if (typedState) return;                 // already answered
+        var verdict = judge(input.value, want);
+        if (verdict === 'empty') { input.focus(); return; }
+        typedState = verdict;
+        typedText = input.value.trim();
+        revealed = true;
+        ui.say(want);
+        onDone();
+      }
+
+      input.onkeydown = function (e) { if (e.key === 'Enter') submit(); };
+      card.appendChild(el('div.answer-row', input,
+        el('button.primary', { onclick: submit }, 'Check')));
+      setTimeout(function () { input.focus(); }, 30);
+    }
+
+    /* What the SRS should hear about a typed answer, before the person
+     * overrides it. Near misses are "hard", not "wrong": they knew it. */
+    var TYPED_GRADE = { right: 4, accents: 3, close: 3, wrong: 0 };
+
     function render() {
       ui.clear(cardWrap);
       var key = queue[i];
-      var v = byKey[key];
-      if (!v) { grade(4); return; }
+      var it = items[key];
+      if (!it) { grade(4); return; }
 
-      var es = v[0], en = v[1], pos = v[2], exEs = v[3], exEn = v[4];
-      var card = el('div.flashcard');
+      var mode = modeFor(key);
       counter.textContent = (i + 1) + ' / ' + queue.length;
+      streakChip.hidden = streak < 3;
+      streakChip.textContent = '🔥 ' + streak + ' in a row';
+      bar.firstChild.style.width = Math.round((i / queue.length) * 100) + '%';
+
+      var card = el('div.flashcard', { 'data-mode': mode });
+      var showGrades = true;
 
       if (mode === 'recall') {
-        card.appendChild(el('div.pos', pos));
-        card.appendChild(el('div.prompt.es', es));
-        card.appendChild(el('div', ui.speakBtn(es, '🔊 Listen')));
+        card.appendChild(el('div.pos', it.mine ? 'your phrase' : it.pos));
+        card.appendChild(el('div.prompt.es', it.es));
+        card.appendChild(el('div', ui.speakBtn(it.es, '🔊 Listen')));
         if (revealed) {
-          card.appendChild(el('div.answer', en));
-          card.appendChild(el('div.example.es', exEs));
-          card.appendChild(el('div.example-en', exEn));
+          card.appendChild(el('div.answer', it.en));
+          if (it.exEs) card.appendChild(el('div.example.es', it.exEs));
+          if (it.exEn) card.appendChild(el('div.example-en', it.exEn));
         }
+
+      } else if (mode === 'listen') {
+        // No text at all until they commit — otherwise they read rather than hear.
+        card.appendChild(el('div.pos', 'listen and say what it means'));
+        card.appendChild(el('div.prompt.listen-prompt', revealed ? it.es : '👂'));
+        card.appendChild(el('div',
+          el('button.primary', { onclick: function () { ui.say(it.es); } }, '🔊 Play again')));
+        if (revealed) {
+          card.appendChild(el('div.answer', it.en));
+          if (it.exEs) card.appendChild(el('div.example.es', it.exEs));
+        }
+        if (!revealed) setTimeout(function () { ui.say(it.es); }, 250);
+
+      } else if (mode === 'cloze') {
+        var cl = clozeOf(it);
+        if (!cl) { pref = pref === 'cloze' ? 'produce' : pref; render(); return; }
+        card.appendChild(el('div.pos', 'fill in the gap'));
+        card.appendChild(el('div.prompt.es.cloze',
+          cl.before, el('span.blank', typedState ? cl.answer : '_____'), cl.after));
+        if (it.exEn) card.appendChild(el('div.example-en', it.exEn));
+        if (!typedState) {
+          showGrades = false;
+          typedAnswer(card, cl.answer, function () { render(); });
+        } else {
+          card.appendChild(verdictNode(cl.answer));
+          card.appendChild(el('div.answer', it.es + ' — ' + it.en));
+        }
+
       } else if (mode === 'produce') {
-        card.appendChild(el('div.pos', 'say it in Spanish'));
-        card.appendChild(el('div.prompt', en));
-        if (revealed) {
-          card.appendChild(el('div.answer.es', { style: { fontSize: '1.6rem' } }, es));
-          card.appendChild(el('div', ui.speakBtn(es, '🔊 Listen')));
-          card.appendChild(el('div.example.es', exEs));
-          card.appendChild(el('div.example-en', exEn));
+        card.appendChild(el('div.pos', 'write it in Spanish'));
+        card.appendChild(el('div.prompt', it.en));
+        if (!typedState) {
+          showGrades = false;
+          typedAnswer(card, it.es, function () { render(); });
+        } else {
+          card.appendChild(verdictNode(it.es));
+          card.appendChild(el('div.answer.es', { style: { fontSize: '1.5rem' } }, it.es));
+          if (it.exEs) card.appendChild(el('div.example.es', it.exEs));
+          if (it.exEn) card.appendChild(el('div.example-en', it.exEn));
         }
+
       } else {
-        // Pronunciation check: read the Spanish aloud and let recognition judge it.
+        // Pronunciation: read it aloud and let recognition judge.
+        showGrades = false;
         card.appendChild(el('div.pos', 'read this aloud'));
-        card.appendChild(el('div.prompt.es', es));
-        card.appendChild(el('div.example-en', en));
-        card.appendChild(el('div', ui.speakBtn(es, '🔊 Hear it first')));
+        card.appendChild(el('div.prompt.es', it.es));
+        card.appendChild(el('div.example-en', it.en));
+        card.appendChild(el('div', ui.speakBtn(it.es, '🔊 Hear it first')));
         var verdict = el('div.mic-label');
         card.appendChild(verdict);
 
         var micB = el('button.primary', { style: { marginTop: '6px' } }, '🎙 Speak');
         micB.onclick = function () {
           if (!PARLA.speech.supported) {
-            verdict.textContent = 'No microphone in this browser — use the ES → EN mode instead.';
+            verdict.textContent = 'No microphone in this browser — use another mode.';
             return;
           }
           if (listenHandle) { listenHandle.stop(); return; }
           micB.textContent = '⏹ Stop';
           listenHandle = PARLA.speech.listen({
             lang: 'es',
+            silenceMs: 1200,
             onpartial: function (t) { verdict.textContent = t; },
             onfinal: function (t) {
-              var heard = PARLA.brain.normalise(t);
-              var want = PARLA.brain.normalise(es);
-              var hit = heard === want || heard.indexOf(want) !== -1 || want.indexOf(heard) !== -1;
+              var v = judge(t, it.es);
+              var hit = v === 'right' || v === 'accents' || v === 'close';
               verdict.innerHTML = '';
               verdict.appendChild(el('div.answer-state.' + (hit ? 'ok' : 'no'),
-                hit ? '✓ Heard: “' + t + '”' : '✗ Heard: “' + t + '” — expected “' + es + '”'));
+                hit ? '✓ Heard: “' + t + '”'
+                    : '✗ Heard: “' + t + '” — expected “' + it.es + '”'));
               revealed = true;
-              // Nudge the grade toward what the microphone actually heard.
               setTimeout(function () { grade(hit ? 4 : 0); }, hit ? 900 : 2200);
             },
             onerror: function (k) { verdict.textContent = 'Mic: ' + k; },
@@ -152,7 +355,7 @@ window.PARLA = window.PARLA || {};
 
       cardWrap.appendChild(card);
 
-      if (mode !== 'speak') {
+      if (showGrades) {
         if (!revealed) {
           cardWrap.appendChild(el('button.primary.wide.big', {
             style: { marginTop: '12px' },
@@ -160,21 +363,26 @@ window.PARLA = window.PARLA || {};
           }, 'Show answer'));
         } else {
           var row = el('div.grade-row');
+          // A typed answer already knows how it went, so the button matching
+          // that verdict is highlighted rather than leaving a blank choice.
+          var suggested = typedState ? TYPED_GRADE[typedState] : null;
           [['g0', 0, 'Again', 'today'], ['g3', 3, 'Hard', 'soon'],
            ['g4', 4, 'Good', 'later'], ['g5', 5, 'Easy', 'much later']].forEach(function (g) {
-            row.appendChild(el('button.' + g[0], { onclick: function () { grade(g[1]); } },
-              g[2], el('small', g[3])));
+            row.appendChild(el('button.' + g[0], {
+              'data-suggested': suggested === g[1] ? 'yes' : null,
+              onclick: function () { grade(g[1]); }
+            }, g[2], el('small', g[3])));
           });
           cardWrap.appendChild(row);
         }
       }
 
-      var card2 = st.srs[key];
+      var c = st.srs[key];
       cardWrap.appendChild(el('div.small.faint.center', { style: { marginTop: '10px' } },
-        card2
-          ? 'seen ' + (card2.reps || 0) + '× · interval ' + (card2.interval || 0) + 'd' +
-            (PARLA.srs.isLeech(card2) ? ' · ⚠ trouble word' : '')
-          : 'new word'));
+        (it.mine ? 'from your conversation · ' : '') +
+        (c ? 'seen ' + (c.reps || 0) + '× · interval ' + (c.interval || 0) + 'd' +
+             (PARLA.srs.isLeech(c) ? ' · ⚠ trouble word' : '')
+           : 'new word')));
     }
 
     render();

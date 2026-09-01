@@ -50,21 +50,24 @@ window.PARLA = window.PARLA || {};
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
   /* Speak a Spanish string using the user's saved voice + rate. */
-  function say(text, onend) {
+  function say(text, onend, character) {
     var s = PARLA.store.state.settings;
     PARLA.speech.speak(text, {
       lang: PARLA.store.state.profile.target || 'es',
       voiceURI: s.voiceURI,
+      voiceRoles: s.voiceRoles,
+      pitchScale: s.voicePitch,
+      character: character,
       rate: s.rate,
       onend: onend
     });
   }
 
   /* A small ▶ button that reads a Spanish string aloud. */
-  function speakBtn(text, label) {
+  function speakBtn(text, label, character) {
     return el('button', { type: 'button', title: 'Listen', onclick: function (e) {
       e.stopPropagation();
-      say(text);
+      say(text, null, character);
     } }, label || '🔊');
   }
 

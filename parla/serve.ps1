@@ -111,6 +111,34 @@ function Trim-Cache {
   } catch { }
 }
 
+# Rewrite the sample rate a WAV declares, so it plays back higher and faster.
+# Only two little-endian integers in the header move: the sample rate at byte
+# 24, and the byte rate at 28, which must stay consistent or players either
+# refuse the file or fall back to the wrong speed.
+function Set-WavRate($path, $factor) {
+  try {
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -lt 44) { return }
+    # Sanity-check it really is the RIFF/WAVE layout before editing offsets.
+    if ([System.Text.Encoding]::ASCII.GetString($bytes, 0, 4) -ne 'RIFF' -or
+        [System.Text.Encoding]::ASCII.GetString($bytes, 8, 4) -ne 'WAVE') { return }
+
+    $rate     = [System.BitConverter]::ToUInt32($bytes, 24)
+    $byteRate = [System.BitConverter]::ToUInt32($bytes, 28)
+    if ($rate -le 0) { return }
+
+    $newRate     = [uint32][math]::Round($rate * $factor)
+    $newByteRate = [uint32][math]::Round($byteRate * $factor)
+
+    [System.BitConverter]::GetBytes($newRate).CopyTo($bytes, 24)
+    [System.BitConverter]::GetBytes($newByteRate).CopyTo($bytes, 28)
+    [System.IO.File]::WriteAllBytes($path, $bytes)
+  } catch {
+    # A voice at the wrong pitch beats no voice at all.
+    Write-Warning ("pitch shift skipped: " + $_.Exception.Message)
+  }
+}
+
 function Invoke-Piper($piperExe, $voicePath, $text, $lengthScale, $outWav) {
   $tmp    = [System.IO.Path]::GetTempPath()
   $stamp  = [guid]::NewGuid().ToString('N')
@@ -281,17 +309,34 @@ try {
         if ($req -and $req.rate) { $rate = [double]$req.rate }
         if ($rate -lt 0.5) { $rate = 0.5 }
         if ($rate -gt 2.0) { $rate = 2.0 }
-        $lengthScale = [math]::Round(1.0 / $rate, 3)
+
+        # Pitch. Piper exposes no pitch control at all, but a WAV is just
+        # samples plus a declared playback rate - so declaring a higher rate
+        # plays the same samples faster AND higher. That alone would also
+        # shorten the clip, which is fixed by asking piper for a proportionally
+        # longer one: length_scale = pitch / rate leaves the duration exactly
+        # where the speed setting wanted it, with only the pitch moved.
+        #
+        # It is a resample, so it shifts formants too - which is the point.
+        # Formant shift is what actually makes a voice read younger or older,
+        # rather than the same person talking in falsetto.
+        $pitch = 1.0
+        if ($req -and $req.pitch) { $pitch = [double]$req.pitch }
+        if ($pitch -lt 0.75) { $pitch = 0.75 }
+        if ($pitch -gt 1.35) { $pitch = 1.35 }
+
+        $lengthScale = [math]::Round($pitch / $rate, 3)
 
         if (-not (Test-Path $cacheDir -PathType Container)) {
           New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
         }
-        $key = Get-CacheKey ($voice.id + '|' + $lengthScale + '|' + $text)
+        $key = Get-CacheKey ($voice.id + '|' + $lengthScale + '|' + $pitch + '|' + $text)
         $wav = Join-Path $cacheDir "$key.wav"
 
         $ok = $true
         if (-not (Test-Path $wav -PathType Leaf)) {
           $ok = Invoke-Piper $piperExe $voice.path $text $lengthScale $wav
+          if ($ok -and $pitch -ne 1.0) { Set-WavRate $wav $pitch }
           if ($ok) { Trim-Cache }
         }
 

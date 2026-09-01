@@ -134,6 +134,76 @@ you are least able to wait.
 
 ---
 
+## Casting
+
+Your partner is a different person in every scenario — Marta the barista, Javi
+at the party, Dr. Ramos the GP. One voice reading every part is the detail that
+quietly tells you nobody was paying attention, so every character carries a
+gender and an age and gets cast accordingly.
+
+Piper exposes **no pitch control**, and its model cards do not record a
+speaker's gender. So two things:
+
+- Setup installs **four** Spanish voices, and **Settings → Voice** asks which
+  sound like women and which like men, with a play button on each. The app
+  cannot hear itself; you can. Two taps, once.
+- Pitch is done by resampling. A WAV is just samples plus a declared playback
+  rate, so declaring a higher rate plays it higher *and* faster — and asking
+  Piper for a proportionally longer clip (`length_scale = pitch / rate`) puts
+  the duration back exactly where the speed setting wanted it. Being a resample,
+  it shifts formants too, which is what actually makes a voice read as twenty
+  rather than fifty. Falsetto alone just sounds like the same person straining.
+
+A **Voice age** slider moves the whole cast, and each character still sits
+younger or older than the others within it. If only one voice fits a gender,
+the other is pitch-shifted towards it — not perfect, but better than everyone
+sounding like the same person.
+
+---
+
+## When you answer in English
+
+You have not failed. You have pointed at the exact sentence you cannot say yet,
+which is the most useful thing that happens in a lesson. The old rule was
+"answer in Spanish anyway and pull them back gently", which left you still not
+knowing how to say it.
+
+Now the partner stays in character, keeps replying in Spanish, and hands you
+**Say it like this** — the Spanish *you* were reaching for, at your level, with
+a play button and a **Try saying it** button that drops it in the box. Then it
+answers as though you had said it, so the scene keeps moving. It never scolds,
+never switches to English itself, never breaks the scene to teach.
+
+Phrases you needed and could not produce go into your review deck automatically.
+They are the best flashcards you will ever have: you already demonstrated you
+wanted them.
+
+Detection is by function-word counting, so it works with no model at all — the
+offline partner catches it too and hands you the phrase this scene needs.
+
+---
+
+## Review that escalates
+
+Recognising a word is the easy half, and it stops teaching you anything the
+moment you can do it. So **Mixed** — the default — picks the drill per card
+based on how well you actually know that card:
+
+| Card | Drill |
+|---|---|
+| New, or one you keep lapsing on | See the Spanish, recall the meaning |
+| Seen once or twice | **Hear it** with no text at all, then reveal |
+| Getting solid | **Type it** in Spanish from the English |
+| Solid, with an example | **Fill the gap** — the word punched out of its own sentence |
+| Strong | **Say it** aloud, checked by the recogniser |
+
+Typed answers are judged properly: articles optional, one-letter slips and
+missing accents scored as *near misses* rather than failures — with the accent
+named, because accents do matter. The grade button matching the verdict is
+highlighted, and you can still override it.
+
+---
+
 ## What it remembers
 
 Tell your partner your name on Monday and it still knows on Thursday. Where you
@@ -312,6 +382,8 @@ test/
   piper-tts.test.js       neural routing, fallback, cancellation
   listen.test.js          microphone endpointing against a fake recogniser
   comprehension.test.js   the partner must not answer what it did not hear
+  english.test.js         answering in English as a teaching moment
+  casting.test.js         who plays whom, and at what pitch
   memory.test.js          what it remembers, and what it must not invent
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
@@ -343,6 +415,8 @@ node test/listen.test.js            # when your turn ends, and when it does not
 node test/comprehension.test.js     # the partner asks instead of assuming
 node test/memory.test.js            # remembering you between sessions
 node test/suggest.test.js          # what to say when you are stuck
+node test/english.test.js          # English as a teaching moment
+node test/casting.test.js          # voices matched to characters
 
 node -e "const{makeSandbox,load}=require('./test/harness');
   const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').PARLA.data.es;
@@ -356,6 +430,7 @@ npm i playwright
 node test/mock-tts-server.js 8765            # or: 8765 nopiper
 node test/piper-browser.test.js 8765         # or: 8765 nopiper
 node test/fiesta.test.js 8765                # layout, reduced motion, decor removed
+node test/drill-browser.test.js 8765        # every flashcard drill, end to end
 ```
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`

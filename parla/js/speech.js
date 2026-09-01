@@ -249,19 +249,56 @@ window.PARLA = window.PARLA || {};
   // tell it has been superseded and stay quiet.
   var token = 0;
 
-  function resolveVoiceId(lang, uri) {
-    if (uri) {
-      if (uri.indexOf(PIPER_PREFIX) === 0) {
-        if (!piper.available) return null;          // saved voice is gone; use the browser
-        var id = uri.slice(PIPER_PREFIX.length);
-        var hit = piper.voices.filter(function (v) { return v.id === id; })[0];
-        return hit ? hit.id : (piperVoicesFor(lang)[0] || {}).id || null;
-      }
-      return null;                                   // an explicit browser voice
+  /* How old a character sounds. Piper has no pitch control, so this is a
+   * resample factor applied by the server - which shifts formants as well as
+   * pitch, and formants are what actually make a voice read as twenty rather
+   * than fifty. Falsetto alone just sounds like the same person straining. */
+  var AGE_PITCH = { young: 1.09, adult: 1.0, older: 0.93 };
+
+  /* Playing a woman's line through a man's voice model, or the reverse, is
+   * the wrong fix - but it is a much better wrong fix than a barista called
+   * Marta speaking in a baritone. Used only when no voice is tagged for the
+   * gender the scene needs. */
+  var CROSS_GENDER_PITCH = { f: 1.14, m: 0.88 };
+
+  function voiceById(id) {
+    return piper.voices.filter(function (v) { return v.id === id; })[0] || null;
+  }
+
+  /* Which installed voice should play this character, and at what pitch. */
+  function castVoice(lang, uri, character, roles, basePitch) {
+    var out = { id: null, pitch: basePitch || 1 };
+    character = character || {};
+    roles = roles || {};
+
+    if (character.age && AGE_PITCH[character.age]) out.pitch *= AGE_PITCH[character.age];
+
+    // An explicitly chosen browser voice always wins - it is a direct request.
+    if (uri && uri.indexOf(PIPER_PREFIX) !== 0) return out;
+
+    if (!piper.available) return out;
+
+    var list = piperVoicesFor(lang);
+    var fallback = (list[0] || {}).id || null;
+
+    // A voice the person picked by hand, for everything.
+    var saved = uri ? voiceById(uri.slice(PIPER_PREFIX.length)) : null;
+
+    if (character.gender) {
+      var cast = roles[character.gender] ? voiceById(roles[character.gender]) : null;
+      if (cast) { out.id = cast.id; return out; }
+      // Nothing tagged for this gender: shift whatever we do have towards it.
+      out.id = (saved && saved.id) || fallback;
+      out.pitch *= CROSS_GENDER_PITCH[character.gender] || 1;
+      return out;
     }
-    // Nothing saved: the neural voice is simply better, so take it.
-    if (!piper.available) return null;
-    return (piperVoicesFor(lang)[0] || {}).id || null;
+
+    out.id = (saved && saved.id) || fallback;
+    return out;
+  }
+
+  function resolveVoiceId(lang, uri) {
+    return castVoice(lang, uri, null, null, 1).id;
   }
 
   function speak(text, opts) {
@@ -274,11 +311,12 @@ window.PARLA = window.PARLA || {};
     cancelSpeech();
     var mine = ++token;
     var lang = opts.lang || 'es';
-    var piperId = resolveVoiceId(lang, opts.voiceURI);
+    var cast = castVoice(lang, opts.voiceURI, opts.character, opts.voiceRoles, opts.pitchScale);
+    var piperId = cast.id;
 
     if (piperId) {
       speaking = true;
-      speakPiper(text, opts, mine, piperId, function () {
+      speakPiper(text, opts, mine, piperId, cast.pitch, function () {
         // Piper failed — the server may have stopped, or the voice file may
         // have gone. Say it with a browser voice rather than saying nothing.
         if (mine !== token) return;
@@ -291,7 +329,7 @@ window.PARLA = window.PARLA || {};
     return function () { cancelSpeech(); };
   }
 
-  function speakPiper(text, opts, mine, voiceId, onFail) {
+  function speakPiper(text, opts, mine, voiceId, pitch, onFail) {
     fetch('/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -299,7 +337,8 @@ window.PARLA = window.PARLA || {};
         text: text,
         voice: voiceId,
         lang: (opts.lang || 'es').slice(0, 2),
-        rate: opts.rate != null ? opts.rate : 0.9
+        rate: opts.rate != null ? opts.rate : 0.9,
+        pitch: Math.round((pitch || 1) * 1000) / 1000
       })
     }).then(function (r) {
       if (!r.ok) throw new Error('tts ' + r.status);
@@ -351,7 +390,13 @@ window.PARLA = window.PARLA || {};
     if (v) u.voice = v;
     u.lang = v ? v.lang : (LANGS[lang] || LANGS.es).code;
     u.rate = opts.rate != null ? opts.rate : 0.9;
-    u.pitch = opts.pitch != null ? opts.pitch : 1;
+    // Browser voices take a pitch directly, so a character's age still lands
+    // even with no neural voice installed.
+    var browserPitch = opts.pitch != null ? opts.pitch : 1;
+    if (opts.character && AGE_PITCH[opts.character.age]) {
+      browserPitch *= AGE_PITCH[opts.character.age];
+    }
+    u.pitch = Math.max(0.5, Math.min(2, browserPitch));
 
     speaking = true;
     function done() {
@@ -623,6 +668,8 @@ window.PARLA = window.PARLA || {};
     piperPrefix: PIPER_PREFIX,
     piperVoicesFor: piperVoicesFor,
     allVoicesFor: allVoicesFor,
+    castVoice: castVoice,
+    agePitch: AGE_PITCH,
     // Exposed so the test harness can drive the probe without a network.
     _setPiper: function (available, list) {
       piper.available = !!available;

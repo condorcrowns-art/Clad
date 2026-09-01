@@ -32,6 +32,13 @@ window.PARLA = window.PARLA || {};
         geminiKey: '',
         geminiModel: 'gemini-2.5-flash-lite',
         voiceURI: '',         // chosen TTS voice
+        // Which installed neural voice plays female and male characters. A
+        // barista called Marta speaking in a baritone is the kind of detail
+        // that quietly tells you nobody was paying attention.
+        voiceRoles: { f: '', m: '' },
+        // Global voice-age dial: everything shifts with it, and each character
+        // still sits younger or older than everyone else within that.
+        voicePitch: 1.0,
         rate: 0.9,            // TTS speed
         autoListen: true,     // reopen the mic after the partner replies
         // How long a silence ends your turn. Beginners hesitate mid-sentence,
@@ -63,6 +70,7 @@ window.PARLA = window.PARLA || {};
       },
       srs: {},                // word -> { ease, interval, due, reps, lapses }
       mistakes: [],           // { es, fix, note, when, scenario }
+      phrases: [],            // { es, en, when } - phrases you reached for and could not say
       history: []             // { when, scenarioId, turns, xp }
     };
   }
@@ -171,6 +179,21 @@ window.PARLA = window.PARLA || {};
     return changed;
   }
 
+  /* A phrase the learner reached for and could not produce is the single best
+   * candidate for review there is - better than any word chosen for them by a
+   * frequency list, because they have already demonstrated they wanted it. */
+  function rememberPhrase(es, en) {
+    es = String(es || '').trim();
+    if (!es) return false;
+    state.phrases = state.phrases || [];
+    var key = es.toLowerCase();
+    if (state.phrases.some(function (p) { return String(p.es).toLowerCase() === key; })) return false;
+    state.phrases.unshift({ es: es, en: String(en || '').trim(), when: Date.now() });
+    if (state.phrases.length > 200) state.phrases.length = 200;
+    save();
+    return true;
+  }
+
   function forgetAll() {
     state.memory = { name: '', facts: [] };
     save();
@@ -214,6 +237,7 @@ window.PARLA = window.PARLA || {};
     today: today,
     creditDay: creditDay,
     remember: remember,
+    rememberPhrase: rememberPhrase,
     forgetAll: forgetAll,
     level: level,
     levelProgress: levelProgress,

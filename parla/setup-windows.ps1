@@ -301,9 +301,16 @@ if ($SkipVoice) {
       New-Item -ItemType Directory -Path $voicesDir -Force | Out-Null
     }
     $hfBase = 'https://huggingface.co/rhasspy/piper-voices/resolve/main'
+    # Four voices, not one. Your partner is a different person in every
+    # scenario, and one voice reading every part is the detail that quietly
+    # tells you nobody was paying attention. Parla casts them by character;
+    # Settings -> Voice lets you say which sounds like a woman and which a man,
+    # since the model cards do not record it and the app cannot hear itself.
     $wanted = @(
-      @{ id = 'es_ES-davefx-medium';  path = 'es/es_ES/davefx/medium';  label = 'Spanish (Spain)'  },
-      @{ id = 'es_MX-claude-high';    path = 'es/es_MX/claude/high';    label = 'Spanish (Mexico)' }
+      @{ id = 'es_ES-davefx-medium';   path = 'es/es_ES/davefx/medium';   label = 'Spain, voice 1'  },
+      @{ id = 'es_ES-sharvard-medium'; path = 'es/es_ES/sharvard/medium'; label = 'Spain, voice 2'  },
+      @{ id = 'es_MX-claude-high';     path = 'es/es_MX/claude/high';     label = 'Mexico, voice 1' },
+      @{ id = 'es_MX-ald-medium';      path = 'es/es_MX/ald/medium';      label = 'Mexico, voice 2' }
     )
 
     $installed = 0
@@ -316,7 +323,7 @@ if ($SkipVoice) {
         continue
       }
       try {
-        Note ("downloading voice: " + $v.label + " (about 60 MB)")
+        Note ("downloading voice: " + $v.label + " (about 65 MB)")
         Invoke-WebRequest -Uri ("$hfBase/" + $v.path + '/' + $v.id + '.onnx') `
           -OutFile $onnx -UseBasicParsing -TimeoutSec 900
         Invoke-WebRequest -Uri ("$hfBase/" + $v.path + '/' + $v.id + '.onnx.json') `

@@ -29,6 +29,12 @@ function wav(seconds) {
   return Buffer.concat([h, data]);
 }
 
+function setWavRate(buf, factor) {
+  const rate = buf.readUInt32LE(24), byteRate = buf.readUInt32LE(28);
+  buf.writeUInt32LE(Math.round(rate * factor), 24);
+  buf.writeUInt32LE(Math.round(byteRate * factor), 28);
+}
+
 const seen = [];
 
 http.createServer((req, res) => {
@@ -54,7 +60,13 @@ http.createServer((req, res) => {
       seen.push(j);
       if (!HAVE_PIPER) { res.writeHead(503, {'Content-Type':'application/json'}); return res.end('{"error":"piper not installed"}'); }
       const b = wav(0.25);
-      res.writeHead(200, {'Content-Type':'audio/wav','Content-Length':b.length,'X-Parla-Voice':j.voice||''});
+      // Same trick serve.ps1 uses: a WAV declares its own playback rate, so
+      // raising it plays the same samples higher and faster.
+      if (j.pitch && j.pitch !== 1) setWavRate(b, j.pitch);
+      res.writeHead(200, {
+        'Content-Type':'audio/wav', 'Content-Length':b.length,
+        'X-Parla-Voice': j.voice || '', 'X-Parla-Rate': String(b.readUInt32LE(24))
+      });
       res.end(b);
     });
   }

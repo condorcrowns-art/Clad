@@ -392,3 +392,51 @@ button:active { transform: scale(.97); }
 
 /* On a short screen the suggestions must not push the text box off it. */
 .help-box { max-height: 40vh; overflow-y: auto; }
+
+/* "Say it like this" — supplying Spanish they did not have, as opposed to
+   fixing Spanish they attempted. Marked apart from a correction so the two
+   never read as the same event. */
+.correction.say-this {
+  border-left-color: var(--turquesa);
+  background: linear-gradient(100deg,
+    color-mix(in oklab, var(--turquesa) 14%, transparent), transparent 70%);
+}
+.correction.say-this .lead { color: var(--turquesa); }
+
+/* ── Review ─────────────────────────────────────────────────*/
+.progress-bar {
+  height: 5px; border-radius: 3px; overflow: hidden;
+  background: var(--bg-sunken); margin-bottom: 14px;
+}
+.progress-bar .fill {
+  height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--rosa), var(--amarillo), var(--turquesa));
+  transition: width .35s var(--ease);
+}
+
+.answer-row { display: flex; gap: 8px; width: 100%; max-width: 380px; margin: 14px auto 0; }
+.answer-input {
+  flex: 1; min-width: 0;
+  font-family: var(--serif); font-size: 1.1rem;
+  text-align: center;
+}
+.answer-state { margin-top: 10px; font-size: .95rem; font-weight: 600; }
+.answer-state.ok   { color: var(--good); }
+.answer-state.near { color: var(--warn); }
+.answer-state.no   { color: var(--bad); }
+
+/* The gap in a cloze card, sized so the sentence does not jump when it fills. */
+.prompt.cloze { font-size: 1.15rem; line-height: 1.6; }
+.prompt.cloze .blank {
+  display: inline-block; min-width: 84px;
+  padding: 0 6px; margin: 0 2px;
+  border-bottom: 2px solid var(--rosa);
+  color: var(--rosa); font-weight: 700;
+}
+.listen-prompt { font-size: 3rem; }
+
+/* The grade the typed answer earned, so the obvious button is obvious. */
+.grade-row button[data-suggested="yes"] {
+  outline: 2px solid var(--rosa);
+  outline-offset: 2px;
+}
