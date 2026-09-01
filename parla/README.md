@@ -96,6 +96,37 @@ conversation stay in one accent rather than drifting between Madrid and Mexico C
 
 ---
 
+## What it remembers
+
+Tell your partner your name on Monday and it still knows on Thursday. Where you
+live, what you do, what you can't stand — anything you actually say gets kept as
+a short note and put back in front of the partner every turn, so you are not
+introducing yourself twice a week.
+
+Your name is extracted deterministically from *"me llamo…"*, *"mi nombre es…"*
+and a capitalised *"Soy Pablo"*, so it survives even when there's no model
+running. Everything else the partner writes down itself, and only from things
+you said — it is explicitly forbidden from guessing.
+
+The list is capped at 14 and shown in full under **Settings → What your partner
+remembers**, with a **Forget everything** button. It lives in this browser next
+to your progress and goes nowhere else.
+
+---
+
+## Conversation as the drill
+
+The vocabulary deck already knows which words aren't sticking — the ones you've
+lapsed on and the ones now overdue. Those get handed to the partner each turn
+with an instruction to work one or two in naturally, never as a list. Your
+mistake journal goes the same way: errors you've already been corrected on get
+caught again rather than waved through as close enough.
+
+So the conversation isn't generic practice. It's aimed at your weak spots
+without ever announcing that it is.
+
+---
+
 ## Listening
 
 Speech recognition decides when you have stopped talking, and it is wrong about
@@ -241,6 +272,7 @@ test/
   piper-tts.test.js       neural routing, fallback, cancellation
   listen.test.js          microphone endpointing against a fake recogniser
   comprehension.test.js   the partner must not answer what it did not hear
+  memory.test.js          what it remembers, and what it must not invent
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
   piper-browser.test.js   the whole thing in a real browser
 ```
@@ -267,6 +299,7 @@ node test/voice-ranking.test.js     # which voice wins, and why
 node test/piper-tts.test.js         # neural routing, fallback, cancel semantics
 node test/listen.test.js            # when your turn ends, and when it does not
 node test/comprehension.test.js     # the partner asks instead of assuming
+node test/memory.test.js            # remembering you between sessions
 
 node -e "const{makeSandbox,load}=require('./test/harness');
   const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').PARLA.data.es;
