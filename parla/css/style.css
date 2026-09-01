@@ -344,6 +344,23 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 
 .mic-label { font-size: .82rem; color: var(--ink-soft); min-height: 1.3em; text-align: center; }
+
+/* The cancel button sits beside the mic without displacing it, so the mic
+   itself never moves under a thumb that is already reaching for it. */
+.mic-row { position: relative; display: flex; align-items: center; justify-content: center; }
+.mic-cancel {
+  position: absolute; left: 50%; margin-left: 38px;
+  width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--bg-sunken);
+  color: var(--ink-faint); font-size: .8rem; line-height: 1; cursor: pointer;
+}
+.mic-cancel:hover { color: var(--bad); border-color: var(--bad); }
+
+/* Your own bubbles only reveal their fix-it button on approach, so the thread
+   does not read as a wall of controls. */
+.bubble.you .tools { opacity: 0; transition: opacity .12s; }
+.bubble.you:hover .tools, .bubble.you:focus-within .tools { opacity: 1; }
+@media (hover: none) { .bubble.you .tools { opacity: 1; } }
 .type-fallback { display: flex; gap: 6px; width: 100%; max-width: 520px; }
 .type-fallback input { flex: 1; }
 

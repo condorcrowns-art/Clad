@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'parla-v3';
+var CACHE = 'parla-v4';
 
 var ASSETS = [
   './',

@@ -565,7 +565,20 @@ window.PARLA = window.PARLA || {};
 
     /* — practice — */
     main.appendChild(ui.sectionTitle('Practice'));
+    var pause = el('input', { type: 'range', min: '800', max: '4000', step: '200',
+                              value: String(s.micPauseMs || 1600) });
+    var pauseOut = el('span.small.muted', ((s.micPauseMs || 1600) / 1000).toFixed(1) + 's');
+    pause.oninput = function () {
+      s.micPauseMs = parseInt(pause.value, 10);
+      pauseOut.textContent = (s.micPauseMs / 1000).toFixed(1) + 's';
+    };
+    pause.onchange = function () { PARLA.store.save(); };
+
     main.appendChild(el('div.card',
+      ui.field('Pause before your turn ends', el('div', pause, pauseOut),
+        'How long a silence means you have finished speaking. Raise this if you get ' +
+        'cut off while thinking mid-sentence — the partner would rather wait than ' +
+        'answer half a question.'),
       toggle('Reopen the microphone automatically', s.autoListen, function (v) {
         s.autoListen = v; PARLA.store.save();
       }, 'Hands-free: the mic reopens as soon as your partner finishes speaking.'),

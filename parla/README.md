@@ -96,6 +96,43 @@ conversation stay in one accent rather than drifting between Madrid and Mexico C
 
 ---
 
+## Listening
+
+Speech recognition decides when you have stopped talking, and it is wrong about
+that constantly. Browsers default to ending the turn at the **first pause** —
+so a beginner saying *"Me llamo…"* and pausing to remember how the sentence goes
+has `Me llamo` submitted as a finished thought.
+
+Parla runs recognition continuously and decides for itself. Your turn ends after
+a real silence — 1.6 seconds by default, adjustable in Settings → Practice, up
+to 4 seconds if you like to think mid-sentence. Chrome also stops recognition on
+its own every few seconds no matter what the flag says; that gets restarted
+underneath and the transcript stitched across the seam, so you never see it.
+
+While the mic is open you can tap it to send early, or **✕** to throw the
+sentence away. If something lands in the transcript that you did not say, the
+**✎ Misheard** button on your own bubble removes it from the conversation and
+puts the text back in the box — a mis-heard line never gets to poison the next
+few turns.
+
+---
+
+## The partner
+
+It role-plays one character and reacts to what you actually said. The rule that
+matters most: **it never fills in what it did not hear.** If your sentence
+arrives cut off, it asks for the missing piece the way a person would — *"¿Cómo
+te llamas?"*, not *"I did not understand your input"* — and asking you to repeat
+yourself does not count as a turn or earn XP.
+
+It knows three things the model cannot work out alone: whether your sentence
+ends on a dangling word that recognition almost certainly truncated, how much
+the recogniser trusted its own transcript, and what it has already said in the
+last few turns so it stops asking the same question. The offline partner applies
+the same rule without a model at all.
+
+---
+
 ## Choosing a conversation partner
 
 Settings → **Conversation partner**. All three are free; they trade off differently.
@@ -202,6 +239,8 @@ test/
   harness.js          loads the plain scripts into Node for testing
   voice-ranking.test.js   voice ordering against a real Windows voice list
   piper-tts.test.js       neural routing, fallback, cancellation
+  listen.test.js          microphone endpointing against a fake recogniser
+  comprehension.test.js   the partner must not answer what it did not hear
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
   piper-browser.test.js   the whole thing in a real browser
 ```
@@ -226,6 +265,8 @@ No dependencies for the unit tests:
 ```bash
 node test/voice-ranking.test.js     # which voice wins, and why
 node test/piper-tts.test.js         # neural routing, fallback, cancel semantics
+node test/listen.test.js            # when your turn ends, and when it does not
+node test/comprehension.test.js     # the partner asks instead of assuming
 
 node -e "const{makeSandbox,load}=require('./test/harness');
   const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').PARLA.data.es;

@@ -380,71 +380,204 @@ window.PARLA = window.PARLA || {};
   }
 
   /* ── Speech to text ─────────────────────────────────────── */
-  /* listen() returns a handle with stop() and abort(). Callbacks:
+  /* listen() returns a handle with stop(), abort() and text(). Callbacks:
    *   onstart, onpartial(text), onfinal(text, confidence), onerror(kind), onend
+   *
+   * This used to run with continuous = false, which ends recognition at the
+   * FIRST pause. A learner saying "Me llamo..." and pausing to remember their
+   * own name had "Me llamo" submitted as a finished sentence before they could
+   * say it — and then had to argue with a partner who cheerfully carried on.
+   * That is not a slow speaker's fault; it is the wrong endpoint.
+   *
+   * So: recognition runs continuously, and WE decide when the turn is over,
+   * after a real silence. Chrome also ends recognition on its own every few
+   * seconds regardless of the flag, so a spontaneous end is restarted
+   * underneath and the transcript is stitched across the seam.
    */
   function listen(opts) {
     opts = opts || {};
     if (!SR) {
       if (opts.onerror) opts.onerror('unsupported');
       if (opts.onend) opts.onend();
-      return { stop: function () {}, abort: function () {} };
+      return { stop: function () {}, abort: function () {}, text: function () { return ''; } };
     }
+
+    // How long a gap means "I have finished my sentence" rather than "I am
+    // thinking". Beginners pause mid-sentence constantly, so this is generous
+    // and adjustable in settings.
+    var silenceMs  = opts.silenceMs  != null ? opts.silenceMs  : 1600;
+    // Give up if they never say anything at all.
+    var noSpeechMs = opts.noSpeechMs != null ? opts.noSpeechMs : 10000;
+    // A hard ceiling so a stuck recogniser cannot listen forever.
+    var maxMs      = opts.maxMs      != null ? opts.maxMs      : 60000;
 
     // Never listen while the app is talking, or the mic hears our own voice.
     cancelSpeech();
 
-    var rec = new SR();
     var lang = opts.lang || 'es';
-    rec.lang = (LANGS[lang] || LANGS.es).code;
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.maxAlternatives = 1;
+    var rec = newRecogniser(lang);
 
-    var finalText = '';
-    var confidence = 0;
-    var done = false;
+    var committed = '';      // finals from earlier recognition sessions
+    var sessionFinal = '';   // finals from the current one
+    var interim = '';
+    var scores = [];
+    var heard = false;
 
-    rec.onstart = function () { if (opts.onstart) opts.onstart(); };
+    var settled = false;     // callbacks already delivered
+    var closing = false;     // we asked it to stop; do not restart
+    var killed = false;      // aborted; deliver nothing
+    var started = false;     // onstart already reported
+    var restarts = 0;
 
-    rec.onresult = function (e) {
-      var interim = '';
-      for (var i = e.resultIndex; i < e.results.length; i++) {
-        var r = e.results[i];
-        if (r.isFinal) {
-          finalText += r[0].transcript;
-          confidence = r[0].confidence || 0;
-        } else {
-          interim += r[0].transcript;
-        }
-      }
-      if (opts.onpartial) opts.onpartial((finalText + ' ' + interim).trim());
-    };
+    var silenceTimer = null;
+    var hardTimer = null;
 
-    rec.onerror = function (e) {
-      // 'no-speech' and 'aborted' are normal outcomes, not failures worth shouting about.
-      if (opts.onerror) opts.onerror(e.error || 'error');
-    };
+    function fullText() {
+      return (committed + sessionFinal + ' ' + interim).replace(/\s+/g, ' ').trim();
+    }
 
-    rec.onend = function () {
-      if (done) return;
-      done = true;
-      var t = finalText.trim();
-      if (t && opts.onfinal) opts.onfinal(t, confidence);
+    function confidence() {
+      if (!scores.length) return 0;
+      var sum = 0;
+      for (var i = 0; i < scores.length; i++) sum += scores[i];
+      return sum / scores.length;
+    }
+
+    function clearTimers() {
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+      if (hardTimer) { clearTimeout(hardTimer); hardTimer = null; }
+    }
+
+    function settle() {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      if (killed) return;
+      var t = fullText();
+      if (t && opts.onfinal) opts.onfinal(t, confidence());
       if (opts.onend) opts.onend();
-    };
+    }
+
+    function endNow() {
+      closing = true;
+      clearTimers();
+      try { rec.stop(); } catch (e) { settle(); }
+      // If the engine never delivers its end event, do not hang the UI.
+      setTimeout(settle, 1200);
+    }
+
+    function armSilence() {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(endNow, heard ? silenceMs : noSpeechMs);
+    }
+
+    function wire(r) {
+      r.onstart = function () {
+        if (started) return;             // restarts must not re-announce
+        started = true;
+        if (opts.onstart) opts.onstart();
+      };
+
+      r.onresult = function (e) {
+        // Rebuild from scratch each time: in continuous mode e.results holds
+        // every result of this session, and a result can stop being interim.
+        var fin = '', itm = '';
+        scores = [];
+        for (var i = 0; i < e.results.length; i++) {
+          var r0 = e.results[i][0];
+          if (e.results[i].isFinal) {
+            fin += r0.transcript + ' ';
+            if (typeof r0.confidence === 'number' && r0.confidence > 0) scores.push(r0.confidence);
+          } else {
+            itm += r0.transcript + ' ';
+          }
+        }
+        sessionFinal = fin;
+        interim = itm;
+        if (fullText()) heard = true;
+        if (opts.onpartial) opts.onpartial(fullText());
+        armSilence();
+      };
+
+      r.onerror = function (e) {
+        var kind = e.error || 'error';
+        // 'no-speech' and 'aborted' are normal outcomes of a continuous
+        // session, not failures worth showing anyone.
+        if (kind === 'no-speech' || kind === 'aborted') return;
+        if (kind === 'not-allowed' || kind === 'service-not-allowed') {
+          closing = true;   // no point restarting into the same refusal
+        }
+        if (opts.onerror) opts.onerror(kind);
+      };
+
+      r.onend = function () {
+        if (settled) return;
+        if (closing || killed) { settle(); return; }
+        // Chrome ends the session on its own every few seconds. Restart and
+        // carry the transcript over, so the seam is invisible to the speaker.
+        if (restarts >= 12) { settle(); return; }
+        restarts++;
+        committed += sessionFinal;
+        sessionFinal = '';
+        interim = '';
+        restart();
+      };
+    }
+
+    function restart() {
+      var next = newRecogniser(lang);
+      wire(next);
+      rec = next;
+      try {
+        next.start();
+      } catch (err) {
+        // "already started" can survive a beat; one retry, then give up
+        // gracefully with whatever was captured.
+        setTimeout(function () {
+          if (settled || closing || killed) return;
+          try { next.start(); } catch (e2) { settle(); }
+        }, 120);
+      }
+    }
+
+    wire(rec);
+    armSilence();
+    hardTimer = setTimeout(endNow, maxMs);
 
     try {
       rec.start();
     } catch (e) {
       if (opts.onerror) opts.onerror('start-failed');
+      settled = true;
+      clearTimers();
       if (opts.onend) opts.onend();
+      return { stop: function () {}, abort: function () {}, text: function () { return ''; } };
     }
 
     return {
-      stop: function () { try { rec.stop(); } catch (e) { /* ignore */ } },
-      abort: function () { done = true; try { rec.abort(); } catch (e) { /* ignore */ } }
+      // Finish the turn and send what was heard.
+      stop: endNow,
+      // Throw it away — the speaker changed their mind, or is leaving.
+      abort: function () {
+        killed = true;
+        closing = true;
+        clearTimers();
+        try { rec.abort(); } catch (e) { /* ignore */ }
+        settled = true;
+      },
+      text: fullText
     };
+  }
+
+  function newRecogniser(lang) {
+    var r = new SR();
+    r.lang = (LANGS[lang] || LANGS.es).code;
+    r.interimResults = true;
+    r.continuous = true;
+    // Alternatives cost nothing and let the engine revise its own guess as
+    // more of the sentence arrives.
+    r.maxAlternatives = 3;
+    return r;
   }
 
   PARLA.speech = {
@@ -460,6 +593,7 @@ window.PARLA = window.PARLA || {};
     pickVoice: pickVoice,
     onVoicesReady: onVoicesReady,
     isSpeaking: function () { return speaking; },
+    defaultPauseMs: 1600,
 
     // Neural voices
     piper: piper,

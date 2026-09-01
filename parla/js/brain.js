@@ -108,9 +108,43 @@ window.PARLA = window.PARLA || {};
 
   /* ── Scripted backend ───────────────────────────────────── */
 
+  /* Sentences the recogniser clearly truncated. Matching a script beat against
+   * "Me llamo" would answer a question the learner never finished asking, so
+   * the scripted partner asks for the rest first - same rule the LLM follows. */
+  var CUT_OFF = [
+    { re: /\bme llamo$/i,        es: 'Perdona, no te he oido. ?Como te llamas?', en: "Sorry, I didn't catch that. What's your name?" },
+    { re: /\bse llama$/i,        es: '?Como se llama?',                          en: 'What is their name?' },
+    { re: /\bquiero(?: un| una)?$/i, es: '?Que quieres exactamente?',            en: 'What exactly would you like?' },
+    { re: /\bnecesito(?: un| una)?$/i, es: '?Que necesitas?',                    en: 'What do you need?' },
+    { re: /\bvoy a$/i,           es: '?Adonde vas?',                             en: 'Where are you going?' },
+    { re: /\b(soy|estoy)$/i,     es: 'Perdona, ?como dices?',                    en: 'Sorry, what was that?' },
+    { re: /\b(un|una|el|la|los|las|de|con|para|por|mi|tu|y|o|que|muy|mas)$/i,
+      es: 'Perdona, no te he oido bien. ?Me lo repites?',                         en: "Sorry, I didn't hear you properly. Could you say that again?" }
+  ];
+
+  function cutOffReply(text) {
+    var t = String(text || '').trim().replace(/[.,!?\u00bf\u00a1]+$/, '');
+    if (!t || t.split(/\s+/).length > 8) return null;   // a long sentence is not a fragment
+    for (var i = 0; i < CUT_OFF.length; i++) {
+      if (CUT_OFF[i].re.test(t)) {
+        return {
+          es: CUT_OFF[i].es, en: CUT_OFF[i].en,
+          askedToRepeat: true,
+          correction: null,          // never correct what you did not hear
+          source: 'scripted'
+        };
+      }
+    }
+    return null;
+  }
+
   function scriptedReply(ctx) {
     var sc = ctx.scenario;
     var st = ctx.scriptState || (ctx.scriptState = { used: [], fb: 0 });
+
+    var cut = cutOffReply(ctx.text);
+    if (cut) return cut;
+
     var script = sc.script || [];
     var said = normalise(ctx.text);
     var saidWords = words(ctx.text);
@@ -171,6 +205,39 @@ window.PARLA = window.PARLA || {};
 
   /* ── Shared LLM prompt ──────────────────────────────────── */
 
+  /* Per-turn facts the model cannot work out for itself: how much to trust the
+   * transcript, and what it has already said too often. Kept separate from the
+   * system prompt so the stable part of the prompt stays cacheable. */
+  function turnNotes(ctx) {
+    var notes = [];
+
+    var t = (ctx.text || '').trim();
+
+    // A trailing function word is the signature of a sentence the recogniser
+    // cut off mid-thought - "Me llamo", "Quiero un", "Voy a".
+    var DANGLING = /\b(me llamo|se llama|quiero|quiero un|quiero una|necesito|voy a|tengo|soy|estoy|hay|es|un|una|el|la|los|las|de|con|para|por|mi|tu|y|o|que|muy|mas)$/i;
+    var lowConfidence = ctx.confidence > 0 && ctx.confidence < 0.6;
+
+    if (DANGLING.test(t.replace(/[.,!?¿¡]+$/, ''))) {
+      notes.push('WARNING: their sentence ends on a word that needs something after it. ' +
+                 'It was almost certainly cut off. Do NOT guess the missing part - ask for it.');
+    } else if (lowConfidence) {
+      notes.push('WARNING: the speech recogniser was unsure of this transcript. If it does ' +
+                 'not make sense in context, assume you misheard and ask, rather than ' +
+                 'answering something they did not say.');
+    }
+
+    // Small models re-ask the same question for several turns running.
+    var mine = (ctx.history || []).filter(function (m) { return m.role === 'partner'; })
+                                  .slice(-3).map(function (m) { return m.text; });
+    if (mine.length) {
+      notes.push('You have already said these. Do not repeat them or ask the same thing ' +
+                 'again:\n- ' + mine.join('\n- '));
+    }
+
+    return notes.length ? '\n\nTHIS TURN\n' + notes.join('\n') : '';
+  }
+
   function systemPrompt(ctx) {
     var sc = ctx.scenario;
     var style = ctx.settings.correctionStyle;
@@ -198,12 +265,34 @@ window.PARLA = window.PARLA || {};
       '- Sound like spoken Spanish, not written Spanish. Use "pues", "vale", "oye",',
       '  "mira", "bueno", "es que", contractions, and half-sentences where natural.',
       '- Stay at CEFR ' + lvl + ': common words, simple clauses. Do not show off.',
-      '- ALWAYS hand the turn back: ask something, offer something, or react with an',
+      '- Hand the turn back: ask something, offer something, or react with an',
       '  opinion. Never reply with bare acknowledgement like "Muy bien." and stop.',
-      '- React to what they ACTUALLY said. Do not run a script. If they surprise you,',
-      '  go with it and stay in character.',
       '- Never explain grammar inside your spoken reply. Never write English there.',
       '- If they speak English, answer in Spanish anyway and pull them back gently.',
+      '',
+      'UNDERSTAND BEFORE YOU ANSWER  --  this is the most important rule.',
+      'Their words reach you through speech recognition, so sentences arrive cut',
+      'off, mis-heard, or half-finished. You are a person, not a form-filler.',
+      '- NEVER invent, assume, or fill in information they did not actually give.',
+      '  If they say "Me llamo" and stop, you do NOT know their name. You did not',
+      '  hear it. Ask for it, the way a person would.',
+      '- If a sentence is incomplete, contradicts what they said before, or you',
+      '  genuinely cannot tell what they meant: say so IN CHARACTER and ask.',
+      '  A waiter says "Perdona, no te he oido bien, que querias?" - not',
+      '  "I did not understand your input."',
+      '- Ask about the specific missing piece, not in general. Missing name ->',
+      '  "?Como te llamas?". Missing dish -> "?Cual quieres?". Never a blank',
+      '  "?Que?" when you can name what you are missing.',
+      '- Do not correct grammar in a sentence you did not understand. Ask first.',
+      '- When it IS clear, do not stall for confirmation. Only ask when something',
+      '  is actually missing or ambiguous. Asking about everything is as bad as',
+      '  assuming everything.',
+      '',
+      'REMEMBER WHAT THEY TOLD YOU',
+      'Everything they have already said in this conversation is true and yours',
+      'to use: their name, their order, what they like, where they are from. Use',
+      'it naturally. Never ask twice for something they already told you, and',
+      'never contradict it.',
       '',
       'THEIR GOAL IN THIS SCENE: ' + ((sc.goals || []).join('; ') || 'just talk'),
       'Steer toward that goal without announcing it.',
@@ -212,15 +301,30 @@ window.PARLA = window.PARLA || {};
       correctionRule,
       'Correct only their SPANISH. Never "correct" a fact, an opinion, or a choice.',
       'If their Spanish was fine, correction MUST be null. Do not invent errors.',
+      'If you had to ask them to repeat, correction MUST be null.',
       '',
       'OUTPUT',
       'Return ONLY a JSON object. No prose, no markdown fence, no commentary.',
-      '{"reply_es": string, "reply_en": string, "correction": null | {"original": string, "fixed": string, "note": string}}',
+      '{"reply_es": string, "reply_en": string, "asked_to_repeat": boolean,',
+      ' "correction": null | {"original": string, "fixed": string, "note": string}}',
+      '"asked_to_repeat" is true when your reply is you asking them to supply or',
+      'repeat something you did not get. Otherwise false.',
       '',
       'EXAMPLES OF THE SHAPE (not of this scene):',
-      '{"reply_es":"¡Pues claro! ¿Y para beber algo?","reply_en":"Of course! And something to drink?","correction":null}',
-      '{"reply_es":"Vale, marchando. ¿Algo más?","reply_en":"Okay, coming up. Anything else?",' +
-        '"correction":{"original":"Yo quiero un cafe y soy cansado","fixed":"Quiero un café y estoy cansado",' +
+      '{"reply_es":"!Pues claro! ?Y para beber algo?","reply_en":"Of course! And something to drink?",' +
+        '"asked_to_repeat":false,"correction":null}',
+      // The failure this rule exists for: an unfinished sentence must not be
+      // silently accepted as a complete one.
+      'They said "Me llamo" and nothing more:',
+      '{"reply_es":"Perdona, no te he oido. ?Como te llamas?","reply_en":"Sorry, I didn\'t catch that. What\'s your name?",' +
+        '"asked_to_repeat":true,"correction":null}',
+      'They said "Quiero un" and nothing more:',
+      '{"reply_es":"?Un que? Tenemos cafe, te y zumo.","reply_en":"A what? We have coffee, tea and juice.",' +
+        '"asked_to_repeat":true,"correction":null}',
+      'They made a real mistake but were clear:',
+      '{"reply_es":"Vale, marchando. ?Algo mas?","reply_en":"Okay, coming up. Anything else?",' +
+        '"asked_to_repeat":false,' +
+        '"correction":{"original":"Yo quiero un cafe y soy cansado","fixed":"Quiero un cafe y estoy cansado",' +
         '"note":"Tiredness is a temporary state, so it takes estar, not ser."}}'
     ].join('\n');
   }
@@ -247,9 +351,15 @@ window.PARLA = window.PARLA || {};
     var corr = obj.correction;
     if (corr && (!corr.fixed || normalise(corr.fixed) === normalise(original || ''))) corr = null;
 
+    // Asking someone to repeat themselves and correcting the fragment you did
+    // not hear are contradictory. If the model does both, the question wins.
+    var asked = obj.asked_to_repeat === true;
+    if (asked) corr = null;
+
     return {
       es: obj.reply_es || obj.es || '',
       en: obj.reply_en || obj.en || '',
+      askedToRepeat: asked,
       correction: corr ? {
         original: corr.original || original || '',
         fixed: corr.fixed || '',
@@ -318,7 +428,7 @@ window.PARLA = window.PARLA || {};
     var s = ctx.settings;
     var url = (s.ollamaUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/api/chat';
 
-    var sys = systemPrompt(ctx) + (extraSystem ? '\n\n' + extraSystem : '');
+    var sys = systemPrompt(ctx) + turnNotes(ctx) + (extraSystem ? '\n\n' + extraSystem : '');
     var messages = [{ role: 'system', content: sys }];
     historyPairs(ctx.history).forEach(function (m) {
       messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text });
@@ -336,8 +446,12 @@ window.PARLA = window.PARLA || {};
         // Keep the model resident so the second turn is not another cold start.
         keep_alive: '30m',
         options: {
-          temperature: 0.85,
+          // 0.85 made small models embellish - inventing names, orders and
+          // details the learner never gave. Comprehension matters more here
+          // than flair, and the character comes from the prompt, not the heat.
+          temperature: 0.7,
           top_p: 0.9,
+          top_k: 40,
           repeat_penalty: 1.15,   // small models loop on stock phrases without this
           num_predict: 220,
           num_ctx: 4096
@@ -414,7 +528,7 @@ window.PARLA = window.PARLA || {};
         'x-goog-api-key': s.geminiKey
       },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt(ctx) }] },
+        systemInstruction: { parts: [{ text: systemPrompt(ctx) + turnNotes(ctx) }] },
         contents: contents,
         generationConfig: {
           temperature: 0.8,
@@ -525,6 +639,7 @@ window.PARLA = window.PARLA || {};
     health: { checked: false, ok: false, detail: '' },
     _scripted: scriptedReply,
     _parseLLM: parseLLM,
-    _systemPrompt: systemPrompt
+    _systemPrompt: systemPrompt,
+    _turnNotes: turnNotes
   };
 })();

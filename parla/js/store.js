@@ -34,6 +34,10 @@ window.PARLA = window.PARLA || {};
         voiceURI: '',         // chosen TTS voice
         rate: 0.9,            // TTS speed
         autoListen: true,     // reopen the mic after the partner replies
+        // How long a silence ends your turn. Beginners hesitate mid-sentence,
+        // and cutting them off there is what made the partner answer
+        // half-sentences as if they were finished ones.
+        micPauseMs: 1600,
         showTranslations: true,
         correctionStyle: 'gentle', // gentle | strict | off
         theme: 'auto'

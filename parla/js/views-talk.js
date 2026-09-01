@@ -82,7 +82,7 @@ window.PARLA = window.PARLA || {};
 
     var main = el('main');
     var thread = el('div#thread');
-    var micBtn, micLabel, typeInput, listenHandle = null;
+    var micBtn, micCancel, micLabel, typeInput, listenHandle = null;
 
     /* — header — */
     main.appendChild(el('div.convo-head',
@@ -122,8 +122,15 @@ window.PARLA = window.PARLA || {};
     }
 
     micBtn = el('button.mic', { 'data-state': 'idle', title: 'Hold a conversation', onclick: toggleMic }, '🎙');
-    micLabel = el('div.mic-label', PARLA.speech.supported ? 'Tap and speak in Spanish' : 'Type your reply below');
-    dock.appendChild(micBtn);
+    // Speech recognition mishears. Without a way out, a garbled sentence had to
+    // be sent and then argued with; this throws it away instead.
+    micCancel = el('button.mic-cancel', {
+      title: 'Discard what you just said', hidden: true, onclick: cancelListening
+    }, '✕');
+    micLabel = el('div.mic-label', PARLA.speech.supported
+      ? 'Tap and speak in Spanish — pause when you are done'
+      : 'Type your reply below');
+    dock.appendChild(el('div.mic-row', micBtn, micCancel));
     dock.appendChild(micLabel);
 
     typeInput = el('input', {
@@ -175,7 +182,27 @@ window.PARLA = window.PARLA || {};
     }
 
     function addUser(text) {
-      thread.appendChild(el('div.bubble.you', el('div.body.es', text)));
+      // The recogniser will sometimes hear something else entirely. Rather than
+      // leaving that in the transcript to confuse the next few turns, let it be
+      // retyped - the wrong line is dropped from history, not argued with.
+      var bubble = el('div.bubble.you',
+        el('div.body.es', text),
+        el('div.tools',
+          el('button', { title: 'That is not what I said', onclick: function () {
+            if (session.ended) return;
+            var i = session.history.lastIndexOf(
+              session.history.filter(function (m) { return m.role === 'user' && m.text === text; }).slice(-1)[0]);
+            if (i !== -1) session.history.splice(i, 1);
+            session.turns = Math.max(0, session.turns - 1);
+            session.words = Math.max(0, session.words - PARLA.brain.words(text).length);
+            bubble.remove();
+            typeInput.value = text;
+            typeInput.focus();
+            typeInput.setSelectionRange(text.length, text.length);
+          } }, '✎ Misheard')
+        )
+      );
+      thread.appendChild(bubble);
       scrollDown();
       session.history.push({ role: 'user', text: text });
       session.turns++;
@@ -229,13 +256,24 @@ window.PARLA = window.PARLA || {};
     function setMic(state, label) {
       micBtn.setAttribute('data-state', state);
       micBtn.textContent = state === 'listening' ? '⏹' : (state === 'thinking' ? '…' : '🎙');
+      micBtn.title = state === 'listening' ? 'Send what you have said' : 'Hold a conversation';
+      micCancel.hidden = state !== 'listening';
       if (label != null) micLabel.textContent = label;
     }
 
     function toggleMic() {
       if (session.ended) return;
+      // While listening, the button means "I have finished, send it" - which is
+      // the escape hatch for anyone the silence timer is too patient for.
       if (listenHandle) { listenHandle.stop(); return; }
       startListening();
+    }
+
+    function cancelListening() {
+      if (!listenHandle) return;
+      listenHandle.abort();
+      listenHandle = null;
+      setMic('idle', 'Discarded. Tap and try again.');
     }
 
     function startListening() {
@@ -245,16 +283,28 @@ window.PARLA = window.PARLA || {};
         return;
       }
       var partial = '';
+      var errored = false;
+
       listenHandle = PARLA.speech.listen({
         lang: st.profile.target || 'es',
-        onstart: function () { setMic('listening', 'Listening… tap to stop'); },
-        onpartial: function (t) { partial = t; micLabel.textContent = t || 'Listening…'; },
-        onfinal: function (t) { submit(t); },
+        // How long a pause means "finished" rather than "thinking". Beginners
+        // hesitate mid-sentence, and cutting them off there is what made the
+        // partner answer half-sentences as though they were whole ones.
+        silenceMs: st.settings.micPauseMs || PARLA.speech.defaultPauseMs || 1600,
+
+        onstart: function () {
+          errored = false;
+          setMic('listening', 'Listening… pause when you are done');
+        },
+        onpartial: function (t) {
+          partial = t;
+          if (!errored) micLabel.textContent = t || 'Listening…';
+        },
+        onfinal: function (t, conf) { submit(t, conf); },
         onerror: function (kind) {
+          errored = true;
           if (kind === 'not-allowed' || kind === 'service-not-allowed') {
             micLabel.textContent = 'Microphone blocked — allow it in your browser, or type below.';
-          } else if (kind === 'no-speech') {
-            micLabel.textContent = 'Did not catch that. Tap and try again.';
           } else if (kind === 'unsupported') {
             micLabel.textContent = 'Speech recognition unavailable — type instead.';
           } else {
@@ -263,9 +313,10 @@ window.PARLA = window.PARLA || {};
         },
         onend: function () {
           listenHandle = null;
-          if (micBtn.getAttribute('data-state') === 'listening') {
-            setMic('idle', partial ? '' : 'Tap and speak in Spanish');
-          }
+          if (micBtn.getAttribute('data-state') !== 'listening') return;
+          // Do not stamp over an error message with a cheerful idle prompt.
+          if (errored) { setMic('idle', null); return; }
+          setMic('idle', partial ? 'Thinking…' : 'Did not catch that. Tap and try again.');
         }
       });
     }
@@ -273,15 +324,16 @@ window.PARLA = window.PARLA || {};
     function maybeAutoListen() {
       if (session.ended) return;
       if (!st.settings.autoListen || !PARLA.speech.supported) return;
-      // Small gap so the tail of the spoken reply is not picked up as input.
+      // Long enough that the tail of the spoken reply - and its echo off the
+      // desk - is not picked up as the first word of the answer.
       setTimeout(function () {
-        if (!session.ended && !listenHandle) startListening();
-      }, 350);
+        if (!session.ended && !listenHandle && !PARLA.speech.isSpeaking()) startListening();
+      }, 500);
     }
 
     /* ── the turn ── */
 
-    function submit(text) {
+    function submit(text, confidence) {
       text = (text || '').trim();
       if (!text || session.ended) return;
       if (listenHandle) { listenHandle.abort(); listenHandle = null; }
@@ -295,6 +347,9 @@ window.PARLA = window.PARLA || {};
         scenario: sc,
         history: session.history.slice(0, -1),
         text: text,
+        // How much the recogniser trusted its own transcript, so the partner
+        // can ask instead of confidently answering something never said.
+        confidence: confidence || 0,
         settings: Object.assign({}, st.settings, { level: st.profile.level }),
         scriptState: session.scriptState
       }).then(function (out) {
@@ -313,6 +368,10 @@ window.PARLA = window.PARLA || {};
         }
 
         addPartner(out.es, out.en, out.correction);
+
+        // Being asked to repeat yourself is not a turn of conversation, so it
+        // must not earn XP or tick off a challenge day.
+        if (out.askedToRepeat) session.turns = Math.max(0, session.turns - 1);
 
         if (session.turns >= minTurns && !session.hinted) {
           session.hinted = true;
