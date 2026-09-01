@@ -88,10 +88,26 @@ window.PARLA = window.PARLA || {};
     var hour = new Date().getHours();
     var greet = hour < 12 ? 'Buenos días' : (hour < 20 ? 'Buenas tardes' : 'Buenas noches');
 
-    main.appendChild(el('h1', greet + ', ' + (st.profile.name || 'amigo') + '.'));
-    main.appendChild(el('p.muted', doneToday
-      ? 'You have already practised today — anything more is a bonus.'
-      : 'You have not spoken Spanish yet today.'));
+    // A painted wall to open on. Decorative and optional - without decor.js the
+    // greeting simply stands on its own, which is what it did before.
+    if (PARLA.decor) {
+      var streak = st.progress.streak;
+      main.appendChild(PARLA.decor.mural(
+        greet + ', ' + (st.profile.name || 'amigo'),
+        doneToday
+          ? 'You have already practised today — anything more is a bonus.'
+          : 'You have not spoken Spanish yet today.',
+        streak > 0 ? streak + ' day streak' : 'Day one'
+      ));
+    }
+
+    main.appendChild(el('h1', { class: PARLA.decor ? 'sr-head' : '' },
+      greet + ', ' + (st.profile.name || 'amigo') + '.'));
+    if (!PARLA.decor) {
+      main.appendChild(el('p.muted', doneToday
+        ? 'You have already practised today — anything more is a bonus.'
+        : 'You have not spoken Spanish yet today.'));
+    }
 
     var bb = ui.brainBanner();
     if (bb) main.appendChild(bb);

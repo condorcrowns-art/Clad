@@ -3,84 +3,129 @@
  * user overrides it in settings (data-theme on <html>).
  */
 
+/* ── Palette ────────────────────────────────────────────────
+ * Mexican folk colour: papel picado pink, Talavera turquoise, marigold,
+ * jacaranda purple, nopal green — sat on warm adobe cream rather than white,
+ * because these hues go muddy against a cold ground.
+ *
+ * The six fiesta hues are exposed as tokens so any component can reach for
+ * one; everything structural still runs on the semantic tokens beneath them,
+ * so the whole app can be recoloured from this block alone.
+ */
 :root {
-  --bg:        #faf7f2;
+  --rosa:     #e01a76;   /* rosa mexicano */
+  --turquesa: #00a3a3;
+  --amarillo: #f0a500;
+  --naranja:  #f0592b;
+  --verde:    #2e9e5b;
+  --morado:   #7a3e9d;
+  --azul:     #1f6f8c;
+
+  --bg:        #fff8ee;
   --bg-raised: #ffffff;
-  --bg-sunken: #f1ece3;
-  --line:      #e2dace;
-  --line-soft: #efe9df;
-  --ink:       #221f1a;
-  --ink-soft:  #6a6257;
-  --ink-faint: #9a9186;
+  --bg-sunken: #fdeedd;
+  --line:      #f0dcc2;
+  --line-soft: #f7ebda;
+  --ink:       #2b1b14;
+  --ink-soft:  #75584a;
+  --ink-faint: #a98d7c;
 
-  --accent:      #c8542a;
+  --accent:      var(--rosa);
   --accent-ink:  #ffffff;
-  --accent-soft: #fbeee7;
+  --accent-soft: #fde4ef;
 
-  --good:      #2f7d54;
-  --good-soft: #e6f3ea;
-  --warn:      #b1740c;
-  --warn-soft: #fdf2dd;
-  --bad:       #b03636;
-  --bad-soft:  #fbe9e7;
+  --good:      #1f8b52;
+  --good-soft: #e2f4e9;
+  --warn:      #b87400;
+  --warn-soft: #fdf0d8;
+  --bad:       #c62d3f;
+  --bad-soft:  #fce7ea;
 
-  --r-sm: 8px;
-  --r:    14px;
-  --r-lg: 22px;
-  --shadow:    0 1px 2px rgba(40,30,20,.06), 0 6px 18px rgba(40,30,20,.06);
-  --shadow-lg: 0 2px 6px rgba(40,30,20,.08), 0 18px 44px rgba(40,30,20,.12);
+  --r-sm: 10px;
+  --r:    16px;
+  --r-lg: 26px;
+  --shadow:    0 1px 2px rgba(90,45,20,.07), 0 8px 22px rgba(90,45,20,.08);
+  --shadow-lg: 0 2px 8px rgba(90,45,20,.10), 0 22px 50px rgba(90,45,20,.16);
+  /* A warm, slightly coloured lift — grey shadows read as dust on this ground. */
+  --glow: 0 6px 20px rgba(224,26,118,.28);
 
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
   --serif: ui-serif, Georgia, "Times New Roman", serif;
+  --display: "Trebuchet MS", "Gill Sans", var(--sans);
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --ease: cubic-bezier(.22,.9,.28,1);
 }
 
+/* Night: the same fiesta on a jacaranda-dark ground, hues lifted so they
+   still sing rather than sinking into the background. */
 html[data-theme="dark"] {
-  --bg:        #16151a;
-  --bg-raised: #201e25;
-  --bg-sunken: #100f13;
-  --line:      #322f3a;
-  --line-soft: #282631;
-  --ink:       #f0ece6;
-  --ink-soft:  #a9a2b0;
-  --ink-faint: #746d7e;
+  --rosa:     #ff5fa2;
+  --turquesa: #2fd4d4;
+  --amarillo: #ffc44d;
+  --naranja:  #ff855c;
+  --verde:    #55d089;
+  --morado:   #c084e8;
+  --azul:     #63b6d4;
 
-  --accent:      #f0764a;
-  --accent-ink:  #1a1116;
-  --accent-soft: #2e211d;
+  --bg:        #171020;
+  --bg-raised: #221830;
+  --bg-sunken: #0f0a16;
+  --line:      #3a2b4c;
+  --line-soft: #2c2039;
+  --ink:       #f8ecf4;
+  --ink-soft:  #bfa8c8;
+  --ink-faint: #8b7699;
 
-  --good:      #5fc98d;
-  --good-soft: #16281f;
-  --warn:      #e0ab4a;
-  --warn-soft: #2a2214;
-  --bad:       #f0736b;
-  --bad-soft:  #2c1a1a;
+  --accent:      var(--rosa);
+  --accent-ink:  #2b0a1a;
+  --accent-soft: #3a1730;
 
-  --shadow:    0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
-  --shadow-lg: 0 2px 6px rgba(0,0,0,.5), 0 18px 44px rgba(0,0,0,.45);
+  --good:      #55d089;
+  --good-soft: #14301f;
+  --warn:      #ffc44d;
+  --warn-soft: #34260d;
+  --bad:       #ff7080;
+  --bad-soft:  #38151d;
+
+  --shadow:    0 1px 2px rgba(0,0,0,.5), 0 8px 22px rgba(0,0,0,.4);
+  --shadow-lg: 0 2px 8px rgba(0,0,0,.6), 0 22px 50px rgba(0,0,0,.5);
+  --glow: 0 6px 22px rgba(255,95,162,.35);
 }
 
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]) {
-    --bg:        #16151a;
-    --bg-raised: #201e25;
-    --bg-sunken: #100f13;
-    --line:      #322f3a;
-    --line-soft: #282631;
-    --ink:       #f0ece6;
-    --ink-soft:  #a9a2b0;
-    --ink-faint: #746d7e;
-    --accent:      #f0764a;
-    --accent-ink:  #1a1116;
-    --accent-soft: #2e211d;
-    --good:      #5fc98d;
-    --good-soft: #16281f;
-    --warn:      #e0ab4a;
-    --warn-soft: #2a2214;
-    --bad:       #f0736b;
-    --bad-soft:  #2c1a1a;
-    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
-    --shadow-lg: 0 2px 6px rgba(0,0,0,.5), 0 18px 44px rgba(0,0,0,.45);
+    --rosa:     #ff5fa2;
+    --turquesa: #2fd4d4;
+    --amarillo: #ffc44d;
+    --naranja:  #ff855c;
+    --verde:    #55d089;
+    --morado:   #c084e8;
+    --azul:     #63b6d4;
+
+    --bg:        #171020;
+    --bg-raised: #221830;
+    --bg-sunken: #0f0a16;
+    --line:      #3a2b4c;
+    --line-soft: #2c2039;
+    --ink:       #f8ecf4;
+    --ink-soft:  #bfa8c8;
+    --ink-faint: #8b7699;
+
+    --accent:      var(--rosa);
+    --accent-ink:  #2b0a1a;
+    --accent-soft: #3a1730;
+
+    --good:      #55d089;
+    --good-soft: #14301f;
+    --warn:      #ffc44d;
+    --warn-soft: #34260d;
+    --bad:       #ff7080;
+    --bad-soft:  #38151d;
+
+    --shadow:    0 1px 2px rgba(0,0,0,.5), 0 8px 22px rgba(0,0,0,.4);
+    --shadow-lg: 0 2px 8px rgba(0,0,0,.6), 0 22px 50px rgba(0,0,0,.5);
+    --glow: 0 6px 22px rgba(255,95,162,.35);
   }
 }
 

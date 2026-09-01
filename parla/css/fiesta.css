@@ -1,0 +1,394 @@
+/* Parla — the fiesta layer
+ *
+ * Everything decorative lives here, on top of the structural system in
+ * style.css. All artwork is generated from geometry in js/decor.js — no
+ * images, no fonts to fetch, nothing to load. The app still works with this
+ * file deleted; it just stops being a party.
+ *
+ * Motion is real but cheap: transform and opacity only, so nothing here
+ * triggers layout. Everything stops dead under prefers-reduced-motion.
+ */
+
+/* ── Background: a Talavera tile field ──────────────────────
+   Two fixed layers - the tile lattice and a slow colour wash drifting over
+   it - so the page has depth without a single pixel being downloaded. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -2;
+}
+body::before {
+  background-image: var(--tile-art);
+  background-size: 132px 132px;
+  opacity: .5;
+}
+html[data-theme="dark"] body::before { opacity: .28; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) body::before { opacity: .28; }
+}
+
+/* The wash: three soft colour fields breathing against each other. Kept far
+   below the content and very low contrast, so it reads as warmth on the wall
+   rather than as a gradient anyone notices. */
+body::after {
+  z-index: -3;
+  background:
+    radial-gradient(58vw 58vw at 12% -8%,  color-mix(in oklab, var(--rosa) 22%, transparent), transparent 62%),
+    radial-gradient(52vw 52vw at 92% 12%,  color-mix(in oklab, var(--turquesa) 20%, transparent), transparent 60%),
+    radial-gradient(64vw 64vw at 50% 108%, color-mix(in oklab, var(--amarillo) 22%, transparent), transparent 64%);
+  animation: wash 34s var(--ease) infinite alternate;
+}
+@keyframes wash {
+  0%   { transform: translate3d(0,0,0) scale(1); }
+  50%  { transform: translate3d(-2%, 1.5%, 0) scale(1.06); }
+  100% { transform: translate3d(2%, -1.5%, 0) scale(1.02); }
+}
+
+/* ── Papel picado ───────────────────────────────────────────
+   Cut-paper bunting strung under the top bar. Each flag swings on its own
+   beat from its top edge, the way paper actually hangs. */
+/* Static, not sticky: a string of paper with gaps in it cannot sit over
+   scrolling text without the text showing through the holes. */
+.papel {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  /* Taller than the flags themselves: each one swings a few degrees and would
+     otherwise be clipped at its own corners by that rotation. */
+  height: 68px;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* The string they hang from. */
+.papel::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 1px;
+  height: 2px;
+  background: color-mix(in oklab, var(--ink) 22%, transparent);
+}
+.papel svg {
+  height: 58px;
+  width: auto;
+  transform-origin: 50% 0;
+  animation: sway 5.5s ease-in-out infinite alternate;
+  filter: drop-shadow(0 3px 3px rgba(90,45,20,.16));
+}
+.papel svg:nth-child(even) { animation-duration: 6.8s; animation-delay: -1.4s; }
+.papel svg:nth-child(3n)   { animation-duration: 7.9s; animation-delay: -2.7s; }
+@keyframes sway {
+  from { transform: rotate(-3.2deg); }
+  to   { transform: rotate(3.2deg); }
+}
+
+/* ── The mural ──────────────────────────────────────────────
+   A flat-colour scene on the home screen: sun, hills, arches, agave. The sun
+   turns, the hills drift, the birds cross. */
+.mural {
+  position: relative;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-lg);
+  isolation: isolate;
+}
+.mural svg { display: block; width: 100%; height: auto; }
+.mural .rays { transform-origin: 50% 50%; animation: turn 90s linear infinite; }
+.mural .bird { animation: fly 19s linear infinite; }
+.mural .bird:nth-of-type(2) { animation-duration: 26s; animation-delay: -7s; }
+.mural .bird:nth-of-type(3) { animation-duration: 32s; animation-delay: -14s; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@keyframes fly {
+  from { transform: translateX(-14%); }
+  to   { transform: translateX(118%); }
+}
+
+/* Text laid over the mural, in a scrim so it stays readable whatever is
+   painted underneath it. */
+.mural .over {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 22px 20px 18px;
+  background: linear-gradient(to top, rgba(20,8,14,.82), rgba(20,8,14,.45) 55%, transparent);
+  color: #fff8ee;
+}
+.mural .over .kicker {
+  font-size: .7rem; letter-spacing: .16em; text-transform: uppercase;
+  opacity: .85; margin-bottom: 4px;
+}
+.mural .over .line { font-family: var(--display); font-size: 1.55rem; font-weight: 700; line-height: 1.15; }
+.mural .over .sub { font-size: .86rem; opacity: .9; margin-top: 3px; }
+
+/* ── Entrances ──────────────────────────────────────────────
+   Cards arrive in sequence rather than all at once. The delay is set inline
+   by decor.js so any number of them stagger correctly. */
+.rise { animation: rise .5s var(--ease) both; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Cards ──────────────────────────────────────────────────
+   A woven-ribbon edge on the left, and a lift on approach. */
+.card {
+  position: relative;
+  overflow: hidden;
+  transition: transform .22s var(--ease), box-shadow .22s var(--ease);
+}
+.card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: linear-gradient(to bottom,
+    var(--rosa) 0 20%, var(--amarillo) 20% 40%, var(--turquesa) 40% 60%,
+    var(--verde) 60% 80%, var(--morado) 80% 100%);
+  opacity: .85;
+}
+.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+
+/* ── Buttons ────────────────────────────────────────────────
+   The primary action gets a sheen that crosses it on approach. */
+button.primary, .btn-row button:first-child {
+  position: relative;
+  overflow: hidden;
+}
+button.primary::after, .btn-row button:first-child::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.42) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform .55s var(--ease);
+}
+button.primary:hover::after, .btn-row button:first-child:hover::after { transform: translateX(120%); }
+button { transition: transform .16s var(--ease), box-shadow .16s var(--ease), background .16s; }
+button:active { transform: scale(.97); }
+
+/* ── Top bar and nav ────────────────────────────────────────*/
+.topbar {
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--rosa) 12%, var(--bg-raised)),
+    color-mix(in oklab, var(--amarillo) 12%, var(--bg-raised)),
+    color-mix(in oklab, var(--turquesa) 12%, var(--bg-raised)));
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--rosa), var(--amarillo), var(--turquesa), var(--morado)) 1;
+}
+.topbar .brand .dot {
+  background: var(--rosa);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--rosa) 25%, transparent);
+  animation: beat 2.6s var(--ease) infinite;
+}
+@keyframes beat {
+  0%, 100% { transform: scale(1); }
+  14%      { transform: scale(1.35); }
+  28%      { transform: scale(1); }
+}
+
+.nav button .ico { transition: transform .2s var(--ease); display: inline-block; }
+.nav button:hover .ico { transform: translateY(-3px) scale(1.12); }
+.nav button[aria-current="page"] { color: var(--rosa); }
+.nav button[aria-current="page"]::after {
+  content: '';
+  position: absolute;
+  bottom: 4px; left: 50%;
+  width: 18px; height: 3px; margin-left: -9px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--rosa), var(--amarillo));
+  animation: rise .3s var(--ease) both;
+}
+.nav button { position: relative; }
+
+/* ── Chips ──────────────────────────────────────────────────*/
+.chip { transition: transform .18s var(--ease); }
+.chip:hover { transform: translateY(-1px); }
+.chip.hot { background: linear-gradient(135deg, var(--rosa), var(--naranja)); color: #fff; }
+.chip.good { background: linear-gradient(135deg, var(--verde), var(--turquesa)); color: #fff; }
+.chip.pop { animation: pop .45s var(--ease); }
+@keyframes pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.28) rotate(-4deg); }
+  100% { transform: scale(1); }
+}
+
+/* ── The microphone ─────────────────────────────────────────
+   Listening sends rings outward, so there is never a doubt about whether it
+   is actually hearing you. */
+.mic {
+  background: linear-gradient(140deg, var(--rosa), var(--naranja));
+  box-shadow: var(--glow);
+}
+.mic[data-state="listening"] { background: linear-gradient(140deg, var(--turquesa), var(--verde)); }
+.mic[data-state="thinking"]  { background: linear-gradient(140deg, var(--morado), var(--azul)); }
+.mic-row::before, .mic-row::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 64px; height: 64px; margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  border: 2px solid var(--turquesa);
+  opacity: 0;
+  pointer-events: none;
+}
+.mic-row:has(.mic[data-state="listening"])::before { animation: ring 1.8s var(--ease) infinite; }
+.mic-row:has(.mic[data-state="listening"])::after  { animation: ring 1.8s var(--ease) .9s infinite; }
+@keyframes ring {
+  0%   { transform: scale(1);   opacity: .55; }
+  100% { transform: scale(2.3); opacity: 0; }
+}
+
+/* ── Bubbles ────────────────────────────────────────────────*/
+.bubble { animation: bubble .34s var(--ease) both; }
+@keyframes bubble {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+.bubble.them .body {
+  border-left: 3px solid var(--turquesa);
+}
+.bubble.you .body {
+  background: linear-gradient(135deg, var(--rosa), var(--morado));
+  color: #fff;
+}
+.correction {
+  border-left: 3px solid var(--amarillo);
+  background: linear-gradient(100deg, var(--warn-soft), transparent 70%);
+}
+
+/* ── Confetti ───────────────────────────────────────────────
+   Fired on a level-up or a banked session. Purely decorative, removed from
+   the DOM the moment it lands. */
+.confetti-layer { position: fixed; inset: 0; pointer-events: none; z-index: 90; overflow: hidden; }
+.confetti {
+  position: absolute;
+  width: 9px; height: 14px;
+  will-change: transform, opacity;
+  animation: fall var(--dur, 2.4s) linear forwards;
+}
+@keyframes fall {
+  from { transform: translate3d(0,0,0) rotate(0); opacity: 1; }
+  to   { transform: translate3d(var(--dx, 0), 105vh, 0) rotate(var(--spin, 720deg)); opacity: .9; }
+}
+
+/* ── Section headings ───────────────────────────────────────*/
+.section-title h2 {
+  font-family: var(--display);
+  letter-spacing: -.01em;
+}
+.section-title h2::after {
+  content: '';
+  display: block;
+  width: 34px; height: 3px; margin-top: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--rosa), var(--amarillo));
+}
+
+/* ── Respect the setting ────────────────────────────────────
+   Someone who has asked their operating system for less motion means it.
+   Colour stays; everything that moves stops. */
+@media (prefers-reduced-motion: reduce) {
+  body::after,
+  .papel svg,
+  .mural .rays,
+  .mural .bird,
+  .rise,
+  .bubble,
+  .chip.pop,
+  .topbar .brand .dot,
+  .mic-row::before,
+  .mic-row::after,
+  .confetti {
+    animation: none !important;
+  }
+  .card:hover { transform: none; }
+  button.primary::after, .btn-row button:first-child::after { display: none; }
+  * { transition-duration: .01ms !important; }
+}
+
+/* The greeting is painted onto the mural, but it still has to exist as a real
+   heading for screen readers and for anything navigating by landmark. Kept in
+   the accessibility tree, out of the visual one. */
+.sr-head {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── "I don't know what to say" ─────────────────────────────
+   Deliberately quiet until wanted: a learner who never needs it should not
+   have a bright button nagging at them all session. */
+.help-me {
+  background: none;
+  border: 1px dashed var(--line);
+  color: var(--ink-faint);
+  font-size: .78rem;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.help-me:hover {
+  color: var(--morado);
+  border-color: var(--morado);
+  border-style: solid;
+  background: color-mix(in oklab, var(--morado) 8%, transparent);
+}
+.help-box {
+  width: 100%; max-width: 520px;
+  margin-top: 8px; padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--morado);
+  box-shadow: var(--shadow);
+  animation: rise .28s var(--ease) both;
+}
+.help-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0;
+}
+.help-opt + .help-opt { border-top: 1px solid var(--line-soft); }
+.help-text { flex: 1; min-width: 0; }
+.help-text .es { font-family: var(--serif); font-size: .98rem; }
+.help-say, .help-use {
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink-soft);
+  border-radius: var(--r-sm);
+  padding: 4px 9px;
+  font-size: .76rem;
+  cursor: pointer;
+  flex: none;
+}
+.help-use:hover { background: var(--morado); border-color: var(--morado); color: #fff; }
+.help-goal { font-size: .84rem; color: var(--ink-soft); padding: 4px 0; }
+
+
+/* ── Layout corrections the fiesta made necessary ───────────*/
+
+/* The dock used to fade into the page with a gradient. That worked when it
+   held a mic and a text box; with the suggestion panel open it is tall enough
+   that the conversation showed straight through it. Opaque, with a short
+   fade above, so the thread slides cleanly underneath. */
+.mic-dock {
+  background: var(--bg);
+  padding-bottom: 10px;
+}
+.mic-dock::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: -28px;
+  height: 28px;
+  background: linear-gradient(to top, var(--bg), transparent);
+  pointer-events: none;
+}
+
+/* On a short screen the suggestions must not push the text box off it. */
+.help-box { max-height: 40vh; overflow-y: auto; }

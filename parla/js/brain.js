@@ -454,6 +454,123 @@ window.PARLA = window.PARLA || {};
     return (history || []).slice(-12);
   }
 
+  /* ── "I don't know what to say" ───────────────────────────
+   *
+   * The moment a beginner gives up is the moment they are standing there with
+   * nothing to say and the mic waiting. Three things they could actually say
+   * right now, at their level, is the difference between carrying on and
+   * closing the tab.
+   *
+   * Falls back to the scenario's own script lines, so it works with no model
+   * and no network - the same rule the rest of the app follows.
+   */
+  function suggestPrompt(ctx) {
+    var sc = ctx.scenario;
+    var lvl = (ctx.settings.level || 'a1').toUpperCase();
+    var last = (ctx.history || []).filter(function (m) { return m.role === 'partner'; }).slice(-1)[0];
+
+    return [
+      'A learner is in the middle of a Spanish conversation and is stuck.',
+      'You are their coach, not their partner.',
+      '',
+      'THE SCENE: ' + sc.setting,
+      'THEY ARE TALKING TO: ' + sc.role,
+      last ? 'THE LAST THING SAID TO THEM: ' + last.text : 'The conversation has just started.',
+      'THEIR GOAL: ' + ((sc.goals || []).join('; ') || 'keep the conversation going'),
+      '',
+      'Give THREE things they could say next. Rules:',
+      '- Spanish a CEFR ' + lvl + ' learner could actually pronounce. Short.',
+      '- Three DIFFERENT directions - not three wordings of one idea.',
+      '- Each must genuinely answer or advance what was just said to them.',
+      '- No greetings unless the conversation has only just started.',
+      '',
+      'Return ONLY JSON: {"options":[{"es":string,"en":string},...]}'
+    ].join('\n');
+  }
+
+  function parseSuggestions(raw) {
+    var text = (raw || '').trim();
+    var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) text = fence[1].trim();
+    if (text[0] !== '{') {
+      var a = text.indexOf('{'), b = text.lastIndexOf('}');
+      if (a !== -1 && b > a) text = text.slice(a, b + 1);
+    }
+    try {
+      var obj = JSON.parse(text);
+      var opts = (obj.options || obj.suggestions || []).filter(function (o) {
+        return o && typeof o.es === 'string' && o.es.trim();
+      }).slice(0, 3).map(function (o) {
+        return { es: String(o.es).trim(), en: String(o.en || '').trim() };
+      });
+      return opts;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /* Without a model: the scenario's own phrasebook, minus anything already
+   * said. Not tailored to the exact moment the way a model's are, but always
+   * correct Spanish, always on-topic, and instant. */
+  function scriptedSuggestions(ctx) {
+    var sc = ctx.scenario || {};
+    var said = (ctx.history || []).filter(function (m) { return m.role === 'user'; })
+                                  .map(function (m) { return normalise(m.text); });
+
+    var out = [];
+    (sc.phrases || []).forEach(function (phrase) {
+      var text = String(phrase || '').trim();
+      if (!text) return;
+      var key = normalise(text);
+      // Skip anything they have already used - suggesting it back is noise.
+      if (said.some(function (u) { return u.indexOf(key) !== -1; })) return;
+      if (out.some(function (o) { return normalise(o.es) === key; })) return;
+      out.push({ es: text, en: '' });
+    });
+
+    // Everything used already: fall back to the goals, which are always
+    // something they still have to do.
+    if (!out.length) {
+      (sc.goals || []).slice(0, 3).forEach(function (g) {
+        out.push({ es: '', en: g, goal: true });
+      });
+    }
+    return out.slice(0, 3);
+  }
+
+  function suggest(ctx) {
+    var s = ctx.settings || {};
+    var offline = function () {
+      return { options: scriptedSuggestions(ctx), source: 'scripted' };
+    };
+
+    if (s.brain === 'ollama') {
+      var model = s.ollamaModel;
+      var ready = model ? Promise.resolve(model)
+                        : detectOllama(s).then(function (d) { return d.best; });
+      return ready.then(function (m) {
+        if (!m) throw new Error('no model');
+        var url = (s.ollamaUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/api/chat';
+        return fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: m, stream: false, format: 'json', keep_alive: '30m',
+            messages: [{ role: 'system', content: suggestPrompt(ctx) },
+                       { role: 'user', content: 'What could I say?' }],
+            options: { temperature: 0.6, num_predict: 200, num_ctx: 4096 }
+          })
+        }).then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) {
+            var opts = parseSuggestions(d && d.message && d.message.content);
+            return opts.length ? { options: opts, source: 'ollama' } : offline();
+          });
+      }).catch(offline);
+    }
+
+    return Promise.resolve(offline());
+  }
+
   /* ── Ollama backend ─────────────────────────────────────── */
 
   /* Installed models ranked by how well they actually hold a Spanish
@@ -715,6 +832,10 @@ window.PARLA = window.PARLA || {};
     normalise: normalise,
     words: words,
     correctOffline: correctOffline,
+    suggest: suggest,
+    _suggestPrompt: suggestPrompt,
+    _parseSuggestions: parseSuggestions,
+    _scriptedSuggestions: scriptedSuggestions,
     // Set at boot by app.js so views can explain why the AI partner is not in use.
     health: { checked: false, ok: false, detail: '' },
     _scripted: scriptedReply,

@@ -66,6 +66,9 @@ window.PARLA = window.PARLA || {};
     var node = fn(currentParams);
     PARLA.ui.clear(appEl);
     appEl.appendChild(node);
+    // Cards arrive in sequence rather than all at once. Decorative only, and
+    // guarded so a missing decor.js leaves a plain, working app.
+    if (PARLA.decor) PARLA.decor.reveal(node);
     current = node;
 
     paintChips();
@@ -94,6 +97,8 @@ window.PARLA = window.PARLA || {};
     navEl = document.getElementById('nav');
 
     PARLA.store.load();
+
+    if (PARLA.decor) PARLA.decor.install();
     applyTheme();
 
     navEl.addEventListener('click', function (e) {

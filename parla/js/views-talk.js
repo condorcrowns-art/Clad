@@ -144,6 +144,15 @@ window.PARLA = window.PARLA || {};
         }
       }
     });
+    // The moment a beginner gives up is standing there with nothing to say and
+    // the mic waiting. Three things they could actually say next is the
+    // difference between carrying on and closing the tab.
+    var helpBtn = el('button.help-me', { type: 'button', onclick: askForHelp },
+      '💡 I don\u2019t know what to say');
+    var helpBox = el('div.help-box', { hidden: true });
+    dock.appendChild(helpBtn);
+    dock.appendChild(helpBox);
+
     dock.appendChild(el('div.type-fallback', typeInput,
       el('button', { onclick: function () {
         if (typeInput.value.trim()) { var v = typeInput.value.trim(); typeInput.value = ''; submit(v); }
@@ -361,6 +370,58 @@ window.PARLA = window.PARLA || {};
       }).filter(Boolean);
     }
 
+    /* ── stuck ── */
+
+    function askForHelp() {
+      if (session.ended) return;
+      if (!helpBox.hidden) { helpBox.hidden = true; return; }   // tap again to dismiss
+
+      ui.clear(helpBox);
+      helpBox.hidden = false;
+      helpBox.appendChild(el('div.small.muted', 'Thinking of a few…'));
+
+      PARLA.brain.suggest({
+        scenario: sc,
+        history: session.history,
+        settings: Object.assign({}, st.settings, { level: st.profile.level })
+      }).then(function (res) {
+        ui.clear(helpBox);
+        var opts = res.options || [];
+        if (!opts.length) {
+          helpBox.appendChild(el('div.small.muted', 'Nothing to suggest — say anything and see what happens.'));
+          return;
+        }
+
+        helpBox.appendChild(el('div.small.muted',
+          res.source === 'ollama' ? 'You could say:' : 'Useful here:'));
+
+        opts.forEach(function (o) {
+          // A goal has no Spanish to offer, only a nudge about what is left to do.
+          if (o.goal) {
+            helpBox.appendChild(el('div.help-goal', '· ' + o.en));
+            return;
+          }
+          var row = el('div.help-opt',
+            el('button.help-say', { title: 'Hear it', onclick: function (e) {
+              e.stopPropagation();
+              ui.say(o.es);
+            } }, '🔊'),
+            el('div.help-text',
+              el('div.es', o.es),
+              o.en ? el('div.small.muted', o.en) : null),
+            el('button.help-use', { onclick: function () {
+              // Put it in the box rather than sending it: reading it out loud
+              // is the point, and sending it for them is not practice.
+              typeInput.value = o.es;
+              typeInput.focus();
+              helpBox.hidden = true;
+            } }, 'Use')
+          );
+          helpBox.appendChild(row);
+        });
+      });
+    }
+
     /* ── the turn ── */
 
     function submit(text, confidence, alternatives) {
@@ -369,6 +430,7 @@ window.PARLA = window.PARLA || {};
       if (listenHandle) { listenHandle.abort(); listenHandle = null; }
 
       PARLA.speech.cancel();
+      helpBox.hidden = true;
       addUser(text);
       setMic('thinking', 'Thinking…');
       var thinking = addThinking();
@@ -468,7 +530,17 @@ window.PARLA = window.PARLA || {};
         if (challengeDay === p.challengeDay) p.challengeDay = Math.min(59, p.challengeDay + 1);
       }
 
+      var levelBefore = PARLA.store.level();   // reads live state, so take it first
       PARLA.store.creditDay(xp);
+
+      // Mark the moments actually worth marking: banking a session that met
+      // its goal, and crossing a level. Not every turn - constant celebration
+      // is the same as none.
+      if (PARLA.decor) {
+        var levelled = PARLA.store.level() > levelBefore;
+        if (levelled) PARLA.decor.confetti(140);
+        else if (session.turns >= minTurns) PARLA.decor.confetti(60);
+      }
       PARLA.store.save();
 
       PARLA.app.go('summary', {

@@ -96,6 +96,44 @@ conversation stay in one accent rather than drifting between Madrid and Mexico C
 
 ---
 
+## How it looks
+
+Mexican folk colour: papel picado pink, Talavera turquoise, marigold, jacaranda
+purple, nopal green, on warm adobe cream rather than white — those hues go muddy
+against a cold ground. Night is the same fiesta on a jacaranda-dark wall.
+
+Every ornament is **drawn from geometry at runtime**, not downloaded. The papel
+picado is cut from circles and triangles, the tiled background is an eight-fold
+Talavera rosette rendered once to a data URI, and the home screen mural is
+composed from flat shapes that recolour with the theme. No images, no web fonts,
+nothing to fetch — the same constraint that keeps the rest of it free and
+offline. The designs are original compositions in a folk idiom, not
+reproductions of anyone's artwork.
+
+Things move, but only `transform` and `opacity`, so nothing here causes layout:
+bunting sways, the sun turns, birds cross, cards arrive in sequence, the mic
+sends rings out while it listens, and confetti marks a level-up. All of it stops
+dead under `prefers-reduced-motion`, and the colour stays.
+
+`js/decor.js` and `css/fiesta.css` can both be deleted and the app still works —
+there's a test that loads it with `decor.js` blanked out to prove it.
+
+---
+
+## When you're stuck
+
+Tap **I don't know what to say** and you get three things you could actually say
+next — different directions, not three wordings of one idea, at your level, each
+one answering what was just said to you. **Use** puts a phrase in the box rather
+than sending it, because reading it aloud is the point.
+
+With a model running these are written for the exact moment. Without one you get
+the scenario's own phrasebook minus anything you have already said, which is
+less tailored but instant and always correct — and being stuck is exactly when
+you are least able to wait.
+
+---
+
 ## What it remembers
 
 Tell your partner your name on Monday and it still knows on Thursday. Where you
@@ -246,6 +284,8 @@ serve.ps1             dependency-free static server (.NET HttpListener)
 manifest.json         PWA metadata
 sw.js                 offline cache
 css/style.css         design system (light + dark)
+css/fiesta.css        the decorative layer — deletable
+js/decor.js           papel picado, Talavera tiles, the mural, confetti
 js/
   data/
     vocab-es.js       345 words: [es, en, pos, example_es, example_en, tags]
@@ -273,6 +313,8 @@ test/
   listen.test.js          microphone endpointing against a fake recogniser
   comprehension.test.js   the partner must not answer what it did not hear
   memory.test.js          what it remembers, and what it must not invent
+  suggest.test.js         being stuck, with and without a model
+  fiesta.test.js          the ornament must not break the app
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
   piper-browser.test.js   the whole thing in a real browser
 ```
@@ -300,6 +342,7 @@ node test/piper-tts.test.js         # neural routing, fallback, cancel semantics
 node test/listen.test.js            # when your turn ends, and when it does not
 node test/comprehension.test.js     # the partner asks instead of assuming
 node test/memory.test.js            # remembering you between sessions
+node test/suggest.test.js          # what to say when you are stuck
 
 node -e "const{makeSandbox,load}=require('./test/harness');
   const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').PARLA.data.es;
@@ -312,6 +355,7 @@ The end-to-end test needs Playwright, and stands the `/tts` contract up without 
 npm i playwright
 node test/mock-tts-server.js 8765            # or: 8765 nopiper
 node test/piper-browser.test.js 8765         # or: 8765 nopiper
+node test/fiesta.test.js 8765                # layout, reduced motion, decor removed
 ```
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
