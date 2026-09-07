@@ -59,13 +59,17 @@ http.createServer((req, res) => {
       let j = {}; try { j = JSON.parse(body); } catch (e) {}
       seen.push(j);
       if (!HAVE_PIPER) { res.writeHead(503, {'Content-Type':'application/json'}); return res.end('{"error":"piper not installed"}'); }
-      const b = wav(0.25);
+      // Longer when there is more to say, and longer again for several
+      // sentences, so the browser test can tell chunking actually happened.
+      const parts = String(j.text || '').split(/(?<=[.!?\u2026])\s+/).filter(Boolean);
+      const b = wav(0.2 * Math.max(1, parts.length) + (parts.length - 1) * 0.3);
       // Same trick serve.ps1 uses: a WAV declares its own playback rate, so
       // raising it plays the same samples higher and faster.
       if (j.pitch && j.pitch !== 1) setWavRate(b, j.pitch);
       res.writeHead(200, {
         'Content-Type':'audio/wav', 'Content-Length':b.length,
-        'X-Parla-Voice': j.voice || '', 'X-Parla-Rate': String(b.readUInt32LE(24))
+        'X-Parla-Voice': j.voice || '', 'X-Parla-Rate': String(b.readUInt32LE(24)),
+        'X-Parla-Sentences': String(parts.length)
       });
       res.end(b);
     });

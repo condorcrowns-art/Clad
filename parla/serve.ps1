@@ -139,6 +139,100 @@ function Set-WavRate($path, $factor) {
   }
 }
 
+# Split a reply into sentences so each can be spoken on its own and joined
+# with a real pause. One long synthesis run reads everything at one unbroken
+# pace - technically correct, and the single clearest tell that nobody is
+# actually breathing behind it.
+function Split-Sentences($text) {
+  $matches = [regex]::Matches($text, '[^.!?\u2026]+[.!?\u2026]+["''\u00bb)\]]*|[^.!?\u2026]+$')
+  $out = @()
+  foreach ($m in $matches) {
+    $t = $m.Value.Trim()
+    if ($t) { $out += $t }
+  }
+  if ($out.Count -eq 0) { $out = @($text) }
+  return $out
+}
+
+# Join WAVs end to end, with a chosen silence between each.
+# All of them come from the same voice at the same rate, so the format is
+# identical and only the 44-byte header has to be rebuilt.
+function Join-Wavs($paths, $gapsMs, $outPath) {
+  $chunks = @()
+  $rate = 22050; $channels = 1; $bits = 16
+  $header = $null
+
+  for ($i = 0; $i -lt $paths.Count; $i++) {
+    $bytes = [System.IO.File]::ReadAllBytes($paths[$i])
+    if ($bytes.Length -le 44) { continue }
+    if ($null -eq $header) {
+      $header   = $bytes
+      $channels = [System.BitConverter]::ToUInt16($bytes, 22)
+      $rate     = [System.BitConverter]::ToUInt32($bytes, 24)
+      $bits     = [System.BitConverter]::ToUInt16($bytes, 34)
+    }
+    # Find the data chunk rather than assuming it starts at 44: piper writes a
+    # plain header today, but a file with a LIST chunk would silently prepend
+    # metadata bytes to the audio as a burst of noise.
+    $pos = 12
+    $dataAt = 44; $dataLen = $bytes.Length - 44
+    while ($pos + 8 -le $bytes.Length) {
+      $id  = [System.Text.Encoding]::ASCII.GetString($bytes, $pos, 4)
+      $len = [System.BitConverter]::ToUInt32($bytes, $pos + 4)
+      if ($id -eq 'data') { $dataAt = $pos + 8; $dataLen = [int]$len; break }
+      $pos += 8 + $len + ($len % 2)
+    }
+    if ($dataAt + $dataLen -gt $bytes.Length) { $dataLen = $bytes.Length - $dataAt }
+    if ($dataLen -le 0) { continue }
+
+    $audio = New-Object byte[] $dataLen
+    [Array]::Copy($bytes, $dataAt, $audio, 0, $dataLen)
+    $chunks += ,$audio
+
+    $gap = if ($i -lt $gapsMs.Count) { [int]$gapsMs[$i] } else { 0 }
+    if ($gap -gt 0 -and $i -lt $paths.Count - 1) {
+      $silenceLen = [int]($rate * $channels * ($bits / 8) * $gap / 1000)
+      # Even-align so a sample is never cut in half.
+      $silenceLen = $silenceLen - ($silenceLen % ($channels * ($bits / 8)))
+      $chunks += ,(New-Object byte[] $silenceLen)
+    }
+  }
+
+  if ($chunks.Count -eq 0) { return $false }
+
+  $total = 0
+  foreach ($c in $chunks) { $total += $c.Length }
+
+  $outBytes = New-Object byte[] (44 + $total)
+  [System.Text.Encoding]::ASCII.GetBytes('RIFF').CopyTo($outBytes, 0)
+  [System.BitConverter]::GetBytes([uint32](36 + $total)).CopyTo($outBytes, 4)
+  [System.Text.Encoding]::ASCII.GetBytes('WAVEfmt ').CopyTo($outBytes, 8)
+  [System.BitConverter]::GetBytes([uint32]16).CopyTo($outBytes, 16)
+  [System.BitConverter]::GetBytes([uint16]1).CopyTo($outBytes, 20)
+  [System.BitConverter]::GetBytes([uint16]$channels).CopyTo($outBytes, 22)
+  [System.BitConverter]::GetBytes([uint32]$rate).CopyTo($outBytes, 24)
+  [System.BitConverter]::GetBytes([uint32]($rate * $channels * ($bits / 8))).CopyTo($outBytes, 28)
+  [System.BitConverter]::GetBytes([uint16]($channels * ($bits / 8))).CopyTo($outBytes, 32)
+  [System.BitConverter]::GetBytes([uint16]$bits).CopyTo($outBytes, 34)
+  [System.Text.Encoding]::ASCII.GetBytes('data').CopyTo($outBytes, 36)
+  [System.BitConverter]::GetBytes([uint32]$total).CopyTo($outBytes, 40)
+
+  $at = 44
+  foreach ($c in $chunks) { [Array]::Copy($c, 0, $outBytes, $at, $c.Length); $at += $c.Length }
+
+  [System.IO.File]::WriteAllBytes($outPath, $outBytes)
+  return $true
+}
+
+# How long to leave after a sentence. A question hangs a beat longer than a
+# statement, the way someone actually waits for an answer.
+function Get-GapMs($sentence) {
+  if ($sentence -match '[?\u00bf]\s*$') { return 420 }
+  if ($sentence -match '!\s*$')          { return 320 }
+  if ($sentence -match '[.\u2026]\s*$') { return 280 }
+  return 200
+}
+
 function Invoke-Piper($piperExe, $voicePath, $text, $lengthScale, $outWav) {
   $tmp    = [System.IO.Path]::GetTempPath()
   $stamp  = [guid]::NewGuid().ToString('N')
@@ -335,7 +429,30 @@ try {
 
         $ok = $true
         if (-not (Test-Path $wav -PathType Leaf)) {
-          $ok = Invoke-Piper $piperExe $voice.path $text $lengthScale $wav
+          $parts = Split-Sentences $text
+
+          if ($parts.Count -le 1) {
+            $ok = Invoke-Piper $piperExe $voice.path $text $lengthScale $wav
+          } else {
+            # One synthesis run per sentence, joined with a real silence.
+            $tmpFiles = @(); $gaps = @()
+            foreach ($sentence in $parts) {
+              $tmp = Join-Path $cacheDir ([guid]::NewGuid().ToString('N') + '.part.wav')
+              # A question is delivered a touch slower, the way people ask them.
+              $ls = if ($sentence -match '[?\u00bf]') { [math]::Round($lengthScale * 1.05, 3) } else { $lengthScale }
+              if (Invoke-Piper $piperExe $voice.path $sentence $ls $tmp) {
+                $tmpFiles += $tmp
+                $gaps += (Get-GapMs $sentence)
+              }
+            }
+            if ($tmpFiles.Count -gt 0) {
+              $ok = Join-Wavs $tmpFiles $gaps $wav
+            } else {
+              $ok = $false
+            }
+            foreach ($t in $tmpFiles) { Remove-Item $t -Force -ErrorAction SilentlyContinue }
+          }
+
           if ($ok -and $pitch -ne 1.0) { Set-WavRate $wav $pitch }
           if ($ok) { Trim-Cache }
         }

@@ -357,6 +357,36 @@ if ($SkipVoice) {
     } elseif ($installed -eq 0) {
       Warn "no voice models installed - the app will use your browser's voices"
     }
+
+    # Windows ships genuinely good neural Spanish voices, and they are the only
+    # easy source of a convincing FEMALE Spanish voice - piper's Spanish set is
+    # almost entirely male. Worth pointing at, since half the characters in the
+    # app are women. Free, and already paid for by owning Windows.
+    $hasNatural = $false
+    try {
+      Add-Type -AssemblyName System.Speech -ErrorAction SilentlyContinue
+      $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+      $spanish = $synth.GetInstalledVoices() | Where-Object {
+        $_.VoiceInfo.Culture.Name -like 'es-*'
+      }
+      $synth.Dispose()
+      if ($spanish) {
+        Note ("Windows Spanish voices found: " +
+              (($spanish | ForEach-Object { $_.VoiceInfo.Name }) -join ', '))
+        $hasNatural = [bool]($spanish | Where-Object { $_.VoiceInfo.Name -match 'Natural' })
+      }
+    } catch { }
+
+    if (-not $hasNatural) {
+      Write-Host ""
+      Write-Host "    For a convincing woman's voice, add a Windows natural voice:" -ForegroundColor Cyan
+      Write-Host "      Settings > Time and language > Language and region"
+      Write-Host "      Add a language > Spanish > install the Speech feature"
+      Write-Host "      then Accessibility > Narrator > Add natural voices"
+      Write-Host "    Pick one whose name contains 'Natural' (Elvira, Dalia, Alvaro)."
+      Write-Host "    Restart your browser afterwards and they appear in Settings > Voice."
+      Write-Host ""
+    }
   } catch {
     Warn "Neural voice setup failed: $($_.Exception.Message)"
     Warn "Not fatal - Parla falls back to your browser's voices. Re-run this to retry."

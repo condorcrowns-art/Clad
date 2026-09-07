@@ -51,7 +51,7 @@ vm.runInContext(`
   };
 `, ctx);
 
-load(ctx, 'js/speech.js');
+load(ctx, 'js/saytext.js', 'js/speech.js');
 
 const run = (code) => vm.runInContext(code, ctx);
 const tick = () => new Promise((r) => setTimeout(r, 5));
@@ -142,6 +142,23 @@ function reset() {
   await tick();
   check('a saved neural voice after piper is uninstalled uses the browser',
     run('__ttsCalls.length') === 0 && run('__spoken.length') === 1);
+
+  /* — spoken form, not written form — */
+  console.log('');
+  run('PARLA.speech._setPiper(true, ' + JSON.stringify(PIPER_VOICES) + ');');
+  reset();
+  run('PARLA.speech.speak("Habitacion 204. Son 3,20 \u20ac.", { lang: "es" });');
+  await tick();
+  let spoken = JSON.parse(run('JSON.stringify(__ttsCalls[0] || {})')).body;
+  check('digits are turned into words before synthesis',
+    /doscientos cuatro/.test(spoken.text), spoken.text);
+  check('and so is money', /tres euros con veinte/.test(spoken.text));
+
+  reset();
+  run('PARLA.speech.speak("Hola", { lang: "es", raw: true });');
+  await tick();
+  check('raw mode passes the text through untouched',
+    JSON.parse(run('JSON.stringify(__ttsCalls[0] || {})')).body.text === 'Hola');
 
   /* — lifecycle — */
   console.log('');

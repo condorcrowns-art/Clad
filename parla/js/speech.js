@@ -303,6 +303,15 @@ window.PARLA = window.PARLA || {};
 
   function speak(text, opts) {
     opts = opts || {};
+
+    /* Say it the way a person would, not the way it is written. "Habitación
+     * 204" and "Son 3,20 EUR" are read as digits and symbols by every engine
+     * there is, and one mangled number undoes a whole neural model's worth of
+     * realism. The text on screen is untouched - this is the speech layer. */
+    if (PARLA.saytext && opts.raw !== true) {
+      text = PARLA.saytext.forSpeech(text);
+    }
+
     if (!text) {
       if (opts.onend) opts.onend();
       return function () {};

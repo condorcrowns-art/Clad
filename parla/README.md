@@ -134,6 +134,32 @@ you are least able to wait.
 
 ---
 
+## Making it sound like a person
+
+Three things separate a synthesiser from someone talking, and none of them is
+the model.
+
+**It has to say numbers the way people say them.** Every engine reads
+"Habitación 204" as digits and "Son 3,20 €" as noise. One mangled number undoes
+a whole neural model's worth of realism, because nobody would ever say it that
+way. So `js/saytext.js` rewrites the lot before synthesis — numbers with proper
+Spanish agreement (*cien* vs *ciento*, *quinientos*, *setecientos*, *una* vs
+*un*), the clock in halves and quarters (*las nueve menos cuarto*, not *veinte
+cuarenta y cinco*), money, percentages, decimals, ordinals, and the
+abbreviations that are always written short and always said long — *Sr.*,
+*Dra.*, *Ud.*, *Avda.*. Phone numbers go digit by digit, because grouping them
+in pairs turns "00" into a single *cero* and loses one. The text on screen is
+untouched; this is purely the speech layer.
+
+**It has to breathe.** A reply used to be one synthesis run at one unbroken
+pace. Now `serve.ps1` splits it into sentences, synthesises each on its own, and
+joins them with a real silence — longer after a question than a statement — with
+questions delivered a touch slower, the way people actually ask them.
+
+**Every character is a different person.** See below.
+
+---
+
 ## Casting
 
 Your partner is a different person in every scenario — Marta the barista, Javi
@@ -356,9 +382,10 @@ sw.js                 offline cache
 css/style.css         design system (light + dark)
 css/fiesta.css        the decorative layer — deletable
 js/decor.js           papel picado, Talavera tiles, the mural, confetti
+js/saytext.js         written Spanish -> spoken Spanish, before synthesis
 js/
   data/
-    vocab-es.js       345 words: [es, en, pos, example_es, example_en, tags]
+    vocab-es.js       440 words: [es, en, pos, example_es, example_en, tags]
     verbs-es.js       conjugation ENGINE — regular endings + irregular overrides
     scenarios-es.js   23 scenarios: LLM briefing + offline script beats
     challenge-es.js   the 60-day plan
@@ -385,6 +412,8 @@ test/
   english.test.js         answering in English as a teaching moment
   casting.test.js         who plays whom, and at what pitch
   memory.test.js          what it remembers, and what it must not invent
+  saytext.test.js         numbers, times and money as a person says them
+  corpus.test.js          the content itself: no duplicates, no broken rows
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
@@ -414,6 +443,8 @@ node test/piper-tts.test.js         # neural routing, fallback, cancel semantics
 node test/listen.test.js            # when your turn ends, and when it does not
 node test/comprehension.test.js     # the partner asks instead of assuming
 node test/memory.test.js            # remembering you between sessions
+node test/saytext.test.js          # "Habitación 204" -> "doscientos cuatro"
+node test/corpus.test.js           # the word list and scenarios themselves
 node test/suggest.test.js          # what to say when you are stuck
 node test/english.test.js          # English as a teaching moment
 node test/casting.test.js          # voices matched to characters

@@ -383,5 +383,121 @@ PARLA.data.es.vocab = [
   ["me da igual", "I don't mind", "phrase", "Me da igual, elige tú.", "I don't mind, you pick.", "survival|b1"],
   ["¿me ayudas?", "can you help me?", "phrase", "¿Me ayudas un segundo?", "Can you help me a second?", "survival|a1"],
   ["¿qué tal si...?", "how about we...?", "phrase", "¿Qué tal si vamos mañana?", "How about we go tomorrow?", "survival|b1"]
+,
+
+  /* ── Time & frequency ── */
+  ["el rato", "a while", "noun-m", "Espera un rato, ahora vuelvo.", "Wait a while, I'll be right back.", "time|a2"],
+  ["a menudo", "often", "adv", "Voy al gimnasio a menudo.", "I go to the gym often.", "time|a2"],
+  ["casi nunca", "hardly ever", "phrase", "Casi nunca veo la tele.", "I hardly ever watch TV.", "time|a2"],
+  ["ya no", "not any more", "phrase", "Ya no vivo allí.", "I don't live there any more.", "time|a2"],
+  ["en cuanto", "as soon as", "conj", "Te llamo en cuanto llegue.", "I'll call you as soon as I arrive.", "time|b1"],
+  ["de momento", "for now", "phrase", "De momento estoy bien así.", "For now I'm fine like this.", "time|b1"],
+  ["hace poco", "recently", "phrase", "Hace poco cambié de trabajo.", "I changed jobs recently.", "time|a2"],
+  ["dentro de", "in (time) / inside", "prep", "Vuelvo dentro de una hora.", "I'll be back in an hour.", "time|a2"],
+  ["la madrugada", "the small hours", "noun-f", "Llegamos de madrugada.", "We arrived in the small hours.", "time|b1"],
+  ["el fin de semana", "the weekend", "noun-m", "¿Qué haces el fin de semana?", "What are you doing this weekend?", "time|a1"],
+  ["el mes pasado", "last month", "phrase", "El mes pasado estuve en Sevilla.", "Last month I was in Seville.", "time|a1"],
+
+  /* ── Feelings & opinion ── */
+  ["me apetece", "I feel like", "phrase", "Me apetece un helado.", "I feel like an ice cream.", "feelings|a2"],
+  ["estar harto de", "to be fed up with", "phrase", "Estoy harto de esperar.", "I'm fed up with waiting.", "feelings|b1"],
+  ["dar pena", "to be a shame", "phrase", "Me da pena irme ya.", "It's a shame I have to go.", "feelings|b1"],
+  ["echar de menos", "to miss", "verb", "Echo de menos a mi familia.", "I miss my family.", "feelings|b1"],
+  ["estar orgulloso", "to be proud", "phrase", "Estoy muy orgulloso de ti.", "I'm very proud of you.", "feelings|b1"],
+  ["preocuparse", "to worry", "verb", "No te preocupes, hay tiempo.", "Don't worry, there's time.", "feelings|a2"],
+  ["alegrarse", "to be glad", "verb", "Me alegro de verte.", "I'm glad to see you.", "feelings|a2"],
+  ["enfadarse", "to get angry", "verb", "No te enfades conmigo.", "Don't get angry with me.", "feelings|a2"],
+  ["tener ganas de", "to look forward to", "phrase", "Tengo ganas de verte.", "I'm looking forward to seeing you.", "feelings|a2"],
+  ["dar igual", "not to matter", "phrase", "Me da igual el color.", "The colour doesn't matter to me.", "feelings|a2"],
+  ["estar de acuerdo", "to agree", "phrase", "No estoy de acuerdo contigo.", "I don't agree with you.", "opinion|a2"],
+  ["en mi opinión", "in my opinion", "phrase", "En mi opinión, es demasiado caro.", "In my opinion, it's too expensive.", "opinion|b1"],
+  ["me parece que", "it seems to me that", "phrase", "Me parece que va a llover.", "It seems to me it's going to rain.", "opinion|a2"],
+  ["por cierto", "by the way", "phrase", "Por cierto, ¿cómo está tu hermana?", "By the way, how's your sister?", "opinion|b1"],
+  ["la verdad es que", "the truth is", "phrase", "La verdad es que no lo sé.", "The truth is I don't know.", "opinion|b1"],
+
+  /* ── Getting around ── */
+  ["el asiento", "the seat", "noun-m", "¿Está libre este asiento?", "Is this seat free?", "travel|a2"],
+  ["la parada", "the stop", "noun-f", "Bájate en la próxima parada.", "Get off at the next stop.", "travel|a1"],
+  ["el trasbordo", "the transfer", "noun-m", "Hay que hacer trasbordo en Sol.", "You have to change at Sol.", "travel|b1"],
+  ["la puerta de embarque", "the boarding gate", "phrase", "La puerta de embarque ha cambiado.", "The boarding gate has changed.", "travel|a2"],
+  ["el billete de ida y vuelta", "return ticket", "phrase", "Un billete de ida y vuelta, por favor.", "A return ticket, please.", "travel|a2"],
+  ["perderse", "to get lost", "verb", "Creo que nos hemos perdido.", "I think we're lost.", "travel|a2"],
+  ["seguir recto", "to go straight on", "phrase", "Sigue recto hasta la plaza.", "Go straight on to the square.", "directions|a1"],
+  ["girar", "to turn", "verb", "Gira a la derecha en el semáforo.", "Turn right at the lights.", "directions|a1"],
+  ["al final de", "at the end of", "phrase", "Al final de la calle hay una farmacia.", "At the end of the street there's a pharmacy.", "directions|a2"],
+  ["enfrente de", "opposite", "prep", "El banco está enfrente del cine.", "The bank is opposite the cinema.", "directions|a1"],
+  ["al lado de", "next to", "prep", "Vivo al lado del mercado.", "I live next to the market.", "directions|a1"],
+
+  /* ── Food & eating out ── */
+  ["la carta", "the menu", "noun-f", "¿Nos trae la carta, por favor?", "Could you bring us the menu, please?", "food|a1"],
+  ["el plato del día", "the dish of the day", "phrase", "¿Cuál es el plato del día?", "What's the dish of the day?", "food|a2"],
+  ["el primero", "the starter", "noun-m", "De primero, una ensalada.", "For starters, a salad.", "food|a2"],
+  ["el segundo", "the main course", "noun-m", "De segundo, pescado.", "For the main, fish.", "food|a2"],
+  ["soso", "bland / under-salted", "adj", "La sopa está un poco sosa.", "The soup is a bit bland.", "food|b1"],
+  ["crudo", "raw / undercooked", "adj", "El pollo está un poco crudo.", "The chicken is a bit undercooked.", "food|a2"],
+  ["tener alergia a", "to be allergic to", "phrase", "Tengo alergia a los frutos secos.", "I'm allergic to nuts.", "food|a2"],
+  ["la merienda", "afternoon snack", "noun-f", "Los niños toman la merienda a las cinco.", "The children have their snack at five.", "food|a2"],
+  ["estar buenísimo", "to be delicious", "phrase", "Esto está buenísimo.", "This is delicious.", "food|a2"],
+
+  /* ── Shopping & money ── */
+  ["el número", "the size (shoes)", "noun-m", "Calzo el cuarenta y dos.", "I take a size forty-two.", "shopping|a2"],
+  ["probarse", "to try on", "verb", "¿Me lo puedo probar?", "Can I try it on?", "shopping|a2"],
+  ["el probador", "the fitting room", "noun-m", "El probador está al fondo.", "The fitting room is at the back.", "shopping|a2"],
+  ["caducar", "to expire", "verb", "La oferta caduca mañana.", "The offer expires tomorrow.", "shopping|b1"],
+  ["el reembolso", "the refund", "noun-m", "Quisiera un reembolso.", "I'd like a refund.", "shopping|b1"],
+  ["en efectivo", "in cash", "phrase", "¿Puedo pagar en efectivo?", "Can I pay in cash?", "money|a2"],
+  ["salir caro", "to work out expensive", "phrase", "Al final sale caro.", "In the end it works out expensive.", "money|b1"],
+
+  /* ── Home & everyday ── */
+  ["la fianza", "the deposit", "noun-f", "Piden dos meses de fianza.", "They ask for two months' deposit.", "home|b1"],
+  ["los gastos", "the bills / expenses", "noun-m", "¿Los gastos están incluidos?", "Are bills included?", "home|b1"],
+  ["amueblado", "furnished", "adj", "¿Está amueblado?", "Is it furnished?", "home|b1"],
+  ["la calefacción", "the heating", "noun-f", "No funciona la calefacción.", "The heating isn't working.", "home|a2"],
+  ["arreglar", "to fix", "verb", "¿Puedes arreglarlo?", "Can you fix it?", "home|a2"],
+  ["estropearse", "to break down", "verb", "Se ha estropeado la lavadora.", "The washing machine has broken.", "home|b1"],
+
+  /* ── Health ── */
+  ["la pastilla", "the tablet", "noun-f", "Tómese una pastilla cada ocho horas.", "Take one tablet every eight hours.", "health|a2"],
+  ["mareado", "dizzy", "adj", "Estoy un poco mareado.", "I feel a bit dizzy.", "health|a2"],
+  ["hacerse daño", "to hurt oneself", "phrase", "Me he hecho daño en el pie.", "I've hurt my foot.", "health|a2"],
+  ["estar resfriado", "to have a cold", "phrase", "Estoy resfriado.", "I have a cold.", "health|a2"],
+
+  /* ── Work & study ── */
+  ["el plazo", "the deadline", "noun-m", "El plazo termina el viernes.", "The deadline is Friday.", "work|b1"],
+  ["encargarse de", "to be in charge of", "phrase", "Yo me encargo de eso.", "I'll take care of that.", "work|b1"],
+  ["estar de baja", "to be on sick leave", "phrase", "Está de baja esta semana.", "He's on sick leave this week.", "work|b1"],
+  ["practicar", "to practise", "verb", "Necesito practicar más.", "I need to practise more.", "study|a1"],
+  ["el error", "the mistake", "noun-m", "He cometido un error.", "I've made a mistake.", "study|a2"],
+  ["mejorar", "to improve", "verb", "Quiero mejorar mi pronunciación.", "I want to improve my pronunciation.", "study|a2"],
+  ["darse cuenta", "to realise", "verb", "No me di cuenta.", "I didn't realise.", "study|b1"],
+
+  /* ── Keeping a conversation going ── */
+  ["¿en serio?", "really?", "phrase", "¿En serio? No me lo creo.", "Really? I don't believe it.", "conversation|a2"],
+  ["¡qué bien!", "how great!", "phrase", "¡Qué bien! Me alegro.", "How great! I'm glad.", "conversation|a1"],
+  ["¡qué pena!", "what a shame!", "phrase", "¡Qué pena! Será otra vez.", "What a shame! Another time.", "conversation|a2"],
+  ["¿y tú?", "and you?", "phrase", "Bien, ¿y tú?", "Fine, and you?", "conversation|a1"],
+  ["cuéntame", "tell me", "phrase", "Cuéntame, ¿qué tal el viaje?", "Tell me, how was the trip?", "conversation|a2"],
+  ["es que", "the thing is", "phrase", "Es que no tengo tiempo.", "The thing is, I don't have time.", "conversation|a2"],
+  ["bueno...", "well...", "interj", "Bueno, ya veremos.", "Well, we'll see.", "conversation|a1"],
+  ["a ver", "let's see", "phrase", "A ver qué pasa.", "Let's see what happens.", "conversation|a2"],
+  ["¿cómo dices?", "sorry, what?", "phrase", "¿Cómo dices? No te he oído.", "Sorry, what? I didn't hear you.", "conversation|a1"],
+  ["no me acuerdo", "I don't remember", "phrase", "No me acuerdo de su nombre.", "I don't remember his name.", "conversation|a2"],
+  ["se me ha olvidado", "I've forgotten", "phrase", "Se me ha olvidado la palabra.", "I've forgotten the word.", "conversation|b1"],
+  ["por si acaso", "just in case", "phrase", "Lleva paraguas por si acaso.", "Take an umbrella just in case.", "conversation|b1"],
+  ["de todas formas", "anyway", "phrase", "De todas formas, gracias.", "Anyway, thanks.", "conversation|b1"],
+  ["resulta que", "it turns out that", "phrase", "Resulta que ya lo sabía.", "It turns out he already knew.", "conversation|b1"],
+
+  /* ── Useful verbs ── */
+  ["dejar de", "to stop doing", "phrase", "He dejado de fumar.", "I've stopped smoking.", "verbs|b1"],
+  ["volver a", "to do again", "phrase", "Vuelve a decirlo, por favor.", "Say it again, please.", "verbs|a2"],
+  ["acabar de", "to have just done", "phrase", "Acabo de llegar.", "I've just arrived.", "verbs|a2"],
+  ["ponerse a", "to start doing", "phrase", "Se puso a llover.", "It started raining.", "verbs|b1"],
+  ["soler", "to usually do", "verb", "Suelo levantarme temprano.", "I usually get up early.", "verbs|b1"],
+  ["quedarse", "to stay", "verb", "Me quedo en casa hoy.", "I'm staying home today.", "verbs|a2"],
+  ["llevar", "to have been (doing)", "verb", "Llevo dos años aquí.", "I've been here two years.", "verbs|b1"],
+  ["tardar", "to take (time)", "verb", "¿Cuánto se tarda?", "How long does it take?", "verbs|a2"],
+  ["hacer falta", "to be needed", "phrase", "No hace falta, gracias.", "There's no need, thanks.", "verbs|a2"],
+  ["valer la pena", "to be worth it", "phrase", "Vale la pena verlo.", "It's worth seeing.", "verbs|b1"],
+  ["tener que ver con", "to have to do with", "phrase", "No tiene nada que ver conmigo.", "It has nothing to do with me.", "verbs|b1"]
 
 ];
