@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lunosia</title>
+<link rel="stylesheet" href="css/panel.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M15.5 3.2A9 9 0 1 0 20.8 8.5 7 7 0 0 1 15.5 3.2Z"/>
+    </svg>
+    <span>Lunosia</span>
+  </div>
+  <div class="bar-right">
+    <span id="engineBadge" class="badge" title="Where transcription is running">local</span>
+    <button id="btnSessions" class="icon" title="Saved transcripts" aria-label="Saved transcripts">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    </button>
+    <button id="btnSettings" class="icon" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="privacyNote" class="privacy">
+  <strong>Nothing leaves this machine.</strong> Audio is transcribed by a model running inside your browser.
+  <button id="dismissPrivacy" class="link">got it</button>
+</div>
+
+<section class="control">
+  <div class="sources" role="radiogroup" aria-label="Audio source">
+    <button class="src is-on" data-source="tab" role="radio" aria-checked="true">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>
+      This tab
+    </button>
+    <button class="src" data-source="mic" role="radio" aria-checked="false">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      Microphone
+    </button>
+  </div>
+
+  <button id="btnRecord" class="record">
+    <span class="dot"></span>
+    <span id="recordLabel">Start transcribing</span>
+  </button>
+
+  <div class="meterRow">
+    <div class="meter"><i id="meterFill"></i></div>
+    <span id="timer" class="timer">0:00</span>
+  </div>
+
+  <p id="status" class="status">Ready — the model loads on first use.</p>
+  <div id="progressWrap" class="progress" hidden><i id="progressFill"></i><span id="progressText"></span></div>
+</section>
+
+<div class="findRow">
+  <input id="find" type="search" placeholder="Search this transcript…" autocomplete="off">
+  <span id="counts" class="counts"></span>
+</div>
+
+<main id="transcript" class="transcript" aria-live="polite">
+  <div id="empty" class="empty">
+    <svg viewBox="0 0 24 24" class="emptyMark"><path d="M15.5 3.2A9 9 0 1 0 20.8 8.5 7 7 0 0 1 15.5 3.2Z"/></svg>
+    <p>Play something in this tab, or speak into your mic, and the words appear here.</p>
+    <p class="fine">Click any line to correct it. Everything stays on this computer.</p>
+  </div>
+</main>
+
+<footer class="tools">
+  <button id="btnCopy" class="tool">Copy</button>
+  <div class="exportWrap">
+    <button id="btnExport" class="tool primary">Export ▾</button>
+    <div id="exportMenu" class="menu" hidden>
+      <button data-fmt="txt">Plain text (.txt)</button>
+      <button data-fmt="md">Markdown (.md)</button>
+      <button data-fmt="srt">Subtitles (.srt)</button>
+      <button data-fmt="vtt">WebVTT (.vtt)</button>
+      <button data-fmt="json">Data (.json)</button>
+    </div>
+  </div>
+  <button id="btnNew" class="tool">New</button>
+</footer>
+
+<!-- drawers -->
+<div id="settingsPane" class="pane" hidden>
+  <div class="paneHead"><h2>Settings</h2><button class="icon" data-close="settingsPane">✕</button></div>
+  <label class="field">
+    <span>Transcription engine</span>
+    <select id="setEngine">
+      <option value="local">In-browser Whisper (no setup)</option>
+      <option value="server">Local server on 127.0.0.1 (best accuracy)</option>
+    </select>
+  </label>
+  <label class="field" id="modelField">
+    <span>Model</span>
+    <select id="setModel">
+      <option value="tiny">Tiny — fastest, roughest (~75 MB)</option>
+      <option value="base">Base — balanced (~145 MB)</option>
+      <option value="small">Small — most accurate, slowest (~480 MB)</option>
+    </select>
+  </label>
+  <label class="field" id="serverField" hidden>
+    <span>Server URL</span>
+    <input id="setServer" type="url" spellcheck="false">
+    <small>e.g. whisper.cpp: <code>./server -m model.bin --port 8080</code></small>
+  </label>
+  <label class="field">
+    <span>Language</span>
+    <select id="setLang">
+      <option value="auto">Detect automatically</option>
+      <option value="en">English</option><option value="es">Spanish</option>
+      <option value="fr">French</option><option value="de">German</option>
+      <option value="it">Italian</option><option value="pt">Portuguese</option>
+      <option value="nl">Dutch</option><option value="pl">Polish</option>
+      <option value="ru">Russian</option><option value="ja">Japanese</option>
+      <option value="ko">Korean</option><option value="zh">Chinese</option>
+      <option value="ar">Arabic</option><option value="hi">Hindi</option>
+    </select>
+  </label>
+  <label class="field">
+    <span>Task</span>
+    <select id="setTask">
+      <option value="transcribe">Transcribe as spoken</option>
+      <option value="translate">Translate into English</option>
+    </select>
+  </label>
+  <label class="check"><input id="setTimestamps" type="checkbox"> Show timestamps</label>
+  <label class="check"><input id="setAutoscroll" type="checkbox"> Follow the newest line</label>
+  <label class="check"><input id="setSpeakers" type="checkbox"> Speaker labels (manual)</label>
+  <div class="paneFoot">
+    <span id="usageNote" class="fine"></span>
+    <button id="btnRelease" class="tool">Unload model from memory</button>
+  </div>
+</div>
+
+<div id="sessionsPane" class="pane" hidden>
+  <div class="paneHead"><h2>Saved transcripts</h2><button class="icon" data-close="sessionsPane">✕</button></div>
+  <div id="sessionList" class="sessionList"></div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="src/panel.js"></script>
+</body>
+</html>

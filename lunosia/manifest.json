@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "Lunosia \u2014 Private Transcription",
+  "short_name": "Lunosia",
+  "version": "2.0.0",
+  "description": "Transcribe any tab's audio or your microphone entirely on your own machine. No account, no upload, no cloud. Your audio never leaves this computer.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "sidePanel",
+    "storage",
+    "scripting",
+    "unlimitedStorage",
+    "downloads",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://huggingface.co/*",
+    "https://cdn-lfs.huggingface.co/*",
+    "https://cdn-lfs-us-1.huggingface.co/*",
+    "https://cas-bridge.xethub.hf.co/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "sw.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Lunosia \u2014 open transcription panel",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Start or stop transcribing"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/ort/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

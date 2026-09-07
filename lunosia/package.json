@@ -1,0 +1,14 @@
+{
+  "name": "lunosia",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Private, on-device transcription for Chrome. Audio never leaves the machine.",
+  "type": "module",
+  "scripts": {
+    "setup": "node tools/fetch-engine.mjs",
+    "test": "node test/export.test.mjs",
+    "validate": "node tools/validate.mjs",
+    "icons": "node tools/make-icons.mjs",
+    "check": "npm run validate && npm test"
+  }
+}
