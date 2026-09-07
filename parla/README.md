@@ -209,6 +209,40 @@ offline partner catches it too and hands you the phrase this scene needs.
 
 ---
 
+## Ask it anything
+
+The shipped list is 521 words. **The model knows the language** — capping a
+lookup at a list somebody typed by hand was the wrong instinct, so the **Ask**
+screen takes any word, phrase or whole sentence, in Spanish or English, spelled
+right or not, and comes back with:
+
+- what it means
+- the dictionary form, with its article and gender if it's a noun
+- what form you were looking at (*third-person preterite of tener*)
+- **the full conjugation, every tense**, if it's a verb
+- how a sentence is built around it — what it takes after it, which verb it needs
+- **the mistake English speakers make with that exact word**
+- two examples at your level, each with a play button
+
+Write a sentence with a mistake in it and you get the corrected sentence back
+plus what was wrong.
+
+**Where each part comes from matters.** The conjugation table is generated from
+the same rules that drive the verb drill, not recited by an 8B model from
+memory — so it is right for any regular verb in the language, including ones
+nobody put in a list. `madrugar` is not in the fifty-verb drill pool and
+conjugates correctly across all six tenses. For a verb it has no irregular data
+on, it says so rather than pretending.
+
+Everything you ask about can go straight into your deck. A word it has no
+meaning for is refused rather than banked — a card with a blank back is not a
+flashcard.
+
+Without a model it still answers from the corpus and the grammar engine, and
+tells you that is what happened.
+
+---
+
 ## Tap any word
 
 A fixed word list is always the wrong list: it holds words you already know and
@@ -247,6 +281,12 @@ based on how well you actually know that card:
 | Getting solid | **Type it** in Spanish from the English |
 | Solid, with an example | **Fill the gap** — the word punched out of its own sentence |
 | Strong | **Say it** aloud, checked by the recogniser |
+
+Cards **flip** — front and back stacked on the same spot, the whole thing
+rotating, so the answer arrives from behind the question rather than replacing
+it. **Space** flips, **1–4** grade, **U** undoes the last card and puts its
+scheduling back exactly as it was. Mis-tapping a grade is the commonest mistake
+in any flashcard app and without undo it silently costs you a week.
 
 Typed answers are judged properly: articles optional, one-letter slips and
 missing accents scored as *near misses* rather than failures — with the accent
@@ -415,6 +455,7 @@ css/style.css         design system (light + dark)
 css/fiesta.css        the decorative layer — deletable
 js/decor.js           papel picado, Talavera tiles, the mural, confetti
 js/saytext.js         written Spanish -> spoken Spanish, before synthesis
+js/views-coach.js     the Ask screen
 js/
   data/
     vocab-es.js       521 words: [es, en, pos, example_es, example_en, tags]
@@ -448,6 +489,7 @@ test/
   saytext.test.js         numbers, times and money as a person says them
   corpus.test.js          the content itself: no duplicates, no broken rows
   lookup.test.js          tapping a word, and which model gets picked
+  coach.test.js           asking about any word, and conjugating any verb
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
@@ -480,6 +522,7 @@ node test/memory.test.js            # remembering you between sessions
 node test/saytext.test.js          # "Habitación 204" -> "doscientos cuatro"
 node test/corpus.test.js           # the word list and scenarios themselves
 node test/lookup.test.js           # word lookup and model ranking
+node test/coach.test.js            # the Ask screen's answers
 node test/suggest.test.js          # what to say when you are stuck
 node test/english.test.js          # English as a teaching moment
 node test/casting.test.js          # voices matched to characters
@@ -498,6 +541,7 @@ node test/piper-browser.test.js 8765         # or: 8765 nopiper
 node test/fiesta.test.js 8765                # layout, reduced motion, decor removed
 node test/drill-browser.test.js 8765        # every flashcard drill, end to end
 node test/word-browser.test.js 8765         # tapping a word out of a conversation
+node test/coach-browser.test.js 8765        # the Ask screen and the flip cards
 ```
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`

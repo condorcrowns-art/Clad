@@ -771,6 +771,189 @@ window.PARLA = window.PARLA || {};
     }).catch(function () { return local; });
   }
 
+  /* ── Ask it anything ──────────────────────────────────────
+   *
+   * The corpus is 521 words. The model knows the language. Capping a lookup at
+   * a list somebody typed by hand was the wrong instinct: whatever word you
+   * throw at this, it should come back with the meaning, the dictionary form,
+   * the gender, the conjugation if it is a verb, how the sentence is built
+   * around it, and the mistake an English speaker makes with it.
+   *
+   * The corpus and the conjugation engine still answer first where they can,
+   * because they are instant, free and never wrong. The model fills in
+   * everything they cannot reach - which is most of the language.
+   */
+  function explainPrompt(ctx) {
+    var lvl = (ctx.settings && ctx.settings.level || 'a1').toUpperCase();
+    return [
+      'You are a Spanish teacher answering a single question from an',
+      'English-speaking learner at CEFR ' + lvl + '. Be exact and be brief.',
+      '',
+      'They will give you a word, a phrase or a whole sentence, in Spanish or',
+      'in English. Work out which, and explain the SPANISH.',
+      '',
+      'Return ONLY this JSON:',
+      '{',
+      '  "term": string,        // the Spanish, spelled correctly and accented',
+      '  "en": string,          // what it means, plainly. 1-8 words.',
+      '  "lemma": string,       // dictionary form: infinitive / noun with its',
+      '                         // article / adjective masculine singular',
+      '  "pos": string,         // "noun" | "verb" | "adjective" | "adverb" |',
+      '                         // "phrase" | "preposition" | "other"',
+      '  "gender": string,      // "m" | "f" | "" - nouns only',
+      '  "note": string,        // the form, if worth naming. "" if not.',
+      '  "structure": string,   // how a sentence is built around it, in ONE',
+      '                         // sentence. What it takes after it, which verb',
+      '                         // it needs, where it sits. "" if nothing to say.',
+      '  "pitfall": string,     // the mistake English speakers make with this',
+      '                         // exact word. "" if there is not an obvious one.',
+      '  "examples": [ {"es": string, "en": string} ]   // exactly 2, at their level',
+      '}',
+      '',
+      'If they wrote English, "term" is the Spanish for it and you explain that.',
+      'If they wrote a sentence with a mistake, "term" is the CORRECTED sentence',
+      'and "pitfall" says what was wrong.',
+      'Never invent a word. If it is not Spanish and has no Spanish equivalent,',
+      'set "en" to "" and say so in "note".',
+      'No markdown, no prose outside the JSON.'
+    ].join('\n');
+  }
+
+  function parseExplain(raw) {
+    var text = String(raw || '').trim();
+    var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) text = fence[1].trim();
+    if (text[0] !== '{') {
+      var a = text.indexOf('{'), b = text.lastIndexOf('}');
+      if (a !== -1 && b > a) text = text.slice(a, b + 1);
+    }
+    var o;
+    try { o = JSON.parse(text); } catch (e) { return null; }
+    if (!o || (!o.term && !o.en)) return null;
+
+    var str = function (v, cap) { return String(v == null ? '' : v).trim().slice(0, cap || 200); };
+    var examples = Array.isArray(o.examples) ? o.examples : [];
+
+    return {
+      term: str(o.term, 120),
+      en: str(o.en, 120),
+      lemma: str(o.lemma, 80) || str(o.term, 80),
+      pos: str(o.pos, 24).toLowerCase(),
+      gender: /^[mf]$/.test(str(o.gender, 2)) ? str(o.gender, 2) : '',
+      note: str(o.note, 140),
+      structure: str(o.structure, 260),
+      pitfall: str(o.pitfall, 260),
+      examples: examples.filter(function (e) { return e && e.es; })
+                        .slice(0, 3)
+                        .map(function (e) { return { es: str(e.es, 160), en: str(e.en, 160) }; }),
+      source: 'ollama'
+    };
+  }
+
+  /* Everything the app can work out with no model at all. Always computed, so
+   * it can be merged over a model answer - the conjugation table in particular
+   * is generated from rules and is more reliable than a 8B model reciting one. */
+  function explainLocal(query, lang) {
+    var word = String(query || '').trim();
+    if (!word) return null;
+
+    var local = lookupLocal(word, lang || 'es');
+    var data = PARLA.data && PARLA.data[lang || 'es'];
+    var out = {
+      term: word,
+      en: local ? local.en : '',
+      lemma: local ? local.lemma : word,
+      pos: '', gender: '', note: local ? (local.note || '') : '',
+      structure: '', pitfall: '', examples: [], conjugation: null,
+      source: local ? local.source : 'none'
+    };
+
+    // Article and part of speech straight out of the corpus row.
+    if (data && data.vocab) {
+      var row = data.vocab.filter(function (v) {
+        return normalise(v[0]) === normalise(out.lemma) || normalise(v[0]) === normalise(word);
+      })[0];
+      if (row) {
+        out.pos = row[2].indexOf('noun') === 0 ? 'noun' : row[2];
+        out.gender = row[2] === 'noun-f' ? 'f' : (row[2] === 'noun-m' ? 'm' : '');
+        if (row[3]) out.examples = [{ es: row[3], en: row[4] }];
+      }
+    }
+
+    // The conjugation engine works from rules, so it handles ANY infinitive -
+    // the fifty in the drill list are only the drill's pool, not its limit.
+    var verbs = data && data.verbs;
+    if (verbs && verbs.conjugate) {
+      var inf = /(ar|er|ir)$/i.test(out.lemma) ? out.lemma : null;
+      if (inf) {
+        var table = {};
+        Object.keys(verbs.tenses).forEach(function (t) {
+          var forms = verbs.conjugate(inf, t);
+          if (forms) table[t] = forms;
+        });
+        if (Object.keys(table).length) {
+          out.conjugation = table;
+          out.pos = out.pos || 'verb';
+          out.conjugationExact = !!verbs.isIrregular(inf) ||
+            !!(data.vocab || []).filter(function (v) { return v[0] === inf; })[0];
+        }
+      }
+    }
+    return out;
+  }
+
+  function explain(ctx) {
+    var query = String(ctx.query || '').trim();
+    if (!query) return Promise.resolve(null);
+
+    var lang = ctx.lang || 'es';
+    var local = explainLocal(query, lang);
+    var s = ctx.settings || {};
+
+    function merge(model) {
+      if (!model) {
+        if (local) local.partial = true;
+        return local;
+      }
+      // The model is the dictionary; the engine is the conjugator. Take each
+      // where it is strongest, and recompute the table for whatever lemma the
+      // model settled on rather than the raw word that was typed.
+      var lemmaLocal = explainLocal(model.lemma || model.term, lang);
+      model.conjugation = (lemmaLocal && lemmaLocal.conjugation) || null;
+      model.conjugationExact = lemmaLocal ? lemmaLocal.conjugationExact : false;
+      if (!model.examples.length && local && local.examples.length) {
+        model.examples = local.examples;
+      }
+      return model;
+    }
+
+    if (s.brain !== 'ollama') return Promise.resolve(merge(null));
+
+    var model = s.ollamaModel;
+    var ready = model ? Promise.resolve(model)
+                      : detectOllama(s).then(function (d) { return d.best; });
+
+    return ready.then(function (m) {
+      if (!m) throw new Error('no model');
+      var url = (s.ollamaUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/api/chat';
+      var user = 'QUESTION: ' + query +
+                 (ctx.sentence ? '\nIT APPEARED IN: ' + ctx.sentence : '');
+
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: m, stream: false, format: 'json', keep_alive: '30m',
+          messages: [{ role: 'system', content: explainPrompt(ctx) },
+                     { role: 'user', content: user }],
+          options: { temperature: 0.2, num_predict: 500, num_ctx: 4096 }
+        })
+      }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { return merge(parseExplain(d && d.message && d.message.content)); })
+        .catch(function () { return merge(null); });
+    }).catch(function () { return merge(null); });
+  }
+
   /* ── Ollama backend ─────────────────────────────────────── */
 
   /* Installed models ranked by how well they actually hold a Spanish
@@ -1050,6 +1233,10 @@ window.PARLA = window.PARLA || {};
     correctOffline: correctOffline,
     suggest: suggest,
     translate: translate,
+    explain: explain,
+    _explainLocal: explainLocal,
+    _parseExplain: parseExplain,
+    _explainPrompt: explainPrompt,
     lookupLocal: lookupLocal,
     _suggestPrompt: suggestPrompt,
     _parseSuggestions: parseSuggestions,

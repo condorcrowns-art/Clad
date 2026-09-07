@@ -107,6 +107,9 @@ window.PARLA = window.PARLA || {};
     }
 
     var i = 0, revealed = false, correctCount = 0, streak = 0, bestStreak = 0;
+    // One step of undo. Grading the wrong button is the commonest mis-tap in
+    // any flashcard app, and without this it silently costs you a week.
+    var lastGrade = null;
     var pref = 'auto';          // auto | recall | produce | cloze | listen | speak
     var listenHandle = null;
     var typedState = null;      // null | 'right' | 'accents' | 'close' | 'wrong'
@@ -175,6 +178,11 @@ window.PARLA = window.PARLA || {};
 
     function grade(q) {
       var key = queue[i];
+      lastGrade = {
+        index: i, key: key,
+        card: st.srs[key] ? JSON.parse(JSON.stringify(st.srs[key])) : null,
+        correct: correctCount, streak: streak
+      };
       st.srs[key] = PARLA.srs.grade(st.srs[key], q);
       st.progress.totals.reviews++;
       if (q >= 3) { correctCount++; streak++; if (streak > bestStreak) bestStreak = streak; }
@@ -183,6 +191,21 @@ window.PARLA = window.PARLA || {};
       i++; revealed = false; typedState = null; typedText = '';
       if (listenHandle) { listenHandle.abort(); listenHandle = null; }
       if (i >= queue.length) return done();
+      render();
+    }
+
+    function undo() {
+      if (!lastGrade) return;
+      // Put the scheduling back exactly as it was, not merely close to it.
+      if (lastGrade.card) st.srs[lastGrade.key] = lastGrade.card;
+      else delete st.srs[lastGrade.key];
+      st.progress.totals.reviews = Math.max(0, st.progress.totals.reviews - 1);
+      i = lastGrade.index;
+      correctCount = lastGrade.correct;
+      streak = lastGrade.streak;
+      revealed = false; typedState = null; typedText = '';
+      lastGrade = null;
+      PARLA.store.save();
       render();
     }
 
@@ -203,6 +226,15 @@ window.PARLA = window.PARLA || {};
         el('button.primary', { onclick: function () { PARLA.app.go('scenarios'); } }, 'Now go talk'),
         el('button', { onclick: function () { PARLA.app.go('home'); } }, 'Home')
       ));
+    }
+
+    /* A card whose back is blank teaches nothing and looks broken. Words picked
+     * up from a conversation can arrive without a translation, so say what
+     * happened instead of rendering an empty face. */
+    function meaning(it) {
+      if (it.en) return el('div.answer', it.en);
+      return el('div.answer.muted', { style: { fontSize: '1rem' } },
+        'No meaning saved — look it up on the Ask screen.');
     }
 
     /* Shared by every typed mode.
@@ -266,68 +298,74 @@ window.PARLA = window.PARLA || {};
       streakChip.textContent = '🔥 ' + streak + ' in a row';
       bar.firstChild.style.width = Math.round((i / queue.length) * 100) + '%';
 
-      var card = el('div.flashcard', { 'data-mode': mode });
+      // A flashcard that does not flip is a page that redraws. The two faces
+      // are laid on top of each other and the whole thing rotates, so the
+      // answer arrives from behind the question rather than replacing it.
+      var front = el('div.face.front');
+      var back = el('div.face.back');
+      var card = el('div.flashcard', { 'data-mode': mode, 'data-flipped': revealed ? 'yes' : 'no' },
+                    el('div.faces', front, back));
       var showGrades = true;
 
       if (mode === 'recall') {
-        card.appendChild(el('div.pos', it.mine ? 'your phrase' : it.pos));
-        card.appendChild(el('div.prompt.es', it.es));
-        card.appendChild(el('div', ui.speakBtn(it.es, '🔊 Listen')));
+        front.appendChild(el('div.pos', it.mine ? 'your phrase' : it.pos));
+        front.appendChild(el('div.prompt.es', it.es));
+        front.appendChild(el('div', ui.speakBtn(it.es, '🔊 Listen')));
         if (revealed) {
-          card.appendChild(el('div.answer', it.en));
-          if (it.exEs) card.appendChild(el('div.example.es', it.exEs));
-          if (it.exEn) card.appendChild(el('div.example-en', it.exEn));
+          back.appendChild(meaning(it));
+          if (it.exEs) back.appendChild(el('div.example.es', it.exEs));
+          if (it.exEn) back.appendChild(el('div.example-en', it.exEn));
         }
 
       } else if (mode === 'listen') {
         // No text at all until they commit — otherwise they read rather than hear.
-        card.appendChild(el('div.pos', 'listen and say what it means'));
-        card.appendChild(el('div.prompt.listen-prompt', revealed ? it.es : '👂'));
-        card.appendChild(el('div',
+        front.appendChild(el('div.pos', 'listen and say what it means'));
+        front.appendChild(el('div.prompt.listen-prompt', revealed ? it.es : '👂'));
+        front.appendChild(el('div',
           el('button.primary', { onclick: function () { ui.say(it.es); } }, '🔊 Play again')));
         if (revealed) {
-          card.appendChild(el('div.answer', it.en));
-          if (it.exEs) card.appendChild(el('div.example.es', it.exEs));
+          back.appendChild(meaning(it));
+          if (it.exEs) back.appendChild(el('div.example.es', it.exEs));
         }
         if (!revealed) setTimeout(function () { ui.say(it.es); }, 250);
 
       } else if (mode === 'cloze') {
         var cl = clozeOf(it);
         if (!cl) { pref = pref === 'cloze' ? 'produce' : pref; render(); return; }
-        card.appendChild(el('div.pos', 'fill in the gap'));
-        card.appendChild(el('div.prompt.es.cloze',
+        front.appendChild(el('div.pos', 'fill in the gap'));
+        front.appendChild(el('div.prompt.es.cloze',
           cl.before, el('span.blank', typedState ? cl.answer : '_____'), cl.after));
-        if (it.exEn) card.appendChild(el('div.example-en', it.exEn));
+        if (it.exEn) back.appendChild(el('div.example-en', it.exEn));
         if (!typedState) {
           showGrades = false;
-          typedAnswer(card, cl.answer, function () { render(); });
+          typedAnswer(front, cl.answer, function () { render(); });
         } else {
-          card.appendChild(verdictNode(cl.answer));
-          card.appendChild(el('div.answer', it.es + ' — ' + it.en));
+          back.appendChild(verdictNode(cl.answer));
+          back.appendChild(el('div.answer', it.es + ' — ' + it.en));
         }
 
       } else if (mode === 'produce') {
-        card.appendChild(el('div.pos', 'write it in Spanish'));
-        card.appendChild(el('div.prompt', it.en));
+        front.appendChild(el('div.pos', 'write it in Spanish'));
+        front.appendChild(el('div.prompt', it.en));
         if (!typedState) {
           showGrades = false;
-          typedAnswer(card, it.es, function () { render(); });
+          typedAnswer(front, it.es, function () { render(); });
         } else {
-          card.appendChild(verdictNode(it.es));
-          card.appendChild(el('div.answer.es', { style: { fontSize: '1.5rem' } }, it.es));
-          if (it.exEs) card.appendChild(el('div.example.es', it.exEs));
-          if (it.exEn) card.appendChild(el('div.example-en', it.exEn));
+          back.appendChild(verdictNode(it.es));
+          back.appendChild(el('div.answer.es', { style: { fontSize: '1.5rem' } }, it.es));
+          if (it.exEs) back.appendChild(el('div.example.es', it.exEs));
+          if (it.exEn) back.appendChild(el('div.example-en', it.exEn));
         }
 
       } else {
         // Pronunciation: read it aloud and let recognition judge.
         showGrades = false;
-        card.appendChild(el('div.pos', 'read this aloud'));
-        card.appendChild(el('div.prompt.es', it.es));
-        card.appendChild(el('div.example-en', it.en));
-        card.appendChild(el('div', ui.speakBtn(it.es, '🔊 Hear it first')));
+        front.appendChild(el('div.pos', 'read this aloud'));
+        front.appendChild(el('div.prompt.es', it.es));
+        front.appendChild(el('div.example-en', it.en));
+        front.appendChild(el('div', ui.speakBtn(it.es, '🔊 Hear it first')));
         var verdict = el('div.mic-label');
-        card.appendChild(verdict);
+        front.appendChild(verdict);
 
         var micB = el('button.primary', { style: { marginTop: '6px' } }, '🎙 Speak');
         micB.onclick = function () {
@@ -355,7 +393,7 @@ window.PARLA = window.PARLA || {};
             onend: function () { listenHandle = null; micB.textContent = '🎙 Speak'; }
           });
         };
-        card.appendChild(micB);
+        front.appendChild(micB);
       }
 
       cardWrap.appendChild(card);
@@ -382,8 +420,16 @@ window.PARLA = window.PARLA || {};
         }
       }
 
+      if (lastGrade) {
+        cardWrap.appendChild(el('div.center', { style: { marginTop: '10px' } },
+          el('button.ghost.small', { onclick: undo }, '↶ Undo last card')));
+      }
+
+      cardWrap.appendChild(el('div.small.faint.center', { style: { marginTop: '8px' } },
+        'space to flip · 1-4 to grade · U to undo'));
+
       var c = st.srs[key];
-      cardWrap.appendChild(el('div.small.faint.center', { style: { marginTop: '10px' } },
+      cardWrap.appendChild(el('div.small.faint.center', { style: { marginTop: '6px' } },
         (it.mine ? 'from your conversation · ' : '') +
         (c ? 'seen ' + (c.reps || 0) + '× · interval ' + (c.interval || 0) + 'd' +
              (PARLA.srs.isLeech(c) ? ' · ⚠ trouble word' : '')
@@ -392,9 +438,32 @@ window.PARLA = window.PARLA || {};
 
     render();
 
+    /* Hands stay on the keyboard through a review session, so the whole loop
+     * is reachable without the mouse. Ignored while typing an answer, or the
+     * digits in "3,20" would grade the card. */
+    function onKey(e) {
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === ' ' || e.key === 'Enter') {
+        var show = cardWrap.querySelector('button.primary.wide.big');
+        if (show) { e.preventDefault(); show.click(); }
+        return;
+      }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); undo(); return; }
+      var n = ['1', '2', '3', '4'].indexOf(e.key);
+      if (n !== -1) {
+        var btn = cardWrap.querySelectorAll('.grade-row button')[n];
+        if (btn) { e.preventDefault(); btn.click(); }
+      }
+    }
+    document.addEventListener('keydown', onKey);
+
     main._onLeave = function () {
       if (listenHandle) listenHandle.abort();
       PARLA.speech.cancel();
+      document.removeEventListener('keydown', onKey);
     };
     return main;
   }

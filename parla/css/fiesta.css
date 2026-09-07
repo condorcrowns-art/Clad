@@ -484,3 +484,87 @@ button:active { transform: scale(.97); }
 .word-en { font-size: 1rem; font-weight: 600; color: var(--ink); margin-top: 2px; }
 .word-body { margin-top: 4px; }
 .word-body .btn-row button { padding: 4px 10px; font-size: .78rem; }
+
+/* ── A card that actually flips ─────────────────────────────
+   Front and back stacked on the same spot, the whole thing rotated. The
+   answer arrives from behind the question instead of replacing it. */
+.flashcard { perspective: 1200px; background: none; border: 0; box-shadow: none; padding: 0; }
+.flashcard .faces {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform .34s var(--ease);
+}
+.flashcard[data-flipped="yes"] .faces { transform: rotateY(180deg); }
+
+.flashcard .face {
+  backface-visibility: hidden;
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  padding: 26px 20px;
+  text-align: center;
+  min-height: 210px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+}
+.flashcard .face.back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+  border-top: 3px solid var(--turquesa);
+}
+/* Nothing behind the card may be clickable through it. */
+.flashcard[data-flipped="no"]  .face.back  { pointer-events: none; }
+.flashcard[data-flipped="yes"] .face.front { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flashcard .faces { transition: none; }
+}
+
+.ghost.small { font-size: .78rem; padding: 4px 10px; }
+
+/* ── Ask ────────────────────────────────────────────────────*/
+.ask-row { display: flex; gap: 8px; margin: 14px 0 8px; }
+.ask-input { flex: 1; min-width: 0; font-size: 1.02rem; }
+.ask-recent { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
+.ask-chip {
+  border: 1px solid var(--line); background: var(--bg-sunken);
+  color: var(--ink-soft); border-radius: 999px;
+  padding: 3px 11px; font-size: .78rem; cursor: pointer;
+  font-family: var(--serif);
+}
+.ask-chip:hover { border-color: var(--turquesa); color: var(--turquesa); }
+
+.ask-card { border-left: 4px solid var(--turquesa); }
+.ask-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ask-term { font-size: 1.9rem; font-weight: 600; line-height: 1.1; }
+.ask-en { font-size: 1.15rem; margin-top: 4px; }
+.ask-note { font-size: .85rem; color: var(--ink-faint); margin-top: 2px; }
+
+.ask-block { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.ask-block.warn { border-top-color: var(--amarillo); }
+.ask-label {
+  font-size: .7rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-faint); margin-bottom: 6px;
+}
+.ask-block.warn .ask-label { color: var(--warn); }
+.ask-example { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; }
+.ask-example .es { font-family: var(--serif); font-size: 1.02rem; }
+
+.tense-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.tense-btn {
+  border: 1px solid var(--line); background: var(--bg-sunken); color: var(--ink-soft);
+  border-radius: var(--r-sm); padding: 4px 10px; font-size: .76rem; cursor: pointer;
+}
+.tense-btn[aria-pressed="true"] {
+  background: var(--turquesa); border-color: var(--turquesa); color: #fff;
+}
+.conj-table { display: grid; gap: 2px; }
+.conj-row {
+  display: grid; grid-template-columns: 1fr 1.3fr auto;
+  align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: var(--r-sm);
+}
+.conj-row:nth-child(odd) { background: var(--bg-sunken); }
+.conj-p { font-size: .82rem; color: var(--ink-faint); }
+.conj-f { font-family: var(--serif); font-size: 1.02rem; font-weight: 600; }
