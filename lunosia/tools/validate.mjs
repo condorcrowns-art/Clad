@@ -66,13 +66,23 @@ if (missing.length) bad('panel.js references ids not in the html: ' + missing.jo
 else ok(`${used.size} element ids all resolve`);
 
 /* ---- es module graph ---- */
+/* Whether the fetched-not-committed engine is on disk. The module walker needs
+ * this so an un-fetched engine is reported once, by the section that can
+ * actually tell you what to do about it, rather than twice. */
+const ENGINE = ['lib/transformers.js', 'lib/ort/ort-wasm-simd-threaded.jsep.wasm'];
+const engineHere = ENGINE.every(existsSync);
+
 console.log('\nmodule imports');
 const roots = ['src/panel.js', 'worker/asr-worker.js', 'src/export.js', 'src/store.js', 'src/format.js'];
 const seen = new Set();
 function walk(file) {
   if (seen.has(file)) return;
   seen.add(file);
-  if (!existsSync(file)) return bad('import target missing: ' + file);
+  if (!existsSync(file)) {
+    // A missing engine file is the setup step, not a broken import.
+    if (ENGINE.includes(file)) return;
+    return bad('import target missing: ' + file);
+  }
   const src = readFileSync(file, 'utf8');
   for (const m of src.matchAll(/from\s+['"](\.[^'"]+)['"]/g)) {
     walk(join(dirname(file), m[1]));
@@ -82,11 +92,21 @@ roots.forEach(walk);
 ok(`${seen.size} modules resolve cleanly`);
 
 /* ---- vendored engine ---- */
+/* The engine is fetched, not committed, so a fresh clone legitimately does not
+ * have it yet. That is a "run npm run setup" situation, not broken code — say
+ * so instead of dying on an unhandled ENOENT, and keep checking everything
+ * that does not depend on the files being present. */
 console.log('\nvendored engine');
-must('lib/transformers.js', 'transformers.js');
-must('lib/ort/ort-wasm-simd-threaded.jsep.wasm', 'onnxruntime wasm');
-const wasmMb = statSync('lib/ort/ort-wasm-simd-threaded.jsep.wasm').size / 1048576;
-ok(`wasm binary is ${wasmMb.toFixed(1)} MB (ships offline, no CDN at runtime)`);
+if (!engineHere) {
+  warn('inference engine not fetched yet — run: npm run setup');
+  for (const f of ENGINE) if (!existsSync(f)) console.warn('          missing ' + f);
+} else {
+  for (const f of ENGINE) ok('present: ' + f);
+  const wasmMb = statSync('lib/ort/ort-wasm-simd-threaded.jsep.wasm').size / 1048576;
+  ok(`wasm binary is ${wasmMb.toFixed(1)} MB (ships offline, no CDN at runtime)`);
+}
+
+/* This one is about the source, not the download, so it always runs. */
 if (!readFileSync('worker/asr-worker.js', 'utf8').includes('wasmPaths')) {
   bad('asr-worker must point env.backends.onnx.wasm.wasmPaths at the vendored wasm');
 } else ok('wasmPaths pinned to the extension bundle');

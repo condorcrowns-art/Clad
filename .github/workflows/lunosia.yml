@@ -1,0 +1,52 @@
+# Runs Lunosia's checks on every change to the extension.
+#
+# The repository had no CI at all, so the exporter tests and the manifest
+# validator were run by nothing. Both are fast and need no browser: the
+# exporters are deliberately free of DOM and chrome.*, and the validator only
+# reads files.
+
+name: Lunosia
+
+on:
+  push:
+    paths: ['lunosia/**', '.github/workflows/lunosia.yml']
+  pull_request:
+    paths: ['lunosia/**', '.github/workflows/lunosia.yml']
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lunosia
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The inference engine is ~26 MB of third-party build output fetched from
+      # pinned npm versions rather than committed. Cached so CI is not
+      # re-downloading it on every run.
+      - name: Cache inference engine
+        uses: actions/cache@v4
+        with:
+          path: lunosia/lib
+          key: lunosia-engine-transformers4.2.0-ort1.26.0dev
+
+      - name: Fetch inference engine
+        run: npm run setup
+
+      - name: Validate extension
+        run: npm run validate
+
+      - name: Exporter tests
+        run: npm test
+
+      # Catches the mistake that actually breaks a Chrome extension at load
+      # time: a manifest that is not valid JSON.
+      - name: Manifest parses
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
