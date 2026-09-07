@@ -209,6 +209,31 @@ offline partner catches it too and hands you the phrase this scene needs.
 
 ---
 
+## Tap any word
+
+A fixed word list is always the wrong list: it holds words you already know and
+lacks the one your partner just used. So **every Spanish word in the
+conversation is tappable**. Tap it and you get what it means *in that sentence*,
+the dictionary form, and what grammatical form it is — then **+ Learn this**
+puts it in your deck **with the sentence it was actually said in as its example**.
+
+That sentence is the point. It is real context you were present for, which beats
+anything a corpus author invents, and it is what the fill-in-the-gap drill uses.
+
+Three sources, tried in order, and the first two are instant and free:
+
+1. **The corpus** — 521 words, matched with or without the article.
+2. **The conjugation engine** — it generates every form of every verb, so it can
+   recognise one too. Tap *tuvo* and it tells you: third-person preterite of
+   *tener*. No reverse table was written; the index is built from the same rules
+   that produce the drill.
+3. **The model**, which has the whole sentence in front of it and can tell which
+   sense was meant.
+
+Words already in your deck are marked, not offered twice.
+
+---
+
 ## Review that escalates
 
 Recognising a word is the easy half, and it stops teaching you anything the
@@ -305,6 +330,13 @@ Settings → **Conversation partner**. All three are free; they trade off differ
 ### Ollama - the default
 Unlimited, private, genuinely free forever. A real open-ended conversation partner.
 
+Models are ranked by how well they hold a *Spanish* conversation, which is not
+the same as how they score on English benchmarks. Ones trained explicitly for
+multilingual use — `aya-expanse`, `mistral-nemo` — sit above general models of
+the same size, because holding register and idiom is the whole job here. Setup
+tries the best fit for your VRAM and falls back down the list if a pull fails,
+so a tag that no longer exists costs you a retry rather than a broken install.
+
 On Windows the setup script above does all of this. Manually:
 
 ```bash
@@ -385,7 +417,8 @@ js/decor.js           papel picado, Talavera tiles, the mural, confetti
 js/saytext.js         written Spanish -> spoken Spanish, before synthesis
 js/
   data/
-    vocab-es.js       440 words: [es, en, pos, example_es, example_en, tags]
+    vocab-es.js       521 words: [es, en, pos, example_es, example_en, tags]
+                      — plus everything you tap in conversation, unbounded
     verbs-es.js       conjugation ENGINE — regular endings + irregular overrides
     scenarios-es.js   23 scenarios: LLM briefing + offline script beats
     challenge-es.js   the 60-day plan
@@ -414,6 +447,7 @@ test/
   memory.test.js          what it remembers, and what it must not invent
   saytext.test.js         numbers, times and money as a person says them
   corpus.test.js          the content itself: no duplicates, no broken rows
+  lookup.test.js          tapping a word, and which model gets picked
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
@@ -445,6 +479,7 @@ node test/comprehension.test.js     # the partner asks instead of assuming
 node test/memory.test.js            # remembering you between sessions
 node test/saytext.test.js          # "Habitación 204" -> "doscientos cuatro"
 node test/corpus.test.js           # the word list and scenarios themselves
+node test/lookup.test.js           # word lookup and model ranking
 node test/suggest.test.js          # what to say when you are stuck
 node test/english.test.js          # English as a teaching moment
 node test/casting.test.js          # voices matched to characters
@@ -462,6 +497,7 @@ node test/mock-tts-server.js 8765            # or: 8765 nopiper
 node test/piper-browser.test.js 8765         # or: 8765 nopiper
 node test/fiesta.test.js 8765                # layout, reduced motion, decor removed
 node test/drill-browser.test.js 8765        # every flashcard drill, end to end
+node test/word-browser.test.js 8765         # tapping a word out of a conversation
 ```
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`

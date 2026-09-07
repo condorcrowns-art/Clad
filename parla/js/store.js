@@ -182,17 +182,27 @@ window.PARLA = window.PARLA || {};
   /* A phrase the learner reached for and could not produce is the single best
    * candidate for review there is - better than any word chosen for them by a
    * frequency list, because they have already demonstrated they wanted it. */
-  function rememberPhrase(es, en) {
+  function addWord(es, en, exEs, exEn) {
     es = String(es || '').trim();
     if (!es) return false;
     state.phrases = state.phrases || [];
     var key = es.toLowerCase();
     if (state.phrases.some(function (p) { return String(p.es).toLowerCase() === key; })) return false;
-    state.phrases.unshift({ es: es, en: String(en || '').trim(), when: Date.now() });
-    if (state.phrases.length > 200) state.phrases.length = 200;
+    state.phrases.unshift({
+      es: es,
+      en: String(en || '').trim(),
+      // The sentence it actually appeared in. Authentic context beats anything
+      // a corpus author invents, and it is what the fill-in-the-gap drill uses.
+      exEs: String(exEs || '').trim(),
+      exEn: String(exEn || '').trim(),
+      when: Date.now()
+    });
+    if (state.phrases.length > 2000) state.phrases.length = 2000;
     save();
     return true;
   }
+
+  function rememberPhrase(es, en) { return addWord(es, en, '', ''); }
 
   function forgetAll() {
     state.memory = { name: '', facts: [] };
@@ -238,6 +248,7 @@ window.PARLA = window.PARLA || {};
     creditDay: creditDay,
     remember: remember,
     rememberPhrase: rememberPhrase,
+    addWord: addWord,
     forgetAll: forgetAll,
     level: level,
     levelProgress: levelProgress,

@@ -662,13 +662,135 @@ window.PARLA = window.PARLA || {};
     return Promise.resolve(offline());
   }
 
+  /* ── Look up any word you just heard ──────────────────────
+   *
+   * A fixed word list is always the wrong list: it contains words you already
+   * know and lacks the one your partner just used. Every Spanish word in the
+   * conversation is a candidate, so tapping one has to work for ANY word -
+   * which means falling through from the corpus, to the conjugation engine,
+   * to the model, in that order. The first two are instant and free.
+   */
+  function lookupLocal(word, lang) {
+    var target = normalise(word);
+    if (!target) return null;
+    var data = PARLA.data && PARLA.data[lang || 'es'];
+    if (!data) return null;
+
+    var vocab = data.vocab || [];
+    var i;
+
+    // The word itself, with or without its article.
+    for (i = 0; i < vocab.length; i++) {
+      var key = normalise(vocab[i][0]);
+      if (key === target) return { en: vocab[i][1], lemma: vocab[i][0], source: 'corpus' };
+      if (key.replace(/^(el|la|los|las|un|una) /, '') === target) {
+        return { en: vocab[i][1], lemma: vocab[i][0], source: 'corpus' };
+      }
+    }
+
+    // A conjugated verb: the trainer already knows every form it generates, so
+    // it can name the infinitive without anyone having to type a table out.
+    var verbs = data.verbs;
+    if (verbs && verbs.identify) {
+      var hit = verbs.identify(word);
+      if (hit) {
+        var row = vocab.filter(function (v) { return normalise(v[0]) === normalise(hit.verb); })[0];
+        return {
+          en: row ? row[1] : '',
+          lemma: hit.verb,
+          note: hit.person + ' ' + hit.tense + ' of "' + hit.verb + '"',
+          source: 'verbs'
+        };
+      }
+    }
+    return null;
+  }
+
+  function translate(ctx) {
+    var word = String(ctx.word || '').trim();
+    if (!word) return Promise.resolve(null);
+
+    var local = lookupLocal(word, ctx.lang || 'es');
+    var s = ctx.settings || {};
+
+    // The corpus answer is exact and instant, but it cannot tell you which
+    // sense was meant. With a model available, ask it too - it has the
+    // sentence in front of it.
+    if (s.brain !== 'ollama') return Promise.resolve(local);
+
+    var model = s.ollamaModel;
+    var ready = model ? Promise.resolve(model)
+                      : detectOllama(s).then(function (d) { return d.best; });
+
+    return ready.then(function (m) {
+      if (!m) throw new Error('no model');
+      var url = (s.ollamaUrl || 'http://localhost:11434').replace(/\/+$/, '') + '/api/chat';
+      var sys = [
+        'You are a Spanish dictionary for an English-speaking learner.',
+        'Given a word and the sentence it appeared in, return JSON only:',
+        '{"en": string, "lemma": string, "note": string}',
+        '- "en": the meaning IN THIS SENTENCE, 1-4 words, no article.',
+        '- "lemma": the dictionary form. A verb becomes the infinitive; a noun',
+        '  gets its article ("la cuenta"); an adjective goes masculine singular.',
+        '- "note": at most 8 words, and ONLY if the form is worth naming',
+        '  ("third person preterite of tener"). Otherwise "".',
+        'No explanation, no markdown, no extra keys.'
+      ].join('\n');
+
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: m, stream: false, format: 'json', keep_alive: '30m',
+          messages: [
+            { role: 'system', content: sys },
+            { role: 'user', content: 'WORD: ' + word + '\nSENTENCE: ' + (ctx.sentence || word) }
+          ],
+          options: { temperature: 0.1, num_predict: 120, num_ctx: 2048 }
+        })
+      }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          var raw = d && d.message && d.message.content;
+          var text = String(raw || '').trim();
+          var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (fence) text = fence[1].trim();
+          if (text[0] !== '{') {
+            var a = text.indexOf('{'), b = text.lastIndexOf('}');
+            if (a !== -1 && b > a) text = text.slice(a, b + 1);
+          }
+          var obj = JSON.parse(text);
+          if (!obj || !obj.en) return local;
+          return {
+            en: String(obj.en).trim().slice(0, 60),
+            lemma: String(obj.lemma || word).trim().slice(0, 60),
+            note: String(obj.note || '').trim().slice(0, 80),
+            source: 'ollama'
+          };
+        })
+        .catch(function () { return local; });
+    }).catch(function () { return local; });
+  }
+
   /* ── Ollama backend ─────────────────────────────────────── */
 
   /* Installed models ranked by how well they actually hold a Spanish
    * conversation, best first. The app picks the best one you have rather than
    * making you know which to choose. */
+  /* Ranked by how well they actually hold a Spanish conversation, best first -
+   * which is not the same as how they score on English benchmarks.
+   *
+   * Models trained explicitly for multilingual use sit above general models of
+   * the same size: aya-expanse is Cohere's multilingual line, and mistral-nemo
+   * was trained with Spanish as a first-class language rather than as English
+   * with extras. Both hold register and idiom noticeably better than a general
+   * 7B, which is what this app is asking them to do all day.
+   */
   var MODEL_RANK = [
+    /^aya-expanse[:-].*32b/i,
     /^qwen2\.5[:-].*(32b|14b)/i,
+    /^mistral-nemo/i,
+    /^aya-expanse/i,
+    /^gemma2[:-].*27b/i,
     /^qwen3[:-]/i,
     /^qwen2\.5[:-].*7b/i,
     /^qwen2\.5(:latest)?$/i,
@@ -742,7 +864,10 @@ window.PARLA = window.PARLA || {};
           top_k: 40,
           repeat_penalty: 1.15,   // small models loop on stock phrases without this
           num_predict: 220,
-          num_ctx: 4096
+          // The prompt carries what it remembers about you, your weak words,
+          // your past mistakes and a dozen turns of history. 4096 was starting
+          // to push the oldest turns out of the window mid-conversation.
+          num_ctx: 8192
         }
       })
     }).then(function (r) {
@@ -924,6 +1049,8 @@ window.PARLA = window.PARLA || {};
     words: words,
     correctOffline: correctOffline,
     suggest: suggest,
+    translate: translate,
+    lookupLocal: lookupLocal,
     _suggestPrompt: suggestPrompt,
     _parseSuggestions: parseSuggestions,
     _scriptedSuggestions: scriptedSuggestions,

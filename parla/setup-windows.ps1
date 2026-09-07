@@ -144,19 +144,46 @@ if (-not $SkipOllama) {
   # and the CPU half sets the pace - a 12 GB card running the 9 GB 14b model
   # measured 4.1 tok/s, which is CPU speed. Weights: 14b=9.0GB, 7b=4.7GB,
   # 3b=1.9GB; leave roughly 3 GB of headroom above the weights.
+  # First choice, then what to fall back to. Models trained explicitly for
+  # multilingual use hold Spanish register and idiom noticeably better than a
+  # general model of the same size, which is what this app asks of them all
+  # day. The fallbacks matter: a tag that does not exist in Ollama's library
+  # fails the pull, and a failed pull must not end the setup.
   if (-not $Model) {
-    if     ($vramGB -ge 16) { $Model = 'qwen2.5:14b' }
-    elseif ($vramGB -ge 8)  { $Model = 'qwen2.5:7b'  }
-    elseif ($vramGB -ge 5)  { $Model = 'qwen2.5:3b'  }
-    elseif ($ramGB -ge 16)  { $Model = 'qwen2.5:7b'  }   # CPU: tolerable, not fast
-    else                    { $Model = 'qwen2.5:3b'  }
+    if ($vramGB -ge 16) {
+      $Model = 'aya-expanse:32b'; $Fallbacks = @('qwen2.5:14b', 'qwen2.5:7b')
+    } elseif ($vramGB -ge 8) {
+      $Model = 'aya-expanse:8b';  $Fallbacks = @('mistral-nemo', 'qwen2.5:7b')
+    } elseif ($vramGB -ge 5) {
+      $Model = 'qwen2.5:3b';      $Fallbacks = @('llama3.2:3b')
+    } elseif ($ramGB -ge 16) {
+      $Model = 'qwen2.5:7b';      $Fallbacks = @('qwen2.5:3b')   # CPU: tolerable, not fast
+    } else {
+      $Model = 'qwen2.5:3b';      $Fallbacks = @('llama3.2:3b')
+    }
+  } else {
+    $Fallbacks = @()
   }
 
   Note "choosing $Model"
-  Note "(qwen2.5 speaks better Spanish than llama3.2 at the same size)"
+  Note "(a multilingual model holds Spanish register better than a general one)"
 
   Step 5 "Pulling $Model - a few GB the first time, one-off"
-  ollama pull $Model
+  $pulled = $false
+  foreach ($candidate in @($Model) + $Fallbacks) {
+    Note "trying $candidate"
+    ollama pull $candidate
+    if ($LASTEXITCODE -eq 0) {
+      $Model = $candidate
+      $pulled = $true
+      break
+    }
+    Warn "could not pull $candidate - trying the next one"
+  }
+  if (-not $pulled) {
+    Write-Host "    Could not pull any model. Check your connection and re-run." -ForegroundColor Red
+    exit 1
+  }
   Ok "$Model ready"
 
   Step 6 "Measuring how fast it actually replies on your machine"

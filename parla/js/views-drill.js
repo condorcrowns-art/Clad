@@ -74,7 +74,12 @@ window.PARLA = window.PARLA || {};
     });
     (st.phrases || []).forEach(function (p) {
       if (!items[p.es]) {
-        items[p.es] = { es: p.es, en: p.en, pos: 'your phrase', exEs: '', exEn: '', mine: true };
+        items[p.es] = {
+          es: p.es, en: p.en, pos: p.exEs ? 'heard in conversation' : 'your phrase',
+          // The sentence it was actually said in - so the fill-in-the-gap drill
+          // works on words you picked up yourself, not just the shipped list.
+          exEs: p.exEs || '', exEn: p.exEn || '', mine: true
+        };
       }
     });
 

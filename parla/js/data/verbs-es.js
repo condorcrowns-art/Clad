@@ -264,12 +264,56 @@ PARLA.data.es = PARLA.data.es || {};
     return out;
   }
 
+  /* ── Backwards ────────────────────────────────────────────
+   * The engine generates every form, so it can also recognise one. Tapping
+   * "tuvo" in a conversation should say "third person preterite of tener"
+   * without anyone having written a reverse table: the index is built the
+   * first time it is asked for, from the same rules that produce the tables.
+   */
+  var reverse = null;
+
+  function buildReverse() {
+    reverse = {};
+    var tenseKeys = Object.keys(TENSES);
+    VERBS.forEach(function (row) {
+      var inf = row[0];
+      // The infinitive is a form too.
+      reverse[strip(inf)] = reverse[strip(inf)] || { verb: inf, tense: 'infinitivo', person: '' };
+      tenseKeys.forEach(function (t) {
+        var forms = conjugate(inf, t);
+        if (!forms) return;
+        forms.forEach(function (f, i) {
+          var key = strip(f);
+          // First writing wins, so the commonest tense keeps an ambiguous form
+          // rather than the last one generated claiming it.
+          if (!reverse[key]) {
+            reverse[key] = { verb: inf, tense: TENSES[t].label, person: PRONOUNS[i] };
+          }
+        });
+      });
+    });
+  }
+
+  function strip(w) {
+    return String(w || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z\u00f1]/g, '');
+  }
+
+  /* Which verb, tense and person is this word? null if it is not one. */
+  function identify(word) {
+    if (!reverse) buildReverse();
+    var hit = reverse[strip(word)];
+    return hit ? { verb: hit.verb, tense: hit.tense, person: hit.person } : null;
+  }
+
   PARLA.data.es.verbs = {
     list: VERBS,
     pronouns: PRONOUNS,
     tenses: TENSES,
     conjugate: conjugate,
     fullTable: fullTable,
+    identify: identify,
     isIrregular: function (inf) { return !!IRREGULAR[inf]; }
   };
 })();

@@ -163,13 +163,102 @@ window.PARLA = window.PARLA || {};
     /* — opening line — */
     addPartner(sc.opener.es, sc.opener.en, null, true);
 
+    /* ── learning a word you just heard ────────────────────── */
+
+    /* Wrap each Spanish word in its own span, leaving punctuation and spacing
+     * exactly as they were - the sentence has to still read normally. */
+    function tappable(text) {
+      var frag = document.createDocumentFragment();
+      var parts = String(text || '').split(/([A-Za-zÀ-ÿñÑ'’-]+)/);
+      parts.forEach(function (part, idx) {
+        if (idx % 2 === 1 && part.length > 1) {
+          frag.appendChild(el('span.word', {
+            onclick: function (e) { e.stopPropagation(); showWord(part, text, e.target); }
+          }, part));
+        } else if (part) {
+          frag.appendChild(document.createTextNode(part));
+        }
+      });
+      return frag;
+    }
+
+    var wordPop = null;
+
+    function closeWord() {
+      if (wordPop) { wordPop.remove(); wordPop = null; }
+    }
+
+    function showWord(word, sentence, anchorEl) {
+      closeWord();
+      var pop = el('div.word-pop');
+      wordPop = pop;
+
+      pop.appendChild(el('div.word-head',
+        el('span.es', word),
+        el('button.word-x', { title: 'Close', onclick: closeWord }, '✕')));
+      var body = el('div.word-body', el('div.small.muted', 'Looking it up…'));
+      pop.appendChild(body);
+
+      anchorEl.appendChild(pop);
+      // Keep it on screen when the word is near the right-hand edge.
+      requestAnimationFrame(function () {
+        var r = pop.getBoundingClientRect();
+        if (r.right > window.innerWidth - 8) {
+          pop.style.left = 'auto';
+          pop.style.right = '0';
+        }
+      });
+
+      PARLA.brain.translate({
+        word: word,
+        sentence: sentence,
+        lang: st.profile.target || 'es',
+        settings: st.settings
+      }).then(function (res) {
+        if (wordPop !== pop) return;              // a different word was tapped
+        ui.clear(body);
+
+        if (!res || !res.en) {
+          body.appendChild(el('div.small.muted',
+            'No translation available. You can still add it and look it up later.'));
+        } else {
+          body.appendChild(el('div.word-en', res.en));
+          if (res.lemma && PARLA.brain.normalise(res.lemma) !== PARLA.brain.normalise(word)) {
+            body.appendChild(el('div.small.muted', 'from ' + res.lemma));
+          }
+          if (res.note) body.appendChild(el('div.small.faint', res.note));
+        }
+
+        var lemma = (res && res.lemma) || word;
+        var already = (st.phrases || []).some(function (p) {
+          return PARLA.brain.normalise(p.es) === PARLA.brain.normalise(lemma);
+        }) || !!(PARLA.data.es.vocab || []).filter(function (v) {
+          return PARLA.brain.normalise(v[0]) === PARLA.brain.normalise(lemma);
+        })[0];
+
+        body.appendChild(el('div.btn-row', { style: { marginTop: '8px' } },
+          el('button', { onclick: function () { ui.say(word, null, sc.voice); } }, '🔊'),
+          already
+            ? el('button', { disabled: 'disabled' }, '✓ In your deck')
+            : el('button.primary', { onclick: function () {
+                // The sentence it appeared in becomes its example. Authentic
+                // context beats anything a corpus author invents.
+                PARLA.store.addWord(lemma, (res && res.en) || '', sentence, '');
+                ui.toast('“' + lemma + '” added to your deck', 'good');
+                closeWord();
+              } }, '+ Learn this')));
+      });
+    }
+
     /* ── bubbles ── */
 
     function addPartner(es, en, correction, autoSpeak) {
       if (correction) addCorrection(correction);
 
       var b = el('div.bubble.them',
-        el('div.body.es', es),
+        // Every word is tappable. A fixed word list is always the wrong list -
+        // it has words you know and lacks the one just used on you.
+        el('div.body.es', tappable(es)),
         st.settings.showTranslations && en ? el('div.trans', en) : null,
         el('div.tools',
           el('button', { onclick: function () { ui.say(es, null, sc.voice); } }, '🔊 Again'),
@@ -585,6 +674,7 @@ window.PARLA = window.PARLA || {};
     main._onLeave = function () {
       if (listenHandle) listenHandle.abort();
       PARLA.speech.cancel();
+      closeWord();
       session.ended = true;
     };
 
