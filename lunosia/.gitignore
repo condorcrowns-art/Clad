@@ -1,0 +1,11 @@
+node_modules/
+*.zip
+*.crx
+*.pem
+
+# Third-party inference engine (~26 MB of build output).
+# Not committed: it is reproducible from pinned npm versions, and GitHub's
+# secret scanner misreads a model-registry string in transformers.js as a
+# Mistral API key. Fetch it with: npm run setup
+lib/transformers.js
+lib/ort/
