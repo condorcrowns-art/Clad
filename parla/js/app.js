@@ -25,7 +25,7 @@ window.PARLA = window.PARLA || {};
 
     var brain = document.getElementById('chipBrain');
     if (brain) {
-      var names = { scripted: 'built-in', ollama: 'ollama', gemini: 'gemini' };
+      var names = { scripted: 'built-in', ollama: 'ollama', gemini: 'gemini', hosted: 'this site' };
       var h = PARLA.brain.health;
       var label = names[st.settings.brain] || st.settings.brain;
       var cls = 'chip';
@@ -105,6 +105,16 @@ window.PARLA = window.PARLA || {};
       var b = e.target.closest('button[data-view]');
       if (b) go(b.getAttribute('data-view'));
     });
+
+    // The dictionary is a megabyte and a half and nothing on the first screen
+    // needs it, so it is fetched once the page has settled. After that it is in
+    // the service worker's cache and every later visit — including offline
+    // ones — has thirty-one thousand words available instantly.
+    if (PARLA.dict) {
+      var warm = function () { PARLA.dict.load(); };
+      if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 4000 });
+      else setTimeout(warm, 1500);
+    }
 
     var brand = document.getElementById('brandBtn');
     if (brand) brand.addEventListener('click', function () { go('home'); });

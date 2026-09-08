@@ -32,10 +32,23 @@ Pages only finds a `functions/` folder if it sits at the root of what you
 published. Point Pages at the repository root instead and the site will still
 load — and `/api/chat` will 404, which looks exactly like "the AI is broken".
 
+### About that 1.5 MB dictionary
+
+`js/data/dict-es.json` is the biggest thing in the deploy. It is deliberately
+*not* part of the initial page load: the app starts, and the file is fetched
+once the page has settled, then cached by the service worker. Cloudflare serves
+it compressed — about 500 KB on the wire — and after the first visit it is on
+the phone for good, including offline.
+
+So the first load on mobile data costs about half a megabyte more than it used
+to, once, and buys the whole language. Nothing needs configuring for this.
+
 ### What you must not ship
 
 `piper/` and `voices/` are in `.gitignore` and must stay there. They are ~150 MB
 of binaries that are useless in a browser, and Pages has a 25 MB per-file limit.
+`tools/cache/` is ignored too — it holds the raw source files the dictionary is
+built from, and only the built output belongs in the repo.
 
 ---
 
@@ -82,6 +95,8 @@ get simpler; nothing breaks.
 |---|---|---|
 | Chatbot | **Workers AI**, via `/api/chat` | Ollama (qwen2.5:7b) |
 | Voice | Android's Spanish voices | **Piper** neural voice |
+| Dictionary — 31,000 words | yes, offline after first load | yes |
+| Word bank and frequency bands | yes | yes |
 | Flash cards, SRS, review | yes | yes |
 | Games (Pairs, Word rush, El or la, Dictation) | yes | yes |
 | Ask — any word, meaning, conjugation | yes | yes |
@@ -136,6 +151,11 @@ more account to hold.
 ---
 
 ## It installs as an app on the S11
+
+The manifest now points at real PNG icons (`icon-192.png`, `icon-512.png`).
+That matters: Chrome on Android will not offer to install a site whose only
+icon is an inline SVG, which is what shipped before — so the one device this is
+meant to live on was the one that would not install it.
 
 Once it is on https, Chrome on Android will offer **Add to Home Screen**. It
 then runs full-screen with no address bar, keeps working offline through the

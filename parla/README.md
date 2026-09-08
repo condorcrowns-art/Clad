@@ -43,9 +43,12 @@ python3 -m http.server 8000
 |---|---|
 | **23 conversation scenarios** | Café, restaurant, doctor, job interview, emergency call, arguing about where to live… |
 | **60-day speaking challenge** | One conversation a day, ordered so grammar arrives when you need it |
-| **345-word vocabulary** | With native audio, gendered articles, and a real example sentence each |
+| **31,000-word dictionary** | Meaning, gender, register and where it is said — offline, built from open Wiktionary and subtitle-corpus data |
+| **Any form of any word** | Type `pidiéndoselo` and get *pedir*, gerund, with *se* and *lo* on the end. Conjugations, plurals, feminines, `-mente`, `-ísimo`, diminutives, attached pronouns |
+| **Frequency bands** | The words ordered by how often people actually say them, so "how much Spanish do I know" has a real answer |
+| **521 curated words** | With native audio, gendered articles, and a real example sentence each |
 | **Spaced repetition** | Full SM-2. Words you miss come back tomorrow; words you nail vanish for months |
-| **Conjugation trainer** | 50 verbs × 6 tenses × 6 persons, generated from rules — irregulars and stem-changers included |
+| **Conjugation trainer** | Any verb × 11 tenses × 6 persons, generated from rules — stem changes, spelling rules, the compounds of the irregulars, imperatives, participles and gerunds |
 | **Pronunciation check** | Read a word aloud; speech recognition tells you whether it heard the right thing |
 | **Ask anything** | Type any Spanish word: meaning, gender, every tense, the mistake learners make with it, two examples — then bank it as a card |
 | **Four study games** | Pairs, Word rush, El or la, Dictation — no mic, no model, no network, all feeding the same deck |
@@ -61,6 +64,7 @@ Every part that normally costs money has a free native equivalent:
 
 | Piece | Usually | Here |
 |---|---|---|
+| A dictionary | a subscription | Wiktionary and an open frequency list, built into a file at release time |
 | Speech → text | paid ASR API | `SpeechRecognition` — built into the browser |
 | Text → speech | paid TTS | Piper — a neural voice running on your own machine |
 | AI conversation | someone's servers | Ollama on your machine, Cloudflare Workers AI on the deployed site, Gemini's free tier, or no AI at all |
@@ -512,6 +516,8 @@ js/
   speech.js           speech in (Web Speech ASR) and out (Piper, falling back
                       to the browser's voices), plus voice ranking
   srs.js              SM-2 spaced repetition
+  dict.js             the dictionary at runtime: lazy load, index, search, bands
+  morph.js            any Spanish form worked back to the word you look up
   brain.js            four backends behind one interface, model auto-pick,
                       JSON retry, and the offline corrector
   ui.js               tiny DOM toolkit
@@ -519,11 +525,15 @@ js/
   views-drill.js      flashcard review, conjugation trainer
   views-coach.js      the Ask screen: any word, meaning, conjugation, pitfalls
   views-games.js      Pairs, Word rush, El or la, Dictation
+  views-words.js      the word bank: 31,000 words by frequency band
   views-progress.js   home, 60-day grid, stats, mistake journal, settings
   app.js              router + bootstrap
 functions/
   api/chat.js         Cloudflare Pages Function: the partner on the public site,
                       running on Workers AI so a phone needs no PC
+tools/
+  build-dict.js       turns open Wiktionary + frequency data into dict-es.json
+  make-icons.js       renders the PWA icons Android needs to offer "install"
 serve.ps1             dependency-free static server + the /tts endpoint
 setup-windows.ps1     one-shot installer: Ollama, a model, Piper, a voice
 piper/  voices/       downloaded by setup, git-ignored
@@ -543,6 +553,9 @@ test/
   mic-browser.test.js     every way a microphone fails, and the mural geometry
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
+  verbs.test.js           every conjugation rule, form by form
+  dict.test.js            the dictionary, and working any form back to a lemma
+  words-browser.test.js   the word bank and the dictionary-backed Ask screen
   hosted.test.js          the Workers AI backend, and its fallbacks
   games-browser.test.js   all four study games, played through, at phone size
   hosted-browser.test.js  the deployed site end to end against the real function
@@ -552,12 +565,42 @@ test/
   piper-browser.test.js   the whole thing in a real browser
 ```
 
+## Where the words come from
+
+`js/data/dict-es.json` is built, not written. `tools/build-dict.js` takes four
+freely-licensed sources and turns them into 31,000 headwords:
+
+- **en.wiktionary Spanish↔English glosses**, exported by Matthias Buchmeier
+  (CC BY-SA 3.0 / GFDL) — the meanings, parts of speech, gender tags and
+  register labels. Both directions, because a gloss that translates *back* to
+  the word you started from is its core sense, and the other five are the long
+  tail. That is how "tener" gets "to have" on the card rather than "to be of a
+  measure or age".
+- **hermitdave/FrequencyWords** over OpenSubtitles 2018, Spanish and English
+  (CC BY-SA 4.0) — the ordering. Spanish decides which words ship first;
+  English breaks ties between glosses.
+
+The output file carries its own attribution and licence, and it is committed,
+so the app never touches any of this at runtime. Rebuild with:
+
+```bash
+node tools/build-dict.js            # downloads to tools/cache/ if empty
+node tools/build-dict.js --offline  # fails rather than reaching the network
+```
+
+The commonest few hundred words are the ones a Wiktionary dump handles worst —
+it will tell you "una" is "an indefinite plural pronoun using a singular
+feminine item" — so those are written by hand in the builder and win where they
+exist, as do the 521 curated corpus words.
+
 ## Adding content
 
 - **A word** — append one row to `js/data/vocab-es.js`. SRS, audio and drills pick it up
-  automatically.
-- **A verb** — add `['infinitive', 'english', 'a1']` to `VERBS` in `verbs-es.js`. If it's
-  irregular, add its odd tenses to `IRREGULAR`; everything else is generated.
+  automatically. (The 31,000-word dictionary is separate and is rebuilt, not edited.)
+- **A verb** — add `['infinitive', 'english', 'a1']` to `VERBS` in `verbs-es.js` to put it in
+  the drill. Conjugation needs nothing: stem changes come from the `STEM_IE`/`STEM_UE`/`STEM_I`
+  lists, spelling rules apply by shape, compounds of the irregulars are derived, and only a
+  genuinely suppletive verb needs a row in `IRREGULAR`.
 - **A scenario** — append an object to `scenarios-es.js`. `role`/`setting`/`goals` brief the LLM;
   `script` beats make it work offline. Give it a `fallback` or two.
 - **French** — the engines are already language-parameterised (`PARLA.speech.langs` has `fr`).
@@ -582,6 +625,8 @@ node test/coach.test.js            # the Ask screen's answers
 node test/suggest.test.js          # what to say when you are stuck
 node test/english.test.js          # English as a teaching moment
 node test/casting.test.js          # voices matched to characters
+node test/verbs.test.js            # conjugation, form by form, against real Spanish
+node test/dict.test.js             # the dictionary, and unpicking any word form
 node test/hosted.test.js           # the Workers AI partner, and what happens without it
 
 node -e "const{makeSandbox,load}=require('./test/harness');
@@ -600,6 +645,7 @@ node test/drill-browser.test.js 8765        # every flashcard drill, end to end
 node test/word-browser.test.js 8765         # tapping a word out of a conversation
 node test/coach-browser.test.js 8765        # the Ask screen and the flip cards
 node test/games-browser.test.js 8765        # all four games, played through, on a phone
+node test/words-browser.test.js 8765        # the word bank, and Ask with a dictionary behind it
 ```
 
 The hosted partner has its own server, because the thing worth testing is the

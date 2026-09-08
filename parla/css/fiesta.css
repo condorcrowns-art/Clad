@@ -744,3 +744,69 @@ button:active { transform: scale(.97); }
   .bubble.you .tools { opacity: 1; }
   .card:hover { transform: none; }
 }
+
+/* ── The word bank ────────────────────────────────────────────
+ * A list of thirty-one thousand things needs to be scannable before it is
+ * beautiful: one line per word, the Spanish in the serif so it reads as
+ * Spanish, everything else quiet. */
+.wb-big { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+.right { text-align: right; }
+
+.band-card {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 14px; transition: transform .16s ease, box-shadow .16s ease;
+}
+.band-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.band-card .bar { margin: 8px 0 6px; }
+
+.wb-controls { margin: 14px 0 6px; }
+.wb-controls .tense-row { margin-top: 8px; }
+
+.wb-list {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden; margin-top: 12px; background: var(--card);
+}
+.wb-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-bottom: 1px solid var(--line);
+}
+.wb-row:last-child { border-bottom: 0; }
+.wb-row.have { background: color-mix(in srgb, var(--good) 6%, transparent); }
+.wb-main { flex: 1; min-width: 0; }
+.wb-term { font-family: var(--serif); font-size: 1.05rem; line-height: 1.2; }
+.wb-en { font-size: .85rem; color: var(--ink-soft); overflow: hidden;
+         text-overflow: ellipsis; white-space: nowrap; }
+.wb-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; }
+.wb-meta span { font-size: .68rem; color: var(--ink-faint); }
+.small-btn { padding: 4px 10px; font-size: .85rem; min-width: 34px; }
+
+/* ── Ask, with a dictionary behind it ─────────────────────────*/
+.ask-senses { font-size: .86rem; color: var(--ink-soft); margin-top: 4px; }
+.ask-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tag-soft, .tag-warn {
+  font-size: .7rem; padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--ink-soft);
+}
+.tag-warn { background: var(--bad-soft); color: var(--bad); font-weight: 700; }
+.ask-reading { display: flex; align-items: baseline; gap: 6px; padding: 4px 0; flex-wrap: wrap; }
+.ask-reading .es { font-family: var(--serif); }
+.linkish {
+  background: none; border: 0; padding: 0 0 0 4px; color: var(--accent);
+  font-size: .78rem; text-decoration: underline; cursor: pointer;
+}
+.conj-extra { display: flex; gap: 16px; margin: 8px 0 4px; flex-wrap: wrap; }
+.conj-extra .es { font-family: var(--serif); }
+.hint.good-hint {
+  border-left: 3px solid var(--good);
+  background: color-mix(in srgb, var(--good) 8%, transparent);
+  color: var(--ink); padding-left: 10px;
+}
+
+@media (max-width: 560px) {
+  .wb-row { padding: 8px; gap: 7px; }
+  .wb-term { font-size: 1rem; }
+  .wb-en { font-size: .8rem; }
+  .band-card { padding: 12px; }
+  .wb-big { font-size: 1.7rem; }
+}

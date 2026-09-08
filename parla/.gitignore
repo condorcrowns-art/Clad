@@ -3,3 +3,7 @@
 piper/
 voices/
 node_modules/
+
+# Raw sources for tools/build-dict.js. Only the built dictionary is committed;
+# these are ~7 MB of upstream data that anyone can re-download.
+tools/cache/

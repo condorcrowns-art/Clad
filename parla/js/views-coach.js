@@ -27,7 +27,24 @@ window.PARLA = window.PARLA || {};
     main.appendChild(el('h1', 'Ask about any word'));
     main.appendChild(el('p.muted',
       'A word, a phrase, or a whole sentence — in Spanish or English. ' +
-      'If you are not sure how it is spelled, write it how it sounded.'));
+      'Conjugated, plural, feminine, with pronouns stuck on the end: ' +
+      'it works the form backwards to the word you should look up.'));
+
+    var dictLine = el('div.small.faint', { style: { marginBottom: '10px' } });
+    main.appendChild(dictLine);
+    function paintDict() {
+      var D = PARLA.dict;
+      if (!D) return;
+      if (D.ready()) {
+        dictLine.textContent = D.size().toLocaleString() + ' words offline, no model needed.';
+      } else if (D.failure()) {
+        dictLine.textContent = 'Dictionary not loaded (' + D.failure() + ') — answers will be thinner.';
+      } else {
+        dictLine.textContent = 'Loading the dictionary…';
+        D.load().then(paintDict);
+      }
+    }
+    paintDict();
 
     var input = el('input.ask-input', {
       type: 'text', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false',
@@ -79,9 +96,9 @@ window.PARLA = window.PARLA || {};
       return el('div.card',
         el('h2', 'Nothing to go on'),
         el('p.muted',
-          'The word list here does not have “' + query + '”, and there is no AI ' +
-          'partner connected to ask. Start Ollama and this screen answers for ' +
-          'any word in the language.'),
+          'Nothing in the dictionary matches “' + query + '”, and no form of it ' +
+          'works backwards to a word either. Check the spelling — or connect an ' +
+          'AI partner in Settings, which can answer for things a dictionary cannot.'),
         el('div.btn-row',
           el('button', { onclick: function () { PARLA.app.go('settings'); } }, 'Settings')));
     }
@@ -102,10 +119,48 @@ window.PARLA = window.PARLA || {};
       if (r.en) card.appendChild(el('div.ask-en', r.en));
       else card.appendChild(el('div.ask-en.muted', 'No confident meaning — try rephrasing it.'));
 
+      // Other senses of the same word. A learner who only ever sees the first
+      // one will use "mano" for the hand of a clock and wonder why nobody
+      // understands.
+      if (r.senses && r.senses.length > 1) {
+        card.appendChild(el('div.ask-senses',
+          el('span.small.faint', 'also: '),
+          el('span', r.senses.slice(1).join(' · '))));
+      }
+
+      // Register and region are the difference between sounding fluent and
+      // sounding like you learned Spanish from one country's television.
+      if (r.register || r.region) {
+        var tags = el('div.ask-tags');
+        if (r.register) {
+          tags.appendChild(el('span.tag-' + (r.register === 'vulgar' || r.register === 'rude'
+            ? 'warn' : 'soft'), REGISTER_TEXT[r.register] || r.register));
+        }
+        if (r.region) tags.appendChild(el('span.tag-soft', '📍 ' + r.region));
+        card.appendChild(tags);
+      }
+
       if (r.term && r.term !== headword) {
         card.appendChild(el('div.small.muted', 'you asked about: ' + r.term));
       }
       if (r.note) card.appendChild(el('div.ask-note', r.note));
+      if (r.rarity) card.appendChild(el('div.small.faint', r.rarity +
+        (r.band ? '  (#' + r.band.toLocaleString() + ' commonest)' : '')));
+
+      // Every other way the form could be read. "casas" is the plural of a
+      // house far more often than it is the tú-form of "to marry", but it is
+      // both, and being shown both is how you stop being confused by it.
+      if (r.readings && r.readings.length > 1) {
+        var alt = el('div.ask-block',
+          el('div.ask-label', 'It could also be'));
+        r.readings.slice(1, 4).forEach(function (a2) {
+          alt.appendChild(el('div.ask-reading',
+            el('span.es', a2.lemma),
+            el('span.small.muted', ' — ' + (a2.why || a2.en || '')),
+            el('button.linkish', { onclick: function () { ask(a2.lemma); } }, 'look up')));
+        });
+        card.appendChild(alt);
+      }
 
       if (r.structure) {
         card.appendChild(el('div.ask-block',
@@ -132,14 +187,19 @@ window.PARLA = window.PARLA || {};
         card.appendChild(ex);
       }
 
-      if (r.conjugation) card.appendChild(conjugationBlock(headword, r));
+      if (r.conjugation) card.appendChild(conjugationBlock(r.conjugationOf || headword, r));
 
       // Everything looked up is a candidate for the deck, whether or not it
       // was ever in the shipped list.
+      // Compare with the article off both sides, or "cuenta" gets a second
+      // card next to the "la cuenta" already in the deck.
+      var bare = function (t) {
+        return PARLA.brain.normalise(String(t).replace(/^(el|la|los|las|un|una)\s+/i, ''));
+      };
       var already = (st.phrases || []).some(function (p) {
-        return PARLA.brain.normalise(p.es) === PARLA.brain.normalise(headword);
+        return bare(p.es) === bare(headword);
       }) || !!(PARLA.data.es.vocab || []).filter(function (v) {
-        return PARLA.brain.normalise(v[0]) === PARLA.brain.normalise(headword);
+        return bare(v[0]) === bare(headword);
       })[0];
 
       // A card with no meaning on the back is not a flashcard, it is a blank.
@@ -190,7 +250,20 @@ window.PARLA = window.PARLA || {};
       // The table is generated from the same rules that drive the verb drill,
       // which is more reliable than an 8B model reciting one from memory. For a
       // verb it has never been told is irregular, that is a guess - and it says so.
-      if (!r.conjugationExact) {
+      if (r.participle || r.gerund) {
+        block.appendChild(el('div.conj-extra',
+          r.gerund ? el('span', el('span.small.faint', 'doing it: '),
+                        el('span.es', r.gerund)) : null,
+          r.participle ? el('span', el('span.small.faint', 'done: '),
+                            el('span.es', r.participle)) : null));
+      }
+
+      // Why this verb bends, when it does. "Irregular" on its own teaches
+      // nothing; "the e breaks when the stress lands on it" is a rule you can
+      // carry to the next verb.
+      if (r.irregularNote) {
+        block.appendChild(el('div.hint.good-hint', r.irregularNote));
+      } else if (!r.conjugationExact) {
         block.appendChild(el('div.hint',
           'Generated from the regular pattern. If “' + inf + '” is irregular, ' +
           'check a form before trusting it.'));
@@ -222,6 +295,12 @@ window.PARLA = window.PARLA || {};
 
     return main;
   }
+
+  var REGISTER_TEXT = {
+    vulgar: '⚠️ vulgar', rude: '⚠️ rude', slang: 'slang', informal: 'informal',
+    formal: 'formal', literary: 'literary', dated: 'old-fashioned', rare: 'rare',
+    euphemism: 'a polite way of putting it', humorous: 'jokey'
+  };
 
   PARLA.views = PARLA.views || {};
   PARLA.views.coach = viewCoach;

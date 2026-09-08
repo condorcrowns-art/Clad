@@ -697,6 +697,13 @@ window.PARLA = window.PARLA || {};
       }
     }
 
+    // The dictionary and the morphology engine: thirty-one thousand words and
+    // every form of every one of them. Asked before the fifty-verb reverse
+    // index because it says more - "gerund, with se and lo on the end" rather
+    // than "Gerund of pedir".
+    var m = morphLookup(word);
+    if (m) return m;
+
     // A conjugated verb: the trainer already knows every form it generates, so
     // it can name the infinitive without anyone having to type a table out.
     var verbs = data.verbs;
@@ -712,7 +719,29 @@ window.PARLA = window.PARLA || {};
         };
       }
     }
+
     return null;
+  }
+
+  /* One reading of a surface form, in the shape the rest of the app expects. */
+  function morphLookup(word) {
+    if (!PARLA.morph || !PARLA.morph.ready()) return null;
+    var a = PARLA.morph.analyse(word);
+    if (!a.length) return null;
+    var top = a[0];
+    if (!top.en) return null;
+    return {
+      en: top.en,
+      lemma: top.lemma,
+      note: top.why || '',
+      pos: top.pos,
+      gender: top.entry ? top.entry.gender : null,
+      register: top.entry ? top.entry.register : null,
+      region: top.entry ? top.entry.region : null,
+      band: top.entry ? top.entry.band : 0,
+      analyses: a,
+      source: 'dict'
+    };
   }
 
   function translate(ctx) {
@@ -899,11 +928,48 @@ window.PARLA = window.PARLA || {};
       }
     }
 
+    /* The dictionary. Thirty-one thousand headwords with gender, register and
+     * where a word is said - and, through the morphology engine, every form of
+     * every one of them. All of it offline, none of it a guess. */
+    if (PARLA.morph && PARLA.morph.ready()) {
+      var readings = PARLA.morph.analyse(word);
+      if (readings.length) {
+        var top = readings[0];
+        var e = top.entry;
+        // Only rename the headword if nothing better already named it. The
+        // curated list calls it "la cuenta"; the dictionary calls it "cuenta";
+        // and letting the dictionary win would offer a second card for a word
+        // the deck already has.
+        if (out.source === 'none') out.lemma = top.lemma || out.lemma;
+        out.en = out.en || top.en || '';
+        out.source = out.source === 'none' ? 'dict' : out.source;
+        out.readings = readings;
+        if (top.why) out.note = out.note || top.why;
+        if (e) {
+          out.pos = out.pos || POS_NAME[e.pos] || e.pos;
+          out.gender = out.gender || e.gender || '';
+          out.senses = e.glosses;
+          out.register = e.register;
+          out.region = e.region;
+          out.band = e.band;
+          if (e.band) {
+            out.rarity = e.band <= 500 ? 'One of the 500 commonest words in Spanish.'
+              : e.band <= 1000 ? 'In the commonest 1,000 words.'
+              : e.band <= 3000 ? 'In the commonest 3,000 words.'
+              : e.band <= 10000 ? 'Not rare, but not everyday either.'
+              : 'An uncommon word.';
+          }
+        }
+        // If the word was a conjugated form, the table belongs to its verb.
+        if (top.pos === 'v' && top.lemma) out.verbLemma = top.lemma;
+      }
+    }
+
     // The conjugation engine works from rules, so it handles ANY infinitive -
     // the fifty in the drill list are only the drill's pool, not its limit.
     var verbs = data && data.verbs;
     if (verbs && verbs.conjugate) {
-      var inf = /(ar|er|ir)$/i.test(out.lemma) ? out.lemma : null;
+      var inf = out.verbLemma || (/(ar|er|ir|ír)$/i.test(out.lemma) ? out.lemma : null);
       if (inf) {
         var table = {};
         Object.keys(verbs.tenses).forEach(function (t) {
@@ -912,14 +978,28 @@ window.PARLA = window.PARLA || {};
         });
         if (Object.keys(table).length) {
           out.conjugation = table;
+          out.conjugationOf = inf;
           out.pos = out.pos || 'verb';
+          out.participle = verbs.participle(inf);
+          out.gerund = verbs.gerund(inf);
+          out.irregularNote = verbs.irregularNote ? verbs.irregularNote(inf) : null;
+          // The rules now cover stem changes, spelling changes and the
+          // compounds of the irregular verbs, so "exact" means something
+          // stronger than it used to: the engine knows *why* this verb bends.
           out.conjugationExact = !!verbs.isIrregular(inf) ||
+            !!(PARLA.dict && PARLA.dict.ready() && PARLA.dict.isVerb(inf)) ||
             !!(data.vocab || []).filter(function (v) { return v[0] === inf; })[0];
         }
       }
     }
     return out;
   }
+
+  var POS_NAME = {
+    n: 'noun', v: 'verb', adj: 'adjective', adv: 'adverb', pron: 'pronoun',
+    prep: 'preposition', conj: 'conjunction', interj: 'interjection',
+    num: 'number', phrase: 'phrase', prop: 'proper noun', abbr: 'abbreviation'
+  };
 
   function explain(ctx) {
     var query = String(ctx.query || '').trim();
@@ -1357,6 +1437,7 @@ window.PARLA = window.PARLA || {};
     testBackend: testBackend,
     detectOllama: detectOllama,
     hostedAvailable: hostedAvailable,
+    morphLookup: morphLookup,
     bestModel: bestModel,
     normalise: normalise,
     words: words,

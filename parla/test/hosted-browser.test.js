@@ -98,8 +98,8 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 3, has
 
   console.log('\nThe rest of the app, unchanged\n');
   const nav = await page.locator('#nav button').count();
-  check('every screen is still reachable', nav === 8, nav + ' nav items');
-  for (const v of ['review', 'games', 'conjugate', 'challenge', 'progress']) {
+  check('every screen is still reachable', nav === 9, nav + ' nav items');
+  for (const v of ['review', 'words', 'games', 'conjugate', 'challenge', 'progress']) {
     await page.locator('#nav button[data-view=' + v + ']').click();
     await page.waitForTimeout(350);
     check(v + ' opens with no model involved', (await page.locator('main').count()) === 1);

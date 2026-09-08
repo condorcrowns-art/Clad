@@ -29,8 +29,11 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   check('conjugated correctly', present[0] === 'madrugo' && present[3] === 'madrugamos',
     present.join(' '));
   check('all six persons', present.length === 6, String(present.length));
-  check('and it admits the irregulars are a guess',
-    (await page.locator('.ask-card').innerText()).includes('regular pattern'));
+  // It used to hedge on every verb it had not been told about. Now the engine
+  // knows the stem-change classes and the spelling rules, so for a plainly
+  // regular -ar verb it says nothing, and where a verb does bend it says why.
+  check('a regular verb is not hedged about',
+    !(await page.locator('.ask-card').innerText()).includes('regular pattern'));
 
   const tenses = await page.locator('.tense-btn').count();
   check('every tense is offered', tenses >= 5, tenses + ' tenses');
@@ -40,10 +43,13 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   check('switching tense changes the table', pret[0] !== present[0], present[0] + ' -> ' + pret[0]);
 
   console.log('\nInto the deck\n');
-  // With no model connected there is no meaning for "madrugar", and a card with
-  // a blank back is not a flashcard - so it must refuse rather than bank one.
-  check('a word with no meaning is not offered as a card',
-    (await page.locator('.ask-card button', { hasText: 'Needs a meaning first' }).count()) === 1);
+  // "madrugar" is not in the shipped 521 words and there is no model connected,
+  // and it still comes back with a meaning - because there is a dictionary now.
+  check('a word outside the shipped list still has a meaning, with no model',
+    /get up early/i.test(await page.locator('.ask-en').innerText()),
+    await page.locator('.ask-en').innerText());
+  check('so it can be banked as a card',
+    (await page.locator('.ask-card button', { hasText: 'Learn this' }).count()) === 1);
 
   await page.fill('.ask-input', 'la cuenta');
   await page.keyboard.press('Enter');

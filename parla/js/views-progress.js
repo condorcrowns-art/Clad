@@ -137,7 +137,10 @@ window.PARLA = window.PARLA || {};
       quick('💬', 'Free talk', 'Any scenario', function () { PARLA.app.go('scenarios'); }),
       quick('🔁', 'Review words', due + ' card' + (due === 1 ? '' : 's') + ' waiting',
         function () { PARLA.app.go('review'); }),
-      quick('🧩', 'Drill verbs', 'Conjugation trainer', function () { PARLA.app.go('conjugate'); })
+      quick('🧩', 'Drill verbs', 'Conjugation trainer', function () { PARLA.app.go('conjugate'); }),
+      quick('🎮', 'Play a game', 'Four minutes', function () { PARLA.app.go('games'); }),
+      quick('📚', 'Word bank', dictBlurb(), function () { PARLA.app.go('words'); }),
+      quick('🔎', 'Look something up', 'Any word, any form', function () { PARLA.app.go('coach'); })
     ));
 
     /* at a glance */
@@ -243,6 +246,15 @@ window.PARLA = window.PARLA || {};
 
   /* ── Stats ──────────────────────────────────────────────── */
 
+  /* One line for the word-bank tile, honest about whether it is there yet. */
+  function dictBlurb() {
+    var D = PARLA.dict;
+    if (!D) return 'Browse and search';
+    if (D.ready()) return D.size().toLocaleString() + ' words';
+    if (D.failure()) return 'not loaded';
+    return 'loading…';
+  }
+
   function viewProgress() {
     init();
     var st = PARLA.store.state;
@@ -280,6 +292,38 @@ window.PARLA = window.PARLA || {};
       ui.stat(s.leeches, 'trouble')
     ));
     main.appendChild(el('div', { style: { marginTop: '10px' } }, ui.bar(s.seen / Math.max(1, s.total))));
+
+    /* How much of the language, rather than how much of the shipped list. This
+     * is the number that actually tracks whether Spanish is getting easier:
+     * the thousand commonest words are most of what anyone says. */
+    var D = PARLA.dict;
+    if (D && D.ready()) {
+      var norm = PARLA.brain.normalise;
+      var have = Object.create(null);
+      (PARLA.data.es.vocab || []).forEach(function (v) {
+        have[norm(v[0])] = 1;
+        have[norm(String(v[0]).replace(/^(el|la|los|las)\s+/, ''))] = 1;
+      });
+      (st.phrases || []).forEach(function (p) { have[norm(p.es)] = 1; });
+      var isKnown = function (t) { return !!have[norm(t)]; };
+
+      var c1 = D.coverage(isKnown, 1000);
+      var c3 = D.coverage(isKnown, 3000);
+      var c10 = D.coverage(isKnown, 10000);
+
+      main.appendChild(ui.sectionTitle('How much of the language', 
+        el('button.ghost', { onclick: function () { PARLA.app.go('words'); } }, 'Word bank →')));
+      main.appendChild(el('div.grid.three',
+        ui.stat(c1.pct + '%', 'of the top 1,000'),
+        ui.stat(c3.pct + '%', 'of the top 3,000'),
+        ui.stat(c10.pct + '%', 'of the top 10,000')));
+      main.appendChild(el('div', { style: { marginTop: '10px' } }, ui.bar(c1.pct / 100)));
+      main.appendChild(el('p.small.muted',
+        'Measured against ' + D.size().toLocaleString() + ' words ordered by how often ' +
+        'Spanish speakers actually say them. The first thousand do most of the work; ' +
+        'after that each one buys a little less, which is why the number slows down ' +
+        'and that is not you failing.'));
+    }
 
     main.appendChild(ui.sectionTitle('Practice'));
     main.appendChild(el('div.grid.three',
