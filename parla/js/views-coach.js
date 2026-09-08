@@ -220,9 +220,14 @@ window.PARLA = window.PARLA || {};
         el('button', { onclick: function () { PARLA.app.go('review'); } }, 'Go review')));
 
       if (r.partial) {
+        var D2 = PARLA.dict;
         card.appendChild(el('div.hint', { style: { marginTop: '10px' } },
-          'Answered from the built-in word list and grammar engine. ' +
-          'With an AI partner connected this covers the whole language.'));
+          D2 && D2.ready()
+            ? 'From the ' + D2.size().toLocaleString() + '-word dictionary and the grammar ' +
+              'engine — no model involved, and it works offline. An AI partner would add ' +
+              'the sentence-level advice: how it is used, and what English speakers get wrong.'
+            : 'From the built-in word list and grammar engine. The full dictionary has not ' +
+              'loaded yet, so this answer is thinner than it should be.'));
       }
       return card;
     }
