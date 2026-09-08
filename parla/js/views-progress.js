@@ -693,6 +693,96 @@ window.PARLA = window.PARLA || {};
     drawMemory();
     main.appendChild(memCard);
 
+    /* — the microphone —
+     * A microphone that does not work has half a dozen possible causes and the
+     * browser reports almost none of them. This checks every one at once and
+     * then actually listens, so "it doesn't work" becomes a specific sentence. */
+    main.appendChild(ui.sectionTitle('Microphone'));
+    var micCard = el('div.card');
+    var micOut = el('div');
+    var micLive = el('div.mic-live', { hidden: true });
+
+    micCard.appendChild(el('div.hint',
+      'If speaking is not working, run this. It checks everything the browser ' +
+      'will tell us, then listens for five seconds and shows exactly what it heard.'));
+    micCard.appendChild(el('div.btn-row', { style: { marginTop: '10px' } },
+      el('button.primary', { onclick: runMicTest }, '🎙 Test microphone')));
+    micCard.appendChild(micOut);
+    micCard.appendChild(micLive);
+    main.appendChild(micCard);
+
+    function line(ok, label, detail) {
+      return el('div.check-line',
+        el('span.check-mark.' + (ok === true ? 'ok' : ok === false ? 'no' : 'meh'),
+           ok === true ? '✓' : ok === false ? '✗' : '•'),
+        el('div',
+          el('div', label),
+          detail ? el('div.small.muted', detail) : null));
+    }
+
+    function runMicTest() {
+      ui.clear(micOut);
+      micLive.hidden = true;
+      micOut.appendChild(el('div.small.muted', { style: { marginTop: '10px' } }, 'Checking…'));
+
+      PARLA.speech.recheckMic();
+      PARLA.speech.micReport().then(function (r) {
+        return PARLA.speech.ensureMic(true).then(function (m) { return [r, m]; });
+      }).then(function (pair) {
+        var r = pair[0], m = pair[1];
+        ui.clear(micOut);
+
+        micOut.appendChild(line(r.secure, 'Secure context',
+          r.secure ? r.origin : 'Browsers only give a microphone to https:// or localhost. ' +
+                                'You are on ' + r.origin));
+        micOut.appendChild(line(r.recognition, 'Speech recognition available',
+          r.recognition ? '' : 'This browser has no SpeechRecognition. Use Chrome or Edge.'));
+        micOut.appendChild(line(
+          r.permission === 'granted' ? true : r.permission === 'denied' ? false : null,
+          'Permission: ' + r.permission,
+          r.permission === 'denied'
+            ? 'Click the padlock in the address bar, set Microphone to Allow, then reload.'
+            : ''));
+        micOut.appendChild(line(r.devices.length > 0,
+          r.devices.length + ' microphone' + (r.devices.length === 1 ? '' : 's') + ' found',
+          r.devices.join(', ')));
+        micOut.appendChild(line(m.ok, m.ok ? 'Microphone opened' : 'Could not open the microphone',
+          m.detail));
+
+        if (m.ok && r.recognition) listenTest();
+      });
+    }
+
+    function listenTest() {
+      ui.clear(micLive);
+      micLive.hidden = false;
+      var heard = el('div.mic-live-text', 'Say something in Spanish…');
+      micLive.appendChild(heard);
+
+      var handle = PARLA.speech.listen({
+        lang: st.profile.target || 'es',
+        silenceMs: 5000, noSpeechMs: 6000, maxMs: 9000,
+        onpartial: function (t) { heard.textContent = t; heard.className = 'mic-live-text live'; },
+        onfinal: function (t, conf) {
+          heard.className = 'mic-live-text ok';
+          heard.textContent = '✓ Heard: “' + t + '”' +
+            (conf ? '  (confidence ' + Math.round(conf * 100) + '%)' : '');
+        },
+        onerror: function (kind, detail) {
+          heard.className = 'mic-live-text no';
+          heard.textContent = '✗ ' + kind + (detail ? ' — ' + detail : '');
+        },
+        onend: function () {
+          if (heard.className === 'mic-live-text') {
+            heard.className = 'mic-live-text no';
+            heard.textContent = '✗ Nothing was heard. Check Windows has the right ' +
+                                'microphone selected as the default input device.';
+          }
+        }
+      });
+      main._micTest = handle;
+    }
+
     /* — practice — */
     main.appendChild(ui.sectionTitle('Practice'));
     var pause = el('input', { type: 'range', min: '800', max: '4000', step: '200',
@@ -775,6 +865,12 @@ window.PARLA = window.PARLA || {};
           }
         }, 'Erase everything'))
     ));
+
+    // A live microphone test must not keep listening after you navigate away.
+    main._onLeave = function () {
+      if (main._micTest) { main._micTest.abort(); main._micTest = null; }
+      PARLA.speech.cancel();
+    };
 
     return main;
   }

@@ -433,6 +433,95 @@ window.PARLA = window.PARLA || {};
     speaking = false;
   }
 
+  /* ── Getting at the microphone ────────────────────────────
+   *
+   * SpeechRecognition asks for the microphone itself, but when it is refused
+   * it reports "not-allowed" and nothing else - no clue whether the browser
+   * blocked it, the user did, or there is no microphone plugged in at all.
+   * Asking through getUserMedia first turns that into a real error name, and
+   * makes the permission prompt appear at a moment the user understands.
+   */
+  var micState = { checked: false, ok: false, error: '', detail: '' };
+
+  function micError(e) {
+    var name = (e && e.name) || 'Error';
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return { error: 'blocked',
+               detail: 'The browser is blocking the microphone for this page. ' +
+                       'Click the padlock or camera icon in the address bar and allow it.' };
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      return { error: 'no-device',
+               detail: 'No microphone was found. Check it is plugged in and selected ' +
+                       'in Windows sound settings.' };
+    }
+    if (name === 'NotReadableError' || name === 'AbortError') {
+      return { error: 'busy',
+               detail: 'Something else has the microphone open - a call, a recorder, ' +
+                       'another browser tab. Close it and try again.' };
+    }
+    return { error: 'unknown', detail: name + ': ' + ((e && e.message) || '') };
+  }
+
+  /* Resolves to micState. Cached once it has succeeded, because asking every
+   * turn spins the hardware up needlessly. */
+  function ensureMic(force) {
+    if (micState.checked && micState.ok && !force) return Promise.resolve(micState);
+
+    if (window.isSecureContext === false) {
+      micState = { checked: true, ok: false, error: 'insecure',
+                   detail: 'This page is not a secure context, so browsers will not ' +
+                           'give it a microphone. Open it on http://localhost or https://.' };
+      return Promise.resolve(micState);
+    }
+    if (typeof navigator === 'undefined' ||
+        !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Old browser: let recognition try on its own rather than refusing here.
+      micState = { checked: true, ok: true, error: '', detail: '' };
+      return Promise.resolve(micState);
+    }
+
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      // Hand it straight back: recognition opens its own stream, and holding
+      // this one would leave the recording indicator on for the whole session.
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      micState = { checked: true, ok: true, error: '', detail: '' };
+      return micState;
+    }).catch(function (e) {
+      var m = micError(e);
+      micState = { checked: true, ok: false, error: m.error, detail: m.detail };
+      return micState;
+    });
+  }
+
+  /* Everything that could be wrong, for the settings screen to show at once. */
+  function micReport() {
+    var out = {
+      secure: window.isSecureContext !== false,
+      recognition: !!SR,
+      origin: (typeof location !== 'undefined' ? location.origin : ''),
+      permission: 'unknown',
+      devices: [],
+      state: micState
+    };
+
+    var steps = [];
+    if (typeof navigator === 'undefined') return Promise.resolve(out);
+
+    if (navigator.permissions && navigator.permissions.query) {
+      steps.push(navigator.permissions.query({ name: 'microphone' })
+        .then(function (p) { out.permission = p.state; })
+        .catch(function () { /* Firefox has no microphone permission name */ }));
+    }
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+      steps.push(navigator.mediaDevices.enumerateDevices().then(function (list) {
+        out.devices = list.filter(function (d) { return d.kind === 'audioinput'; })
+                          .map(function (d) { return d.label || 'microphone (name hidden until allowed)'; });
+      }).catch(function () { }));
+    }
+    return Promise.all(steps).then(function () { return out; });
+  }
+
   /* ── Speech to text ─────────────────────────────────────── */
   /* listen() returns a handle with stop(), abort() and text(). Callbacks:
    *   onstart, onpartial(text), onfinal(text, confidence), onerror(kind), onend
@@ -581,10 +670,25 @@ window.PARLA = window.PARLA || {};
         // 'no-speech' and 'aborted' are normal outcomes of a continuous
         // session, not failures worth showing anyone.
         if (kind === 'no-speech' || kind === 'aborted') return;
+
         if (kind === 'not-allowed' || kind === 'service-not-allowed') {
-          closing = true;   // no point restarting into the same refusal
+          closing = true;                  // no point restarting into a refusal
+          micState.checked = false;        // re-ask next time; it may be granted
+          if (opts.onerror) opts.onerror('blocked',
+            'The browser is blocking the microphone for this page. Click the ' +
+            'padlock in the address bar and allow it, then try again.');
+          return;
         }
-        if (opts.onerror) opts.onerror(kind);
+        if (kind === 'network') {
+          // Chrome's recognition runs on Google's servers. No connection, no
+          // transcript - and it is worth saying so rather than looking broken.
+          closing = true;
+          if (opts.onerror) opts.onerror('network',
+            'Speech recognition needs an internet connection - Chrome does the ' +
+            'listening on Google\'s servers, not on your machine. Typing still works.');
+          return;
+        }
+        if (opts.onerror) opts.onerror(kind, '');
       };
 
       r.onend = function () {
@@ -601,19 +705,20 @@ window.PARLA = window.PARLA || {};
       };
     }
 
+    /* Chrome ends a session on its own every few seconds. Restarting the SAME
+     * recogniser reuses its connection; building a new one each time opens a
+     * fresh connection to the speech service on every restart, which is what
+     * gets throttled into "network" errors after a minute of talking. */
     function restart() {
-      var next = newRecogniser(lang);
-      wire(next);
-      rec = next;
       try {
-        next.start();
+        rec.start();
       } catch (err) {
         // "already started" can survive a beat; one retry, then give up
         // gracefully with whatever was captured.
         setTimeout(function () {
           if (settled || closing || killed) return;
-          try { next.start(); } catch (e2) { settle(); }
-        }, 120);
+          try { rec.start(); } catch (e2) { settle(); }
+        }, 150);
       }
     }
 
@@ -621,15 +726,24 @@ window.PARLA = window.PARLA || {};
     armSilence();
     hardTimer = setTimeout(endNow, maxMs);
 
-    try {
-      rec.start();
-    } catch (e) {
-      if (opts.onerror) opts.onerror('start-failed');
-      settled = true;
-      clearTimers();
-      if (opts.onend) opts.onend();
-      return { stop: function () {}, abort: function () {}, text: function () { return ''; } };
-    }
+    ensureMic().then(function (m) {
+      if (killed || settled) return;
+      if (!m.ok) {
+        clearTimers();
+        settled = true;
+        if (opts.onerror) opts.onerror(m.error, m.detail);
+        if (opts.onend) opts.onend();
+        return;
+      }
+      try {
+        rec.start();
+      } catch (e) {
+        clearTimers();
+        settled = true;
+        if (opts.onerror) opts.onerror('start-failed', String(e && e.message || e));
+        if (opts.onend) opts.onend();
+      }
+    });
 
     return {
       // Finish the turn and send what was heard.
@@ -669,6 +783,12 @@ window.PARLA = window.PARLA || {};
     voiceQuality: voiceQuality,
     pickVoice: pickVoice,
     onVoicesReady: onVoicesReady,
+    ensureMic: ensureMic,
+    micReport: micReport,
+    /* Forget a previous verdict and ask the hardware again - what Settings'
+     * "Test microphone" does, and what has to happen after someone changes a
+     * permission in the address bar without reloading. */
+    recheckMic: function () { micState = { checked: false, ok: false, error: '', detail: '' }; },
     isSpeaking: function () { return speaking; },
     defaultPauseMs: 1600,
 

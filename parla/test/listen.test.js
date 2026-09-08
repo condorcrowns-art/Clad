@@ -14,6 +14,26 @@ vm.runInContext(`
   globalThis.setInterval = function(){ return 0; };
   globalThis.clearInterval = function(){};
   globalThis.isSecureContext = true;
+
+  // The microphone is asked for through getUserMedia before recognition
+  // starts, so a refusal can be explained rather than reported as a bare
+  // "not-allowed". __micFail switches that to a named browser error.
+  globalThis.__micFail = null;
+  globalThis.navigator = {
+    mediaDevices: {
+      getUserMedia: function () {
+        if (globalThis.__micFail) {
+          var e = new Error('denied'); e.name = globalThis.__micFail;
+          return Promise.reject(e);
+        }
+        return Promise.resolve({ getTracks: function () { return [{ stop: function () {} }]; } });
+      },
+      enumerateDevices: function () {
+        return Promise.resolve([{ kind: 'audioinput', label: 'Test mic' }]);
+      }
+    },
+    permissions: { query: function () { return Promise.resolve({ state: 'granted' }); } }
+  };
   globalThis.speechSynthesis = { getVoices: function(){ return []; }, cancel: function(){}, speak: function(){} };
   globalThis.SpeechSynthesisUtterance = function(){};
 
@@ -22,10 +42,12 @@ vm.runInContext(`
     var self = this;
     this.started = false;
     this.aborted = false;
+    this.starts = 0;
     globalThis.__recs.push(this);
     this.start = function () {
       if (self.started) throw new Error('InvalidStateError');
       self.started = true;
+      self.starts++;
       if (self.onstart) self.onstart();
     };
     this.stop  = function () { self.started = false; if (self.onend) self.onend(); };
@@ -56,7 +78,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = [];
 function check(n, c, x) { console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:'')); if(!c) fail.push(n); }
 
-function begin(opts) {
+async function begin(opts) {
   // Retire the previous handle first. A listener left running keeps its
   // silence timer armed and will happily deliver a transcript into the next
   // test's globals - which is exactly the cross-talk the abort() case exists
@@ -64,14 +86,15 @@ function begin(opts) {
   // behind a failing harness.
   run('if (globalThis.__h) { try { __h.abort(); } catch (e) {} }');
   run('__recs = []; globalThis.__final = null; globalThis.__conf = null; globalThis.__ends = 0; ' +
-      'globalThis.__partials = []; globalThis.__errs = [];');
+      'globalThis.__partials = []; globalThis.__errs = []; globalThis.__details = [];');
   run(`globalThis.__h = PARLA.speech.listen({
     lang: 'es', ${opts || ''}
     onpartial: function (t) { __partials.push(t); },
     onfinal: function (t, c) { __final = t; __conf = c; },
-    onerror: function (k) { __errs.push(k); },
+    onerror: function (k, detail) { __errs.push(k); __details.push(detail || ''); },
     onend: function () { __ends++; }
   });`);
+  await wait(25);          // the microphone check resolves before recognition starts
 }
 const rec = (i) => `__recs[${i}]`;
 
@@ -79,7 +102,7 @@ const rec = (i) => `__recs[${i}]`;
   console.log('Microphone endpointing\n');
 
   /* — the reported bug — */
-  begin('silenceMs: 300,');
+  await begin('silenceMs: 300,');
   run(`${rec(0)}.say([{ t: 'Me llamo', final: true }])`);
   await wait(120);
   check('a pause shorter than the threshold does not end the turn', run('__final') === null);
@@ -90,33 +113,39 @@ const rec = (i) => `__recs[${i}]`;
   check('onend fired exactly once', run('__ends') === 1);
 
   /* — Chrome ending the session underneath us — */
-  begin('silenceMs: 400,');
+  await begin('silenceMs: 400,');
   run(`${rec(0)}.say([{ t: 'Quiero un cafe', final: true }])`);
   run(`${rec(0)}.die()`);                       // Chrome gives up mid-thought
   await wait(60);
   check('a spontaneous end restarts recognition instead of finishing',
-    run('__recs.length') === 2 && run('__final') === null, run('__recs.length') + ' sessions');
-  run(`${rec(1)}.say([{ t: 'con leche', final: true }])`);
+    run(`${rec(0)}.starts`) === 2 && run('__final') === null,
+    run(`${rec(0)}.starts`) + ' starts');
+  // Restarting the SAME recogniser reuses its connection. Building a new one
+  // on every spontaneous end opens a fresh connection to the speech service
+  // each time, which is what gets throttled into "network" errors.
+  check('and does so without opening a new connection',
+    run('__recs.length') === 1, run('__recs.length') + ' recognisers');
+  run(`${rec(0)}.say([{ t: 'con leche', final: true }])`);
   await wait(600);
   check('the transcript is stitched across the seam',
     run('__final') === 'Quiero un cafe con leche', JSON.stringify(run('__final')));
 
   /* — interim text — */
-  begin('silenceMs: 400,');
+  await begin('silenceMs: 400,');
   run(`${rec(0)}.say([{ t: 'Buenos', final: false }])`);
   await wait(50);
   check('interim words are reported as you speak', run('__partials').includes('Buenos'));
   check('but interim words alone do not end the turn', run('__final') === null);
 
   /* — the escape hatches — */
-  begin('silenceMs: 9000,');
+  await begin('silenceMs: 9000,');
   run(`${rec(0)}.say([{ t: 'Hola que tal', final: true }])`);
   run('__h.stop()');
   await wait(50);
   check('tapping the mic sends immediately without waiting out the silence',
     run('__final') === 'Hola que tal');
 
-  begin('silenceMs: 9000,');
+  await begin('silenceMs: 9000,');
   run(`${rec(0)}.say([{ t: 'no queria decir eso', final: true }])`);
   run('__h.abort()');
   await wait(400);
@@ -125,30 +154,62 @@ const rec = (i) => `__recs[${i}]`;
   check('cancel stops the recogniser', run(`${rec(0)}.aborted`) === true);
 
   /* — errors — */
-  begin('silenceMs: 400,');
+  await begin('silenceMs: 400,');
   run(`${rec(0)}.fail('no-speech')`);
   await wait(50);
   check('no-speech is not surfaced as an error', run('__errs').length === 0);
   run(`${rec(0)}.fail('not-allowed')`);
   await wait(50);
-  check('a blocked microphone is surfaced', run('__errs').includes('not-allowed'));
+  check('a blocked microphone is reported in plain words, not as an error code',
+    run('__errs').includes('blocked'), JSON.stringify(run('__errs')));
+  const startsBefore = run(`${rec(0)}.starts`);
   run(`${rec(0)}.die()`);
   await wait(60);
-  check('and does not retry into the same refusal', run('__recs.length') === 1);
+  check('and it does not retry into the same refusal',
+    run(`${rec(0)}.starts`) === startsBefore);
+
+  await begin('silenceMs: 400,');
+  run(`${rec(0)}.fail('network')`);
+  await wait(50);
+  check('a dead connection is named as one', run('__errs').includes('network'));
+  check('with an explanation of why a local app needs the internet for this',
+    /Google/.test(run('__details').join(' ')), run('__details').join(' | ').slice(0, 90));
+
+  /* — the microphone itself refusing, before recognition even starts — */
+  console.log('');
+  run('__micFail = "NotAllowedError"; PARLA.speech.recheckMic();');
+  await begin('silenceMs: 400,');
+  check('a browser-blocked microphone is caught before recognition starts',
+    run('__errs').includes('blocked'), JSON.stringify(run('__errs')));
+  check('and the turn ends rather than hanging', run('__ends') === 1);
+
+  run('__micFail = "NotFoundError"; PARLA.speech.recheckMic();');
+  await begin('silenceMs: 400,');
+  check('no microphone at all is told apart from a refusal',
+    run('__errs').includes('no-device'), JSON.stringify(run('__errs')));
+  check('and says to check it is plugged in',
+    /plugged in/.test(run('__details').join(' ')));
+
+  run('__micFail = "NotReadableError"; PARLA.speech.recheckMic();');
+  await begin('silenceMs: 400,');
+  check('a microphone another app has open is its own case',
+    run('__errs').includes('busy'), JSON.stringify(run('__errs')));
+
+  run('__micFail = null; PARLA.speech.recheckMic();');
 
   /* — nothing said at all — */
-  begin('silenceMs: 300, noSpeechMs: 200,');
+  await begin('silenceMs: 300, noSpeechMs: 200,');
   await wait(500);
   check('silence with no speech ends without submitting', run('__final') === null && run('__ends') === 1);
 
   /* — confidence reaches the caller — */
-  begin('silenceMs: 200,');
+  await begin('silenceMs: 200,');
   run(`${rec(0)}.say([{ t: 'algo raro', final: true, c: 0.4 }])`);
   await wait(400);
   check('the recogniser\'s confidence is passed on', run('__conf') === 0.4, String(run('__conf')));
 
   /* — the hard ceiling — */
-  begin('silenceMs: 9000, maxMs: 250,');
+  await begin('silenceMs: 9000, maxMs: 250,');
   run(`${rec(0)}.say([{ t: 'hablando sin parar', final: true }])`);
   await wait(600);
   check('a stuck recogniser cannot listen forever', run('__final') === 'hablando sin parar');

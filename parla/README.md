@@ -96,6 +96,43 @@ conversation stay in one accent rather than drifting between Madrid and Mexico C
 
 ---
 
+## When the microphone does not work
+
+"It doesn't work" has half a dozen causes and the browser reports almost none of
+them — `not-allowed` covers a denied permission, a blocked page, an unplugged
+microphone and one another app is holding. So Parla asks for the microphone
+through `getUserMedia` *before* recognition does, which turns that into a real
+error name, and then says the remedy in plain words on screen next to the mic
+rather than in a console nobody opens.
+
+**Settings → Microphone → Test microphone** checks everything at once: secure
+context, whether recognition exists, the permission state, how many input
+devices the browser can see, whether one actually opens — then listens for five
+seconds and shows you exactly what it heard, with the confidence.
+
+One thing worth knowing: **Chrome does speech recognition on Google's servers**,
+not on your machine. With no internet connection the microphone fails with
+`network` however healthy the hardware is. The app says so rather than looking
+broken. Typing always works.
+
+---
+
+## Hosting it
+
+See **[DEPLOY.md](DEPLOY.md)**. Short version: the app is static and goes on
+Cloudflare Pages in about five minutes, and installs to an Android home screen
+as a real app.
+
+The catch is that a page served over **https cannot call http://localhost** —
+that is mixed content and no setting changes it — so on a phone the Ollama
+partner and the Piper voice are out of reach. You get everything else, plus
+Android's own Spanish voices. For an AI partner on the phone: Gemini's free tier
+(built in, five minutes, but your turns go to Google) or a Cloudflare Tunnel to
+your own Ollama (free, private, thirty minutes). DEPLOY.md walks through both,
+and through what AdSense actually requires.
+
+---
+
 ## How it looks
 
 Mexican folk colour: papel picado pink, Talavera turquoise, marigold, jacaranda
@@ -490,6 +527,7 @@ test/
   corpus.test.js          the content itself: no duplicates, no broken rows
   lookup.test.js          tapping a word, and which model gets picked
   coach.test.js           asking about any word, and conjugating any verb
+  mic-browser.test.js     every way a microphone fails, and the mural geometry
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows

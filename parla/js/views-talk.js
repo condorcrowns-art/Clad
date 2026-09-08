@@ -82,7 +82,7 @@ window.PARLA = window.PARLA || {};
 
     var main = el('main');
     var thread = el('div#thread');
-    var micBtn, micCancel, micLabel, typeInput, listenHandle = null;
+    var micBtn, micCancel, micLabel, micHelp, typeInput, listenHandle = null;
 
     /* — header — */
     main.appendChild(el('div.convo-head',
@@ -130,8 +130,12 @@ window.PARLA = window.PARLA || {};
     micLabel = el('div.mic-label', PARLA.speech.supported
       ? 'Tap and speak in Spanish — pause when you are done'
       : 'Type your reply below');
+    // The fix for a broken microphone is never obvious, so when one breaks the
+    // exact remedy goes on screen next to it rather than in a console.
+    micHelp = el('div.mic-help', { hidden: true });
     dock.appendChild(el('div.mic-row', micBtn, micCancel));
     dock.appendChild(micLabel);
+    dock.appendChild(micHelp);
 
     typeInput = el('input', {
       type: 'text', placeholder: '…or type in Spanish and press Enter',
@@ -418,6 +422,7 @@ window.PARLA = window.PARLA || {};
 
         onstart: function () {
           errored = false;
+          micHelp.hidden = true;
           setMic('listening', 'Listening… pause when you are done');
         },
         onpartial: function (t) {
@@ -425,14 +430,23 @@ window.PARLA = window.PARLA || {};
           if (!errored) micLabel.textContent = t || 'Listening…';
         },
         onfinal: function (t, conf, alts) { submit(t, conf, alts); },
-        onerror: function (kind) {
+        onerror: function (kind, detail) {
           errored = true;
-          if (kind === 'not-allowed' || kind === 'service-not-allowed') {
-            micLabel.textContent = 'Microphone blocked — allow it in your browser, or type below.';
-          } else if (kind === 'unsupported') {
-            micLabel.textContent = 'Speech recognition unavailable — type instead.';
-          } else {
-            micLabel.textContent = 'Mic error (' + kind + '). You can type instead.';
+          // The speech layer works out what actually went wrong and writes it
+          // in plain words. Showing a raw error code helped nobody.
+          var says = {
+            blocked:    'Microphone blocked by the browser.',
+            'no-device':'No microphone found.',
+            busy:       'Another app has the microphone.',
+            network:    'Speech recognition is offline.',
+            insecure:   'This page cannot use a microphone.',
+            unsupported:'This browser has no speech recognition.'
+          };
+          micLabel.textContent = (says[kind] || 'Microphone problem (' + kind + ').') +
+                                 ' You can type below.';
+          if (detail) {
+            micHelp.textContent = detail;
+            micHelp.hidden = false;
           }
         },
         onend: function () {

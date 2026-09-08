@@ -26,7 +26,15 @@ window.PARLA = window.PARLA || {};
       settings: {
         // Default to a real AI partner. If Ollama is not there, the app detects
         // that at boot, says so, and falls back to the scripted engine.
-        brain: 'ollama',      // scripted | ollama | gemini
+        // Ollama on the desktop, where localhost is reachable. A phone loading
+        // this over https cannot reach any localhost - that is mixed content,
+        // and no setting changes it - so there it starts on the scripted
+        // partner and says how to connect a real one. See DEPLOY.md.
+        brain: (typeof location !== 'undefined' &&
+                location.protocol === 'https:' &&
+                location.hostname !== 'localhost' &&
+                location.hostname !== '127.0.0.1')
+                 ? 'scripted' : 'ollama',   // scripted | ollama | gemini
         ollamaUrl: 'http://localhost:11434',
         ollamaModel: '',      // empty = auto-pick the best model installed
         geminiKey: '',

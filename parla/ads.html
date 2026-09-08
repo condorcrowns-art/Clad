@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ad slot — reference only</title>
+</head>
+<body>
+<!--
+  This file is a REFERENCE, not something the app loads. Nothing in Parla
+  includes an ad script, and adding one is a deliberate act.
+
+  Before any of this does anything:
+
+  1. AdSense has to approve the site. It reviews for real content, so a
+     single-page app with almost no indexable text is commonly rejected. You
+     will most likely need a landing page, an about page and the privacy policy.
+  2. The privacy policy has to be live and linked. See privacy.html.
+  3. For visitors in the EU or UK, a consent banner has to run and be answered
+     BEFORE the ad script loads. Loading it first is the violation.
+
+  To place an ad, put the script once in index.html's <head> with your own
+  publisher id, and the <ins> block wherever the unit belongs. Keep it out of
+  the conversation view: an ad next to someone practising speaking is the
+  fastest way to make them stop.
+-->
+
+<script async
+  src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+  crossorigin="anonymous"></script>
+
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+     data-ad-slot="XXXXXXXXXX"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+
+</body>
+</html>

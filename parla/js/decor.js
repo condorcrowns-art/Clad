@@ -273,7 +273,7 @@ window.PARLA = window.PARLA || {};
     for (var i = 0; i < items.length; i++) {
       if (items[i].closest('.mural') && !items[i].classList.contains('mural')) continue;
       items[i].classList.add('rise');
-      items[i].style.animationDelay = Math.min(i * 45, 400) + 'ms';
+      items[i].style.animationDelay = Math.min(i * 28, 190) + 'ms';
     }
   }
 
