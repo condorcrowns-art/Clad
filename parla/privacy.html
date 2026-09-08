@@ -53,6 +53,15 @@
   <ul>
     <li><strong>Built-in (scripted):</strong> runs entirely in the page. Nothing leaves the device.</li>
     <li><strong>Ollama:</strong> runs on a machine you control. Nothing leaves that machine.</li>
+    <li><strong>This site:</strong> <em>this one sends data off your device.</em> It is the
+        default on the public site, because it is the only partner that works on a
+        phone. What you type and what the microphone transcribed is sent to
+        Cloudflare's Workers AI — over this site's own address, not to a third-party
+        API you signed up for — along with the scenario and the recent turns of the
+        conversation, and a reply comes back. Cloudflare's own privacy terms apply to
+        that processing. Nothing is stored on the server: there is no account, no
+        conversation history kept off your device, and no key to leak. Switch to
+        Built-in or Ollama if you would rather nothing left the device at all.</li>
     <li><strong>Gemini:</strong> <em>this one sends data off your device.</em> If you
         switch it on, what you type and what the microphone transcribed is sent
         to Google to generate a reply, along with the scenario and recent turns.

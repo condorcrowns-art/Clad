@@ -614,3 +614,133 @@ button:active { transform: scale(.97); }
 .mic-live-text.live { color: var(--ink); }
 .mic-live-text.ok   { color: var(--good); font-weight: 600; }
 .mic-live-text.no   { color: var(--bad); font-family: var(--sans); font-size: .88rem; }
+
+/* ── Games ──────────────────────────────────────────────────*/
+.game-card {
+  display: flex; align-items: center; gap: 14px;
+  text-align: left; width: 100%;
+  padding: 16px; border-radius: var(--r-lg);
+  background: var(--bg-raised); border: 1px solid var(--line);
+  box-shadow: var(--shadow); cursor: pointer;
+  transition: transform .18s var(--ease), box-shadow .18s var(--ease);
+}
+.game-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.game-emoji { font-size: 2rem; line-height: 1; flex: none; }
+.game-name { font-weight: 700; font-size: 1.05rem; }
+.game-desc { font-size: .82rem; color: var(--ink-soft); margin-top: 2px; }
+.game-final { font-size: 3.2rem; font-weight: 800; color: var(--rosa); line-height: 1; }
+
+.chip.bad-chip { background: var(--bad); color: #fff; }
+
+.tile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tile {
+  min-height: 74px; padding: 8px 6px;
+  border-radius: var(--r); border: 1px solid var(--line);
+  background: var(--bg-raised); color: var(--ink);
+  font-size: .84rem; line-height: 1.25; cursor: pointer;
+  transition: transform .14s var(--ease), background .14s, border-color .14s, opacity .3s;
+}
+.tile.es { font-family: var(--serif); font-size: .95rem; }
+.tile.picked { background: var(--accent-soft); border-color: var(--rosa); transform: scale(1.04); }
+.tile.wrong  { background: var(--bad-soft); border-color: var(--bad); }
+.tile.gone   { opacity: 0; pointer-events: none; transform: scale(.9); }
+
+.quiz { text-align: center; }
+.quiz-prompt { font-size: 2rem; font-weight: 700; line-height: 1.15; margin-bottom: 4px; }
+.quiz-prompt.es { font-family: var(--serif); }
+.quiz-options { display: grid; gap: 8px; margin-top: 16px; }
+.quiz-opt {
+  padding: 14px 12px; border-radius: var(--r);
+  border: 1px solid var(--line); background: var(--bg-raised);
+  color: var(--ink); font-size: .98rem; cursor: pointer;
+  transition: background .14s, border-color .14s, transform .1s;
+}
+.quiz-opt.es { font-family: var(--serif); font-size: 1.3rem; }
+.quiz-opt:active { transform: scale(.98); }
+.quiz-opt.right { background: var(--good-soft); border-color: var(--good); color: var(--good); font-weight: 700; }
+.quiz-opt.wrong { background: var(--bad-soft);  border-color: var(--bad);  color: var(--bad); }
+
+@media (max-width: 520px) {
+  .tile-grid { grid-template-columns: repeat(3, 1fr); }
+  .tile { min-height: 66px; font-size: .78rem; }
+  .quiz-prompt { font-size: 1.6rem; }
+}
+
+/* ── Phone ──────────────────────────────────────────────────
+   The Galaxy S11 lands around 360-412 CSS pixels wide. Eight navigation items
+   do not fit across that, so below 560px they scroll horizontally with the
+   current one kept in view, rather than being squeezed until the labels are
+   unreadable. */
+@media (max-width: 560px) {
+  .nav {
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: flex-start;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* Clear of the gesture bar at the bottom of a modern Android phone. */
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    scroll-snap-type: x proximity;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav button {
+    flex: 0 0 auto;
+    min-width: 68px;
+    padding: 7px 4px;
+    font-size: .66rem;
+    scroll-snap-align: center;
+  }
+  .nav button .ico { font-size: 1.25rem; }
+
+  main { padding-left: 14px; padding-right: 14px; }
+  h1 { font-size: 1.42rem; }
+
+  /* The mural is a third of a phone screen. Shorter, so the day's task is
+     visible without scrolling. */
+  .mural svg { min-height: 150px; max-height: 190px; object-fit: cover; }
+  .mural .over { padding: 16px 14px 14px; }
+  .mural .over .line { font-size: 1.25rem; }
+
+  .papel { height: 44px; }
+  .papel svg { height: 38px; }
+
+  /* Bubbles get the width back from the margins. */
+  .bubble { max-width: 92%; }
+
+  /* Thumb-sized targets: 44px is the floor anything tappable should hit. */
+  .bubble .tools button,
+  .phrasebook button,
+  .help-say, .help-use,
+  .tense-btn { min-height: 36px; }
+  .grade-row button { min-height: 54px; }
+  .quiz-opt { min-height: 52px; }
+  .game-card { padding: 14px; }
+  .game-emoji { font-size: 1.7rem; }
+
+  /* A dock holding a mic, a label, a hint, a suggestion panel and a text box
+     can eat a phone screen whole. */
+  .mic { width: 66px; height: 66px; font-size: 1.5rem; }
+  .mic-dock { padding-top: 10px; }
+  .help-box { max-height: 34vh; }
+
+  .word-pop { min-width: 0; width: min(80vw, 250px); }
+  .conj-row { grid-template-columns: 1fr 1.1fr auto; font-size: .92rem; }
+  .ask-term { font-size: 1.5rem; }
+  .flashcard .face { min-height: 190px; padding: 20px 14px; }
+}
+
+/* Landscape on a phone is short, not narrow: the dock and the nav together
+   can leave no room for the conversation at all. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .papel, .mural { display: none; }
+  .mic { width: 52px; height: 52px; }
+  .mic-dock { padding: 6px 0 4px; }
+  .flashcard .face { min-height: 120px; padding: 12px; }
+}
+
+/* A phone is a touch device: hover styles that only reveal on hover would hide
+   the control forever. */
+@media (hover: none) {
+  .bubble.you .tools { opacity: 1; }
+  .card:hover { transform: none; }
+}

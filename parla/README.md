@@ -47,8 +47,11 @@ python3 -m http.server 8000
 | **Spaced repetition** | Full SM-2. Words you miss come back tomorrow; words you nail vanish for months |
 | **Conjugation trainer** | 50 verbs × 6 tenses × 6 persons, generated from rules — irregulars and stem-changers included |
 | **Pronunciation check** | Read a word aloud; speech recognition tells you whether it heard the right thing |
+| **Ask anything** | Type any Spanish word: meaning, gender, every tense, the mistake learners make with it, two examples — then bank it as a card |
+| **Four study games** | Pairs, Word rush, El or la, Dictation — no mic, no model, no network, all feeding the same deck |
 | **Mistake journal** | Every correction you've ever been given, in one place |
 | **Offline** | Installs as a PWA and works with no network at all |
+| **Works on your phone** | The AI partner runs on Cloudflare's edge, so the S11 needs no PC awake at home |
 
 ---
 
@@ -60,7 +63,7 @@ Every part that normally costs money has a free native equivalent:
 |---|---|---|
 | Speech → text | paid ASR API | `SpeechRecognition` — built into the browser |
 | Text → speech | paid TTS | Piper — a neural voice running on your own machine |
-| AI conversation | someone's servers | Ollama on your machine, or Gemini's free tier, or no AI at all |
+| AI conversation | someone's servers | Ollama on your machine, Cloudflare Workers AI on the deployed site, Gemini's free tier, or no AI at all |
 | Progress storage | an account | `localStorage` — never leaves your device |
 | Hosting | App Store | a static folder |
 
@@ -119,17 +122,22 @@ broken. Typing always works.
 
 ## Hosting it
 
-See **[DEPLOY.md](DEPLOY.md)**. Short version: the app is static and goes on
-Cloudflare Pages in about five minutes, and installs to an Android home screen
-as a real app.
+See **[DEPLOY.md](DEPLOY.md)**. Short version: the app goes on Cloudflare Pages
+in about five minutes, and installs to an Android home screen as a real app.
 
-The catch is that a page served over **https cannot call http://localhost** —
-that is mixed content and no setting changes it — so on a phone the Ollama
-partner and the Piper voice are out of reach. You get everything else, plus
-Android's own Spanish voices. For an AI partner on the phone: Gemini's free tier
-(built in, five minutes, but your turns go to Google) or a Cloudflare Tunnel to
-your own Ollama (free, private, thirty minutes). DEPLOY.md walks through both,
-and through what AdSense actually requires.
+The AI partner comes with it. `functions/api/chat.js` is a Pages Function that
+calls **Workers AI** — Cloudflare's own models on Cloudflare's hardware, free on
+a normal account — so the phone talks to the site it is already on and nothing
+has to be running at home. It needs one thing done in the dashboard: an **AI
+binding named `AI`**, then a redeploy. DEPLOY.md is exact about it, because
+skipping the redeploy is the one way to make this look broken.
+
+What the phone still cannot have is Piper: a page served over **https cannot
+call http://localhost**, that is mixed content, and no setting changes it. So
+the phone uses Android's own Spanish voices, which are decent, and the same rule
+is why the phone cannot reach your Ollama either. If you would rather your
+conversations never left your hardware, DEPLOY.md also covers a Cloudflare
+Tunnel to your own Ollama, and what AdSense actually requires.
 
 ---
 
@@ -504,13 +512,18 @@ js/
   speech.js           speech in (Web Speech ASR) and out (Piper, falling back
                       to the browser's voices), plus voice ranking
   srs.js              SM-2 spaced repetition
-  brain.js            three backends behind one interface, model auto-pick,
+  brain.js            four backends behind one interface, model auto-pick,
                       JSON retry, and the offline corrector
   ui.js               tiny DOM toolkit
   views-talk.js       scenario picker, conversation, session summary
   views-drill.js      flashcard review, conjugation trainer
+  views-coach.js      the Ask screen: any word, meaning, conjugation, pitfalls
+  views-games.js      Pairs, Word rush, El or la, Dictation
   views-progress.js   home, 60-day grid, stats, mistake journal, settings
   app.js              router + bootstrap
+functions/
+  api/chat.js         Cloudflare Pages Function: the partner on the public site,
+                      running on Workers AI so a phone needs no PC
 serve.ps1             dependency-free static server + the /tts endpoint
 setup-windows.ps1     one-shot installer: Ollama, a model, Piper, a voice
 piper/  voices/       downloaded by setup, git-ignored
@@ -530,7 +543,12 @@ test/
   mic-browser.test.js     every way a microphone fails, and the mural geometry
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
+  hosted.test.js          the Workers AI backend, and its fallbacks
+  games-browser.test.js   all four study games, played through, at phone size
+  hosted-browser.test.js  the deployed site end to end against the real function
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
+  mock-pages-server.js    stands in for Cloudflare Pages, running the real
+                          functions/api/chat.js against a faked AI binding
   piper-browser.test.js   the whole thing in a real browser
 ```
 
@@ -564,6 +582,7 @@ node test/coach.test.js            # the Ask screen's answers
 node test/suggest.test.js          # what to say when you are stuck
 node test/english.test.js          # English as a teaching moment
 node test/casting.test.js          # voices matched to characters
+node test/hosted.test.js           # the Workers AI partner, and what happens without it
 
 node -e "const{makeSandbox,load}=require('./test/harness');
   const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').PARLA.data.es;
@@ -580,6 +599,22 @@ node test/fiesta.test.js 8765                # layout, reduced motion, decor rem
 node test/drill-browser.test.js 8765        # every flashcard drill, end to end
 node test/word-browser.test.js 8765         # tapping a word out of a conversation
 node test/coach-browser.test.js 8765        # the Ask screen and the flip cards
+node test/games-browser.test.js 8765        # all four games, played through, on a phone
+```
+
+The hosted partner has its own server, because the thing worth testing is the
+Pages Function itself — `mock-pages-server.js` loads `functions/api/chat.js` and
+runs it, so what these checks exercise is the code that gets deployed:
+
+```bash
+node test/mock-pages-server.js 8801            # binding present, models answer
+node test/hosted-browser.test.js 8801
+
+node test/mock-pages-server.js 8802 nobinding  # the binding was never added
+node test/hosted-browser.test.js 8802 nobinding
+
+node test/mock-pages-server.js 8803 flaky      # the first models are down
+node test/hosted-browser.test.js 8803 flaky
 ```
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`

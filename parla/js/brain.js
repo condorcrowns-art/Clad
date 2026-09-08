@@ -635,6 +635,15 @@ window.PARLA = window.PARLA || {};
       return { options: scriptedSuggestions(ctx), source: 'scripted' };
     };
 
+    if (s.brain === 'hosted') {
+      return askHosted(suggestPrompt(ctx), 'What could I say?', 260)
+        .then(function (obj) {
+          var opts = parseSuggestions(JSON.stringify(obj));
+          return opts.length ? { options: opts, source: 'hosted' } : offline();
+        })
+        .catch(offline);
+    }
+
     if (s.brain === 'ollama') {
       var model = s.ollamaModel;
       var ready = model ? Promise.resolve(model)
@@ -716,6 +725,16 @@ window.PARLA = window.PARLA || {};
     // The corpus answer is exact and instant, but it cannot tell you which
     // sense was meant. With a model available, ask it too - it has the
     // sentence in front of it.
+    if (s.brain === 'hosted') {
+      return askHosted(dictSystem(), 'WORD: ' + word + '\nSENTENCE: ' + (ctx.sentence || word))
+        .then(function (obj) {
+          if (!obj || !obj.en) return local;
+          return { en: String(obj.en).trim().slice(0, 60),
+                   lemma: String(obj.lemma || word).trim().slice(0, 60),
+                   note: String(obj.note || '').trim().slice(0, 80), source: 'hosted' };
+        })
+        .catch(function () { return local; });
+    }
     if (s.brain !== 'ollama') return Promise.resolve(local);
 
     var model = s.ollamaModel;
@@ -927,6 +946,13 @@ window.PARLA = window.PARLA || {};
       return model;
     }
 
+    if (s.brain === 'hosted') {
+      return askHosted(explainPrompt(ctx),
+                       'QUESTION: ' + query + (ctx.sentence ? '\nIT APPEARED IN: ' + ctx.sentence : ''),
+                       500)
+        .then(function (obj) { return merge(parseExplain(JSON.stringify(obj))); })
+        .catch(function () { return merge(null); });
+    }
     if (s.brain !== 'ollama') return Promise.resolve(merge(null));
 
     var model = s.ollamaModel;
@@ -1098,6 +1124,101 @@ window.PARLA = window.PARLA || {};
     });
   }
 
+  /* ── Hosted backend (Cloudflare Workers AI) ───────────────
+   *
+   * The one that works on a phone. A page on https cannot reach Ollama on a PC
+   * at http://localhost, so on the hosted site there was no AI partner at all.
+   * This calls a Pages Function on the same origin, which runs a model on
+   * Cloudflare's own edge - no key, no PC, nothing to install, and the request
+   * never leaves the site you are already on.
+   */
+  /* The small JSON asks - dictionary lookup, suggestions, the Ask screen - all
+   * have the same shape: a system prompt, one user message, JSON back. */
+  function askHosted(system, user, maxTokens) {
+    return fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        temperature: 0.2, max_tokens: maxTokens || 400
+      })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (d) {
+      var text = String((d && d.reply) || '').trim();
+      var fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fence) text = fence[1].trim();
+      if (text[0] !== '{') {
+        var a = text.indexOf('{'), b = text.lastIndexOf('}');
+        if (a !== -1 && b > a) text = text.slice(a, b + 1);
+      }
+      return JSON.parse(text);
+    });
+  }
+
+  function dictSystem() {
+    return [
+      'You are a Spanish dictionary for an English-speaking learner.',
+      'Given a word and the sentence it appeared in, return JSON only:',
+      '{"en": string, "lemma": string, "note": string}',
+      '- "en": the meaning IN THIS SENTENCE, 1-4 words, no article.',
+      '- "lemma": the dictionary form.',
+      '- "note": at most 8 words naming the form, or "".',
+      'No explanation, no markdown, no extra keys.'
+    ].join('\n');
+  }
+
+  function hostedAvailable() {
+    return fetch('/api/chat', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        return d && d.available
+          ? { ok: true, models: d.models || [] }
+          : { ok: false, detail: 'This site has no Workers AI binding yet. See DEPLOY.md.' };
+      })
+      .catch(function (e) {
+        return { ok: false, detail: 'No /api/chat on this origin (' + (e.message || e) + ')' };
+      });
+  }
+
+  function hostedCall(ctx, extraSystem) {
+    var sys = systemPrompt(ctx) + turnNotes(ctx) + (extraSystem ? '\n\n' + extraSystem : '');
+    var messages = [{ role: 'system', content: sys }];
+    historyPairs(ctx.history).forEach(function (m) {
+      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text });
+    });
+    messages.push({ role: 'user', content: ctx.text });
+
+    return fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: messages, temperature: 0.7, max_tokens: 320 })
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (!r.ok) throw new Error(d.detail || d.error || ('HTTP ' + r.status));
+        return d.reply || '';
+      });
+    });
+  }
+
+  function hostedReply(ctx) {
+    return hostedCall(ctx).then(function (content) {
+      var out = parseLLM(content, ctx.text);
+      if (out.source !== 'llm-raw' && out.es) { out.source = 'hosted'; return out; }
+      // Edge models are smaller than a desktop one and drop the JSON contract
+      // more often, so the blunter retry matters more here, not less.
+      return hostedCall(ctx,
+        'YOUR LAST REPLY WAS REJECTED. Output raw JSON only. Start with { and end with }. ' +
+        'No prose before or after.'
+      ).then(function (retry) {
+        var out2 = parseLLM(retry, ctx.text);
+        out2.source = 'hosted';
+        return out2;
+      });
+    });
+  }
+
   /* ── Gemini backend ─────────────────────────────────────── */
 
   function geminiReply(ctx) {
@@ -1150,7 +1271,8 @@ window.PARLA = window.PARLA || {};
 
   /* ── Dispatcher ─────────────────────────────────────────── */
 
-  var BACKENDS = { scripted: scriptedReply, ollama: ollamaReply, gemini: geminiReply };
+  var BACKENDS = { scripted: scriptedReply, ollama: ollamaReply,
+                   gemini: geminiReply, hosted: hostedReply };
 
   /* Always resolves. If an AI backend fails (Ollama not running, quota spent,
    * no network) the scripted engine picks up the turn so practice never stops. */
@@ -1208,6 +1330,13 @@ window.PARLA = window.PARLA || {};
       });
     }
 
+    if (settings.brain === 'hosted') {
+      return hostedAvailable().then(function (d) {
+        if (!d.ok) return { ok: false, detail: d.detail };
+        return { ok: true, detail: 'Connected to this site\'s own AI. Nothing to install.' };
+      });
+    }
+
     if (settings.brain === 'gemini') {
       if (!settings.geminiKey) return Promise.resolve({ ok: false, detail: 'No API key entered.' });
       return reply({
@@ -1227,6 +1356,7 @@ window.PARLA = window.PARLA || {};
     reply: reply,
     testBackend: testBackend,
     detectOllama: detectOllama,
+    hostedAvailable: hostedAvailable,
     bestModel: bestModel,
     normalise: normalise,
     words: words,

@@ -378,6 +378,7 @@ window.PARLA = window.PARLA || {};
     brainCard.appendChild(ui.field('Engine',
       ui.segmented([
         ['scripted', 'Built-in'],
+        ['hosted', 'This site'],
         ['ollama', 'Ollama'],
         ['gemini', 'Gemini']
       ], s.brain, function (v) {
@@ -388,7 +389,8 @@ window.PARLA = window.PARLA || {};
         PARLA.app.paintChips();
         PARLA.app.checkBrainHealth();
       }),
-      'All three are free. Built-in works offline with no setup; the other two give you a real AI partner.'));
+      'All four are free. Built-in works offline with no setup; the rest give you a real AI partner. ' +
+      'On a phone, use “This site”.'));
     brainCard.appendChild(brainBody);
 
     var testOut = el('div');
@@ -408,6 +410,21 @@ window.PARLA = window.PARLA || {};
 
     function renderBrain() {
       ui.clear(brainBody);
+
+      if (s.brain === 'hosted') {
+        brainBody.appendChild(ui.banner('good',
+          '<strong>Nothing to install, works on any device.</strong> The model runs on ' +
+          'Cloudflare\'s edge, on the same site you are already using — so this is the one ' +
+          'that works on your phone, where a page on <code>https</code> cannot reach ' +
+          'Ollama on a PC at <code>http://localhost</code>. Your turns go to Cloudflare ' +
+          'rather than staying on your own machine; if that matters to you, use Ollama at ' +
+          'your desk and this one when you are out.'));
+        brainBody.appendChild(el('div.hint',
+          'Only available on the deployed site. Running from your PC, this will not answer — ' +
+          'there is no Pages Function behind a local folder.'));
+        return;
+      }
+
       if (s.brain === 'ollama') {
         var url = el('input', { type: 'url', value: s.ollamaUrl });
         url.onchange = function () {
