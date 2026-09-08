@@ -80,7 +80,7 @@ window.PARLA = window.PARLA || {};
       ended: false
     };
 
-    var main = el('main');
+    var main = el('main.talk');
     var thread = el('div#thread');
     var micBtn, micCancel, micLabel, micHelp, typeInput, listenHandle = null;
 
@@ -91,7 +91,6 @@ window.PARLA = window.PARLA || {};
         el('h2', sc.title),
         el('p', sc.setting)
       ),
-      el('div.spacer'),
       el('button.ghost', { onclick: finish, title: 'End and save this session' }, 'Finish')
     ));
 
@@ -266,7 +265,8 @@ window.PARLA = window.PARLA || {};
         st.settings.showTranslations && en ? el('div.trans', en) : null,
         el('div.tools',
           el('button', { onclick: function () { ui.say(es, null, sc.voice); } }, '🔊 Again'),
-          el('button', { onclick: function () { ui.say(es, null, sc.voice); } , title: 'Repeat slowly'}, '🐢')
+          el('button', { onclick: function () { ui.say(es, null, sc.voice); },
+                         title: 'Say it again, slowly' }, '🐢 Slower')
         )
       );
       // The slow button re-speaks at a reduced rate.

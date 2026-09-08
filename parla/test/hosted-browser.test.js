@@ -10,6 +10,7 @@
  *   node test/mock-pages-server.js 8803 flaky      && node test/hosted-browser.test.js 8803 flaky
  */
 const { chromium } = require('playwright');
+const { goTo } = require('./nav');
 const BASE = 'http://localhost:' + (process.argv[2] || 8801);
 const MODE = process.argv[3] || 'ok';
 const fail = [];
@@ -97,14 +98,16 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 3, has
   }
 
   console.log('\nThe rest of the app, unchanged\n');
-  const nav = await page.locator('#nav button').count();
+  const nav = await page.locator('#nav button[data-view]').count();
   check('every screen is still reachable', nav === 9, nav + ' nav items');
+  check('and five of them fit across a phone, with the rest behind More',
+    (await page.locator('#nav button[data-view]:visible').count()) === 5 &&
+    await page.locator('#navMore').isVisible());
   for (const v of ['review', 'words', 'games', 'conjugate', 'challenge', 'progress']) {
-    await page.locator('#nav button[data-view=' + v + ']').click();
-    await page.waitForTimeout(350);
+    await goTo(page, v);
     check(v + ' opens with no model involved', (await page.locator('main').count()) === 1);
   }
-  await page.locator('#nav button[data-view=coach]').click();
+  await goTo(page, 'coach');
   await page.waitForTimeout(250);
   await page.fill('.ask-input', 'madrugar');
   await page.keyboard.press('Enter');

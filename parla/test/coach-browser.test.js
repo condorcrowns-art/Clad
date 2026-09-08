@@ -1,5 +1,6 @@
 /* The Ask screen and the flip cards, in a real browser. */
 const { chromium } = require('playwright');
+const { goTo } = require('./nav');
 const BASE = 'http://localhost:' + (process.argv[2] || 8765);
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};
@@ -14,7 +15,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.waitForTimeout(400);
 
   console.log('Ask\n');
-  await page.locator('#nav button[data-view=coach]').click();
+  await goTo(page, 'coach');
   await page.waitForTimeout(300);
   check('the Ask screen has its own place in the nav', await page.locator('.ask-input').isVisible());
 
@@ -63,7 +64,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   check('and nothing was duplicated into the deck',
     (await page.evaluate(() => (PARLA.store.state.phrases || []).length)) === before);
 
-  await page.locator('#nav button[data-view=coach]').click();
+  await goTo(page, 'coach');
   await page.waitForTimeout(300);
   check('past questions are offered again', (await page.locator('.ask-chip').count()) > 0);
 

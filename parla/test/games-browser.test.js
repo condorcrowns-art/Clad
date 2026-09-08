@@ -7,6 +7,7 @@
  * tap lands back in the same spaced-repetition deck the review screen uses.
  */
 const { chromium } = require('playwright');
+const { goTo } = require('./nav');
 const BASE = 'http://localhost:' + (process.argv[2] || 8765);
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};
@@ -49,7 +50,7 @@ async function open(page, id) {
   const { page, errs } = await boot(browser);
 
   console.log('The menu\n');
-  await page.locator('#nav button[data-view=games]').click();
+  await goTo(page, 'games');
   await page.waitForTimeout(300);
   check('games have their own place in the nav', await page.locator('.game-card').first().isVisible());
   check('all four are offered', (await page.locator('.game-card').count()) === 4,
@@ -231,12 +232,20 @@ async function open(page, id) {
   /* ── Leaving mid-game ──────────────────────────────────── */
   console.log('\nLeaving\n');
   await open(page, 'rush');
-  await page.locator('#nav button[data-view=home]').click();
+  await goTo(page, 'home');
   await page.waitForTimeout(1600);
   check('leaving a game stops its clock',
     (await page.locator('.quiz').count()) === 0 && (await page.locator('.game-final').count()) === 0);
   check('and the app is still on the screen you asked for',
     await page.locator('#nav button[data-view=home]').evaluate(b => b.getAttribute('aria-current') === 'page'));
+  // Games is not one of the five tabs that fit on a phone, so the More button
+  // has to carry the "you are here" mark while you are on it.
+  await goTo(page, 'games');
+  check('More shows as current when you are on a screen behind it',
+    await page.locator('#navMore').evaluate(b => b.getAttribute('aria-current') === 'page'));
+  await goTo(page, 'home');
+  check('and stops when you leave',
+    await page.locator('#navMore').evaluate(b => b.getAttribute('aria-current') === null));
 
   check('no page errors throughout', errs.length === 0, errs.join(' | '));
 

@@ -43,13 +43,85 @@ window.PARLA = window.PARLA || {};
 
   function paintNav() {
     if (!navEl) return;
-    Array.prototype.forEach.call(navEl.querySelectorAll('button'), function (b) {
-      if (b.getAttribute('data-view') === currentView) b.setAttribute('aria-current', 'page');
+    var onMore = false;
+    Array.prototype.forEach.call(navEl.querySelectorAll('button[data-view]'), function (b) {
+      var on = b.getAttribute('data-view') === currentView;
+      if (on) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
+      // Below the breakpoint the secondary tabs are hidden, so the More button
+      // has to show that one of them is the screen you are on - otherwise the
+      // bar claims you are nowhere.
+      if (on && !b.hasAttribute('data-primary')) onMore = true;
     });
+    var more = document.getElementById('navMore');
+    if (more) {
+      if (onMore) more.setAttribute('aria-current', 'page');
+      else more.removeAttribute('aria-current');
+    }
     // The nav is noise during onboarding.
     navEl.classList.toggle('hidden', currentView === 'onboard');
   }
+
+  /* ── The More sheet ───────────────────────────────────────
+   * Five tabs is what fits across a phone. The other four live here, along
+   * with Settings, which never had a tab of its own. */
+  function sheetEls() {
+    return {
+      sheet: document.getElementById('moreSheet'),
+      scrim: document.getElementById('sheetScrim'),
+      grid: document.getElementById('sheetGrid'),
+      btn: document.getElementById('navMore')
+    };
+  }
+
+  var SHEET_EXTRA = [['settings', '⚙️', 'Settings']];
+
+  function buildSheet() {
+    var e = sheetEls();
+    if (!e.grid) return;
+    PARLA.ui.clear(e.grid);
+    var items = [];
+    Array.prototype.forEach.call(navEl.querySelectorAll('button[data-view]'), function (b) {
+      if (b.hasAttribute('data-primary')) return;
+      items.push([b.getAttribute('data-view'),
+                  b.querySelector('.ico').textContent,
+                  b.textContent.replace(b.querySelector('.ico').textContent, '').trim()]);
+    });
+    items = items.concat(SHEET_EXTRA);
+    items.forEach(function (it) {
+      var b = document.createElement('button');
+      b.className = 'sheet-item' + (it[0] === currentView ? ' on' : '');
+      b.innerHTML = '<span class="sheet-ico"></span><span class="sheet-name"></span>';
+      b.querySelector('.sheet-ico').textContent = it[1];
+      b.querySelector('.sheet-name').textContent = it[2];
+      b.addEventListener('click', function () { closeSheet(); go(it[0]); });
+      e.grid.appendChild(b);
+    });
+  }
+
+  function openSheet() {
+    var e = sheetEls();
+    if (!e.sheet) return;
+    buildSheet();
+    e.sheet.hidden = false;
+    e.scrim.hidden = false;
+    // Two frames so the transition has a start state to move from.
+    requestAnimationFrame(function () { e.sheet.classList.add('up'); });
+    if (e.btn) e.btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('keydown', escSheet);
+  }
+
+  function closeSheet() {
+    var e = sheetEls();
+    if (!e.sheet || e.sheet.hidden) return;
+    e.sheet.classList.remove('up');
+    e.scrim.hidden = true;
+    if (e.btn) e.btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('keydown', escSheet);
+    setTimeout(function () { e.sheet.hidden = true; }, 220);
+  }
+
+  function escSheet(ev) { if (ev.key === 'Escape') closeSheet(); }
 
   function go(view, params) {
     var fn = PARLA.views[view];
@@ -61,6 +133,7 @@ window.PARLA = window.PARLA || {};
     }
     PARLA.speech.cancel();
 
+    closeSheet();
     currentView = view;
     currentParams = params || {};
     var node = fn(currentParams);
@@ -102,9 +175,16 @@ window.PARLA = window.PARLA || {};
     applyTheme();
 
     navEl.addEventListener('click', function (e) {
+      if (e.target.closest('#navMore')) {
+        var sheet = document.getElementById('moreSheet');
+        if (sheet && !sheet.hidden) closeSheet(); else openSheet();
+        return;
+      }
       var b = e.target.closest('button[data-view]');
       if (b) go(b.getAttribute('data-view'));
     });
+    var scrim = document.getElementById('sheetScrim');
+    if (scrim) scrim.addEventListener('click', closeSheet);
 
     // The dictionary is a megabyte and a half and nothing on the first screen
     // needs it, so it is fetched once the page has settled. After that it is in
@@ -208,7 +288,9 @@ window.PARLA = window.PARLA || {};
 
   PARLA.app = {
     go: go, applyTheme: applyTheme, paintChips: paintChips,
-    checkBrainHealth: checkBrainHealth
+    checkBrainHealth: checkBrainHealth,
+    view: function () { return currentView; },
+    openSheet: openSheet, closeSheet: closeSheet
   };
 
   if (document.readyState === 'loading') {

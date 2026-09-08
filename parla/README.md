@@ -559,6 +559,9 @@ test/
   hosted.test.js          the Workers AI backend, and its fallbacks
   games-browser.test.js   all four study games, played through, at phone size
   hosted-browser.test.js  the deployed site end to end against the real function
+  chrome-browser.test.js  the nav, the More sheet, hover states, and whether
+                          anything runs off the side of a phone
+  nav.js                  navigating the way a person does, tab or More sheet
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
   mock-pages-server.js    stands in for Cloudflare Pages, running the real
                           functions/api/chat.js against a faked AI binding
@@ -646,6 +649,7 @@ node test/word-browser.test.js 8765         # tapping a word out of a conversati
 node test/coach-browser.test.js 8765        # the Ask screen and the flip cards
 node test/games-browser.test.js 8765        # all four games, played through, on a phone
 node test/words-browser.test.js 8765        # the word bank, and Ask with a dictionary behind it
+node test/chrome-browser.test.js 8765       # the nav, hover states, and nothing off the side
 ```
 
 The hosted partner has its own server, because the thing worth testing is the

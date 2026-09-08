@@ -3,6 +3,7 @@
  * list, that clicking through actually issues a /tts request, and that a
  * server with no piper degrades without breaking anything. */
 const { chromium } = require('playwright');
+const { goTo } = require('./nav');
 const BASE = 'http://localhost:' + (process.argv[2] || 8765);
 const EXPECT_PIPER = process.argv[3] !== 'nopiper';
 

@@ -55,8 +55,12 @@ body::after {
 .papel {
   position: relative;
   display: flex;
-  justify-content: space-between;
+  /* space-around, not space-between: with space-between the end flags sit hard
+     against the edges, and since each one swings a few degrees it gets sliced
+     down its own side by the overflow clip. */
+  justify-content: space-around;
   align-items: flex-start;
+  padding: 0 4px;
   /* Taller than the flags themselves: each one swings a few degrees and would
      otherwise be clipped at its own corners by that rotation. */
   height: 68px;
@@ -673,22 +677,12 @@ button:active { transform: scale(.97); }
    unreadable. */
 @media (max-width: 560px) {
   .nav {
-    overflow-x: auto;
-    overflow-y: hidden;
-    justify-content: flex-start;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
     /* Clear of the gesture bar at the bottom of a modern Android phone. */
     padding-bottom: max(4px, env(safe-area-inset-bottom));
-    scroll-snap-type: x proximity;
   }
-  .nav::-webkit-scrollbar { display: none; }
   .nav button {
-    flex: 0 0 auto;
-    min-width: 68px;
-    padding: 7px 4px;
-    font-size: .66rem;
-    scroll-snap-align: center;
+    padding: 7px 2px;
+    font-size: .64rem;
   }
   .nav button .ico { font-size: 1.25rem; }
 
@@ -758,6 +752,15 @@ button:active { transform: scale(.97); }
   padding: 14px; transition: transform .16s ease, box-shadow .16s ease;
 }
 .band-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+/* A card that is a <button> makes everything inside it 600-weight, so the
+   description under the title came out as bold as the title. */
+.band-card .small, .band-card .muted, .band-card .faint,
+.game-card .game-desc { font-weight: 400; }
+/* Titles on one line and descriptions on two would otherwise put the progress
+   bars of a row at different heights. */
+.band-card { display: flex; flex-direction: column; }
+.band-card .band-desc { min-height: 2.4em; }
+.band-card .bar { margin-top: auto; }
 .band-card .bar { margin: 8px 0 6px; }
 
 .wb-controls { margin: 14px 0 6px; }
@@ -810,3 +813,16 @@ button:active { transform: scale(.97); }
   .band-card { padding: 12px; }
   .wb-big { font-size: 1.7rem; }
 }
+
+/* The Ask screen with nothing asked yet. A lone text box on an empty screen
+   does not tell anyone what the thing behind it can do; eight taps do. */
+.ask-starter { margin-top: 22px; }
+.ask-starter .ask-recent { margin-top: 8px; }
+.ask-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 7px 12px; border-radius: var(--r-sm);
+  background: var(--bg-raised); border: 1px solid var(--line-soft);
+  text-align: left;
+}
+.ask-chip .es { font-family: var(--serif); font-size: .95rem; color: var(--ink); }
+.ask-chip .small { font-weight: 400; }

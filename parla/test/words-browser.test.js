@@ -5,6 +5,7 @@
  * spaced-repetition deck as everything else.
  */
 const { chromium } = require('playwright');
+const { goTo } = require('./nav');
 const BASE = 'http://localhost:' + (process.argv[2] || 8765);
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};
@@ -32,7 +33,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
     await page.evaluate(() => PARLA.morph.ready()));
 
   console.log('\nThe word bank\n');
-  await page.locator('#nav button[data-view=words]').click();
+  await goTo(page, 'words');
   await page.waitForTimeout(700);
   check('it has its own place in the nav', await page.locator('.wb-list').isVisible());
   check('the frequency bands are all there', (await page.locator('.band-card').count()) === 7);
@@ -77,7 +78,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   check('the row now says you have it', (await page.locator('.wb-row.have').count()) > 0);
 
   console.log('\nAsk, with a dictionary behind it\n');
-  await page.locator('#nav button[data-view=coach]').click();
+  await goTo(page, 'coach');
   await page.waitForTimeout(300);
 
   await page.fill('.ask-input', 'pidiéndoselo');
@@ -125,7 +126,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   console.log('\nOn a phone\n');
   check('nothing overflows sideways',
     (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);
-  await page.locator('#nav button[data-view=progress]').click();
+  await goTo(page, 'progress');
   await page.waitForTimeout(900);
   const stats = await page.locator('main').innerText();
   check('Stats says how much of the language you have',

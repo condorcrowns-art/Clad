@@ -24,17 +24,28 @@
 
 <div id="app"><main><p class="muted">Loading…</p></main></div>
 
+<!-- Nine tabs do not fit across a phone. The five marked data-primary stay on
+     the bar at any width; the rest move into the More sheet below 620px and sit
+     on the bar above it. -->
 <nav class="nav" id="nav">
-  <button data-view="home"><span class="ico">🏠</span>Home</button>
-  <button data-view="scenarios"><span class="ico">💬</span>Talk</button>
-  <button data-view="coach"><span class="ico">🔎</span>Ask</button>
-  <button data-view="words"><span class="ico">📚</span>Words</button>
-  <button data-view="review"><span class="ico">🔁</span>Review</button>
+  <button data-view="home"      data-primary><span class="ico">🏠</span>Home</button>
+  <button data-view="scenarios" data-primary><span class="ico">💬</span>Talk</button>
+  <button data-view="coach"     data-primary><span class="ico">🔎</span>Ask</button>
+  <button data-view="words"     data-primary><span class="ico">📚</span>Words</button>
+  <button data-view="review"    data-primary><span class="ico">🔁</span>Review</button>
   <button data-view="games"><span class="ico">🎮</span>Games</button>
   <button data-view="conjugate"><span class="ico">🧩</span>Verbs</button>
   <button data-view="challenge"><span class="ico">🎯</span>60 days</button>
   <button data-view="progress"><span class="ico">📊</span>Stats</button>
+  <button class="nav-more" id="navMore" type="button" aria-haspopup="true" aria-expanded="false">
+    <span class="ico">☰</span>More</button>
 </nav>
+
+<div class="sheet-scrim" id="sheetScrim" hidden></div>
+<div class="sheet" id="moreSheet" role="dialog" aria-label="More screens" hidden>
+  <div class="sheet-grip"></div>
+  <div class="sheet-grid" id="sheetGrid"></div>
+</div>
 
 <!-- Data -->
 <script src="js/data/vocab-es.js"></script>

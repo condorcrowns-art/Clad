@@ -104,7 +104,9 @@ window.PARLA = window.PARLA || {};
     main.appendChild(ui.sectionTitle('By how common they are'));
     var bandGrid = el('div.grid.two');
     BANDS.forEach(function (b) {
-      var words = D.band(b[0], b[1], 4000);
+      // The whole band, not a page of it: passing a limit here once made the
+      // 5,000-to-10,000 band report "25 of 4000".
+      var words = D.band(b[0], b[1], b[1] - b[0] + 1);
       var have = words.filter(function (w) { return isKnown(w.term); }).length;
       var pct = words.length ? Math.round(have * 100 / words.length) : 0;
       bandGrid.appendChild(el('button.band-card', {
@@ -114,7 +116,7 @@ window.PARLA = window.PARLA || {};
           el('strong', b[2]),
           el('div.spacer'),
           el('span.chip' + (pct >= 80 ? '.good' : ''), pct + '%')),
-        el('div.small.muted', b[3]),
+        el('div.small.muted.band-desc', b[3]),
         ui.bar(pct / 100),
         el('div.small.faint', have + ' of ' + words.length + ' in your deck')));
     });

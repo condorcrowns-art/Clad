@@ -88,7 +88,7 @@ window.PARLA = window.PARLA || {};
     keys.sort(function (a, b) { return (items[b].mine ? 1 : 0) - (items[a].mine ? 1 : 0); });
     var queue = PARLA.srs.buildQueue(keys, st.srs, { maxNew: 12, maxTotal: 40 });
 
-    var main = el('main');
+    var main = el('main.drill');
     var stats = PARLA.srs.stats(keys, st.srs);
 
     if (!queue.length) {
@@ -152,7 +152,10 @@ window.PARLA = window.PARLA || {};
       };
     }
 
-    var head = el('div.row', { style: { marginBottom: '10px' } });
+    // Wraps, because six review modes plus two chips is 480 pixels of controls
+    // and a phone is 412 wide. On a phone the modes drop to their own line and
+    // all six fit; on a desktop it stays one row.
+    var head = el('div.row.wrap.drill-head', { style: { marginBottom: '10px' } });
     var counter = el('span.chip');
     var streakChip = el('span.chip.good', { hidden: true });
     head.appendChild(counter);
@@ -173,7 +176,7 @@ window.PARLA = window.PARLA || {};
     var bar = el('div.progress-bar', el('div.fill'));
     main.appendChild(bar);
 
-    var cardWrap = el('div');
+    var cardWrap = el('div.card-wrap');
     main.appendChild(cardWrap);
 
     function grade(q) {

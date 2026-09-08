@@ -235,6 +235,7 @@ main.wide { max-width: 1100px; }
 .grid { display: grid; gap: 12px; }
 .grid.two   { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .grid.three { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.grid { align-items: stretch; }
 .grid.four  { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
 
 .row { display: flex; align-items: center; gap: 10px; }
@@ -252,7 +253,14 @@ main.wide { max-width: 1100px; }
 
 /* ── Buttons ───────────────────────────────────────────── */
 
-button, .btn {
+/* The plain-button look, wrapped in :where() so it carries no specificity at
+ * all. That matters more than it sounds: written as `button:hover` this rule
+ * scores 0,1,1 and beats every single-class rule in the app — `.mic`,
+ * `.primary`, `.tile`, `.quiz-opt` — so hovering the microphone turned it into
+ * a cream circle with white text on it, and every pink button went blank under
+ * the cursor. At zero specificity a class always wins, which is what anyone
+ * writing `.primary { background: ... }` expects to happen. */
+:where(button, .btn) {
   font-family: inherit; font-size: .92rem; font-weight: 600;
   padding: 9px 16px; border-radius: var(--r-sm);
   border: 1px solid var(--line);
@@ -260,9 +268,20 @@ button, .btn {
   cursor: pointer;
   transition: background .14s, border-color .14s, transform .06s, opacity .14s;
 }
-button:hover, .btn:hover { background: var(--bg-sunken); }
+:where(button, .btn):hover { background: var(--bg-sunken); }
 button:active, .btn:active { transform: translateY(1px); }
 button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+/* Coloured buttons keep their colour and get lit rather than repainted, so
+ * there is no way for a hover state to make one unreadable. */
+button:not(:disabled):hover.primary,
+.primary:not(:disabled):hover,
+.mic:not(:disabled):hover,
+.tile:not(.gone):hover,
+.quiz-opt:hover,
+.game-card:hover,
+.band-card:hover,
+.scenario:hover { filter: brightness(1.05) saturate(1.03); }
 
 button.primary {
   background: var(--accent); color: var(--accent-ink); border-color: transparent;
@@ -302,7 +321,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .hint { font-size: .8rem; color: var(--ink-faint); margin-top: 4px; }
 
-.seg { display: inline-flex; background: var(--bg-sunken); border-radius: var(--r-sm); padding: 3px; gap: 3px; }
+/* A segmented control sits in a flex row next to a couple of chips. On a phone
+ * that row is 412px wide and the control alone wants 379, so as an inline-flex
+ * that refuses to shrink it pushed the whole page 187px sideways. It may now
+ * shrink, and scroll inside itself rather than dragging the document with it. */
+.seg {
+  display: inline-flex; background: var(--bg-sunken);
+  border-radius: var(--r-sm); padding: 3px; gap: 3px;
+  min-width: 0; max-width: 100%;
+  overflow-x: auto; scrollbar-width: none;
+}
+.seg::-webkit-scrollbar { display: none; }
+.seg button { flex: 0 0 auto; white-space: nowrap; }
 .seg button {
   border: 0; background: none; padding: 6px 13px; border-radius: 6px;
   font-size: .85rem; color: var(--ink-soft);
@@ -311,15 +341,24 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* ── Conversation ──────────────────────────────────────── */
 
+/* Aligned to the top, not the middle: the setting runs to three lines on a
+ * phone, and centring left the emoji floating beside the second line with
+ * "Finish" hovering in empty space opposite it. */
 .convo-head {
-  display: flex; align-items: center; gap: 12px;
-  padding-bottom: 12px; margin-bottom: 6px;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding-bottom: 10px; margin-bottom: 6px;
   border-bottom: 1px solid var(--line-soft);
 }
-.convo-head .emoji { font-size: 1.8rem; }
-.convo-head .meta { min-width: 0; }
+.convo-head .emoji { font-size: 1.7rem; line-height: 1.25; flex: none; }
+.convo-head .meta { min-width: 0; flex: 1; }
 .convo-head .meta h2 { margin: 0; font-size: 1.05rem; }
-.convo-head .meta p { margin: 0; font-size: .8rem; color: var(--ink-faint); }
+.convo-head .meta p {
+  margin: 2px 0 0; font-size: .8rem; color: var(--ink-faint); line-height: 1.35;
+  /* Two lines of scene-setting is plenty above a conversation. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.convo-head > button { flex: none; align-self: flex-start; }
 
 #thread {
   display: flex; flex-direction: column; gap: 12px;
@@ -432,8 +471,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .scenario .emoji { font-size: 1.6rem; flex-shrink: 0; }
 .scenario .txt { min-width: 0; flex: 1; }
 .scenario .txt strong { display: block; font-size: .95rem; }
-.scenario .txt span { display: block; font-size: .78rem; color: var(--ink-faint);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The subtitle used to be one clipped line, which at two tiles across a phone
+ * turned "12 cards waiting" into "12 cards wait…" and "Conjugation trainer"
+ * into "Conjugation t…". Two lines, wrapped, and the tiles in a row keep the
+ * same height. */
+.scenario .txt span {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: .78rem; color: var(--ink-faint); line-height: 1.3;
+}
+.grid .scenario { height: 100%; align-items: flex-start; }
+.grid .scenario .emoji { margin-top: 1px; }
 .level-tag {
   font-size: .66rem; font-weight: 800; letter-spacing: .06em;
   padding: 2px 7px; border-radius: 999px; text-transform: uppercase;
@@ -542,3 +590,88 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .chip.bad { background: var(--bad-soft); border-color: transparent; color: var(--bad); }
 .chip { cursor: pointer; }
+
+/* ── The nav bar, and what does not fit on it ─────────────
+ * Nine screens, and a phone is about 412 pixels wide. Scrolling the bar was
+ * the first attempt and it was worse than not fitting: the label of whichever
+ * tab landed at the edge was sliced down the middle, and the tab you were
+ * actually on could be off-screen entirely. So below 620px the bar carries the
+ * five screens a learner opens daily plus a More button, and the rest live in
+ * a sheet. Above 620px they all fit and More disappears. */
+.nav-more { }
+
+@media (min-width: 621px) {
+  .nav-more { display: none !important; }
+}
+
+@media (max-width: 620px) {
+  .nav button[data-view]:not([data-primary]) { display: none; }
+  .nav button { min-width: 0; }
+}
+
+.sheet-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, .38);
+  backdrop-filter: blur(2px);
+}
+
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, .18);
+  padding: 8px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(102%);
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1);
+}
+.sheet.up { transform: translateY(0); }
+.sheet-grip {
+  width: 40px; height: 4px; border-radius: 999px;
+  background: var(--line); margin: 4px auto 12px;
+}
+.sheet-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px;
+}
+.sheet-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 6px; border-radius: var(--r-md);
+  border: 1px solid var(--line); background: var(--bg);
+  font-size: .78rem; font-weight: 600; color: var(--ink-soft);
+  min-height: 76px;
+}
+.sheet-item .sheet-ico { font-size: 1.5rem; line-height: 1; }
+.sheet-item.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.tiny-btn { padding: 4px 10px; font-size: .78rem; }
+
+/* ── The conversation column ──────────────────────────────
+ * A chat screen with one line on it used to leave 250 empty pixels between the
+ * bubble and the microphone, and another 230 below the microphone before the
+ * nav — the dock floated in the middle of nowhere. The column fills the
+ * viewport instead, the thread takes the slack, and the controls sit where a
+ * thumb expects them: at the bottom. */
+main.talk {
+  display: flex; flex-direction: column;
+  min-height: calc(100svh - 128px);
+}
+main.talk #thread { flex: 1; min-height: 90px; }
+main.talk .mic-dock { margin-top: auto; }
+
+/* ── The review screen ────────────────────────────────────
+ * A flashcard is 300 pixels tall on a 915-pixel phone, so left alone the card
+ * sat at the top with two thirds of the screen empty under it and the grade
+ * buttons a thumb-stretch away. The column fills the viewport and the card
+ * takes the middle. */
+/* No stretching here: the header above this column is about 190px tall, so a
+ * column sized to the viewport hangs off the bottom and "centre" lands below
+ * the middle of the screen. The card sits where it falls; what mattered was
+ * the mode switcher, below. */
+
+@media (max-width: 620px) {
+  /* The mode switcher gets its own line and all six modes fit on it. */
+  .drill-head { row-gap: 8px; }
+  .drill-head .spacer { display: none; }
+  .drill-head .seg { flex: 1 0 100%; justify-content: space-between; }
+  .drill-head .seg button { padding: 6px 8px; font-size: .8rem; }
+}

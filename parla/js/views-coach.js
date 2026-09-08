@@ -26,9 +26,7 @@ window.PARLA = window.PARLA || {};
 
     main.appendChild(el('h1', 'Ask about any word'));
     main.appendChild(el('p.muted',
-      'A word, a phrase, or a whole sentence — in Spanish or English. ' +
-      'Conjugated, plural, feminine, with pronouns stuck on the end: ' +
-      'it works the form backwards to the word you should look up.'));
+      'Any form of it — conjugated, plural, feminine, with pronouns on the end.'));
 
     var dictLine = el('div.small.faint', { style: { marginBottom: '10px' } });
     main.appendChild(dictLine);
@@ -48,7 +46,7 @@ window.PARLA = window.PARLA || {};
 
     var input = el('input.ask-input', {
       type: 'text', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false',
-      placeholder: 'e.g. madrugar   ·   la cuenta   ·   how do I say "I forgot"'
+      placeholder: 'a word, or how it sounded'
     });
     var goBtn = el('button.primary', { onclick: function () { ask(input.value); } }, 'Ask');
     input.onkeydown = function (e) { if (e.key === 'Enter') ask(input.value); };
@@ -68,6 +66,31 @@ window.PARLA = window.PARLA || {};
     var out = el('div.ask-out');
     main.appendChild(out);
 
+    /* An empty screen with one text box on it tells a beginner nothing about
+     * what it can do. These are here to be tapped, and each one demonstrates
+     * something different the engine handles. */
+    var TRY = [
+      ['madrugar', 'a verb the shipped list never had'],
+      ['pidiéndoselo', 'a form with two pronouns stuck on it'],
+      ['tuvieron', 'an irregular preterite'],
+      ['canciones', 'a plural'],
+      ['rápidamente', 'an adverb built from an adjective'],
+      ['buenísimo', 'the -ísimo superlative'],
+      ['güey', 'slang, and where it is said'],
+      ['habíamos comido', 'two words, one tense']
+    ];
+    var starter = el('div.ask-starter');
+    starter.appendChild(el('div.small.faint', 'Nothing to ask yet? Try one of these.'));
+    var tryRow = el('div.ask-recent');
+    TRY.forEach(function (t) {
+      tryRow.appendChild(el('button.ask-chip', { title: t[1], onclick: function () { ask(t[0]); } },
+        el('span.es', t[0]), el('span.small.faint', t[1])));
+    });
+    starter.appendChild(tryRow);
+    main.appendChild(starter);
+
+    function hideStarter() { starter.hidden = true; }
+
     function ask(query) {
       query = String(query || '').trim();
       if (!query) { input.focus(); return; }
@@ -77,6 +100,7 @@ window.PARLA = window.PARLA || {};
       PARLA.store.save();
 
       var mine = ++pending;
+      hideStarter();
       ui.clear(out);
       out.appendChild(el('div.card', el('div.muted', 'Looking it up…')));
 

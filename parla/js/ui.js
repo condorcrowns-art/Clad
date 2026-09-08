@@ -160,21 +160,39 @@ window.PARLA = window.PARLA || {};
     var h = PARLA.brain.health;
     if (s.brain === 'scripted' || !h.checked || h.ok) return null;
 
+    /* One line, and the wall of text behind a disclosure. This used to open
+     * with three paragraphs about OLLAMA_ORIGINS and took up a third of the
+     * first screen someone ever sees — on a phone, where Ollama is not even
+     * the partner being used. */
     var b = banner('warn', '');
-    b.appendChild(el('div', el('strong', 'Your AI partner is not connected.'),
-      ' ' + h.detail + ' Conversations will use the built-in scripted partner until it is fixed.'));
+    var head = el('div.row',
+      el('div', el('strong', 'AI partner offline.'), ' Using the built-in partner.'),
+      el('div.spacer'));
+    var why = el('div.small', { hidden: true, style: { marginTop: '8px' } },
+      el('div', h.detail || ''),
+      s.brain === 'ollama'
+        ? el('div', { style: { marginTop: '4px' } },
+            'Make sure Ollama is running and OLLAMA_ORIGINS is set to * so the browser ' +
+            'is allowed to reach it.')
+        : null,
+      el('div.btn-row', { style: { marginTop: '8px' } },
+        el('button.tiny-btn', {
+          onclick: function () {
+            PARLA.app.checkBrainHealth().then(function () { PARLA.app.go(PARLA.app.view()); });
+          } }, 'Retry'),
+        el('button.tiny-btn', { onclick: function () { PARLA.app.go('settings'); } }, 'Settings')));
 
-    if (s.brain === 'ollama') {
-      b.appendChild(el('div.small', { style: { marginTop: '6px' } },
-        'Fix: make sure Ollama is running, and that OLLAMA_ORIGINS is set to * so the browser is allowed to reach it.'));
-    }
-    b.appendChild(el('div', { style: { marginTop: '8px' } },
-      el('button', { style: { padding: '4px 10px', fontSize: '.78rem' },
-        onclick: function () {
-          PARLA.app.checkBrainHealth().then(function () { PARLA.app.go('scenarios'); });
-        } }, 'Retry'),
-      el('button', { style: { padding: '4px 10px', fontSize: '.78rem', marginLeft: '6px' },
-        onclick: function () { PARLA.app.go('settings'); } }, 'Settings')));
+    var toggle = el('button.tiny-btn', {
+      'aria-expanded': 'false',
+      onclick: function () {
+        why.hidden = !why.hidden;
+        toggle.setAttribute('aria-expanded', why.hidden ? 'false' : 'true');
+        toggle.textContent = why.hidden ? 'Why?' : 'Hide';
+      }
+    }, 'Why?');
+    head.appendChild(toggle);
+    b.appendChild(head);
+    b.appendChild(why);
     return b;
   }
 
