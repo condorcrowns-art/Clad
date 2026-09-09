@@ -52,8 +52,16 @@ function check(n, c, x) { console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''
     check('settings says the neural voice is on', /Neural voice installed/.test(banner));
   } else {
     check('no neural voices offered', !voiceOpts.some(o => o.v.startsWith('piper:')));
-    const banner = await page.locator('.banner.info').last().innerText().catch(() => '');
-    check('settings points at setup-windows.ps1', /setup-windows/.test(banner), banner.slice(0, 60));
+    // The Windows install advice is five lines long and is now folded away, so
+    // that a phone — which can never run any of it — is not handed a paragraph
+    // about PowerShell. It is still one tap away on the machine it applies to.
+    const fold = page.locator('.fold-head', { hasText: 'robotic' });
+    check('settings offers to explain the robotic voice', (await fold.count()) === 1);
+    await fold.click();
+    await page.waitForTimeout(200);
+    const advice = await page.locator('.fold > .small').first().innerText().catch(() => '');
+    check('and the explanation points at setup-windows.ps1', /setup-windows/.test(advice),
+      advice.slice(0, 70));
   }
 
   console.log('\n== Speaking ==');

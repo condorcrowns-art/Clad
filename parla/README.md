@@ -48,7 +48,7 @@ python3 -m http.server 8000
 | **Frequency bands** | The words ordered by how often people actually say them, so "how much Spanish do I know" has a real answer |
 | **521 curated words** | With native audio, gendered articles, and a real example sentence each |
 | **Spaced repetition** | Full SM-2. Words you miss come back tomorrow; words you nail vanish for months |
-| **Conjugation trainer** | Any verb × 11 tenses × 6 persons, generated from rules — stem changes, spelling rules, the compounds of the irregulars, imperatives, participles and gerunds |
+| **Conjugation trainer** | Any verb × 11 tenses × 6 persons from rules — stem changes, spelling rules, compounds of the irregulars, imperatives, participles and gerunds. Vosotros is off by default; it is Spain-only |
 | **Pronunciation check** | Read a word aloud; speech recognition tells you whether it heard the right thing |
 | **Ask anything** | Type any Spanish word: meaning, gender, every tense, the mistake learners make with it, two examples — then bank it as a card |
 | **Four study games** | Pairs, Word rush, El or la, Dictation — no mic, no model, no network, all feeding the same deck |
@@ -559,8 +559,8 @@ test/
   hosted.test.js          the Workers AI backend, and its fallbacks
   games-browser.test.js   all four study games, played through, at phone size
   hosted-browser.test.js  the deployed site end to end against the real function
-  chrome-browser.test.js  the nav, the More sheet, hover states, and whether
-                          anything runs off the side of a phone
+  chrome-browser.test.js  the nav, the More sheet, hover states, folded panels,
+                          landscape, and whether anything runs off the side
   nav.js                  navigating the way a person does, tab or More sheet
   mock-tts-server.js      stands in for serve.ps1's /tts on non-Windows
   mock-pages-server.js    stands in for Cloudflare Pages, running the real

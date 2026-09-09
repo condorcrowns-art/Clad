@@ -151,6 +151,109 @@ async function boot(browser, viewport) {
     weights.length && Number(weights[0].desc) < Number(weights[0].title),
     JSON.stringify(weights[0]));
 
+  /* ── Things that fold ──────────────────────────────────── */
+  console.log('\nFolded, and staying folded\n');
+
+  // [hidden] is a UA rule (`display: none`) that any author `display: flex`
+  // silently beats, which is how a "folded" panel ships permanently open.
+  await goTo(page, 'conjugate');
+  check('the tense picker starts folded',
+    !(await page.locator('.tense-panel').isVisible()));
+  check('and says what is switched on without being opened',
+    /Drilling/.test(await page.locator('.tense-summary').innerText()));
+  await page.locator('.tense-summary').click();
+  await page.waitForTimeout(300);
+  check('tapping it opens all eleven tenses',
+    (await page.locator('.tense-panel .tense-btn').count()) === 11,
+    String(await page.locator('.tense-panel .tense-btn').count()));
+  check('and the drill is still above the fold with it closed',
+    (await page.locator('.tense-summary').click(),
+     await page.waitForTimeout(250),
+     await page.locator('.flashcard').first().evaluate(e => e.getBoundingClientRect().top < 700)));
+
+  check('nothing marked hidden is on the screen anyway',
+    await page.evaluate(() => [...document.querySelectorAll('[hidden]')]
+      .every(e => e.offsetParent === null || getComputedStyle(e).display === 'none')));
+
+  /* ── Review ────────────────────────────────────────────── */
+  console.log('\nThe flashcard back\n');
+  await goTo(page, 'review');
+  await page.locator('button', { hasText: 'Show answer' }).click();
+  await page.waitForTimeout(500);
+  check('the answer side can be read aloud, which is the point of the card',
+    (await page.locator('.back-audio button').count()) === 2,
+    String(await page.locator('.back-audio button').count()));
+  check('and the card says where it stands in the deck',
+    /new|seen|due|next in/.test(await page.locator('.card-state').innerText()),
+    (await page.locator('.card-state').innerText()).replace(/\n/g, ' '));
+
+  /* ── Vosotros ──────────────────────────────────────────── */
+  console.log('\nWhat gets drilled\n');
+  await goTo(page, 'conjugate');
+  const persons = await page.evaluate(async () => {
+    const seen = {};
+    for (let i = 0; i < 60; i++) {
+      const p = document.querySelector('.flashcard .answer');
+      if (p) seen[p.textContent] = true;
+      const dk = [...document.querySelectorAll('button')].find(b => /Don't know/.test(b.textContent));
+      if (!dk) break;
+      dk.click(); await new Promise(r => setTimeout(r, 15));
+      const nx = [...document.querySelectorAll('button')].find(b => /Next/.test(b.textContent));
+      if (nx) nx.click();
+      await new Promise(r => setTimeout(r, 15));
+    }
+    return Object.keys(seen);
+  });
+  check('vosotros is not drilled by default — it is Spain-only',
+    persons.length >= 4 && persons.indexOf('vosotros') === -1, persons.join(', '));
+  await page.evaluate(() => {
+    PARLA.store.state.settings.drillVosotros = true; PARLA.store.save(); PARLA.app.go('conjugate');
+  });
+  await page.waitForTimeout(400);
+  const persons2 = await page.evaluate(async () => {
+    const seen = {};
+    for (let i = 0; i < 90; i++) {
+      const p = document.querySelector('.flashcard .answer');
+      if (p) seen[p.textContent] = true;
+      const dk = [...document.querySelectorAll('button')].find(b => /Don't know/.test(b.textContent));
+      if (!dk) break;
+      dk.click(); await new Promise(r => setTimeout(r, 15));
+      const nx = [...document.querySelectorAll('button')].find(b => /Next/.test(b.textContent));
+      if (nx) nx.click();
+      await new Promise(r => setTimeout(r, 15));
+    }
+    return Object.keys(seen);
+  });
+  check('and it comes back when you ask for it', persons2.indexOf('vosotros') !== -1,
+    persons2.join(', '));
+  await page.evaluate(() => {
+    PARLA.store.state.settings.drillVosotros = false; PARLA.store.save();
+  });
+
+  /* ── Landscape ─────────────────────────────────────────── */
+  console.log('\nSideways\n');
+  const land = await boot(browser, { width: 915, height: 412 });
+  const lp = land.page;
+  const navH = await lp.evaluate(() => document.getElementById('nav').getBoundingClientRect().height);
+  check('the nav does not eat a third of a landscape phone', navH < 70, Math.round(navH) + 'px tall');
+  await goTo(lp, 'scenarios');
+  await lp.locator('button.scenario').first().click();
+  await lp.waitForTimeout(700);
+  check('a conversation still shows what was said',
+    await lp.locator('.bubble.them').first().isVisible());
+  check('and the microphone is reachable without scrolling',
+    await lp.evaluate(() => {
+      const m = document.querySelector('.mic');
+      const r = m.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= window.innerHeight;
+    }));
+  for (const v of ['home', 'words', 'review']) {
+    await goTo(lp, v);
+    const over = await lp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(v + ' fits sideways too', over <= 0, over + 'px over');
+  }
+  check('no page errors in landscape', land.errs.length === 0, land.errs.join(' | '));
+
   check('no page errors throughout', phone.errs.length === 0, phone.errs.join(' | '));
 
   await browser.close();

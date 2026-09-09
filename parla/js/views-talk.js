@@ -285,14 +285,19 @@ window.PARLA = window.PARLA || {};
       if (autoSpeak !== false) ui.say(es, maybeAutoListen, sc.voice);
     }
 
-    function addUser(text) {
+    function addUser(text, spoken) {
       // The recogniser will sometimes hear something else entirely. Rather than
       // leaving that in the transcript to confuse the next few turns, let it be
       // retyped - the wrong line is dropped from history, not argued with.
+      //
+      // On a line you typed yourself the same button is just Edit. Labelling
+      // your own typing "Misheard" reads as the app telling you it got it
+      // wrong when nobody said anything out loud.
       var bubble = el('div.bubble.you',
         el('div.body.es', text),
         el('div.tools',
-          el('button', { title: 'That is not what I said', onclick: function () {
+          el('button', { title: spoken ? 'That is not what I said' : 'Change what you wrote',
+                         onclick: function () {
             if (session.ended) return;
             var i = session.history.lastIndexOf(
               session.history.filter(function (m) { return m.role === 'user' && m.text === text; }).slice(-1)[0]);
@@ -303,7 +308,7 @@ window.PARLA = window.PARLA || {};
             typeInput.value = text;
             typeInput.focus();
             typeInput.setSelectionRange(text.length, text.length);
-          } }, '✎ Misheard')
+          } }, spoken ? '✎ Misheard' : '✎ Edit')
         )
       );
       thread.appendChild(bubble);
@@ -560,7 +565,8 @@ window.PARLA = window.PARLA || {};
 
       PARLA.speech.cancel();
       helpBox.hidden = true;
-      addUser(text);
+      // A confidence score only exists when a recogniser produced the text.
+      addUser(text, confidence != null);
       setMic('thinking', 'Thinking…');
       var thinking = addThinking();
 
@@ -596,10 +602,12 @@ window.PARLA = window.PARLA || {};
           // The backend died after boot said it was fine — refresh the health
           // state so the status chip stops claiming everything is well.
           if (PARLA.app.checkBrainHealth) PARLA.app.checkBrainHealth();
+          // One line in the middle of a conversation. The detail belongs in
+          // Settings, not stacked three paragraphs deep between two turns.
           thread.appendChild(ui.banner('warn',
-            'Could not reach the ' + st.settings.brain + ' backend, so this is the built-in ' +
-            'scripted partner. Practice continues either way. <br><span class="small">' +
-            (out.error || '') + '</span>'));
+            'Lost the ' + st.settings.brain + ' partner mid-conversation — carrying on with ' +
+            'the built-in one. <button class="tiny-btn" onclick="PARLA.app.go(\'settings\')">' +
+            'Settings</button>'));
         }
 
         // They reached for something and had to use English to get there. Hand

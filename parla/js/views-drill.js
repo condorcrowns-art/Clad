@@ -310,6 +310,24 @@ window.PARLA = window.PARLA || {};
                     el('div.faces', front, back));
       var showGrades = true;
 
+      /* Every back gets the Spanish read to it. Hearing the word you have just
+       * failed to produce is the single most useful half-second in a review,
+       * and only the mode that starts in Spanish was offering it. */
+      function backAudio() {
+        back.appendChild(el('div.back-audio',
+          ui.speakBtn(it.es, '🔊 Listen'),
+          el('button', {
+            title: 'Slowly',
+            onclick: function (e) {
+              e.stopPropagation();
+              PARLA.speech.speak(it.es, {
+                lang: 'es', rate: 0.6,
+                voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch
+              });
+            }
+          }, '🐢 Slower')));
+      }
+
       if (mode === 'recall') {
         front.appendChild(el('div.pos', it.mine ? 'your phrase' : it.pos));
         front.appendChild(el('div.prompt.es', it.es));
@@ -399,6 +417,8 @@ window.PARLA = window.PARLA || {};
         front.appendChild(micB);
       }
 
+      if (revealed && back.childNodes.length) backAudio();
+
       cardWrap.appendChild(card);
 
       if (showGrades) {
@@ -431,12 +451,20 @@ window.PARLA = window.PARLA || {};
       cardWrap.appendChild(el('div.small.faint.center', { style: { marginTop: '8px' } },
         'space to flip · 1-4 to grade · U to undo'));
 
+      // "new word" on its own line read as a stray label. As a chip it reads as
+      // what it is: this card's standing in the deck.
       var c = st.srs[key];
-      cardWrap.appendChild(el('div.small.faint.center', { style: { marginTop: '6px' } },
-        (it.mine ? 'from your conversation · ' : '') +
-        (c ? 'seen ' + (c.reps || 0) + '× · interval ' + (c.interval || 0) + 'd' +
-             (PARLA.srs.isLeech(c) ? ' · ⚠ trouble word' : '')
-           : 'new word')));
+      var state = el('div.card-state');
+      if (it.mine) state.appendChild(el('span.chip', 'from your conversation'));
+      if (!c) state.appendChild(el('span.chip.good', '✨ new'));
+      else {
+        state.appendChild(el('span.chip', 'seen ' + (c.reps || 0) + '×'));
+        state.appendChild(el('span.chip',
+          (c.interval || 0) < 1 ? 'due again today'
+            : 'next in ' + Math.round(c.interval) + ' day' + (Math.round(c.interval) === 1 ? '' : 's')));
+        if (PARLA.srs.isLeech(c)) state.appendChild(el('span.chip.bad-chip', '⚠ trouble word'));
+      }
+      cardWrap.appendChild(state);
     }
 
     render();
@@ -489,30 +517,53 @@ window.PARLA = window.PARLA || {};
     main.appendChild(el('p.muted',
       'Every form is generated from the rules, so irregulars and stem-changers are all here.'));
 
-    /* tense selector */
-    var tenseRow = el('div.row.wrap', { style: { marginBottom: '14px' } });
+    /* Tense selector.
+     *
+     * There are eleven tenses now, and eleven buttons wrapped across a phone
+     * took five rows and half the screen — you had to scroll past the settings
+     * to reach the thing you came to do. So it folds: a line saying what is
+     * switched on, and the buttons only when you go looking for them. */
+    var tensePanel = el('div.tense-panel', { hidden: true });
+    var tenseSummary = el('button.tense-summary', {
+      'aria-expanded': 'false',
+      onclick: function () {
+        tensePanel.hidden = !tensePanel.hidden;
+        tenseSummary.setAttribute('aria-expanded', tensePanel.hidden ? 'false' : 'true');
+        paintSummary();
+      }
+    });
+    function paintSummary() {
+      ui.clear(tenseSummary);
+      var names = chosenTenses.map(function (t) { return V.tenses[t].label; });
+      tenseSummary.appendChild(el('span.small.faint', 'Drilling'));
+      tenseSummary.appendChild(el('span.tense-list',
+        names.length === tenseKeys.length ? 'every tense'
+          : names.length > 2 ? names.length + ' tenses'
+          : names.join(' + ')));
+      tenseSummary.appendChild(el('span.spacer'));
+      tenseSummary.appendChild(el('span.small.faint', tensePanel.hidden ? 'change ▾' : 'done ▴'));
+    }
+
     tenseKeys.forEach(function (t) {
-      var b = el('button', { 'aria-pressed': String(chosenTenses.indexOf(t) !== -1) },
+      var b = el('button.tense-btn', { 'aria-pressed': String(chosenTenses.indexOf(t) !== -1) },
         V.tenses[t].label);
-      b.style.fontSize = '.82rem';
       function paint() {
-        var on = chosenTenses.indexOf(t) !== -1;
-        b.setAttribute('aria-pressed', String(on));
-        b.style.background = on ? 'var(--accent)' : '';
-        b.style.color = on ? 'var(--accent-ink)' : '';
-        b.style.borderColor = on ? 'transparent' : '';
+        b.setAttribute('aria-pressed', String(chosenTenses.indexOf(t) !== -1));
       }
       b.onclick = function () {
         var idx = chosenTenses.indexOf(t);
         if (idx === -1) chosenTenses.push(t);
         else if (chosenTenses.length > 1) chosenTenses.splice(idx, 1);
         paint();
+        paintSummary();
         next();
       };
       paint();
-      tenseRow.appendChild(b);
+      tensePanel.appendChild(b);
     });
-    main.appendChild(tenseRow);
+    paintSummary();
+    main.appendChild(tenseSummary);
+    main.appendChild(tensePanel);
 
     var scoreChip = el('div.row', { style: { marginBottom: '10px' } },
       el('span.chip.hot', '🔥 streak 0'),
@@ -534,8 +585,28 @@ window.PARLA = window.PARLA || {};
       var tense = chosenTenses[Math.floor(Math.random() * chosenTenses.length)];
       var forms = V.conjugate(verb[0], tense);
       if (!forms) return pick();
-      var person = Math.floor(Math.random() * 6);
+
+      // Vosotros is used in Spain and essentially nowhere else. Drilling it is
+      // a sixth of every session spent on a form most learners will never say,
+      // so it is off unless you turn it on — the tables still show it.
+      var persons = st.settings.drillVosotros === true
+        ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 5];
+      var person = persons[Math.floor(Math.random() * persons.length)];
+      // The imperative has no yo form.
+      if (forms[person] === '—') return pick();
       return { verb: verb, tense: tense, person: person, answer: forms[person], forms: forms };
+    }
+
+    /* "irregular" covers everything from ser to buscar and teaches nothing.
+     * The engine can say which kind, in two words. */
+    function verbTag(inf) {
+      var note = V.irregularNote ? V.irregularNote(inf) : null;
+      if (!note) return '';
+      if (/Stem-changing (\S+)/.test(note)) return 'stem-changing ' + RegExp.$1;
+      if (/Spelling change (\S+)/.test(note)) return 'spelling ' + RegExp.$1;
+      if (/^Follows (\w+)/.test(note)) return 'like ' + RegExp.$1;
+      if (/^Adds a/.test(note)) return 'spelling change';
+      return 'irregular';
     }
 
     function next() {
@@ -561,7 +632,7 @@ window.PARLA = window.PARLA || {};
       var card = el('div.flashcard');
 
       card.appendChild(el('div.pos', V.tenses[c.tense].label +
-        (V.isIrregular(c.verb[0]) ? ' · irregular' : '')));
+        (verbTag(c.verb[0]) ? ' · ' + verbTag(c.verb[0]) : '')));
       card.appendChild(el('div.prompt.es', c.verb[0]));
       card.appendChild(el('div.small.faint', c.verb[1]));
       card.appendChild(el('div.answer', V.pronouns[c.person]));

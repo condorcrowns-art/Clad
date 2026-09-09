@@ -53,6 +53,9 @@ window.PARLA = window.PARLA || {};
         // and cutting them off there is what made the partner answer
         // half-sentences as if they were finished ones.
         micPauseMs: 1600,
+      // Vosotros is Spain-only. The conjugation drill skips it unless this is
+      // on; the tables on the Ask and Verbs screens always show all six.
+      drillVosotros: false,
         showTranslations: true,
         correctionStyle: 'gentle', // gentle | strict | off
         theme: 'auto'

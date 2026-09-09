@@ -196,7 +196,7 @@ window.PARLA = window.PARLA || {};
       'One conversation a day, getting harder. Days unlock as you finish them, ' +
       'so a missed day costs you nothing but time.'));
 
-    main.appendChild(el('div.grid.three', { style: { marginBottom: '18px' } },
+    main.appendChild(el('div.grid.three.tight', { style: { marginBottom: '18px' } },
       ui.stat(done.length, 'days done'),
       ui.stat(st.progress.streak, 'day streak'),
       ui.stat(st.progress.bestStreak, 'best streak')
@@ -253,6 +253,22 @@ window.PARLA = window.PARLA || {};
     if (D.ready()) return D.size().toLocaleString() + ' words';
     if (D.failure()) return 'not loaded';
     return 'loading…';
+  }
+
+  /* A heading you can tap, and the explanation underneath only if you want it.
+   * Settings had five paragraphs of Windows advice open by default on a phone
+   * that will never run any of it. */
+  function fold(title, html) {
+    var body = el('div.small', { hidden: true });
+    body.innerHTML = html;
+    var head = el('button.fold-head', { 'aria-expanded': 'false' },
+      el('span', title), el('span.spacer'), el('span.small.faint', 'why ▾'));
+    head.onclick = function () {
+      body.hidden = !body.hidden;
+      head.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+      head.lastChild.textContent = body.hidden ? 'why ▾' : 'hide ▴';
+    };
+    return el('div.fold', head, body);
   }
 
   function viewProgress() {
@@ -313,7 +329,7 @@ window.PARLA = window.PARLA || {};
 
       main.appendChild(ui.sectionTitle('How much of the language', 
         el('button.ghost', { onclick: function () { PARLA.app.go('words'); } }, 'Word bank →')));
-      main.appendChild(el('div.grid.three',
+      main.appendChild(el('div.grid.three.tight',
         ui.stat(c1.pct + '%', 'of the top 1,000'),
         ui.stat(c3.pct + '%', 'of the top 3,000'),
         ui.stat(c10.pct + '%', 'of the top 10,000')));
@@ -326,7 +342,7 @@ window.PARLA = window.PARLA || {};
     }
 
     main.appendChild(ui.sectionTitle('Practice'));
-    main.appendChild(el('div.grid.three',
+    main.appendChild(el('div.grid.three.tight',
       ui.stat(t.reviews, 'card reviews'),
       ui.stat(t.conjugations, 'verbs drilled'),
       ui.stat(t.corrections, 'corrections')
@@ -337,14 +353,13 @@ window.PARLA = window.PARLA || {};
       var stack = el('div.stack');
       st.history.slice(0, 12).forEach(function (h) {
         var sc = PARLA.data.es.scenarios.filter(function (x) { return x.id === h.scenarioId; })[0];
-        stack.appendChild(el('div.card', { style: { padding: '10px 14px' } },
-          el('div.row',
-            el('span', sc ? sc.emoji + ' ' + sc.title : h.scenarioId),
-            el('div.spacer'),
-            el('span.small.faint', h.turns + ' turns · +' + h.xp + ' xp'),
-            el('span.small.faint', { style: { marginLeft: '10px' } },
-              new Date(h.when).toLocaleDateString())
-          )));
+        // Title on its own line, the numbers under it: on a phone this row used
+        // to wrap in the middle of "+16 xp".
+        stack.appendChild(el('div.card.session-row', { style: { padding: '10px 14px' } },
+          el('div.session-title', sc ? sc.emoji + ' ' + sc.title : h.scenarioId),
+          el('div.small.faint',
+            h.turns + (h.turns === 1 ? ' turn' : ' turns') + ' · +' + h.xp + ' xp · ' +
+            new Date(h.when).toLocaleDateString())));
       });
       main.appendChild(stack);
     }
@@ -703,18 +718,28 @@ window.PARLA = window.PARLA || {};
       }, 'Use the best available')));
 
     // Two different problems wear the same symptom, so say which one it is.
-    voiceCard.appendChild(PARLA.speech.piper.available
-      ? ui.banner('good',
-          '<strong>Neural voice installed.</strong> Speech is generated on this machine by ' +
-          'Piper — no account, no internet, no cost, and nothing you say or hear leaves the ' +
-          'computer. The browser voices below it are only a fallback.')
-      : ui.banner('info',
-          '<strong>Voice sounding robotic?</strong> The good one is not installed yet. Run ' +
-          '<code>.\\setup-windows.ps1</code> again and it will fetch Piper, a neural voice that ' +
-          'runs locally and free. Until then this list only has your operating system\'s own ' +
-          'voices; on Windows the least bad are <code>Google español</code> (from Chrome) or ' +
-          'any whose name contains <em>Natural</em>, which you can add under ' +
-          '<code>Settings → Time &amp; language → Speech</code>.'));
+    // The install advice is for the machine Parla is served from; on a phone
+    // there is no Piper to install and never will be, so it is not offered.
+    var local = typeof location !== 'undefined' &&
+      (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ||
+       location.protocol === 'file:');
+
+    if (PARLA.speech.piper.available) {
+      voiceCard.appendChild(ui.banner('good',
+        '<strong>Neural voice installed.</strong> Speech is generated on this machine, ' +
+        'so nothing you say or hear leaves the computer.'));
+    } else if (local) {
+      voiceCard.appendChild(fold('Voice sounding robotic?',
+        'The neural voice is not installed. Run <code>.\\setup-windows.ps1</code> again and ' +
+        'it will fetch Piper — local, free, and much better than what is in this list. ' +
+        'Until then, on Windows the least bad are <code>Google español</code> (from Chrome) ' +
+        'or any voice whose name contains <em>Natural</em>, added under ' +
+        '<code>Settings → Time &amp; language → Speech</code>.'));
+    } else {
+      voiceCard.appendChild(el('div.hint',
+        'These are your device\'s own Spanish voices. Android\'s are decent; the neural ' +
+        'voice only exists on the computer Parla is installed on.'));
+    }
     main.appendChild(voiceCard);
     main.appendChild(castCard);
 
@@ -866,6 +891,11 @@ window.PARLA = window.PARLA || {};
       toggle('Show English translations', s.showTranslations, function (v) {
         s.showTranslations = v; PARLA.store.save();
       }, 'Turn this off once you can cope — it is the fastest way to improve.'),
+      toggle('Drill vosotros', s.drillVosotros === true, function (v) {
+        s.drillVosotros = v; PARLA.store.save();
+      }, 'Vosotros is used in Spain and almost nowhere else. Off, the conjugation ' +
+         'trainer spends its time on the five forms you will actually say — the ' +
+         'tables on Ask and Verbs still show all six either way.'),
       ui.field('Your level',
         ui.segmented([['a1', 'A1'], ['a2', 'A2'], ['b1', 'B1'], ['b2', 'B2']],
           st.profile.level, function (v) { st.profile.level = v; PARLA.store.save(); }),

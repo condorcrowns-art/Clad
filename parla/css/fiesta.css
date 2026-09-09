@@ -725,11 +725,32 @@ button:active { transform: scale(.97); }
 
 /* Landscape on a phone is short, not narrow: the dock and the nav together
    can leave no room for the conversation at all. */
-@media (max-height: 480px) and (orientation: landscape) {
+/* Landscape on a phone is 412 pixels tall, and the nav bar was taking a third
+   of it — icon over label, at full size, for nine tabs. Here the label sits
+   beside the icon on one short line, and everything else gives up its padding
+   too, because in landscape the only thing anyone wants is the content. */
+@media (max-height: 500px) and (orientation: landscape) {
   .papel, .mural { display: none; }
   .mic { width: 52px; height: 52px; }
   .mic-dock { padding: 6px 0 4px; }
   .flashcard .face { min-height: 120px; padding: 12px; }
+
+  .topbar { padding-top: 2px; padding-bottom: 2px; }
+  .nav { padding: 2px 6px calc(2px + env(safe-area-inset-bottom, 0px)); }
+  .nav button {
+    flex-direction: row; gap: 5px; padding: 5px 8px; font-size: .7rem;
+  }
+  .nav button .ico { font-size: .95rem; }
+  main { padding-top: 10px; padding-bottom: 60px; }
+  main.talk { min-height: 0; }
+  h1 { font-size: 1.25rem; margin-bottom: .2em; }
+  .convo-head { padding-bottom: 6px; }
+  .convo-head .meta p { display: none; }
+  #thread { padding: 8px 0; gap: 8px; }
+  .mic-label, .mic-help { display: none; }
+  .phrasebook { display: none; }
+  .sheet-item { min-height: 56px; padding: 8px 6px; }
+  .sheet-item .sheet-ico { font-size: 1.2rem; }
 }
 
 /* A phone is a touch device: hover styles that only reveal on hover would hide
@@ -826,3 +847,46 @@ button:active { transform: scale(.97); }
 }
 .ask-chip .es { font-family: var(--serif); font-size: .95rem; color: var(--ink); }
 .ask-chip .small { font-weight: 400; }
+
+/* ── The tense picker ─────────────────────────────────────────
+   Eleven tenses is eleven buttons, and eleven buttons wrapped across a phone
+   is five rows above the drill you came to do. Folded away behind one line
+   that says what is switched on. */
+.tense-summary {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; margin-bottom: 10px;
+  background: var(--bg-raised); border: 1px solid var(--line);
+}
+.tense-summary .spacer { flex: 1; }
+.tense-summary .tense-list { font-weight: 700; }
+.tense-summary .small { font-weight: 400; }
+.tense-panel {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 10px; margin-bottom: 12px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+.tense-panel .tense-btn { font-size: .8rem; }
+.tense-panel .tense-btn[aria-pressed="true"] {
+  background: var(--accent); color: var(--accent-ink); border-color: transparent;
+}
+
+/* A paragraph of platform-specific advice, folded. */
+.fold { margin-top: 10px; }
+.fold-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; font-weight: 700;
+}
+.fold-head .spacer { flex: 1; }
+.fold-head .small { font-weight: 400; }
+.fold > .small { padding: 10px 2px 2px; color: var(--ink-soft); line-height: 1.45; }
+
+/* Hear the word you just failed to remember. */
+.back-audio { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+.card-state {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 10px;
+}
+.card-state .chip { font-size: .68rem; }
+
+.session-row .session-title { font-weight: 700; }
+.session-row .small { margin-top: 2px; }

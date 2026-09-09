@@ -675,3 +675,22 @@ main.talk .mic-dock { margin-top: auto; }
   .drill-head .seg { flex: 1 0 100%; justify-content: space-between; }
   .drill-head .seg button { padding: 6px 8px; font-size: .8rem; }
 }
+
+/* Three small numbers should be three across a phone, not two and an orphan
+ * on a row of its own. */
+/* The browser hides [hidden] elements with `display: none` from its own
+ * stylesheet, which any author rule setting `display` silently beats. Anything
+ * given `display: flex` or `grid` in here would ignore being hidden — as the
+ * folded tense picker did, appearing open on every visit. */
+[hidden] { display: none !important; }
+
+.grid.three.tight { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.grid.three.tight .stat { padding: 12px 6px; }
+.grid.three.tight .stat .n { font-size: 1.4rem; }
+.grid.three.tight .stat .k { font-size: .62rem; line-height: 1.25; }
+
+/* A section title with a link beside it: the title takes the room it needs and
+ * the link stays on the baseline next to it rather than being pushed onto the
+ * heading's first line. */
+.section-title { flex-wrap: wrap; row-gap: 2px; }
+.section-title > *:first-child { flex: 1 1 auto; min-width: 0; }
