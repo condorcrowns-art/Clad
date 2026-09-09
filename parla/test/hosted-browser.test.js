@@ -99,11 +99,11 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 3, has
 
   console.log('\nThe rest of the app, unchanged\n');
   const nav = await page.locator('#nav button[data-view]').count();
-  check('every screen is still reachable', nav === 10, nav + ' nav items');
+  check('every screen is still reachable', nav === 11, nav + ' nav items');
   check('and five of them fit across a phone, with the rest behind More',
     (await page.locator('#nav button[data-view]:visible').count()) === 5 &&
     await page.locator('#navMore').isVisible());
-  for (const v of ['review', 'words', 'grammar', 'games', 'conjugate', 'challenge', 'progress']) {
+  for (const v of ['review', 'words', 'grammar', 'say', 'games', 'conjugate', 'challenge', 'progress']) {
     await goTo(page, v);
     check(v + ' opens with no model involved', (await page.locator('main').count()) === 1);
   }

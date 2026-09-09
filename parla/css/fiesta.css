@@ -943,3 +943,48 @@ button:active { transform: scale(.97); }
   .pair-side + .pair-side { border-top: 1px dashed var(--line); padding-top: 6px; }
   .gram-q { font-size: 1.15rem; }
 }
+
+/* ── Pronunciation ────────────────────────────────────────────*/
+.sound-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.sound-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.sound-symbol {
+  display: grid; place-items: center; flex: none;
+  min-width: 44px; height: 40px; padding: 0 8px;
+  border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent);
+  font-family: var(--serif); font-size: 1.15rem; font-weight: 700;
+}
+.sound-symbol.big { min-width: 58px; height: 54px; font-size: 1.5rem; }
+.sound-main { flex: 1; min-width: 0; }
+.sound-title { font-weight: 700; }
+.sound-sub { font-size: .78rem; color: var(--ink-soft); font-weight: 400; }
+
+.say-word {
+  font-family: var(--serif); font-size: 2.1rem; line-height: 1.2;
+  letter-spacing: .01em;
+}
+.say-stress { color: var(--accent); font-weight: 700; }
+.say-ipa { font-size: .95rem; color: var(--ink-faint); margin-top: 2px; letter-spacing: .02em; }
+.say-ipa-inline { font-size: .92rem; letter-spacing: .02em; }
+.say-ipa-inline.no { color: var(--bad); }
+.say-compare {
+  display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 8px; border-radius: var(--r-sm); background: var(--bg-sunken);
+}
+
+.diagnosis {
+  margin-top: 10px; padding: 12px; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--warn) 10%, var(--card));
+  border-left: 3px solid var(--warn);
+}
+.diagnosis .row { gap: 10px; align-items: flex-start; }
+.diag-title { font-weight: 700; margin-bottom: 3px; }
+.diagnosis .small { font-weight: 400; line-height: 1.4; }
+
+@media (max-width: 560px) {
+  .say-word { font-size: 1.75rem; }
+  .sound-symbol { min-width: 38px; height: 36px; font-size: 1rem; }
+}

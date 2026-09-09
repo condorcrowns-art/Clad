@@ -421,8 +421,30 @@ window.PARLA = window.PARLA || {};
               verdict.appendChild(el('div.answer-state.' + (hit ? 'ok' : 'no'),
                 hit ? '✓ Heard: “' + t + '”'
                     : '✗ Heard: “' + t + '” — expected “' + it.es + '”'));
+
+              // "Expected X, heard Y" is a verdict, not a lesson. The phonology
+              // engine can say which sound the difference sits on, and that is
+              // something you can go and practise.
+              if (!hit && PARLA.phon && PARLA.data.es.soundsById) {
+                var cmp = PARLA.phon.compare(it.es, String(t).trim().toLowerCase());
+                var named = (cmp.problems || []).filter(function (pr) {
+                  return PARLA.data.es.soundsById[pr.sound];
+                });
+                if (named.length) {
+                  var sd = PARLA.data.es.soundsById[named[0].sound];
+                  verdict.appendChild(el('div.diagnosis',
+                    el('div.row',
+                      el('span.sound-symbol.es', sd.symbol),
+                      el('div', el('div.diag-title', sd.tell),
+                        el('div.small.muted', sd.mouth))),
+                    el('button.ghost.small-btn', { style: { marginTop: '6px' },
+                      onclick: function () { PARLA.app.go('sound', { id: sd.id }); } },
+                      'Drill this sound →')));
+                }
+              }
+
               revealed = true;
-              setTimeout(function () { grade(hit ? 4 : 0); }, hit ? 900 : 2200);
+              setTimeout(function () { grade(hit ? 4 : 0); }, hit ? 900 : 4200);
             },
             onerror: function (k) { verdict.textContent = 'Mic: ' + k; },
             onend: function () { listenHandle = null; micB.textContent = '🎙 Speak'; }

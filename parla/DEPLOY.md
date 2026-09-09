@@ -97,6 +97,7 @@ get simpler; nothing breaks.
 | Voice | Android's Spanish voices | **Piper** neural voice |
 | Dictionary — 31,000 words | yes, offline after first load | yes |
 | Grammar checker | yes, offline, no model needed | yes |
+| Pronunciation coaching | yes | yes |
 | Your mistakes, scheduled | yes | yes |
 | 20 grammar lessons | yes | yes |
 | Word bank and frequency bands | yes | yes |

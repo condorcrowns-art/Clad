@@ -49,6 +49,7 @@ python3 -m http.server 8000
 | **A grammar checker that is not a model** | Agreement, conjugation, ser/estar, por/para, the personal a — decided from the dictionary and the morphology engine, offline, at 0 false positives across every sentence the app ships |
 | **Your mistakes come back** | Every correction is scheduled. The sentence you got wrong returns until you can write it correctly from memory — the half of the loop most apps drop |
 | **20 grammar lessons** | The places English pulls you the wrong way, each with the rule, why you get it wrong, minimal pairs and a drill. Sorted by what you keep getting wrong |
+| **Pronunciation that diagnoses** | Say a word and be told *which sound* broke — "your rr came out as a single tap" — from real phonology, not a pass/fail from the recogniser |
 | **521 curated words** | With native audio, gendered articles, and a real example sentence each |
 | **Spaced repetition** | Full SM-2. Words you miss come back tomorrow; words you nail vanish for months |
 | **Conjugation trainer** | Any verb × 11 tenses × 6 persons from rules — stem changes, spelling rules, compounds of the irregulars, imperatives, participles and gerunds. Vosotros is off by default; it is Spain-only |
@@ -522,6 +523,7 @@ js/
   dict.js             the dictionary at runtime: lazy load, index, search, bands
   morph.js            any Spanish form worked back to the word you look up
   grammar.js          the checker: agreement and conjugation decided, not guessed
+  phon.js             Spanish phonology: sounds, syllables, stress, and what broke
   brain.js            four backends behind one interface, model auto-pick,
                       JSON retry, and the offline corrector
   ui.js               tiny DOM toolkit
@@ -532,6 +534,7 @@ js/
   views-words.js      the word bank: 31,000 words by frequency band
   views-grammar.js    the twenty lessons, and one lesson with its drill
   views-fix.js        the sentences you got wrong, to write out correctly
+  views-say.js        the ten sounds, how to make them, and what went wrong
   views-progress.js   home, 60-day grid, stats, mistake journal, settings
   app.js              router + bootstrap
 functions/
@@ -560,6 +563,8 @@ test/
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
   grammar.test.js         the checker: what it catches, and what it leaves alone
+  phon.test.js            transcription, syllables, stress, and naming a mistake
+  say-browser.test.js     a mispronunciation, diagnosed rather than failed
   fix-browser.test.js     one mistake followed all the way round the loop
   verbs.test.js           every conjugation rule, form by form
   dict.test.js            the dictionary, and working any form back to a lemma
@@ -609,6 +614,36 @@ backwards, the two past tenses, por/para, the personal a, the subjunctive — ea
 with the rule in one sentence, why your English causes the mistake, minimal
 pairs, and a drill whose wrong answers are the ones a learner would actually
 give. The grammar screen sorts them by what the checker has caught you doing.
+
+## Pronunciation, without a phonetics degree
+
+Speech recognition gives you a verdict: it heard "pero" when you meant "perro".
+You already knew you got it wrong. What you need is the next sentence — *your
+rr came out as a single tap, here is what to do with your tongue* — and that
+takes phonology rather than a comparison of two strings.
+
+Spanish makes it possible in a way English never would: the spelling is close to
+phonemic, so the pronunciation of any word follows from rules. `js/phon.js`
+derives it — 20 transcription cases and 20 syllabifications are checked against
+how the words are actually said, including the awkward ones (`día` is dí-a
+because an accented weak vowel breaks the diphthong; `psicología` starts with a
+cluster Spanish does not otherwise allow). From that it gets syllables, stress
+from the two spelling rules, and an alignment between what you meant and what
+was heard.
+
+The alignment is the diagnosis. A substitution of /ɾ/ for /r/ is not "wrong", it
+is a tap where a trill belongs, and that has a fix you can practise. Ten sounds
+carry the coaching: what to physically do, what English makes you do instead,
+minimal pairs to prove you can *hear* the difference before you try to make it,
+and a trick — the rr is already in "pot of tea" said fast in an American accent.
+
+It works offline, it keeps score per sound, and the speaking drill in Review
+uses the same engine, so a fluffed word there ends with a way into the sound
+that fluffed it.
+
+Two dialect choices are settings rather than facts: seseo and yeísmo. The
+defaults are Latin American, because that is who the learner is most likely to
+be talking to.
 
 ## Where the words come from
 
@@ -671,6 +706,7 @@ node test/suggest.test.js          # what to say when you are stuck
 node test/english.test.js          # English as a teaching moment
 node test/casting.test.js          # voices matched to characters
 node test/grammar.test.js          # the checker, and its zero-false-positive bar
+node test/phon.test.js             # sounds, syllables and stress, against real Spanish
 node test/verbs.test.js            # conjugation, form by form, against real Spanish
 node test/dict.test.js             # the dictionary, and unpicking any word form
 node test/hosted.test.js           # the Workers AI partner, and what happens without it
@@ -694,6 +730,7 @@ node test/games-browser.test.js 8765        # all four games, played through, on
 node test/words-browser.test.js 8765        # the word bank, and Ask with a dictionary behind it
 node test/chrome-browser.test.js 8765       # the nav, hover states, and nothing off the side
 node test/fix-browser.test.js 8765          # corrected, scheduled, surfaced, fixed
+node test/say-browser.test.js 8765          # a wrong sound, named and coached
 ```
 
 The hosted partner has its own server, because the thing worth testing is the

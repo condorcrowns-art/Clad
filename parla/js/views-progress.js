@@ -141,6 +141,7 @@ window.PARLA = window.PARLA || {};
       quick('🎮', 'Play a game', 'Four minutes', function () { PARLA.app.go('games'); }),
       quick('📚', 'Word bank', dictBlurb(), function () { PARLA.app.go('words'); }),
       quick('📐', 'Grammar', grammarBlurb(), function () { PARLA.app.go('grammar'); }),
+      quick('👄', 'Sounds', soundsBlurb(), function () { PARLA.app.go('say'); }),
       quick('🔎', 'Look something up', 'Any word, any form', function () { PARLA.app.go('coach'); })
     ));
 
@@ -288,6 +289,14 @@ window.PARLA = window.PARLA || {};
       head.lastChild.textContent = body.hidden ? 'why ▾' : 'hide ▴';
     };
     return el('div.fold', head, body);
+  }
+
+  function soundsBlurb() {
+    var all = PARLA.store.state.sounds || {};
+    var weak = Object.keys(all).filter(function (id) {
+      return all[id].tries >= 3 && all[id].ok / all[id].tries < 0.7;
+    });
+    return weak.length ? weak.length + ' to work on' : 'The rr, the j, the ñ';
   }
 
   function grammarBlurb() {
