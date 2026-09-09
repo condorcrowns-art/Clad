@@ -140,8 +140,27 @@ window.PARLA = window.PARLA || {};
       quick('🧩', 'Drill verbs', 'Conjugation trainer', function () { PARLA.app.go('conjugate'); }),
       quick('🎮', 'Play a game', 'Four minutes', function () { PARLA.app.go('games'); }),
       quick('📚', 'Word bank', dictBlurb(), function () { PARLA.app.go('words'); }),
+      quick('📐', 'Grammar', grammarBlurb(), function () { PARLA.app.go('grammar'); }),
       quick('🔎', 'Look something up', 'Any word, any form', function () { PARLA.app.go('coach'); })
     ));
+
+    /* The mistakes that are due. This is the highest-value thing on the screen
+     * when it is here, so it goes above everything except the day's task. */
+    var dueFix = PARLA.store.dueMistakes(50);
+    if (dueFix.length) {
+      main.appendChild(el('button.fix-banner', {
+        onclick: function () { PARLA.app.go('fix'); }
+      },
+        el('div.row',
+          el('span.fix-emoji', '🎯'),
+          el('div',
+            el('div.fix-title', dueFix.length + ' mistake' + (dueFix.length === 1 ? '' : 's') +
+              ' to fix again'),
+            el('div.small.muted', 'The sentences you got wrong, back for another go — ' +
+              'this is the part that makes being corrected worth anything.')),
+          el('div.spacer'),
+          el('span.chip.hot', 'Go →'))));
+    }
 
     /* at a glance */
     var lp = PARLA.store.levelProgress();
@@ -269,6 +288,14 @@ window.PARLA = window.PARLA || {};
       head.lastChild.textContent = body.hidden ? 'why ▾' : 'hide ▴';
     };
     return el('div.fold', head, body);
+  }
+
+  function grammarBlurb() {
+    var st = PARLA.store.state;
+    var hits = {};
+    (st.mistakes || []).forEach(function (m) { if (m.topic) hits[m.topic] = 1; });
+    var n = Object.keys(hits).length;
+    return n ? n + ' to look at' : '20 things that trip you up';
   }
 
   function viewProgress() {

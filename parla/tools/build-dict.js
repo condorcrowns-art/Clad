@@ -283,10 +283,24 @@ async function main() {
     'muerte', 'noche', 'tarde', 'clase', 'frase', 'base', 'calle', 'leche', 'parte', 'fuente',
     'corriente', 'serpiente', 'mente', 'imagen', 'orden', 'sal', 'piel', 'miel', 'senal',
     'catedral', 'labor', 'flor', 'coliflor', 'sor', 'razon', 'sazon']);
-  const MASC_EXC = new Set(['dia', 'mapa', 'problema', 'sistema', 'tema', 'programa',
-    'idioma', 'clima', 'planeta', 'sofa', 'tranvia', 'poeta', 'cura', 'papa', 'drama',
-    'poema', 'esquema', 'dilema', 'sintoma', 'aroma', 'diploma', 'panorama', 'fantasma',
-    'karma', 'enigma', 'trauma', 'lema', 'cometa', 'guardia', 'espia', 'atleta', 'pijama']);
+  /* Nouns in -ma that came into Spanish from Greek are masculine. Every other
+   * noun in -ma is feminine — cama, forma, llama, crema, firma, broma, pluma —
+   * and treating -ma as a masculine *ending* rather than as this list marked
+   * two hundred perfectly ordinary feminine words masculine. It is a list, not
+   * a pattern. */
+  const GREEK_MA = ('problema sistema tema programa idioma clima drama poema esquema ' +
+    'dilema sintoma aroma diploma panorama karma enigma trauma lema fantasma ' +
+    'telegrama diagrama dogma carisma crucigrama holograma cromosoma teorema ' +
+    'axioma sintagma paradigma emblema estigma prisma plasma magma sigma ' +
+    'reuma eczema edema melanoma linfoma glaucoma coma aneurisma organismo ' +
+    'anagrama epigrama monograma pentagrama kilogramo miasma fonema morfema ' +
+    'lexema grafema sofisma esperma').split(' ');
+
+  const MASC_EXC = new Set(['dia', 'mapa', 'planeta', 'sofa', 'tranvia', 'poeta',
+    'cura', 'papa', 'cometa', 'guardia', 'espia', 'atleta', 'pijama',
+    'colega', 'futbolista', 'artista', 'turista', 'periodista', 'dentista',
+    'taxista', 'pediatra', 'psiquiatra', 'monarca', 'patriarca', 'insecticida',
+    'tequila', 'vodka', 'chachacha'].concat(GREEK_MA));
   for (const e of list) {
     if (e.pos !== 'n') { e.gender = null; continue; }
     const f = fold(e.term);
@@ -294,7 +308,7 @@ async function main() {
     if (MASC_EXC.has(f)) { e.gender = 'm'; continue; }
     if (FEM_EXC.has(f)) { e.gender = 'f'; continue; }
     if (/(cion|sion|dad|tad|tud|umbre|eza|icie)$/.test(f)) { e.gender = 'f'; continue; }
-    if (/(aje|ambre|ma)$/.test(f)) { e.gender = 'm'; continue; }
+    if (/(aje|ambre)$/.test(f)) { e.gender = 'm'; continue; }
     if (/or$/.test(f) && !/(flor|labor|coliflor)$/.test(f)) { e.gender = 'm'; continue; }
     if (/o$/.test(f)) { e.gender = 'm'; continue; }
     if (/a$/.test(f)) { e.gender = 'f'; continue; }

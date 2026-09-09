@@ -82,6 +82,16 @@ window.PARLA = window.PARLA || {};
   function correctOffline(text) {
     if (!text) return null;
 
+    /* The grammar engine first. It knows the gender of eighteen thousand nouns
+     * and the person of any verb form, so where it speaks it is not guessing —
+     * and it can say which rule it applied, which is what turns a correction
+     * into a lesson. The hand-written patterns below are what is left: fixed
+     * expressions that no amount of agreement checking would catch. */
+    if (PARLA.grammar && PARLA.grammar.ready()) {
+      var g = PARLA.grammar.correct(text);
+      if (g) return g;
+    }
+
     for (var i = 0; i < RULES.length; i++) {
       var r = RULES[i];
       if (r[0].test(text)) {
@@ -504,6 +514,20 @@ window.PARLA = window.PARLA || {};
 
     var corr = obj.correction;
     if (corr && (!corr.fixed || normalise(corr.fixed) === normalise(original || ''))) corr = null;
+
+    /* A small model will sometimes "fix" Spanish that was already right, which
+     * is the most damaging thing a language app can do. The rules engine gets
+     * a veto: if the sentence it proposes has more errors in it than the one
+     * the learner wrote, the correction is dropped. */
+    if (corr && corr.fixed && PARLA.grammar && PARLA.grammar.ready()) {
+      if (PARLA.grammar.agrees(original || corr.original || '', corr.fixed) === false) corr = null;
+    }
+    /* And where the rules *do* have something to say, they say it better: an
+     * exact rule with a named reason beats a paraphrase. */
+    if (PARLA.grammar && PARLA.grammar.ready() && original) {
+      var sure = PARLA.grammar.correct(original);
+      if (sure) corr = sure;
+    }
 
     // Asking someone to repeat themselves and correcting the fragment you did
     // not hear are contradictory. If the model does both, the question wins.

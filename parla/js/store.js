@@ -80,7 +80,7 @@ window.PARLA = window.PARLA || {};
         facts: []             // short English statements: "They are from Chicago"
       },
       srs: {},                // word -> { ease, interval, due, reps, lapses }
-      mistakes: [],           // { es, fix, note, when, scenario }
+      mistakes: [],           // { es, fix, note, topic, when, times, scenario }
       phrases: [],            // { es, en, when } - phrases you reached for and could not say
       history: []             // { when, scenarioId, turns, xp }
     };
@@ -215,6 +215,73 @@ window.PARLA = window.PARLA || {};
 
   function rememberPhrase(es, en) { return addWord(es, en, '', ''); }
 
+  /* ── Mistakes ─────────────────────────────────────────────
+   * A correction used to be written to a journal that nothing ever read again,
+   * which made the most valuable thing the app collects the one thing it threw
+   * away. Every mistake now goes into the same spaced-repetition schedule as
+   * vocabulary: the sentence you got wrong comes back tomorrow, and again in
+   * four days if you fix it, and again tomorrow if you do not.
+   */
+  function mistakeKey(m) {
+    return 'fix:' + String(m.es || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function rememberMistake(m) {
+    if (!m || !m.es) return false;
+    state.mistakes = state.mistakes || [];
+    var key = mistakeKey(m);
+
+    var existing = state.mistakes.filter(function (x) { return mistakeKey(x) === key; })[0];
+    if (existing) {
+      // Making the same mistake twice is worth knowing about: it moves up the
+      // queue rather than being filed a second time.
+      existing.times = (existing.times || 1) + 1;
+      existing.when = Date.now();
+      if (m.topic) existing.topic = m.topic;
+      state.mistakes = [existing].concat(state.mistakes.filter(function (x) {
+        return mistakeKey(x) !== key;
+      }));
+    } else {
+      state.mistakes.unshift({
+        es: m.es, fix: m.fix || '', note: m.note || '', topic: m.topic || null,
+        scenario: m.scenario || null, from: m.from || 'conversation',
+        when: Date.now(), times: 1
+      });
+    }
+    state.mistakes = state.mistakes.slice(0, 300);
+
+    // Schedule it. A fresh card is due immediately, which is the point.
+    state.srs = state.srs || {};
+    if (!state.srs[key]) state.srs[key] = PARLA.srs.fresh ? PARLA.srs.fresh() : null;
+    if (!state.srs[key]) {
+      state.srs[key] = { reps: 0, interval: 0, ease: 2.3, due: Date.now(), lapses: 0 };
+    } else {
+      // Seen again in the wild: it is due now regardless of what it was.
+      state.srs[key].due = Date.now();
+      state.srs[key].lapses = (state.srs[key].lapses || 0) + 1;
+    }
+    save();
+    return true;
+  }
+
+  /* The mistakes that are due to be looked at again. */
+  function dueMistakes(limit) {
+    var now = Date.now();
+    return (state.mistakes || [])
+      .filter(function (m) {
+        var c = state.srs[mistakeKey(m)];
+        return m.fix && (!c || !c.due || c.due <= now);
+      })
+      .slice(0, limit || 20);
+  }
+
+  function gradeMistake(m, ok) {
+    var key = mistakeKey(m);
+    state.srs[key] = PARLA.srs.grade(state.srs[key], ok ? 4 : 1);
+    state.progress.totals.reviews++;
+    save();
+  }
+
   function forgetAll() {
     state.memory = { name: '', facts: [] };
     save();
@@ -258,6 +325,10 @@ window.PARLA = window.PARLA || {};
     today: today,
     creditDay: creditDay,
     remember: remember,
+    rememberMistake: rememberMistake,
+    dueMistakes: dueMistakes,
+    gradeMistake: gradeMistake,
+    mistakeKey: mistakeKey,
     rememberPhrase: rememberPhrase,
     addWord: addWord,
     forgetAll: forgetAll,

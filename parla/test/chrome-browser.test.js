@@ -13,7 +13,7 @@ const BASE = 'http://localhost:' + (process.argv[2] || 8765);
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};
 
-const VIEWS = ['home','scenarios','coach','words','review','games','conjugate','challenge','progress'];
+const VIEWS = ['home','scenarios','coach','words','review','grammar','games','conjugate','challenge','progress'];
 
 async function boot(browser, viewport) {
   const page = await (await browser.newContext({ viewport, deviceScaleFactor: 2, hasTouch: true })).newPage();
@@ -91,8 +91,9 @@ async function boot(browser, viewport) {
   await page.locator('#navMore').click();
   await page.waitForTimeout(400);
   const items = await page.locator('.sheet-item').allInnerTexts();
-  check('More holds the other four screens, and Settings',
-    items.length === 5 && /Settings/.test(items.join(' ')), items.join(' / ').replace(/\n/g, ' '));
+  check('More holds the screens that did not fit, and Settings',
+    items.length === VIEWS.length - 5 + 1 && /Settings/.test(items.join(' ')),
+    items.join(' / ').replace(/\n/g, ' '));
   check('the sheet is above the page, not behind it',
     await page.evaluate(() => {
       const s = document.getElementById('moreSheet'), sc = document.getElementById('sheetScrim');

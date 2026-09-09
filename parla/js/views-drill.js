@@ -155,6 +155,20 @@ window.PARLA = window.PARLA || {};
     // Wraps, because six review modes plus two chips is 480 pixels of controls
     // and a phone is 412 wide. On a phone the modes drop to their own line and
     // all six fit; on a desktop it stays one row.
+    // Mistakes are due before words are. Being corrected and then never made
+    // to produce the fix is where most language apps quietly give up.
+    var dueFix = PARLA.store.dueMistakes(50);
+    if (dueFix.length) {
+      main.appendChild(el('button.fix-banner', { onclick: function () { PARLA.app.go('fix'); } },
+        el('div.row',
+          el('span.fix-emoji', '🎯'),
+          el('div',
+            el('div.fix-title', dueFix.length + ' of your own mistakes are due'),
+            el('div.small.muted', 'Sentences you got wrong, to write out correctly.')),
+          el('div.spacer'),
+          el('span.chip.hot', 'Fix →'))));
+    }
+
     var head = el('div.row.wrap.drill-head', { style: { marginBottom: '10px' } });
     var counter = el('span.chip');
     var streakChip = el('span.chip.good', { hidden: true });

@@ -311,6 +311,17 @@ window.PARLA = window.PARLA || {};
   var INFLECTABLE = { n: 1, adj: 1, interj: 1, prop: 1, other: 1, num: 1 };
 
   /* ── Nouns and adjectives ─────────────────────────────────*/
+  /* The plural of a Spanish singular, so a proposed singular can be checked by
+   * going forwards again. "mesas" strips to "mes" as readily as to "mesa", but
+   * the plural of "mes" is "meses" — so only one of the two survives the test,
+   * and without it "las mesas" reads as masculine. */
+  function pluralOf(sg) {
+    if (/[aeiouáéíóú]$/.test(sg)) return sg + 's';
+    if (/z$/.test(sg)) return sg.slice(0, -1) + 'ces';
+    if (/[íú]$/.test(sg)) return sg + 'es';
+    return sg + 'es';
+  }
+
   function singulars(word) {
     var out = [];
     if (/ces$/.test(word)) out.push(word.slice(0, -3) + 'z');       // luces -> luz
@@ -325,7 +336,11 @@ window.PARLA = window.PARLA || {};
       if (/es$/.test(base)) out.push(base.replace(/es$/, 'és'));
     }
     if (/s$/.test(word)) out.push(word.slice(0, -1));                // casas -> casa
-    return out;
+    // Keep only the ones that pluralise back to what was actually written.
+    var kept = out.filter(function (sg) {
+      return sg.length > 1 && deaccent(pluralOf(sg)) === deaccent(word);
+    });
+    return kept.length ? kept : out;
   }
 
   function masculines(word) {
@@ -423,11 +438,23 @@ window.PARLA = window.PARLA || {};
     if (/as$/.test(word)) masculines(word.slice(0, -1)).forEach(function (m) { femBases.push(m); });
     femBases.forEach(function (m) {
       var e = D.get(m);
-      if (e && INFLECTABLE[e.pos] && D.fold(e.term) === D.fold(m)) {
-        out.push({ lemma: e.term, pos: e.pos, en: e.en, entry: e, surface: word,
-                   gender: 'f', number: /as$/.test(word) ? 'plural' : 'singular',
-                   why: 'feminine' + (/as$/.test(word) ? ' plural' : '') + ' of ' + e.term });
-      }
+      if (!e || !INFLECTABLE[e.pos] || D.fold(e.term) !== D.fold(m)) return;
+      /* Which masculines actually have a feminine in -a?
+       *  - anything in -o: niño -> niña, blanco -> blanca
+       *  - agent and nationality endings: profesor -> profesora,
+       *    alemán -> alemana, inglés -> inglesa, bailarín -> bailarina
+       *  - adjectives, which the dictionary can vouch for
+       * Nothing else. Without this, "mesas" is read as the feminine plural of
+       * "mes", the month, and every table in Spanish becomes masculine. */
+      // Tested on the dictionary's own spelling, accents included: the
+      // nationality and agent endings are -ón, -án, -és, -ín and -or. Folding
+      // the accents away first would let "mes" pass as if it were "inglés".
+      var term = e.term.toLowerCase();
+      var plausible = /o$/.test(term) || /(ón|án|és|ín|or)$/.test(term) || e.pos === 'adj';
+      if (!plausible) return;
+      out.push({ lemma: e.term, pos: e.pos, en: e.en, entry: e, surface: word,
+                 gender: 'f', number: /as$/.test(word) ? 'plural' : 'singular',
+                 why: 'feminine' + (/as$/.test(word) ? ' plural' : '') + ' of ' + e.term });
     });
 
     /* 6. -mente adverbs are built on the feminine of an adjective. */

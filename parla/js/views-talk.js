@@ -649,14 +649,14 @@ window.PARLA = window.PARLA || {};
       p.totals.minutes += mins;
       p.totals.corrections += session.corrections.length;
 
+      // Straight into the schedule, not into a journal nobody reads.
       session.corrections.forEach(function (c) {
         if (!c.fixed) return;
-        st.mistakes.unshift({
-          es: c.original, fix: c.fixed, note: c.note,
-          when: Date.now(), scenario: sc.id
+        PARLA.store.rememberMistake({
+          es: c.original, fix: c.fixed, note: c.note, topic: c.topic || null,
+          scenario: sc.id, from: 'conversation'
         });
       });
-      st.mistakes = st.mistakes.slice(0, 200);
 
       st.history.unshift({
         when: Date.now(), scenarioId: sc.id, turns: session.turns, xp: xp

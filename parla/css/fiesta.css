@@ -890,3 +890,56 @@ button:active { transform: scale(.97); }
 
 .session-row .session-title { font-weight: 700; }
 .session-row .small { margin-top: 2px; }
+
+/* ── Mistakes, and the grammar behind them ────────────────────*/
+.fix-banner {
+  display: block; width: 100%; text-align: left; margin-bottom: 14px;
+  padding: 14px; border-radius: var(--r-md);
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--rosa) 12%, var(--card)),
+    color-mix(in srgb, var(--naranja) 10%, var(--card)));
+  border: 1px solid color-mix(in srgb, var(--rosa) 35%, transparent);
+}
+.fix-banner .row { gap: 12px; align-items: center; }
+.fix-emoji { font-size: 1.7rem; line-height: 1; flex: none; }
+.fix-title { font-weight: 700; }
+.fix-banner .small { font-weight: 400; }
+
+.fix-wrong {
+  font-family: var(--serif); font-size: 1.15rem; line-height: 1.35;
+  padding: 10px 12px; margin: 8px 0;
+  border-radius: var(--r-sm);
+  background: var(--bad-soft); color: var(--ink);
+  text-decoration: line-through; text-decoration-color: var(--bad);
+  text-decoration-thickness: 1px;
+}
+
+.gram-card {
+  display: block; width: 100%; text-align: left;
+  padding: 13px 15px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.gram-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.gram-title { font-weight: 700; font-size: 1rem; }
+.gram-sub { font-size: .82rem; color: var(--ink-soft); font-weight: 400; margin-top: 2px; }
+.gram-q { font-size: 1.35rem; margin: 10px 0 4px; }
+
+.rule-card { border-left: 3px solid var(--accent); }
+.rule-line { font-size: 1.05rem; font-weight: 600; line-height: 1.4; margin-top: 4px; }
+
+.pair {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 10px; border-radius: var(--r-sm); background: var(--card);
+  border: 1px solid var(--line-soft);
+}
+.pair-side { min-width: 0; }
+.pair-side.wrong .pair-es { color: var(--bad); }
+.pair-es { font-family: var(--serif); font-size: 1rem; }
+.pair-x { color: var(--bad); font-weight: 800; }
+.pair .row { gap: 6px; align-items: baseline; }
+
+@media (max-width: 560px) {
+  .pair { grid-template-columns: 1fr; gap: 6px; }
+  .pair-side + .pair-side { border-top: 1px dashed var(--line); padding-top: 6px; }
+  .gram-q { font-size: 1.15rem; }
+}

@@ -96,6 +96,9 @@ get simpler; nothing breaks.
 | Chatbot | **Workers AI**, via `/api/chat` | Ollama (qwen2.5:7b) |
 | Voice | Android's Spanish voices | **Piper** neural voice |
 | Dictionary — 31,000 words | yes, offline after first load | yes |
+| Grammar checker | yes, offline, no model needed | yes |
+| Your mistakes, scheduled | yes | yes |
+| 20 grammar lessons | yes | yes |
 | Word bank and frequency bands | yes | yes |
 | Flash cards, SRS, review | yes | yes |
 | Games (Pairs, Word rush, El or la, Dictation) | yes | yes |

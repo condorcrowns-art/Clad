@@ -46,6 +46,9 @@ python3 -m http.server 8000
 | **31,000-word dictionary** | Meaning, gender, register and where it is said — offline, built from open Wiktionary and subtitle-corpus data |
 | **Any form of any word** | Type `pidiéndoselo` and get *pedir*, gerund, with *se* and *lo* on the end. Conjugations, plurals, feminines, `-mente`, `-ísimo`, diminutives, attached pronouns |
 | **Frequency bands** | The words ordered by how often people actually say them, so "how much Spanish do I know" has a real answer |
+| **A grammar checker that is not a model** | Agreement, conjugation, ser/estar, por/para, the personal a — decided from the dictionary and the morphology engine, offline, at 0 false positives across every sentence the app ships |
+| **Your mistakes come back** | Every correction is scheduled. The sentence you got wrong returns until you can write it correctly from memory — the half of the loop most apps drop |
+| **20 grammar lessons** | The places English pulls you the wrong way, each with the rule, why you get it wrong, minimal pairs and a drill. Sorted by what you keep getting wrong |
 | **521 curated words** | With native audio, gendered articles, and a real example sentence each |
 | **Spaced repetition** | Full SM-2. Words you miss come back tomorrow; words you nail vanish for months |
 | **Conjugation trainer** | Any verb × 11 tenses × 6 persons from rules — stem changes, spelling rules, compounds of the irregulars, imperatives, participles and gerunds. Vosotros is off by default; it is Spain-only |
@@ -518,6 +521,7 @@ js/
   srs.js              SM-2 spaced repetition
   dict.js             the dictionary at runtime: lazy load, index, search, bands
   morph.js            any Spanish form worked back to the word you look up
+  grammar.js          the checker: agreement and conjugation decided, not guessed
   brain.js            four backends behind one interface, model auto-pick,
                       JSON retry, and the offline corrector
   ui.js               tiny DOM toolkit
@@ -526,6 +530,8 @@ js/
   views-coach.js      the Ask screen: any word, meaning, conjugation, pitfalls
   views-games.js      Pairs, Word rush, El or la, Dictation
   views-words.js      the word bank: 31,000 words by frequency band
+  views-grammar.js    the twenty lessons, and one lesson with its drill
+  views-fix.js        the sentences you got wrong, to write out correctly
   views-progress.js   home, 60-day grid, stats, mistake journal, settings
   app.js              router + bootstrap
 functions/
@@ -553,6 +559,8 @@ test/
   mic-browser.test.js     every way a microphone fails, and the mural geometry
   suggest.test.js         being stuck, with and without a model
   fiesta.test.js          the ornament must not break the app
+  grammar.test.js         the checker: what it catches, and what it leaves alone
+  fix-browser.test.js     one mistake followed all the way round the loop
   verbs.test.js           every conjugation rule, form by form
   dict.test.js            the dictionary, and working any form back to a lemma
   words-browser.test.js   the word bank and the dictionary-backed Ask screen
@@ -567,6 +575,40 @@ test/
                           functions/api/chat.js against a faked AI binding
   piper-browser.test.js   the whole thing in a real browser
 ```
+
+## Being corrected, and it mattering
+
+The loop the whole app is built on is: say something, be corrected, produce the
+fix again later from memory. The third part is the one that teaches, and it is
+the one language apps quietly skip.
+
+**The correction** comes from `js/grammar.js` before it comes from a model.
+Agreement is a decidable question once you know a word's gender, number and
+person — and after the dictionary and the morphology engine, the app knows
+both. So it does not guess: `la problema` is wrong because *problema* is
+masculine, `yo tiene` is wrong because *tiene* is third person, and the
+correction says which rule it applied rather than paraphrasing a hunch. It runs
+in under a millisecond, offline, with no model at all.
+
+Its bar is zero false positives. A learner told their correct Spanish was wrong
+learns something false and stops trusting the tool, so every rule needs positive
+evidence and stands down without it — and `test/grammar.test.js` runs the whole
+checker over every Spanish sentence the app ships, about eight hundred of them,
+and fails if a single one is flagged. Where the model proposes a fix the rules
+disagree with, the rules win: a small model "correcting" good Spanish is the
+most damaging thing this app could do.
+
+**The schedule** is the same SM-2 deck as vocabulary. Every correction becomes a
+card keyed on the sentence you actually wrote. Get it right and it goes away for
+four days; get it wrong and it is back tomorrow. Making the same mistake twice
+moves it up the queue rather than filing it twice.
+
+**The lesson** behind it is one tap away. `js/data/grammar-es.js` is twenty
+points where English pulls you the wrong way — ser/estar, gustar running
+backwards, the two past tenses, por/para, the personal a, the subjunctive — each
+with the rule in one sentence, why your English causes the mistake, minimal
+pairs, and a drill whose wrong answers are the ones a learner would actually
+give. The grammar screen sorts them by what the checker has caught you doing.
 
 ## Where the words come from
 
@@ -628,6 +670,7 @@ node test/coach.test.js            # the Ask screen's answers
 node test/suggest.test.js          # what to say when you are stuck
 node test/english.test.js          # English as a teaching moment
 node test/casting.test.js          # voices matched to characters
+node test/grammar.test.js          # the checker, and its zero-false-positive bar
 node test/verbs.test.js            # conjugation, form by form, against real Spanish
 node test/dict.test.js             # the dictionary, and unpicking any word form
 node test/hosted.test.js           # the Workers AI partner, and what happens without it
@@ -650,6 +693,7 @@ node test/coach-browser.test.js 8765        # the Ask screen and the flip cards
 node test/games-browser.test.js 8765        # all four games, played through, on a phone
 node test/words-browser.test.js 8765        # the word bank, and Ask with a dictionary behind it
 node test/chrome-browser.test.js 8765       # the nav, hover states, and nothing off the side
+node test/fix-browser.test.js 8765          # corrected, scheduled, surfaced, fixed
 ```
 
 The hosted partner has its own server, because the thing worth testing is the
