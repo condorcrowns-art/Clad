@@ -58,19 +58,22 @@ window.PARLA = window.PARLA || {};
       main.appendChild(list);
     });
 
+    /* A row rather than one big button, because both ways into a text are
+     * worth offering from here — and a button inside a button is not HTML. */
     function card(t) {
       var p = progressOf(t.id);
-      return el('button.read-card' + (p ? '.read-done' : ''),
-        { onclick: function () { PARLA.app.go('text', { id: t.id }); } },
-        el('div.read-main',
-          el('div.read-title', t.title),
-          el('div.read-blurb', t.blurb),
-          el('div.read-meta',
-            el('span', t.minutes + ' min'),
-            el('span', t.lines.length + ' lines'),
-            p && p.asked ? el('span.chip.good', '📖 ' + p.right + '/' + p.asked) : null,
-            p && p.heardAsked ? el('span.chip.good', '🎧 ' + p.heardRight + '/' + p.heardAsked) : null)),
-        el('span.read-go', p ? '↺' : '→'));
+      return el('div.read-card' + (p ? '.read-done' : ''),
+        el('button.read-open', { onclick: function () { PARLA.app.go('text', { id: t.id }); } },
+          el('div.read-main',
+            el('div.read-title', t.title),
+            el('div.read-blurb', t.blurb),
+            el('div.read-meta',
+              el('span', t.minutes + ' min'),
+              el('span', t.lines.length + ' lines'),
+              p && p.asked ? el('span.chip.good', '📖 ' + p.right + '/' + p.asked) : null,
+              p && p.heardAsked ? el('span.chip.good', '🎧 ' + p.heardRight + '/' + p.heardAsked) : null))),
+        el('button.read-hear', { title: 'Listen to it without the text',
+          onclick: function () { PARLA.app.go('listen', { id: t.id }); } }, '🎧'));
     }
 
     return main;

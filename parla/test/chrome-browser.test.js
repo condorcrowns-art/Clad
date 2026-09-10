@@ -13,7 +13,7 @@ const BASE = 'http://localhost:' + (process.argv[2] || 8765);
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};
 
-const VIEWS = ['home','scenarios','coach','words','review','grammar','say','read','games','conjugate','challenge','progress'];
+const VIEWS = ['home','scenarios','read','review','coach','words','grammar','say','games','conjugate','challenge','progress'];
 
 async function boot(browser, viewport) {
   const page = await (await browser.newContext({ viewport, deviceScaleFactor: 2, hasTouch: true })).newPage();

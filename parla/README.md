@@ -821,6 +821,26 @@ node test/hosted-browser.test.js 8803 flaky
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
 
+## Two design tokens that were never there
+
+`--card` and `--r-md` were used by eleven rules in `css/fiesta.css` and defined
+by nothing. An undefined custom property does not fall back — the whole
+declaration is thrown out — so every card built on them rendered square and
+transparent: the reading shelf, the sound cards, the grammar cards, the
+frequency bands. They still had their borders, which is why four screens looked
+plausible enough to survive a visual audit.
+
+`test/fiesta.test.js` now reads the stylesheets off disk and checks that every
+`var(--x)` has a definition, then checks in the browser that a card on each of
+those four screens really does have a radius and a filled background. Both
+checks were verified by deleting the token and watching them fail.
+
+Reading the files rather than walking the CSSOM is deliberate: a shorthand
+holding an unresolved `var()` — `background: var(--card)`, `border-radius:
+var(--r-md)`, exactly the pair that broke — is not enumerable on a rule's style
+declaration, so a CSSOM scan cannot see the thing it is for. The first version
+of this check walked the CSSOM, passed, and was worthless.
+
 ## Keeping what you have built
 
 Everything the app knows about you is in one browser's localStorage. That is

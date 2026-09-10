@@ -138,6 +138,15 @@ window.PARLA = window.PARLA || {};
       quick('🔁', 'Review words', due + ' card' + (due === 1 ? '' : 's') + ' waiting',
         function () { PARLA.app.go('review'); }),
       quick('🧩', 'Drill verbs', 'Conjugation trainer', function () { PARLA.app.go('conjugate'); }),
+      quick('📖', 'Read a story', readBlurb(), function () { PARLA.app.go('read'); }),
+      quick('🎧', 'Listen', hearBlurb(), function () {
+        // Straight into the next one you have not heard. A tile called Listen
+        // that lands you on a list is a tile that lied.
+        var next = (PARLA.data.es.reading || []).filter(function (t) {
+          return !((PARLA.store.state.reading || {})[t.id] || {}).heardAsked;
+        })[0];
+        PARLA.app.go(next ? 'listen' : 'read', next ? { id: next.id } : null);
+      }),
       quick('🎮', 'Play a game', 'Four minutes', function () { PARLA.app.go('games'); }),
       quick('📚', 'Word bank', dictBlurb(), function () { PARLA.app.go('words'); }),
       quick('📐', 'Grammar', grammarBlurb(), function () { PARLA.app.go('grammar'); }),
@@ -297,6 +306,27 @@ window.PARLA = window.PARLA || {};
       return all[id].tries >= 3 && all[id].ok / all[id].tries < 0.7;
     });
     return weak.length ? weak.length + ' to work on' : 'The rr, the j, the ñ';
+  }
+
+  /* Both of these lead with what is left rather than what is done: "9 to go"
+   * is a reason to open the screen and "3 read" is a pat on the back. */
+  function readBlurb() {
+    var all = (PARLA.data.es.reading || []);
+    var done = all.filter(function (t) {
+      return ((PARLA.store.state.reading || {})[t.id] || {}).asked;
+    }).length;
+    if (!all.length) return 'Short stories';
+    if (!done) return all.length + ' short stories';
+    return done === all.length ? 'All ' + all.length + ' read' : (all.length - done) + ' left to read';
+  }
+
+  function hearBlurb() {
+    var all = (PARLA.data.es.reading || []);
+    var done = all.filter(function (t) {
+      return ((PARLA.store.state.reading || {})[t.id] || {}).heardAsked;
+    }).length;
+    if (!done) return 'The same stories, no text';
+    return done === all.length ? 'All ' + all.length + ' heard' : done + ' heard by ear';
   }
 
   function grammarBlurb() {

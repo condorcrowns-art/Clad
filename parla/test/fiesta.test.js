@@ -2,6 +2,8 @@
  * works, it must not break the layout, and it must stop moving when the
  * viewer's operating system asks it to. */
 const { chromium } = require('playwright');
+const fs = require('fs');
+const path = require('path');
 const BASE = 'http://localhost:' + (process.argv[2] || 8765);
 
 const fail = [];
@@ -71,6 +73,55 @@ async function onboard(page) {
   check('confetti is not fired at all', confettiPieces === 0, String(confettiPieces));
   check('but the colour stays', await page.locator('.mural').isVisible());
   await rm.close();
+
+  /* — every colour and radius the stylesheets ask for — */
+  console.log('\nThe design tokens');
+  const tok = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  page = await tok.newPage();
+  await onboard(page);
+  // An undefined custom property does not fall back to anything: the whole
+  // declaration is thrown away. `--card` and `--r-md` were never defined, and
+  // the eleven rules asking for them rendered square and transparent — the
+  // reading shelf, the sound cards, the grammar cards, the frequency bands —
+  // for as long as they had existed, while still looking plausible because
+  // they kept their borders.
+  //
+  // Read from disk rather than through the CSSOM: a shorthand holding an
+  // unresolved var() — `background: var(--card)`, `border-radius: var(--r-md)`,
+  // which is precisely the pair that broke — is not enumerable on a rule's
+  // style declaration, so a CSSOM scan cannot see the very thing it is for.
+  const css = fs.readdirSync(path.join(__dirname, '..', 'css'))
+    .filter(f => f.endsWith('.css'))
+    .map(f => fs.readFileSync(path.join(__dirname, '..', 'css', f), 'utf8'))
+    .join('\n');
+  const used = new Set([...css.matchAll(/var\((--[a-z0-9-]+)/g)].map(m => m[1]));
+  const defined = new Set([...css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map(m => m[1]));
+  // These four are set from JavaScript, on the element, each with a fallback.
+  const fromJs = ['--dur', '--dx', '--spin', '--tile-art'];
+  const undef = [...used].filter(t => !defined.has(t) && fromJs.indexOf(t) === -1);
+  check('every custom property the stylesheets use is defined somewhere',
+    undef.length === 0, undef.join(', '));
+  check('and the scan is looking at the whole file, not a corner of it',
+    used.size > 30 && defined.size > 30, used.size + ' used, ' + defined.size + ' defined');
+
+  const cards = await page.evaluate(async () => {
+    const out = {};
+    for (const [view, sel] of [['read', '.read-card'], ['say', '.sound-card'],
+                               ['grammar', '.gram-card'], ['words', '.band-card']]) {
+      PARLA.app.go(view);
+      await new Promise(r => setTimeout(r, 250));
+      const e = document.querySelector(sel);
+      if (!e) { out[view] = 'missing'; continue; }
+      const c = getComputedStyle(e);
+      out[view] = { r: parseFloat(c.borderRadius), bg: c.backgroundColor };
+    }
+    return out;
+  });
+  check('and every card actually has a rounded, filled surface',
+    Object.keys(cards).every(k => cards[k] !== 'missing' && cards[k].r > 0 &&
+      !/rgba\(0, 0, 0, 0\)/.test(cards[k].bg)),
+    JSON.stringify(cards));
+  await tok.close();
 
   /* — without the decoration at all — */
   console.log('\nWithout decor.js');
