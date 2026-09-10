@@ -491,6 +491,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 .grid .scenario { height: 100%; align-items: flex-start; }
 .grid .scenario .emoji { margin-top: 1px; }
+/* A long chip on the end — "me llamo / ¿cómo te llamas?" — used to hold its
+   full width and squeeze the title into a four-line column beside it. Below
+   this width the chip drops to its own line instead. */
+@media (max-width: 560px) {
+  .scenario:not(.grid .scenario) { flex-wrap: wrap; }
+  /* The title claims most of the line so the chip has nowhere to sit and wraps
+     below it — at its own width, not stretched across the card like a banner,
+     which is what flex-basis:100% on the chip itself would have done. */
+  .scenario:not(.grid .scenario) > .txt { flex: 1 1 62%; }
+  .scenario:not(.grid .scenario) > .chip { flex: 0 0 auto; margin-top: 4px; }
+}
 .level-tag {
   font-size: .66rem; font-weight: 800; letter-spacing: .06em;
   padding: 2px 7px; border-radius: 999px; text-transform: uppercase;

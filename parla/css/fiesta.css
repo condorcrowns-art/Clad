@@ -1169,3 +1169,38 @@ button:active { transform: scale(.97); }
   .write-box { font-size: 1rem; min-height: 115px; }
   .write-model .es { font-size: .98rem; }
 }
+
+/* ── The day's second task ────────────────────────────────────*/
+.second-label {
+  margin: 14px 0 6px;
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-faint);
+}
+/* Deliberately quieter than the day's conversation button: speaking is still
+   the spine of the plan and this is the "and then". */
+.second-task {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--bg-sunken); border: 1px solid var(--line-soft);
+}
+.second-task:hover { background: var(--accent-soft); border-color: var(--accent); }
+.second-task.second-done { opacity: .72; }
+.second-icon { flex: none; font-size: 1.25rem; line-height: 1; }
+.second-main { flex: 1; min-width: 0; display: block; }
+.second-what {
+  display: block; font-size: .68rem; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ink-faint);
+}
+.second-title { display: block; font-weight: 600; line-height: 1.3; }
+.second-sub {
+  display: block; font-size: .78rem; font-weight: 400; color: var(--ink-soft);
+  line-height: 1.35;
+  /* Two lines at most: a blurb that runs to four makes the card taller than
+     the conversation it is meant to sit under. */
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.second-go { flex: none; color: var(--ink-faint); }
+
+@media (max-width: 560px) {
+  .second-task { padding: 9px 10px; gap: 9px; }
+}

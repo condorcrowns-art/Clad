@@ -131,6 +131,34 @@ async function boot(browser, viewport) {
     check(v + ' fits the screen', over <= 0, over + 'px over — ' + worst);
   }
 
+  /* ── The day's second task ─────────────────────────────── */
+  console.log('\nThe plan is as wide as the app\n');
+  await goTo(page, 'home');
+  await page.waitForTimeout(300);
+  const second = page.locator('.second-task').first();
+  check('the day card offers a second thing to do', await second.isVisible());
+  check('saying what kind it is', /WRITE|READ|LISTEN|GRAMMAR|SOUND/i.test(await second.innerText()),
+    (await second.innerText()).replace(/\n/g, ' | '));
+  // Sixty days of nothing but conversation meant a learner following the plan
+  // never opened four of the six things the app can teach.
+  await second.click();
+  await page.waitForTimeout(500);
+  check('and it goes somewhere real', /#(text|listen|task|sound|lesson)\//.test(
+    await page.evaluate(() => location.hash)),
+    await page.evaluate(() => location.hash));
+
+  await goTo(page, 'challenge');
+  await page.waitForTimeout(400);
+  check('the coming-up list carries them too',
+    (await page.locator('.second-task').count()) >= 5,
+    String(await page.locator('.second-task').count()));
+  // A long focus chip used to hold its full width and squeeze the day title
+  // into a four-line column beside it.
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll('.scenario')].map(e => Math.round(e.getBoundingClientRect().height)));
+  check('and no day row is squeezed taller than the rest',
+    rows.length > 1 && Math.max(...rows) - Math.min(...rows) < 30, rows.join(' '));
+
   /* ── Text that has to be readable ──────────────────────── */
   console.log('\nLegibility\n');
   await goTo(page, 'home');

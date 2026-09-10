@@ -125,6 +125,11 @@ window.PARLA = window.PARLA || {};
         onclick: function () { PARLA.app.go('talk', { id: d[3], day: day }); }
       }, doneToday ? 'Practise again' : 'Start day ' + (day + 1))
     );
+    var second = secondCard(d);
+    if (second) {
+      card.appendChild(el('div.second-label', 'And then'));
+      card.appendChild(second);
+    }
     main.appendChild(card);
 
     /* quick actions */
@@ -213,6 +218,88 @@ window.PARLA = window.PARLA || {};
 
   /* ── 60-day challenge ───────────────────────────────────── */
 
+  /* ── The day's second task ────────────────────────────────
+   *
+   * Sixty days of nothing but conversation meant a learner who followed the
+   * plan never opened the reading, the listening, the writing or the sounds.
+   * Each day now carries a second thing to do, and this resolves it into
+   * something the screen can render: a label, where it goes, and whether it
+   * has already been done.
+   *
+   * "Done" is read off the target's own progress rather than stored again —
+   * a text you have already read is read, whether the challenge sent you there
+   * or you found it yourself.
+   */
+  function secondTask(day) {
+    var pair = day && day[5];
+    if (!pair) return null;
+    var kind = pair[0], id = pair[1];
+    var d = PARLA.data.es;
+    var st = PARLA.store.state;
+
+    if (kind === 'read' || kind === 'listen') {
+      var text = (d.readingById || {})[id];
+      if (!text) return null;
+      var r = (st.reading || {})[id] || {};
+      return {
+        kind: kind, icon: kind === 'read' ? '📖' : '🎧',
+        what: kind === 'read' ? 'Read' : 'Listen, with the text hidden',
+        title: text.title,
+        sub: text.minutes + ' min · ' + text.blurb,
+        done: kind === 'read' ? !!r.asked : !!r.heardAsked,
+        go: function () { PARLA.app.go(kind === 'read' ? 'text' : 'listen', { id: id }); }
+      };
+    }
+    if (kind === 'write') {
+      var task = (d.writingById || {})[id];
+      if (!task) return null;
+      return {
+        kind: kind, icon: '✍️', what: 'Write',
+        title: task.ask, sub: task.en,
+        done: !!(st.writing || {})[id],
+        go: function () { PARLA.app.go('task', { id: id }); }
+      };
+    }
+    if (kind === 'sound') {
+      var snd = (d.soundsById || {})[id];
+      if (!snd) return null;
+      var sc = (st.sounds || {})[id];
+      return {
+        kind: kind, icon: '👄', what: 'Work on a sound',
+        title: snd.title, sub: snd.letters,
+        done: !!(sc && sc.tries >= 4),
+        go: function () { PARLA.app.go('sound', { id: id }); }
+      };
+    }
+    if (kind === 'lesson') {
+      var les = (d.grammar || []).filter(function (g) { return g.id === id; })[0];
+      if (!les) return null;
+      var gs = (st.grammar || {})[id];
+      return {
+        kind: kind, icon: '📐', what: 'Grammar',
+        title: les.title, sub: les.sub || les.rule,
+        done: !!(gs && gs.tries >= 3),
+        go: function () { PARLA.app.go('lesson', { id: id }); }
+      };
+    }
+    return null;
+  }
+
+  /* The card that offers it. Deliberately quieter than the day's conversation:
+   * speaking is still the spine of the plan and this is the "and then". */
+  function secondCard(day) {
+    var x = secondTask(day);
+    if (!x) return null;
+    return el('button.second-task' + (x.done ? '.second-done' : ''),
+      { onclick: x.go },
+      el('span.second-icon', x.icon),
+      el('span.second-main',
+        el('span.second-what', x.what + (x.done ? ' · done' : '')),
+        el('span.second-title' + (x.kind === 'write' ? '.es' : ''), x.title),
+        el('span.second-sub', x.sub)),
+      el('span.second-go', x.done ? '↺' : '→'));
+  }
+
   function viewChallenge() {
     init();
     var st = PARLA.store.state;
@@ -223,8 +310,9 @@ window.PARLA = window.PARLA || {};
 
     main.appendChild(el('h1', 'The 60-day speaking challenge'));
     main.appendChild(el('p.muted',
-      'One conversation a day, getting harder. Days unlock as you finish them, ' +
-      'so a missed day costs you nothing but time.'));
+      'One conversation a day, getting harder, and a second thing to go with it — ' +
+      'a story to read, a sound to fix, something to write. Days unlock as you ' +
+      'finish them, so a missed day costs you nothing but time.'));
 
     main.appendChild(el('div.grid.three.tight', { style: { marginBottom: '18px' } },
       ui.stat(done.length, 'days done'),
@@ -267,6 +355,8 @@ window.PARLA = window.PARLA || {};
             el('span', d[1])),
           el('span.chip', d[2])
         ));
+        var second = secondCard(d);
+        if (second) list.appendChild(second);
       })(j);
     }
     main.appendChild(list);

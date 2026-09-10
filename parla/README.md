@@ -822,6 +822,44 @@ node test/hosted-browser.test.js 8803 flaky
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
 
+## The plan is now as wide as the app
+
+The sixty-day challenge is the spine: it is on the home screen, it has its own
+tab, and it is what someone who wants to be told what to do will follow. It had
+quietly become narrower than everything around it — sixty days of nothing but
+conversation meant a learner following it literally never opened the reading,
+the listening, the writing or the sounds. Four of the six things Parla can
+teach, invisible to the person most likely to do as they are told.
+
+Every day now carries a second task, sitting quietly under the day's
+conversation as *and then*. Speaking is still the spine; this is the "and
+then". Where it can, it matches the day: day 9 is *me gusta* and its second
+task is the lesson on gustar running backwards, day 23 is the preterite of *ir*
+and its second task is writing about last weekend, day 41 is imperatives and
+its second task is writing three pieces of advice for a friend visiting your
+country.
+
+Two rules the plan keeps:
+
+* **A text is read before it is heard.** *El perro del tercero* on day 7, and
+  again on day 19 with the text hidden. Listening to something you have never
+  seen is the hardest version of the exercise and a plan that starts there is a
+  plan people give up on.
+* **The sounds do not pretend.** A sound does not map onto a conversation
+  topic, so they are simply spread evenly and all ten get a turn, rather than
+  being given a fake justification.
+
+Done-ness is read off the target's own progress rather than stored twice: a
+text you have already read is read, whether the challenge sent you there or you
+found it yourself.
+
+`test/challenge.test.js` checks the pairing holds — every kind is used, every
+one of the ten sounds appears, the subjunctive is in the second half and after
+the preterite, no day repeats another — and above all that **every one of the
+sixty ids resolves**. A second task pointing at a renamed text is a dead card
+on the home screen that does not throw; it just quietly renders nothing. The
+check found one on its first run.
+
 ## Somewhere to write
 
 Speaking is production, but it is production under time pressure: you say the
