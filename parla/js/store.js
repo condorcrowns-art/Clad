@@ -82,6 +82,8 @@ window.PARLA = window.PARLA || {};
       // What has been read, and how the comprehension questions went.
       // id -> { read: ms, right: n, asked: n }
       reading: {},
+      // id -> { when, tries, caught, clean }
+      writing: {},
       srs: {},                // word -> { ease, interval, due, reps, lapses }
       mistakes: [],           // { es, fix, note, topic, when, times, scenario }
       phrases: [],            // { es, en, when } - phrases you reached for and could not say
@@ -299,6 +301,22 @@ window.PARLA = window.PARLA || {};
     save();
   }
 
+  /* Finishing a writing task. `caught` is how many sentences the rules had
+   * something to say about — zero is worth recording as its own thing, since
+   * "nothing fired" is the result you are working towards. */
+  function markWritten(id, caught) {
+    var w = state.writing || (state.writing = {});
+    var was = w[id] || {};
+    w[id] = {
+      when: Date.now(),
+      tries: (was.tries || 0) + 1,
+      caught: caught || 0,
+      clean: caught === 0 || !!was.clean
+    };
+    save();
+    return w[id];
+  }
+
   /* Finishing a text by ear. Kept apart from the reading score because
    * understanding a text you only heard is a different result from
    * understanding one you could look at. */
@@ -406,6 +424,19 @@ window.PARLA = window.PARLA || {};
           if (v) out[k] = v;
         });
       state.reading[id] = out;
+    });
+
+    state.writing = state.writing || {};
+    Object.keys(incoming.writing || {}).forEach(function (id) {
+      var t = incoming.writing[id], mine = state.writing[id];
+      if (!t) return;
+      state.writing[id] = {
+        when: Math.max((mine && mine.when) || 0, t.when || 0),
+        tries: Math.max((mine && mine.tries) || 0, t.tries || 0),
+        caught: Math.min((mine && mine.caught != null) ? mine.caught : 99,
+                         t.caught != null ? t.caught : 99),
+        clean: !!((mine && mine.clean) || t.clean)
+      };
     });
 
     /* — per-sound and per-lesson scores: keep whichever was practised more — */
@@ -520,6 +551,7 @@ window.PARLA = window.PARLA || {};
     addWord: addWord,
     markRead: markRead,
     markHeard: markHeard,
+    markWritten: markWritten,
     mergeJSON: mergeJSON,
     forgetAll: forgetAll,
     level: level,

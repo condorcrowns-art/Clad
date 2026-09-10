@@ -800,6 +800,7 @@ node test/fix-browser.test.js 8765          # corrected, scheduled, surfaced, fi
 node test/say-browser.test.js 8765          # a wrong sound, named and coached
 node test/read-browser.test.js 8765        # a story, tapped, heard and answered
 node test/hear-browser.test.js 8765        # the same story with the text withheld
+node test/write-browser.test.js 8765       # write badly, be caught, be re-drilled
 node test/transfer-browser.test.js 8765    # two devices, one deck, nothing lost
 ```
 
@@ -820,6 +821,66 @@ node test/hosted-browser.test.js 8803 flaky
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
+
+## Somewhere to write
+
+Speaking is production, but it is production under time pressure: you say the
+sentence you can reach rather than the one you mean, and the partner fills the
+silence before you have found it. Writing is where you find out what you can
+actually build.
+
+Twenty-four tasks in `js/data/writing-es.js`, each built around one thing an
+English speaker has to get right and would rather avoid, with the prompt chosen
+so you cannot answer it without meeting that thing. *¿Qué te gusta hacer los
+fines de semana?* cannot be answered without gustar running backwards. *Cuenta
+un viaje que hiciste* cannot be answered without the preterite against the
+imperfect in the same paragraph. *¿Qué cambiarías de tu vida si pudieras?*
+cannot be answered without si + imperfect subjunctive and a conditional.
+
+Everything you write goes through `brain.correctOffline` — the grammar checker,
+offline, instant — and every sentence it catches is written straight into the
+same spaced-repetition queue as a mistake made out loud, so it comes back in a
+day or two and you have to produce the fix from memory. Anything short of that
+is a spell-checker.
+
+Two things the screen is careful to be honest about, because a tool that
+oversells itself teaches you to distrust it where it could have helped:
+
+* **It checks the mechanics, not the meaning.** Agreement, person, ser against
+  estar, gustar being backwards. It cannot tell you your sentence does not
+  answer the question, or that nobody would phrase it that way.
+* **Silence is not approval.** "Nothing to fix" means no rule fired, which the
+  screen says in those words. The two model answers are always shown
+  afterwards, and they are the part that covers what rules cannot.
+
+Writing the prompts found four more bugs, three in the checker and one in the
+dictionary:
+
+* **The dictionary gendered common-gender people.** *Cliente* was filed
+  feminine and *paciente* masculine — the source picks one at random — so the
+  app taught an article that is wrong half the time and the checker "corrected"
+  *los clientes* to *las clientes*. A hundred-odd nouns for people whose form
+  does not change are marked `mf` now, which makes the checker stand down on
+  them. It is a list and not a rule, because the endings do not separate them:
+  *puente*, *diente*, *ambiente* and *fuente* have real genders worth keeping,
+  and *revista* and *pista* are not people at all.
+* **`es solo una herramienta` was corrected to `está solo`.** Before a noun
+  phrase, *solo* is the adverb *only*; the adjective *alone* comes at the end
+  of its clause, which is the *estoy solo* the rule was for.
+* **Corrections were printed from the folded lookup key**, so fixing *pequeño*
+  produced *pequena*. Folding is fine for finding a word in a table and wrong
+  for printing it back.
+* **`me gusta los libros` was not caught at all** — the commonest mistake an
+  English speaker makes in Spanish, and it survives years, because in English
+  *you* are the subject so the verb never moves. Six backwards verbs are
+  checked now (gustar, encantar, doler, interesar, faltar, importar…), with the
+  exception that keeps the rule teachable: an infinitive after them stays
+  singular, however many activities are listed.
+
+And one rule that was simply missing: *dos hermano*. English marks the plural
+too, so this is not a concept anyone has to learn — it is what people drop while
+concentrating on the verb, which makes it exactly the slip worth catching and
+re-drilling.
 
 ## Two design tokens that were never there
 

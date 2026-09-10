@@ -163,7 +163,9 @@ window.PARLA = window.PARLA || {};
         el('div.row',
           el('span.fix-emoji', '🎯'),
           el('div',
-            el('div.fix-title', dueFix.length + ' of your own mistakes are due'),
+            el('div.fix-title', dueFix.length === 1
+              ? 'One of your own mistakes is due'
+              : dueFix.length + ' of your own mistakes are due'),
             el('div.small.muted', 'Sentences you got wrong, to write out correctly.')),
           el('div.spacer'),
           el('span.chip.hot', 'Fix →'))));

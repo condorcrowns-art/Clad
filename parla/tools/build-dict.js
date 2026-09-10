@@ -313,10 +313,43 @@ async function main() {
     'colega', 'futbolista', 'artista', 'turista', 'periodista', 'dentista',
     'taxista', 'pediatra', 'psiquiatra', 'monarca', 'patriarca', 'insecticida',
     'tequila', 'vodka', 'chachacha'].concat(GREEK_MA));
+  /* Nouns for people whose form does not change: el cliente and la cliente, el
+   * artista and la artista. The source picks one at random — it files
+   * "cliente" as feminine and "paciente" as masculine — and either way the app
+   * then teaches an article that is wrong half the time. Marking them "mf"
+   * makes the grammar checker stand down on them, which is the correct thing
+   * for a word whose article depends on who you are talking about.
+   *
+   * A list rather than a rule, because the endings do not separate them:
+   * "puente", "diente", "ambiente" and "fuente" have real genders worth
+   * keeping, and "revista" and "pista" are not people at all. */
+  const COMMON_GENDER = new Set((
+    'cliente paciente estudiante agente presidente asistente ayudante amante ' +
+    'gerente representante adolescente cantante gigante comerciante dibujante ' +
+    'principiante participante habitante inmigrante emigrante manifestante ' +
+    'aspirante ocupante visitante hablante oyente creyente dirigente docente ' +
+    'delincuente presidenta escribiente pretendiente sirviente descendiente ' +
+    'ascendiente teniente combatiente contribuyente demandante donante ' +
+    'informante integrante mandante practicante remitente terrateniente ' +
+    'artista periodista dentista taxista turista futbolista pianista violinista ' +
+    'guitarrista novelista especialista socialista comunista capitalista ' +
+    'anarquista feminista machista racista terrorista activista alpinista ' +
+    'analista antropólogo ciclista columnista contorsionista deportista ' +
+    'ebanista economista electricista ensayista escapista guionista humorista ' +
+    'idealista ilusionista maquinista masajista modista oculista oportunista ' +
+    'optimista pacifista paisajista pesimista protagonista realista recepcionista ' +
+    'tenista tercerista tradicionista trapecista ventrílocuo violonchelista ' +
+    'poeta atleta guía colega camarada testigo modelo joven mártir cónyuge ' +
+    'homicida suicida psiquiatra pediatra logopeda terapeuta astronauta ' +
+    'burócrata demócrata autócrata monarca patriarca policía centinela ' +
+    'intérprete cómplice partícipe rehén miembro pariente'
+  ).split(' '));
+
   for (const e of list) {
     if (e.pos !== 'n') { e.gender = null; continue; }
     const f = fold(e.term);
     if (f.includes(' ')) continue;
+    if (COMMON_GENDER.has(f)) { e.gender = 'mf'; continue; }
     if (MASC_EXC.has(f)) { e.gender = 'm'; continue; }
     if (FEM_EXC.has(f)) { e.gender = 'f'; continue; }
     if (/(cion|sion|dad|tad|tud|umbre|eza|icie)$/.test(f)) { e.gender = 'f'; continue; }

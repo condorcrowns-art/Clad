@@ -83,6 +83,85 @@ const G = ctx.PARLA.grammar;
     check('“' + s + '”', hits.length === 0, hits.map(h => h.fixed + ' — ' + h.note).join(' | '));
   });
 
+  console.log('\nMore than one of something\n');
+  // English marks the plural too, so this is not a concept anyone has to
+  // learn — it is what people drop while concentrating on the verb, which is
+  // exactly the slip worth catching and re-drilling.
+  [['dos hermano', 'dos hermanos'], ['tres libro', 'tres libros'],
+   ['cinco año', 'cinco años'], ['veinte casa', 'veinte casas'],
+   ['muchos amigo', 'muchos amigos'], ['algunos libro', 'algunos libros'],
+   ['varias cosa', 'varias cosas']
+  ].forEach(([wrong, want]) => {
+    const hits = G.check(wrong).filter(h => !h.soft);
+    check('“' + wrong + '” → “' + want + '”',
+      hits.some(h => h.fixed === want), hits.map(h => h.fixed).join(' | '));
+  });
+  // "muchos amigo" can be fixed either way and only one of them is what anyone
+  // meant. Nobody says "mucho amigo".
+  check('the noun is pluralised, not the quantifier singularised',
+    !G.check('muchos amigo').some(h => /mucho amigo/.test(h.fixed)));
+
+  ['el dos de mayo', 'veinte por ciento', 'dos mil euros', 'son las dos',
+   'tengo veinte años', 'cien por cien', 'muchas gracias', 'pocos días',
+   'un poco sosa', 'mucho gusto', 'dos crisis', 'compré dos entradas'
+  ].forEach(s => {
+    const hits = G.check(s).filter(h => !h.soft);
+    check('“' + s + '” is left alone', hits.length === 0,
+      hits.map(h => h.fixed).join(' | '));
+  });
+
+  console.log('\nGustar agrees with the thing, not with you\n');
+  // The commonest mistake an English speaker makes in Spanish, and it survives
+  // years, because in English *you* are the subject so the verb never moves.
+  [['Me gusta los libros.', 'Me gustan los libros.'],
+   ['Me gustan el libro.', 'Me gusta el libro.'],
+   ['Me duele los pies.', 'Me duelen los pies.'],
+   ['Le interesa los deportes.', 'Le interesan los deportes.'],
+   ['Me falta dos euros.', 'Me faltan dos euros.'],
+   ['Me gustaba los coches.', 'Me gustaban los coches.']
+  ].forEach(([wrong, want]) => {
+    const fixed = G.correct(wrong);
+    check('“' + wrong + '” → “' + want + '”', !!fixed && fixed.fixed === want,
+      fixed ? fixed.fixed : 'nothing');
+  });
+  // An infinitive after it stays singular, however many activities are listed.
+  ['Me gusta el café.', 'Me gustan las tiendas.', 'Me gusta cocinar.',
+   'Me gusta cocinar y salir con mis amigos.', 'Me duele la cabeza.',
+   'Nos encantan las playas.', 'Me gusta mucho el cine.'
+  ].forEach(s => {
+    const hits = G.check(s).filter(h => !h.soft);
+    check('“' + s + '” stands', hits.length === 0, hits.map(h => h.fixed).join(' | '));
+  });
+
+  console.log('\nA correction has to be spelled the way the word is spelled\n');
+  // The stem was taken from the folded lookup key, so correcting "pequeño"
+  // printed "pequena" and taught a misspelling.
+  [['Mi casa es muy pequeño.', 'pequeña'], ['la casa pequeño', 'pequeña'],
+   ['los niños pequeño', 'pequeños'], ['la comida es delicioso', 'deliciosa']
+  ].forEach(([wrong, want]) => {
+    const fixed = G.correct(wrong);
+    check('“' + wrong + '” keeps its ñ and its accents',
+      !!fixed && fixed.fixed.indexOf(want) !== -1, fixed ? fixed.fixed : 'nothing');
+  });
+
+  console.log('\nCommon-gender nouns for people\n');
+  // el cliente and la cliente. The source picks one at random, and either way
+  // the app then teaches an article that is wrong half the time.
+  ['el cliente entró', 'la cliente entró', 'el paciente espera', 'la paciente espera',
+   'la artista es buena', 'el artista es bueno', 'la estudiante llegó tarde'
+  ].forEach(s => {
+    const hits = G.check(s).filter(h => !h.soft);
+    check('“' + s + '” stands', hits.length === 0, hits.map(h => h.fixed).join(' | '));
+  });
+  // And the ones that only look like them keep their real gender.
+  [['la puente', 'el puente'], ['la diente', 'el diente'], ['el fuente', 'la fuente'],
+   ['el gente', 'la gente'], ['la ambiente', 'el ambiente']
+  ].forEach(([wrong, want]) => {
+    const hits = G.check(wrong).filter(h => !h.soft);
+    check('“' + wrong + '” → “' + want + '”', hits.some(h => h.fixed === want),
+      hits.map(h => h.fixed).join(' | '));
+  });
+
   console.log('\nThe four ways a correct sentence used to be flagged\n');
   // Each of these came out of running the graded reading texts through the
   // checker. Every one was the checker's fault, not the sentence's.
@@ -94,7 +173,9 @@ const G = ctx.PARLA.grammar;
     ['Yo miraba el móvil sin leer nada.', 'sin has already done the negating'],
     ['Va del salón al siguiente sin que nadie la toque.', 'la is the object, not an article'],
     ['¿Quién le ayuda primero?', 'ayuda is the verb the pronoun leans on'],
-    ['¿Qué contestó la otra persona primero?', 'primero is an adverb here']
+    ['¿Qué contestó la otra persona primero?', 'primero is an adverb here'],
+    ['Un idioma no es solo una herramienta.', 'solo before a noun phrase is the adverb only'],
+    ['Me encargo de los clientes.', 'cliente is common gender, so no article is wrong']
   ];
   wasFlagged.forEach(([s, why]) => {
     const hits = G.check(s).filter(h => !h.soft);

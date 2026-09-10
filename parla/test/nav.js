@@ -20,7 +20,7 @@ async function goTo(page, view) {
 
 const LABEL = {
   home: 'Home', scenarios: 'Talk', coach: 'Ask', words: 'Words', review: 'Review',
-  grammar: 'Grammar', say: 'Sounds', read: 'Read', games: 'Games', conjugate: 'Verbs', challenge: '60 days', progress: 'Stats',
+  grammar: 'Grammar', say: 'Sounds', read: 'Read', write: 'Write', games: 'Games', conjugate: 'Verbs', challenge: '60 days', progress: 'Stats',
   settings: 'Settings'
 };
 

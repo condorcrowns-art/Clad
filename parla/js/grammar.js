@@ -275,6 +275,16 @@ window.PARLA = window.PARLA || {};
     return stem + (g === 'f' ? 'a' : 'o') + (n === 'p' ? 's' : '');
   }
 
+  /* The form to *print*, built from the word as it was actually written rather
+   * than from its folded lookup key. Folding "pequeño" to "pequeno" is fine
+   * for finding it in a table; printing the correction from that stem told a
+   * learner the word was spelled "pequena". Only the ending is inspected, and
+   * folding never touches the ending, so the shape is the same either way. */
+  function adjFormOf(word, g, n) {
+    var sh = adjShape(word);
+    return sh ? adjForm(sh.stem, g, n) : null;
+  }
+
   /* Folded keys, so "tú" and "tu" are the same string here. They are not the
    * same word — one is "you", the other is "your" — and "tu punto" is not a
    * subject and a verb. The rule below asks the dictionary before it acts. */
@@ -332,6 +342,11 @@ window.PARLA = window.PARLA || {};
       if (det && prev && BARE_PRONOUN[prev.fold] && /^(el|la|los|las)$/.test(t.fold)) det = null;
       if (det && adjacent(t, next)) {
         var n = nounOf(next);
+        // "muchos amigo": both this rule and the plural-after-a-number rule
+        // below can fix it, and they disagree — this one would singularise
+        // "muchos", which is grammatical and almost certainly not what was
+        // meant. Nobody says "mucho amigo". The other rule owns it.
+        if (n && n.number === 's' && PLURAL_NUM[t.fold] && det.n === 'p') n = null;
         if (n && !(det.g !== n.gender && takesElDespiteFeminine(next.fold) && det.fold === 'el')) {
           var wantG = n.gender, wantN = n.number;
           // "el agua": the article is masculine in form, the noun is feminine.
@@ -379,12 +394,34 @@ window.PARLA = window.PARLA || {};
           if (shape && noun.number && (shape.g !== noun.gender || shape.n !== noun.number)) {
             var want = adjForm(shape.stem, noun.gender, noun.number);
             if (want !== next.fold) {
+              want = adjFormOf(next.low, noun.gender, noun.number) || want;
               out.push(finding(text, next, want,
                 'Adjectives copy the noun. “' + noun.lemma + '” is ' +
                 (noun.gender === 'f' ? 'feminine' : 'masculine') +
                 (noun.number === 'p' ? ' plural' : ' singular') + ', so it is “' + want + '”.',
                 'agreement', 8));
             }
+          }
+        }
+      }
+
+      /* 2b. More than one of something takes the plural.
+       *     "dos hermano" -> "dos hermanos". English marks the plural too, so
+       *     this is not a concept anyone has to learn — it is a thing people
+       *     drop while concentrating on the verb, which makes it exactly the
+       *     kind of slip worth catching and re-drilling. */
+      if (adjacent(t, next) && PLURAL_NUM[t.fold]) {
+        // "el dos de mayo", "veinte por ciento", "dos mil euros": a number
+        // followed by another number word or a preposition is not counting the
+        // next noun.
+        var counted = !NOT_COUNTED[next.fold] && !PLURAL_NUM[next.fold];
+        var cn = counted ? nounOf(next) : null;
+        if (cn && cn.number === 's' && !INVARIABLE[next.fold] && !ALWAYS_PLURAL[next.fold]) {
+          var plural = morph().pluralOf(next.low);
+          if (plural && plural !== next.low) {
+            out.push(finding(text, next, plural,
+              'More than one, so the noun is plural: “' + t.low + ' ' + plural + '”.',
+              'agreement', 7));
           }
         }
       }
@@ -439,7 +476,11 @@ window.PARLA = window.PARLA || {};
        *    Generalised: any adjective the dictionary calls a state. */
       if (adjacent(t, next) && (t.fold === 'soy' || t.fold === 'eres' || t.fold === 'es' ||
                    t.fold === 'somos' || t.fold === 'son')) {
-        if (STATE_ADJ[next.fold]) {
+        // "Es solo una herramienta": before anything else in the clause,
+        // "solo" is the adverb "only". The adjective — alone — comes at the
+        // end of its clause, which is the "estoy solo" this rule is for.
+        var adverbialSolo = next.fold === 'solo' && adjacent(next, after);
+        if (STATE_ADJ[next.fold] && !adverbialSolo) {
           var estar = { soy: 'estoy', eres: 'estás', es: 'está', somos: 'estamos', son: 'están' };
           out.push(finding(text, t, estar[t.fold],
             '“' + next.low + '” is how you are right now, not what you are — that is estar. ' +
@@ -523,6 +564,43 @@ window.PARLA = window.PARLA || {};
         });
       }
 
+      /* 9b. Gustar agrees with the thing liked, not with you.
+       *     "Me gusta los libros" -> "me gustan". This is the commonest
+       *     mistake an English speaker makes in Spanish and it survives years,
+       *     because in English *you* are the subject and so the verb never
+       *     moves. The subject here is whatever comes after the verb.
+       *
+       *     An infinitive stays singular — "me gusta cocinar y salir" is two
+       *     activities and one gusta — which is the exception that makes the
+       *     rule teachable rather than mechanical. */
+      if (BACKWARDS_VERB[t.fold] && prev && CLITIC_OBJ[prev.fold] && adjacent(t, next)) {
+        var sing = BACKWARDS_VERB[t.fold].n === 's';
+        var subjTok = next;
+        // Step over the determiner to reach the noun it introduces.
+        if (detOf(subjTok) && adjacent(subjTok, toks[i + 2])) subjTok = toks[i + 2];
+        var infinitive = /(ar|er|ir)$/.test(next.fold) &&
+          morph().analyse(next.low).some(function (r) {
+            return r.pos === 'v' && r.lemma === next.low;
+          });
+        var sn = infinitive ? null : nounOf(subjTok);
+        // A determiner that is plainly plural settles it even when the noun
+        // itself is not in the dictionary.
+        // "Me falta dos euros": a numeral settles the number as surely as an
+        // article does, and it is not in the determiner table.
+        var detNum = detOf(next) ? detOf(next).n
+                   : (PLURAL_NUM[next.fold] ? 'p' : null);
+        var wantNum = detNum || (sn ? sn.number : null);
+        if (wantNum && !infinitive && (wantNum === 'p') === sing) {
+          var other = BACKWARDS_VERB[t.fold].other;
+          out.push(finding(text, t, other,
+            'Gustar agrees with the thing you like, not with you — it is the subject. ' +
+            (wantNum === 'p'
+              ? 'More than one thing, so “' + other + '”.'
+              : 'One thing, so “' + other + '”.'),
+            'gustar', 9));
+        }
+      }
+
       /* 10. False friends. The word exists, so nothing else will flag it. */
       if (FALSE_FRIENDS[t.fold]) {
         var ff = FALSE_FRIENDS[t.fold];
@@ -577,6 +655,7 @@ window.PARLA = window.PARLA || {};
       if (pshape.g === subj.gender && pshape.n === subj.number) continue;
       var pwant = adjForm(pshape.stem, subj.gender, subj.number);
       if (pwant === pred.fold) continue;
+      pwant = adjFormOf(pred.low, subj.gender, subj.number) || pwant;
       out.push(finding(text, pred, pwant,
         'The describing word after ser or estar agrees with what it describes. “' +
         subj.lemma + '” is ' + (subj.gender === 'f' ? 'feminine' : 'masculine') +
@@ -677,6 +756,41 @@ window.PARLA = window.PARLA || {};
   ('hambre sed sueno frio calor prisa miedo razon suerte cuidado ganas ' +
    'anos vergüenza verguenza celos exito'
   ).split(' ').forEach(function (w) { TENER_NOUN[fold(w)] = 1; });
+
+  /* Verbs that run backwards: the thing is the subject and you are the object.
+   * Half a dozen of them, and every one catches an English speaker out the
+   * same way. Keyed by the form written, giving the form it should have been
+   * if the number was wrong. */
+  var BACKWARDS_VERB = {};
+  ('gusta/gustan encanta/encantan duele/duelen interesa/interesan ' +
+   'molesta/molestan falta/faltan queda/quedan sobra/sobran ' +
+   'importa/importan preocupa/preocupan apetece/apetecen parece/parecen ' +
+   'gustaba/gustaban gustó/gustaron encantó/encantaron'
+  ).split(' ').forEach(function (pair) {
+    var two = pair.split('/');
+    BACKWARDS_VERB[fold(two[0])] = { n: 's', other: two[1] };
+    BACKWARDS_VERB[fold(two[1])] = { n: 'p', other: two[0] };
+  });
+
+  /* The pronoun in front of one of those verbs: me gusta, nos duelen. */
+  var CLITIC_OBJ = {};
+  ('me te le nos os les').split(' ').forEach(function (w) { CLITIC_OBJ[w] = 1; });
+
+  /* Numbers that count more than one thing. "un/una" is deliberately absent,
+   * and so is "cero", which takes the plural in Spanish but is vanishingly
+   * rare in a learner's sentence and not worth the risk. */
+  var PLURAL_NUM = {};
+  ('dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce ' +
+   'quince dieciseis diecisiete dieciocho diecinueve veinte veintiuno ' +
+   'veintidos veintitres treinta cuarenta cincuenta sesenta setenta ochenta ' +
+   'noventa cien ciento doscientos trescientos quinientos mil millon millones ' +
+   'varios varias muchos muchas pocos pocas algunos algunas ambos ambas'
+  ).split(' ').forEach(function (w) { PLURAL_NUM[fold(w)] = 1; });
+
+  /* What a number can be followed by without counting it. */
+  var NOT_COUNTED = {};
+  ('de por y a en con para mil millones ciento coma punto'
+  ).split(' ').forEach(function (w) { NOT_COUNTED[fold(w)] = 1; });
 
   /* Adjectives that are plainly descriptive, so putting them in front is the
    * English habit rather than a deliberate flourish. */

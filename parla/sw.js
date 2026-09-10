@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'parla-v20';
+var CACHE = 'parla-v21';
 
 var ASSETS = [
   './',
@@ -22,6 +22,7 @@ var ASSETS = [
   './js/data/grammar-es.js',
   './js/data/sounds-es.js',
   './js/data/reading-es.js',
+  './js/data/writing-es.js',
   './js/data/scenarios-es.js',
   './js/data/challenge-es.js',
   './js/decor.js',
@@ -41,6 +42,7 @@ var ASSETS = [
   './js/views-say.js',
   './js/views-read.js',
   './js/views-listen.js',
+  './js/views-write.js',
   './js/dict.js',
   './js/morph.js',
   './js/grammar.js',

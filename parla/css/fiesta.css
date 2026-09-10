@@ -1119,3 +1119,53 @@ button:active { transform: scale(.97); }
   .hear-play { width: 78px; height: 78px; font-size: 1.7rem; }
   .hear-es { font-size: 1.12rem; }
 }
+
+/* ── Writing ──────────────────────────────────────────────────*/
+.write-ask { padding: 14px 16px; }
+.write-ask .q-text { margin-bottom: 4px; }
+
+.write-hints { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+/* Tapping a hint drops it in the box. Looking a word up and then typing it
+   from memory is two chances to spell it wrong for no learning. */
+.hint-chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 5px 10px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--line-soft);
+  font-size: .82rem;
+}
+.hint-chip:hover { background: var(--accent-soft); border-color: var(--accent); }
+.hint-en { color: var(--ink-faint); font-size: .74rem; font-weight: 400; }
+
+.write-box {
+  width: 100%; box-sizing: border-box;
+  font-family: var(--serif); font-size: 1.05rem; line-height: 1.6;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line);
+  color: var(--ink); resize: vertical; min-height: 130px;
+}
+.write-box:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.write-count { text-align: right; min-height: 1.1em; margin: 3px 2px 10px; }
+
+.write-line {
+  padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+  border-left-width: 3px;
+}
+.write-line.ok { border-left-color: var(--good); }
+.write-line.no { border-left-color: var(--bad); }
+/* What you wrote, struck through, above what it should have been. Seeing the
+   two lined up is the whole correction. */
+.write-was { text-decoration: line-through; color: var(--ink-faint); }
+.write-now { color: var(--good); font-weight: 600; margin-top: 2px; }
+
+.write-model {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 13px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.write-model .es { font-family: var(--serif); font-size: 1.02rem; line-height: 1.5; }
+
+@media (max-width: 560px) {
+  .write-box { font-size: 1rem; min-height: 115px; }
+  .write-model .es { font-size: .98rem; }
+}

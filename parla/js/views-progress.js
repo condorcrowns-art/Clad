@@ -147,6 +147,7 @@ window.PARLA = window.PARLA || {};
         })[0];
         PARLA.app.go(next ? 'listen' : 'read', next ? { id: next.id } : null);
       }),
+      quick('✍️', 'Write something', writeBlurb(), function () { PARLA.app.go('write'); }),
       quick('🎮', 'Play a game', 'Four minutes', function () { PARLA.app.go('games'); }),
       quick('📚', 'Word bank', dictBlurb(), function () { PARLA.app.go('words'); }),
       quick('📐', 'Grammar', grammarBlurb(), function () { PARLA.app.go('grammar'); }),
@@ -327,6 +328,13 @@ window.PARLA = window.PARLA || {};
     }).length;
     if (!done) return 'The same stories, no text';
     return done === all.length ? 'All ' + all.length + ' heard' : done + ' heard by ear';
+  }
+
+  function writeBlurb() {
+    var all = (PARLA.data.es.writing || []);
+    var done = Object.keys(PARLA.store.state.writing || {}).length;
+    if (!done) return all.length + ' things to write';
+    return done === all.length ? 'All ' + all.length + ' written' : (all.length - done) + ' left';
   }
 
   function grammarBlurb() {

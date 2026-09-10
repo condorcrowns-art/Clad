@@ -614,6 +614,7 @@ window.PARLA = window.PARLA || {};
     analyse: analyse,
     best: best,
     analyseSentence: analyseSentence,
+    pluralOf: pluralOf,
     candidates: candidates,
     splitClitics: splitClitics
   };
