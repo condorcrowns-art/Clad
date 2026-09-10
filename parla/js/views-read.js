@@ -68,7 +68,8 @@ window.PARLA = window.PARLA || {};
           el('div.read-meta',
             el('span', t.minutes + ' min'),
             el('span', t.lines.length + ' lines'),
-            p && p.asked ? el('span.chip.good', p.right + '/' + p.asked) : null)),
+            p && p.asked ? el('span.chip.good', '📖 ' + p.right + '/' + p.asked) : null,
+            p && p.heardAsked ? el('span.chip.good', '🎧 ' + p.heardRight + '/' + p.heardAsked) : null)),
         el('span.read-go', p ? '↺' : '→'));
     }
 
@@ -109,7 +110,9 @@ window.PARLA = window.PARLA || {};
         n.hidden = !showEn;
       });
     } }, '👁 Show English');
-    main.appendChild(el('div.btn-row.read-tools', playBtn, enBtn));
+    main.appendChild(el('div.btn-row.read-tools', playBtn, enBtn,
+      el('button', { onclick: function () { stop(); PARLA.app.go('listen', { id: t.id }); } },
+        '🎧 Listen without the text')));
     main.appendChild(el('p.small.faint.read-hint',
       'Tap a word for its meaning. Tap the line for the translation.'));
 
@@ -237,7 +240,9 @@ window.PARLA = window.PARLA || {};
         slot.appendChild(wordBank());
         quiz.scrollIntoView({ block: 'start', behavior: 'smooth' });
         slot.appendChild(el('div.btn-row', { style: { marginTop: '14px' } },
-          el('button.primary', { onclick: function () { PARLA.app.go('read'); } }, 'Another text'),
+          el('button.primary', { onclick: function () { PARLA.app.go('listen', { id: t.id }); } },
+            '🎧 Now hear it without the text'),
+          el('button', { onclick: function () { PARLA.app.go('read'); } }, 'Another text'),
           el('button', { onclick: function () { PARLA.app.go('text', { id: t.id }); } },
             'Read it again')));
       }

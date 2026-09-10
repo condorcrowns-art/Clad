@@ -1075,3 +1075,34 @@ button:active { transform: scale(.97); }
   .save-line { display: block; }
   .save-line .small { margin-left: 0; display: block; margin-top: 2px; }
 }
+
+/* ── Listening ────────────────────────────────────────────────*/
+.hear-speed {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 10px 0 6px;
+}
+.hear-card { text-align: center; padding: 20px 16px; }
+/* The play button is the screen. Everything else on it is what you do after
+   pressing it. */
+.hear-play {
+  display: grid; place-items: center;
+  width: 92px; height: 92px; margin: 10px auto 6px; padding: 0;
+  border-radius: 50%; border: 0;
+  font-size: 2rem; line-height: 1;
+  background: linear-gradient(140deg, var(--rosa), var(--naranja));
+  color: #fff; box-shadow: var(--shadow);
+}
+.hear-play:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.hear-play:active { transform: translateY(0) scale(.97); }
+.hear-played { min-height: 1.1em; }
+.hear-es {
+  font-family: var(--serif); font-size: 1.25rem; line-height: 1.5;
+  margin-top: 12px;
+}
+.hear-en { font-size: .88rem; color: var(--ink-soft); margin-top: 6px; line-height: 1.4; }
+.hear-tools { justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+
+@media (max-width: 560px) {
+  .hear-play { width: 78px; height: 78px; font-size: 1.7rem; }
+  .hear-es { font-size: 1.12rem; }
+}

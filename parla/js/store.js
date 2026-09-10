@@ -299,6 +299,21 @@ window.PARLA = window.PARLA || {};
     save();
   }
 
+  /* Finishing a text by ear. Kept apart from the reading score because
+   * understanding a text you only heard is a different result from
+   * understanding one you could look at. */
+  function markHeard(id, right, asked, caught) {
+    var r = state.reading || (state.reading = {});
+    var was = r[id] || {};
+    was.heard = Date.now();
+    was.heardRight = Math.max(was.heardRight || 0, right || 0);
+    was.heardAsked = asked || was.heardAsked || 0;
+    was.caught = Math.max(was.caught || 0, caught || 0);
+    r[id] = was;
+    save();
+    return was;
+  }
+
   /* ── Bringing another device's progress in ────────────────
    *
    * Everything lives in this browser's localStorage, which means two things
@@ -384,11 +399,13 @@ window.PARLA = window.PARLA || {};
       var t = incoming.reading[id], mine = state.reading[id];
       if (!t) return;
       if (!mine) got.texts++;
-      state.reading[id] = {
-        read: Math.max((mine && mine.read) || 0, t.read || 0),
-        right: Math.max((mine && mine.right) || 0, t.right || 0),
-        asked: Math.max((mine && mine.asked) || 0, t.asked || 0)
-      };
+      var out = {};
+      ['read', 'right', 'asked', 'heard', 'heardRight', 'heardAsked', 'caught']
+        .forEach(function (k) {
+          var v = Math.max((mine && mine[k]) || 0, t[k] || 0);
+          if (v) out[k] = v;
+        });
+      state.reading[id] = out;
     });
 
     /* — per-sound and per-lesson scores: keep whichever was practised more — */
@@ -502,6 +519,7 @@ window.PARLA = window.PARLA || {};
     rememberPhrase: rememberPhrase,
     addWord: addWord,
     markRead: markRead,
+    markHeard: markHeard,
     mergeJSON: mergeJSON,
     forgetAll: forgetAll,
     level: level,

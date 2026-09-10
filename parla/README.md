@@ -687,6 +687,31 @@ in a story about a wet dog returned a paragraph about crossing borders. A sense
 labelled pejorative, derogatory, offensive or vulgar now stays in the file but
 does not get to decide what a word is or to be the first thing a learner reads.
 
+## The same texts, with nothing on the screen
+
+Reading a sentence and hearing one are different skills, and the second is the
+one that fails you in a conversation. On the page the words arrive already
+separated; in the air *¿de dónde eres?* is a single word until your ear has
+learned where the joins are.
+
+So the twelve texts have a listening mode with the text withheld. Play a line,
+decide whether you caught it, then look — the Spanish first, the English on a
+second tap. Playing a line four times is the drill, not a failure at it, and the
+screen counts the plays rather than hiding them.
+
+The speed control is the part that makes this work rather than merely
+frustrate. Natural speed is the wall, and the way over it is to meet the same
+sentence slow, then slower-than-natural, then at speed: three passes over one
+line beats one pass over three. Slow and Easier are multipliers on whatever
+speed you already chose, so someone who likes a slow voice everywhere does not
+end up at a crawl here, and Natural is exactly the speed the rest of the app
+speaks at.
+
+At the end come the same comprehension questions as the reader. Answering them
+off the audio alone is a genuinely different result from answering them off the
+page, so it is kept as its own score — the shelf shows 📖 and 🎧 separately, and
+getting them both is the thing to aim at.
+
 ## Where the words come from
 
 `js/data/dict-es.json` is built, not written. `tools/build-dict.js` takes four
@@ -774,6 +799,7 @@ node test/chrome-browser.test.js 8765       # the nav, hover states, and nothing
 node test/fix-browser.test.js 8765          # corrected, scheduled, surfaced, fixed
 node test/say-browser.test.js 8765          # a wrong sound, named and coached
 node test/read-browser.test.js 8765        # a story, tapped, heard and answered
+node test/hear-browser.test.js 8765        # the same story with the text withheld
 node test/transfer-browser.test.js 8765    # two devices, one deck, nothing lost
 ```
 

@@ -49,10 +49,13 @@ window.PARLA = window.PARLA || {};
 
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
-  /* Speak a Spanish string using the user's saved voice + rate. */
-  function say(text, onend, character) {
+  /* Speak a Spanish string using the user's saved voice + rate. `extra`
+   * overrides any of those options for this one utterance — the listening
+   * drill slows the voice down without changing the speed the rest of the app
+   * speaks at. */
+  function say(text, onend, character, extra) {
     var s = PARLA.store.state.settings;
-    PARLA.speech.speak(text, {
+    var o = {
       lang: PARLA.store.state.profile.target || 'es',
       voiceURI: s.voiceURI,
       voiceRoles: s.voiceRoles,
@@ -60,7 +63,9 @@ window.PARLA = window.PARLA || {};
       character: character,
       rate: s.rate,
       onend: onend
-    });
+    };
+    if (extra) Object.keys(extra).forEach(function (k) { o[k] = extra[k]; });
+    PARLA.speech.speak(text, o);
   }
 
   /* A small ▶ button that reads a Spanish string aloud. */
