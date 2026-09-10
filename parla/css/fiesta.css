@@ -1062,3 +1062,16 @@ button:active { transform: scale(.97); }
   .rd-line { padding: 6px 2px; gap: 6px; }
   .read-card { padding: 10px 12px; gap: 9px; }
 }
+
+/* ── Carrying progress between devices ────────────────────────*/
+.save-line {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+/* When the counts wrap to their own line they belong at the left margin, not
+   pushed to the right by an auto margin meant for the one-line case. */
+.save-line .small { margin-left: auto; }
+@media (max-width: 560px) {
+  .save-line { display: block; }
+  .save-line .small { margin-left: 0; display: block; margin-top: 2px; }
+}

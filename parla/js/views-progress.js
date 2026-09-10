@@ -947,42 +947,112 @@ window.PARLA = window.PARLA || {};
         }))
     ));
 
-    /* — data — */
-    main.appendChild(ui.sectionTitle('Your data'));
-    var importArea = el('textarea', { placeholder: 'Paste an exported save here…' });
+    /* — data —
+     *
+     * Everything is in this browser's localStorage. That means clearing site
+     * data takes a sixty-day streak with it, and the phone and the computer
+     * keep two decks that never meet. Both of those are fixed by the same
+     * file, provided bringing it in *merges* rather than replaces — importing
+     * the phone's save used to destroy the computer's.
+     */
+    main.appendChild(ui.sectionTitle('Your progress'));
+
+    var st = PARLA.store.state;
+    var counts = [
+      (st.phrases || []).length + ' words',
+      Object.keys(st.srs || {}).length + ' cards',
+      (st.mistakes || []).length + ' mistakes',
+      (st.progress.streak || 0) + '-day streak'
+    ].join(' · ');
+
+    var picker = el('input', { type: 'file', accept: '.json,application/json',
+      style: { display: 'none' } });
+    picker.addEventListener('change', function () {
+      var f = picker.files && picker.files[0];
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () { bringIn(String(r.result)); picker.value = ''; };
+      r.onerror = function () { ui.toast('Could not read that file.', 'bad'); };
+      r.readAsText(f);
+    });
+
+    var importArea = el('textarea', { placeholder: '…or paste an exported save here' });
+
+    function fileName() {
+      var d = new Date();
+      return 'parla-' + d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0') + '.json';
+    }
+
+    function bringIn(text) {
+      var got;
+      try {
+        got = PARLA.store.mergeJSON(text);
+      } catch (e) {
+        ui.toast('That is not a Parla save file.', 'bad');
+        return;
+      }
+      // Say what actually arrived. "Imported" tells you nothing about whether
+      // it was the right file.
+      var bits = [];
+      if (got.words) bits.push(got.words + ' new word' + (got.words === 1 ? '' : 's'));
+      if (got.cards) bits.push(got.cards + ' card' + (got.cards === 1 ? '' : 's'));
+      if (got.mistakes) bits.push(got.mistakes + ' mistake' + (got.mistakes === 1 ? '' : 's'));
+      if (got.texts) bits.push(got.texts + ' text' + (got.texts === 1 ? '' : 's'));
+      if (got.sessions) bits.push(got.sessions + ' session' + (got.sessions === 1 ? '' : 's'));
+      if (got.days) bits.push(got.days + ' challenge day' + (got.days === 1 ? '' : 's'));
+      ui.toast(bits.length ? 'Merged in ' + bits.join(', ') + '.'
+                           : 'Nothing new in that file — you already had all of it.',
+               'good');
+      PARLA.app.go('progress');
+    }
+
     main.appendChild(el('div.card',
       el('p.small.muted',
-        'Everything is stored in this browser only. Export it to move to another machine, ' +
-        'or to keep a backup — clearing site data will otherwise wipe your progress.'),
+        'All of this lives in this browser and nowhere else, so clearing site data ' +
+        'would wipe it. Save a copy, and use the same file to carry your deck ' +
+        'between your phone and your computer.'),
+      el('div.save-line', el('strong', 'On this device'), el('span.small.muted', counts)),
       el('div.btn-row',
-        el('button', {
+        el('button.primary', {
           onclick: function () {
             var blob = new Blob([PARLA.store.exportJSON()], { type: 'application/json' });
-            var a = el('a', { href: URL.createObjectURL(blob), download: 'parla-save.json' });
+            var a = el('a', { href: URL.createObjectURL(blob), download: fileName() });
             document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+            ui.toast('Saved as ' + fileName());
           }
-        }, '⬇ Export save'),
+        }, '⬇ Save a copy'),
         el('button', {
           onclick: function () {
             navigator.clipboard && navigator.clipboard.writeText(PARLA.store.exportJSON())
-              .then(function () { ui.toast('Save copied to clipboard.'); })
+              .then(function () { ui.toast('Copied to the clipboard.'); })
               .catch(function () { ui.toast('Could not copy.', 'bad'); });
           }
-        }, '📋 Copy save')
+        }, '📋 Copy')
       ),
-      el('div', { style: { marginTop: '12px' } },
-        ui.field('Import', importArea),
+      el('div', { style: { marginTop: '4px' } })
+    ));
+
+    main.appendChild(el('div.card',
+      el('div',
+        el('div.save-line', el('strong', 'Bring another device in')),
+        el('p.small.muted',
+          'Nothing is overwritten. Words, cards, mistakes and days are pooled, and ' +
+          'where the same card exists on both, the one further along is kept. ' +
+          'Voices, the microphone pause and the theme stay this device\u2019s own.'),
+        picker,
+        el('div.btn-row',
+          el('button.primary', { onclick: function () { picker.click(); } },
+            '⬆ Choose a save file')),
+        el('div', { style: { marginTop: '10px' } }, importArea),
         el('button', {
           onclick: function () {
-            try {
-              PARLA.store.importJSON(importArea.value);
-              ui.toast('Save imported.');
-              PARLA.app.go('home');
-            } catch (e) {
-              ui.toast('That did not parse as a Parla save.', 'bad');
-            }
+            if (!importArea.value.trim()) { ui.toast('Nothing pasted.', 'bad'); return; }
+            bringIn(importArea.value);
           }
-        }, 'Import')),
+        }, 'Merge pasted save')),
       el('div', { style: { marginTop: '18px' } },
         el('button.danger', {
           onclick: function () {

@@ -774,6 +774,7 @@ node test/chrome-browser.test.js 8765       # the nav, hover states, and nothing
 node test/fix-browser.test.js 8765          # corrected, scheduled, surfaced, fixed
 node test/say-browser.test.js 8765          # a wrong sound, named and coached
 node test/read-browser.test.js 8765        # a story, tapped, heard and answered
+node test/transfer-browser.test.js 8765    # two devices, one deck, nothing lost
 ```
 
 The hosted partner has its own server, because the thing worth testing is the
@@ -794,10 +795,38 @@ node test/hosted-browser.test.js 8803 flaky
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
 
+## Keeping what you have built
+
+Everything the app knows about you is in one browser's localStorage. That is
+two problems wearing one coat: clear the site data and a sixty-day streak goes
+with it, and the phone and the computer keep two decks that never meet.
+
+Settings → Your progress saves a dated JSON file, and takes one back. The
+important word is *takes* — import used to call `merge(defaults(), incoming)`,
+so bringing the phone's save to the computer replaced the computer's deck with
+the phone's. It merges now, and the rule throughout is that neither side loses:
+
+* words, mistakes, sessions and challenge days are the **union**
+* where the same card exists on both, the one **further along** is kept — six
+  recalls beats one, and taking the phone's card would have thrown away three
+  weeks of the computer's spacing
+* XP, streak and the session counters are the **maximum, never the sum**,
+  because a session practised on one device and synced to the other is one
+  session and adding them would invent progress nobody earned
+* the voice, the microphone pause and the theme stay the device's own — what
+  sounds right on a laptop is not what sounds right on a phone
+
+Merging the same file twice does nothing the second time and says so. A file
+that is not a Parla save is refused whole rather than half-applied. Pick the
+file with the file picker on either device; the paste box is still there for
+when moving a file between them is the hard part.
+
 ## Privacy
 
 Nothing you say or save leaves your device — except your typed/spoken turns when you
 deliberately choose the Gemini backend, which sends them to Google. Speech synthesis is
 local too: the text is never sent anywhere to be spoken. Built-in and Ollama send
 nothing anywhere. There is no analytics, no account, and no network call the app makes on its
-own. Clearing site data wipes your progress, so use Settings → Export if you care about it.
+own. Clearing site data wipes your progress, so use Settings → Your progress → Save a
+copy if you care about it. That file never goes anywhere either: it is written by
+your browser and read back by your browser.
