@@ -645,6 +645,48 @@ Two dialect choices are settings rather than facts: seseo and yeísmo. The
 defaults are Latin American, because that is who the learner is most likely to
 be talking to.
 
+## Something to read
+
+Drills build the pieces. Reading is where the pieces turn into a language,
+because it is the only place a word turns up in a sentence somebody meant — and
+it is the one activity a learner will do voluntarily for twenty minutes.
+
+Twelve short stories, A1 to B1, in `js/data/reading-es.js`. Stories rather than
+textbook paragraphs: a dog nobody claims, a missed bus stop, a false friend in a
+pharmacy, forty minutes in a silent taxi. Wanting to know what happens next is
+the only reliable engine for reading in a language you do not speak.
+
+What makes reading possible before you are ready for it is that every word is
+one tap from its meaning — not a translation of the sentence, which just means
+reading the English, but the word you are stuck on:
+
+    tiene
+    to have · to hold, grasp
+    tener — present, él/ella/usted
+
+That runs on the dictionary and the morphology engine, so it works with the
+phone in aeroplane mode. Tap the line rather than a word and you get that line
+in English; there is a button for all of them at once, and one for reading the
+whole thing aloud, which marks the line the voice is on so you can follow.
+
+Then three comprehension questions about what happened, not which word means
+what, and the handful of words the text was built around, ready to go into the
+same deck as everything else with the sentence they turned up in attached.
+
+Every Spanish sentence in the file — 204 of them, counting the questions — is
+run through the grammar checker. That found four bugs, all in the checker: it
+read `está` as the demonstrative `esta`, it wanted a `no` in front of `nadie
+hizo nada`, it read the object pronoun in `nadie la toque` as an article, and it
+tried to make the adverb in `¿quién le ayuda primero?` agree with a noun. All
+four are now regression tests.
+
+It also found one in the dictionary. Wiktionary files `mojado` as both the
+adjective *wet* and an ethnic slur, and the builder let the slur cast a full
+vote for the word's part of speech — so *wet* disappeared, and tapping `mojado`
+in a story about a wet dog returned a paragraph about crossing borders. A sense
+labelled pejorative, derogatory, offensive or vulgar now stays in the file but
+does not get to decide what a word is or to be the first thing a learner reads.
+
 ## Where the words come from
 
 `js/data/dict-es.json` is built, not written. `tools/build-dict.js` takes four
@@ -731,6 +773,7 @@ node test/words-browser.test.js 8765        # the word bank, and Ask with a dict
 node test/chrome-browser.test.js 8765       # the nav, hover states, and nothing off the side
 node test/fix-browser.test.js 8765          # corrected, scheduled, surfaced, fixed
 node test/say-browser.test.js 8765          # a wrong sound, named and coached
+node test/read-browser.test.js 8765        # a story, tapped, heard and answered
 ```
 
 The hosted partner has its own server, because the thing worth testing is the

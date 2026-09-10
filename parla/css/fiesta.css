@@ -988,3 +988,77 @@ button:active { transform: scale(.97); }
   .say-word { font-size: 1.75rem; }
   .sound-symbol { min-width: 38px; height: 36px; font-size: 1rem; }
 }
+
+/* ── Reading ──────────────────────────────────────────────────*/
+.crumb { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+
+.read-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.read-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.read-card.read-done { border-left: 3px solid var(--good); }
+.read-main { flex: 1; min-width: 0; }
+.read-title { font-weight: 700; }
+.read-blurb { font-size: .82rem; color: var(--ink-soft); font-weight: 400; line-height: 1.35; }
+.read-meta {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 4px; font-size: .72rem; color: var(--ink-faint);
+}
+.read-go { flex: none; color: var(--ink-faint); font-size: 1.1rem; }
+.read-tools { margin: 10px 0 4px; flex-wrap: wrap; }
+
+.read-body {
+  margin-top: 6px; padding: 4px 0;
+  border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
+}
+.rd-line {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 7px 6px; border-radius: var(--r-sm);
+  transition: background .18s var(--ease);
+}
+/* The line being read aloud. Following along is the whole reason to have the
+   audio, and that needs the eye to know where the voice is. */
+.rd-line.now { background: var(--accent-soft); }
+.rd-play { flex: none; padding: 2px 7px; font-size: .85rem; line-height: 1.5; }
+.rd-text { flex: 1; min-width: 0; }
+.rd-es { font-size: 1.06rem; line-height: 1.65; }
+.rd-en { font-size: .85rem; color: var(--ink-soft); margin-top: 3px; line-height: 1.4; }
+.rd-text { cursor: pointer; }
+.rd-hint { margin: 0 0 4px; }
+
+/* Every word is one tap from its meaning, so every word has to look tappable
+   without turning the page into a field of links. */
+.rd-es .word {
+  cursor: pointer; border-radius: 3px; position: relative;
+  transition: background .12s var(--ease);
+}
+.rd-es .word:hover { background: var(--accent-soft); }
+@media (hover: none) {
+  .rd-es .word {
+    border-bottom: 1px dotted color-mix(in oklab, var(--turquesa) 32%, transparent);
+  }
+}
+
+.q-count {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-faint); margin-bottom: 6px;
+}
+.q-text { font-size: 1.08rem; font-weight: 600; margin-bottom: 10px; line-height: 1.4; }
+.q-opt { width: 100%; text-align: left; padding: 10px 12px; line-height: 1.35; }
+.q-opt.good, .q-opt.good:hover {
+  background: color-mix(in srgb, var(--good) 16%, var(--card));
+  border-color: var(--good); color: var(--ink);
+}
+.q-opt.bad, .q-opt.bad:hover {
+  background: color-mix(in srgb, var(--bad) 14%, var(--card));
+  border-color: var(--bad); color: var(--ink);
+}
+.q-opt:disabled { opacity: 1; }
+
+@media (max-width: 560px) {
+  .rd-es { font-size: 1rem; line-height: 1.6; }
+  .rd-line { padding: 6px 2px; gap: 6px; }
+  .read-card { padding: 10px 12px; gap: 9px; }
+}

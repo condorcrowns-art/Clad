@@ -83,6 +83,34 @@ const G = ctx.PARLA.grammar;
     check('“' + s + '”', hits.length === 0, hits.map(h => h.fixed + ' — ' + h.note).join(' | '));
   });
 
+  console.log('\nThe four ways a correct sentence used to be flagged\n');
+  // Each of these came out of running the graded reading texts through the
+  // checker. Every one was the checker's fault, not the sentence's.
+  const wasFlagged = [
+    ['Es pequeño y está mojado.', 'está is the verb, not the demonstrative esta'],
+    ['Al principio nadie hizo nada.', 'a negative word in front of its verb negates by itself'],
+    ['Cuando volvió la luz, nadie quería entrar en casa.', 'same, in the second clause'],
+    ['Salí con una palabra nueva que nunca voy a olvidar.', 'nunca before its verb'],
+    ['Yo miraba el móvil sin leer nada.', 'sin has already done the negating'],
+    ['Va del salón al siguiente sin que nadie la toque.', 'la is the object, not an article'],
+    ['¿Quién le ayuda primero?', 'ayuda is the verb the pronoun leans on'],
+    ['¿Qué contestó la otra persona primero?', 'primero is an adverb here']
+  ];
+  wasFlagged.forEach(([s, why]) => {
+    const hits = G.check(s).filter(h => !h.soft);
+    check(why, hits.length === 0, hits.map(h => h.topic + ': ' + h.fixed).join(' | '));
+  });
+
+  console.log('\nAnd the mistakes those fixes must not have hidden\n');
+  [['veo nada', 'negation'], ['este casa es bonita', 'gender'],
+   ['la casa blanco', 'agreement'], ['nunca digo nada malo', null]
+  ].forEach(([s, topic]) => {
+    const hits = G.check(s).filter(h => !h.soft);
+    check('“' + s + '”' + (topic ? ' is still caught' : ' is still left alone'),
+      topic ? hits.some(h => h.topic === topic) : hits.length === 0,
+      hits.map(h => h.topic + ': ' + h.fixed).join(' | '));
+  });
+
   console.log('\nEverything the app itself says\n');
   const lines = [];
   const walk = (o) => {

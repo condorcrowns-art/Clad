@@ -79,6 +79,9 @@ window.PARLA = window.PARLA || {};
         name: '',             // extracted deterministically, so it survives model failures
         facts: []             // short English statements: "They are from Chicago"
       },
+      // What has been read, and how the comprehension questions went.
+      // id -> { read: ms, right: n, asked: n }
+      reading: {},
       srs: {},                // word -> { ease, interval, due, reps, lapses }
       mistakes: [],           // { es, fix, note, topic, when, times, scenario }
       phrases: [],            // { es, en, when } - phrases you reached for and could not say
@@ -215,6 +218,20 @@ window.PARLA = window.PARLA || {};
 
   function rememberPhrase(es, en) { return addWord(es, en, '', ''); }
 
+  /* Finishing a text. The score is kept so the list can show which ones were
+   * understood and which were only got through. */
+  function markRead(id, right, asked) {
+    var r = state.reading || (state.reading = {});
+    var was = r[id] || {};
+    r[id] = {
+      read: Date.now(),
+      right: Math.max(was.right || 0, right || 0),
+      asked: asked || was.asked || 0
+    };
+    save();
+    return r[id];
+  }
+
   /* ── Mistakes ─────────────────────────────────────────────
    * A correction used to be written to a journal that nothing ever read again,
    * which made the most valuable thing the app collects the one thing it threw
@@ -282,6 +299,159 @@ window.PARLA = window.PARLA || {};
     save();
   }
 
+  /* ── Bringing another device's progress in ────────────────
+   *
+   * Everything lives in this browser's localStorage, which means two things
+   * that both cost a learner real work: clear the site data and a sixty-day
+   * streak is gone, and the phone and the computer keep separate decks that
+   * never meet. Export already existed; import replaced everything it
+   * touched, so bringing the phone's save to the computer destroyed the
+   * computer's.
+   *
+   * This merges instead. The rule throughout is that neither side loses:
+   * take the union of the things you have collected, and where the same
+   * thing exists on both, keep whichever record represents more work. It is
+   * deliberately conservative about the counters — a session practised on one
+   * device and synced to the other is one session, and adding the two totals
+   * together would invent XP nobody earned.
+   */
+  function norm(s) {
+    return String(s || '').toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  /* Which of two spaced-repetition cards is further along. Reps first,
+   * because that is the count of times it was actually recalled. */
+  function betterCard(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    if ((a.reps || 0) !== (b.reps || 0)) return (a.reps || 0) > (b.reps || 0) ? a : b;
+    if ((a.interval || 0) !== (b.interval || 0)) return (a.interval || 0) > (b.interval || 0) ? a : b;
+    // Same ladder on both: take the earlier due date, so nothing is skipped
+    // by the merge.
+    return (a.due || 0) <= (b.due || 0) ? a : b;
+  }
+
+  function mergeJSON(text) {
+    var incoming = typeof text === 'string' ? JSON.parse(text) : text;
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+      throw new Error('not a Parla save');
+    }
+    // A file with none of these is not a save, and importing it would quietly
+    // do nothing while reporting success.
+    if (!incoming.progress && !incoming.srs && !incoming.phrases) {
+      throw new Error('not a Parla save');
+    }
+    var got = { words: 0, mistakes: 0, cards: 0, texts: 0, days: 0, sessions: 0 };
+
+    /* — words you reached for — */
+    var have = {};
+    (state.phrases || []).forEach(function (p) { have[norm(p.es)] = 1; });
+    (incoming.phrases || []).forEach(function (p) {
+      if (!p || !p.es || have[norm(p.es)]) return;
+      have[norm(p.es)] = 1;
+      state.phrases.push(p);
+      got.words++;
+    });
+    state.phrases.sort(function (a, b) { return (b.when || 0) - (a.when || 0); });
+    if (state.phrases.length > 2000) state.phrases.length = 2000;
+
+    /* — mistakes, and the schedules behind them — */
+    var seen = {};
+    (state.mistakes || []).forEach(function (m) { seen[mistakeKey(m)] = m; });
+    (incoming.mistakes || []).forEach(function (m) {
+      if (!m || !m.es) return;
+      var k = mistakeKey(m);
+      if (seen[k]) {
+        seen[k].times = Math.max(seen[k].times || 1, m.times || 1);
+        return;
+      }
+      seen[k] = m;
+      state.mistakes.push(m);
+      got.mistakes++;
+    });
+
+    Object.keys(incoming.srs || {}).forEach(function (k) {
+      var mine = state.srs[k], theirs = incoming.srs[k];
+      if (!theirs || typeof theirs !== 'object') return;
+      if (!mine) got.cards++;
+      state.srs[k] = betterCard(mine, theirs);
+    });
+
+    /* — what has been read — */
+    state.reading = state.reading || {};
+    Object.keys(incoming.reading || {}).forEach(function (id) {
+      var t = incoming.reading[id], mine = state.reading[id];
+      if (!t) return;
+      if (!mine) got.texts++;
+      state.reading[id] = {
+        read: Math.max((mine && mine.read) || 0, t.read || 0),
+        right: Math.max((mine && mine.right) || 0, t.right || 0),
+        asked: Math.max((mine && mine.asked) || 0, t.asked || 0)
+      };
+    });
+
+    /* — per-sound and per-lesson scores: keep whichever was practised more — */
+    ['sounds', 'grammar'].forEach(function (bucket) {
+      state[bucket] = state[bucket] || {};
+      Object.keys(incoming[bucket] || {}).forEach(function (id) {
+        var t = incoming[bucket][id], mine = state[bucket][id];
+        if (!t) return;
+        if (!mine || (t.tries || 0) > (mine.tries || 0)) state[bucket][id] = t;
+      });
+    });
+
+    /* — the counters — */
+    var p = state.progress, q = incoming.progress || {};
+    ['xp', 'streak', 'bestStreak', 'challengeDay'].forEach(function (k) {
+      p[k] = Math.max(p[k] || 0, q[k] || 0);
+    });
+    if ((q.lastDay || '') > (p.lastDay || '')) p.lastDay = q.lastDay;
+    var doneWas = (p.challengeDone || []).length;
+    var days = {};
+    (p.challengeDone || []).concat(q.challengeDone || []).forEach(function (d) { days[d] = 1; });
+    p.challengeDone = Object.keys(days).map(Number).sort(function (a, b) { return a - b; });
+    got.days = p.challengeDone.length - doneWas;
+    Object.keys(p.totals).forEach(function (k) {
+      // Max, not sum: the same session synced both ways is one session.
+      p.totals[k] = Math.max(p.totals[k] || 0, (q.totals || {})[k] || 0);
+    });
+
+    /* — sessions — */
+    var when = {};
+    (state.history || []).forEach(function (h) { when[h.when] = 1; });
+    (incoming.history || []).forEach(function (h) {
+      if (!h || when[h.when]) return;
+      when[h.when] = 1;
+      state.history.push(h);
+      got.sessions++;
+    });
+    state.history.sort(function (a, b) { return (b.when || 0) - (a.when || 0); });
+    if (state.history.length > 500) state.history.length = 500;
+
+    /* — what the partner knows about you — */
+    if (!state.memory.name && incoming.memory && incoming.memory.name) {
+      state.memory.name = incoming.memory.name;
+    }
+    var facts = {};
+    state.memory.facts.forEach(function (f) { facts[norm(f)] = 1; });
+    ((incoming.memory || {}).facts || []).forEach(function (f) {
+      if (!f || facts[norm(f)]) return;
+      facts[norm(f)] = 1;
+      state.memory.facts.push(f);
+    });
+    if (state.memory.facts.length > 40) state.memory.facts.length = 40;
+
+    // Settings stay this device's own. The microphone pause and the voice that
+    // sound right on a laptop are not the ones that sound right on a phone.
+    if (!state.profile.name && incoming.profile && incoming.profile.name) {
+      state.profile.name = incoming.profile.name;
+    }
+
+    save();
+    return got;
+  }
+
   function forgetAll() {
     state.memory = { name: '', facts: [] };
     save();
@@ -331,6 +501,8 @@ window.PARLA = window.PARLA || {};
     mistakeKey: mistakeKey,
     rememberPhrase: rememberPhrase,
     addWord: addWord,
+    markRead: markRead,
+    mergeJSON: mergeJSON,
     forgetAll: forgetAll,
     level: level,
     levelProgress: levelProgress,

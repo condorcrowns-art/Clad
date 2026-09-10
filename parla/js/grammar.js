@@ -98,6 +98,28 @@ window.PARLA = window.PARLA || {};
     todos:{ g: 'm', n: 'p', kind: 'q' },    todas:{ g: 'f', n: 'p', kind: 'q' }
   };
 
+  /* Every determiner above is spelled without an accent, so a word that
+   * carries one is a different word that happens to fold onto the same
+   * letters: "está" is the verb, not the demonstrative "esta", and reading it
+   * as a determiner turned "Es pequeño y está mojado" into "y este mojado". */
+  function detOf(tok) {
+    return tok.low === tok.fold ? DETS[tok.fold] : null;
+  }
+
+  /* A pronoun leaning on a verb — "nadie la toque", "quién le ayuda". These
+   * never introduce a noun, so the word after one is the verb, and "la" in
+   * front of one is the object, not an article. */
+  var PROCLITIC = {};
+  ('me te se le les lo la los las nos os').split(' ').forEach(function (w) { PROCLITIC[w] = 1; });
+
+  /* A bare pronoun is never followed by an article: "nadie la toque" is the
+   * object pronoun, and no Spanish sentence puts "la casa" straight after
+   * "nadie". */
+  var BARE_PRONOUN = {};
+  ('yo tu el ella nosotros nosotras vosotros vosotras ellos ellas usted ustedes ' +
+   'nadie alguien quien uno'
+  ).split(' ').forEach(function (w) { BARE_PRONOUN[w] = 1; });
+
   var DET_FORMS = {
     def: { ms: 'el', fs: 'la', mp: 'los', fp: 'las' },
     ind: { ms: 'un', fs: 'una', mp: 'unos', fp: 'unas' },
@@ -207,11 +229,19 @@ window.PARLA = window.PARLA || {};
     return null;
   }
 
+  /* Words that look like a masculine adjective but are doing an adverb's job
+   * after the noun: "¿quién le ayuda primero?" is "who helps first", not a
+   * describing word that ought to have come out "primera". Spanish leaves an
+   * adverbial ordinal in the masculine, so agreement has nothing to say. */
+  var ADVERBIAL = {};
+  ('primero segundo tercero ultimo tarde temprano'
+  ).split(' ').forEach(function (w) { ADVERBIAL[w] = 1; });
+
   function adjOf(tok) {
-    if (NOT_A_NOUN[tok.fold]) return null;
+    if (NOT_A_NOUN[tok.fold] || ADVERBIAL[tok.fold]) return null;
     // "el número otra vez": otra is a determiner looking forward, not an
     // adjective looking back.
-    if (DETS[tok.fold]) return null;
+    if (detOf(tok)) return null;
     var e = entry(tok.low);
     if (e && e.pos === 'adj') return { lemma: e.term, entry: e };
     var a = morph().analyse(tok.low);
@@ -291,12 +321,15 @@ window.PARLA = window.PARLA || {};
       /* 1. Determiner and noun must agree in gender and number.
        *    "la problema" -> "el problema", "los casa" -> "la casa". */
       var prev = toks[i - 1];
-      var det = DETS[t.fold];
+      var det = detOf(t);
       // "un poco sosa": poco here means "a bit", not "few", and agrees with
       // nothing. Same for "un poco de".
       if (/^poc[oa]s?$/.test(t.fold) && prev && /^un$/.test(prev.fold)) det = null;
       // "muy mucho gracias": the muy/mucho rule owns this, not agreement.
       if (det && prev && prev.fold === 'muy') det = null;
+      // "sin que nadie la toque": "la" is the object of the verb, not the
+      // article of a noun that happens to share its spelling.
+      if (det && prev && BARE_PRONOUN[prev.fold] && /^(el|la|los|las)$/.test(t.fold)) det = null;
       if (det && adjacent(t, next)) {
         var n = nounOf(next);
         if (n && !(det.g !== n.gender && takesElDespiteFeminine(next.fold) && det.fold === 'el')) {
@@ -336,6 +369,9 @@ window.PARLA = window.PARLA || {};
         // "Ella enseña ..." — a word straight after a subject pronoun is the
         // verb of that pronoun, whatever else the spelling could be.
         var afterSubject = prev && SUBJECTS[prev.fold] != null && !PREP_BEFORE(toks[i - 2]);
+        // "¿Quién le ayuda primero?" — "ayuda" is the verb the pronoun leans
+        // on, even though "la ayuda" is also a perfectly good noun.
+        if (prev && PROCLITIC[prev.fold] && !DETS[prev.fold]) afterSubject = true;
         var noun = (adjacent(t, next) && !participle && !afterSubject) ? nounOf(t) : null;
         var adj = noun ? adjOf(next) : null;
         if (noun && adj) {
@@ -358,7 +394,7 @@ window.PARLA = window.PARLA || {};
        *    descriptive, since Spanish does front some adjectives for effect. */
       if (adjacent(t, next) && FRONTED_IS_WRONG[t.fold]) {
         var n3 = nounOf(next);
-        if (n3 && !DETS[t.fold]) {
+        if (n3 && !detOf(t)) {
           out.push({
             original: text,
             fixed: text.slice(0, t.at) + next.raw + ' ' + t.raw + text.slice(next.end),
@@ -549,27 +585,50 @@ window.PARLA = window.PARLA || {};
     }
 
     /* 11. A negative word needs "no" in front of the verb as well.
-     *     "Veo nada" -> "No veo nada". Spanish doubles up on purpose. */
-    var negIdx = -1;
+     *     "Veo nada" -> "No veo nada". Spanish doubles up on purpose.
+     *
+     *     Only when the negative word comes *after* its verb, though. Put it
+     *     in front and it does the negating by itself: "nadie hizo nada" and
+     *     "nunca voy a olvidar" are both right and neither wants a "no". So
+     *     this walks clause by clause, and asks two questions inside each
+     *     clause: has a verb gone past yet, and has something already negated
+     *     it. Either answer of no means the sentence is fine.
+     */
+    var NEG_WORD = /^(nada|nadie|nunca|ninguno|ninguna|ningun|tampoco|jamas)$/;
+    var NEGATOR  = /^(no|ni|sin|nada|nadie|nunca|ninguno|ninguna|ningun|tampoco|jamas)$/;
+    // Each of these opens a clause of its own, and a "sin" or "ni" opens one
+    // that is already negative — "sin leer nada", "sin que nadie la toque".
+    var CLAUSE_OPENER = /^(que|y|e|o|u|pero|porque|cuando|si|aunque|mientras|donde|quien|como|sin|ni|ya)$/;
+    /* "Al principio nadie hizo nada" has no verb before "nadie" — but
+     * "principio" is also the yo-form of principiar, and any reading will do
+     * was enough to invent one. The top reading is the one the sentence
+     * means. */
+    var isVerbHere = function (tk) {
+      var a = morph().analyse(tk.low);
+      return !!(a.length && a[0].pos === 'v' && a[0].personIndex != null && a[0].personIndex >= 0);
+    };
+    var clauseVerb = null, clauseNeg = false;
     for (var k = 0; k < toks.length; k++) {
-      if (/^(nada|nadie|nunca|ninguno|ninguna|tampoco|jamas)$/.test(toks[k].fold)) { negIdx = k; break; }
-    }
-    if (negIdx > 0 && !toks.some(function (x) { return x.fold === 'no' || x.fold === 'ni'; })) {
-      var before = toks.slice(0, negIdx);
-      var hasVerb = before.some(function (x) {
-        return morph().analyse(x.low).some(function (r) { return r.pos === 'v' && r.personIndex >= 0; });
-      });
-      if (hasVerb) {
-        var first = before[0];
-        out.push({
-          original: text,
-          fixed: text.slice(0, first.at) + 'no ' + text.slice(first.at),
-          wrong: text.trim(), right: 'no ' + text.trim(),
-          note: 'Spanish uses two negatives on purpose: no veo nada. Dropping the “no” is the ' +
-                'English habit.',
-          topic: 'negation', weight: 7
-        });
+      var tk = toks[k];
+      if (tk.broken || tk.newSentence || CLAUSE_OPENER.test(tk.fold)) {
+        clauseVerb = null;
+        clauseNeg = false;
       }
+      if (NEGATOR.test(tk.fold)) {
+        if (NEG_WORD.test(tk.fold) && clauseVerb && !clauseNeg) {
+          out.push({
+            original: text,
+            fixed: text.slice(0, clauseVerb.at) + 'no ' + text.slice(clauseVerb.at),
+            wrong: text.trim(), right: 'no ' + text.trim(),
+            note: 'Spanish uses two negatives on purpose: no veo nada. Dropping the “no” is the ' +
+                  'English habit.',
+            topic: 'negation', weight: 7
+          });
+        }
+        clauseNeg = true;
+        continue;
+      }
+      if (!clauseVerb && isVerbHere(tk)) clauseVerb = tk;
     }
 
     /* 12. A question written without its opening mark. */

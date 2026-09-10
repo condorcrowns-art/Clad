@@ -85,8 +85,10 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   check('a wrong answer is marked wrong', await page.locator('.answer-state.no').isVisible());
   check('and shows the right one', (await page.locator('.answer-state').innerText()).includes(want));
   check('with the reason, again', (await page.locator('.hint').count()) >= 1);
+  // Scoped to the screen: the Read tab in the nav is a 📖 too, and an
+  // unscoped locator counted it.
   check('and a way into the lesson behind it',
-    (await page.locator('button', { hasText: '📖' }).count()) === 1);
+    (await page.locator('main button', { hasText: '📖' }).count()) === 1);
 
   const dueBefore = await page.evaluate(() => PARLA.store.dueMistakes(50).length);
   await page.locator('button', { hasText: 'Next' }).click();

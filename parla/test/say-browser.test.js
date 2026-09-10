@@ -75,8 +75,11 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.evaluate(w => { window.__heard = w; }, word);
   await page.locator('button', { hasText: 'Say it' }).click();
   await page.waitForTimeout(500);
+  // Both drills are on the screen at once, so both verdicts are. Take the
+  // last one — asking for the first .ok picked up the hear-it answer whenever
+  // that one happened to be right, and failed three runs in five.
   check('a correct attempt is accepted',
-    /That is it/.test(await page.locator('.answer-state.ok').innerText().catch(() => '')));
+    /That is it/.test(await page.locator('.answer-state.ok').last().innerText().catch(() => '')));
 
   // Now mispronounce it in a specific, diagnosable way: a trill as a tap.
   await page.evaluate(() => PARLA.app.go('sound', { id: 'rr' }));

@@ -98,6 +98,15 @@ const REGISTER = {
   formal: 'formal', literary: 'literary', poetic: 'literary',
   rare: 'rare', childish: 'informal', euphemistic: 'euphemism', humorous: 'humorous'
 };
+/* A slur is not what a word means. Wiktionary files "mojado" as both the
+ * adjective "wet" and an ethnic slur, and letting the slur cast a full vote
+ * for its part of speech made "wet" disappear from the dictionary entirely —
+ * so tapping "mojado" in a story about a wet dog on the stairs returned a
+ * paragraph about crossing borders. A sense like this stays in the file, but
+ * it does not get to decide what part of speech a word is, and it does not
+ * get to be the first thing a learner reads. */
+const DEMOTED = new Set(['pejorative', 'derogatory', 'offensive', 'ethnic slur', 'slur', 'vulgar']);
+
 const REGIONS = {
   spain: 'Spain', mexico: 'Mexico', argentina: 'Argentina', chile: 'Chile',
   colombia: 'Colombia', peru: 'Peru', venezuela: 'Venezuela', cuba: 'Cuba',
@@ -214,7 +223,8 @@ async function main() {
     // do not. Without this, "perro" is an adjective, because the source files
     // "perro :: dog" as feminine and lists three senses of "perro" = awful.
     const rt = roundTrip.get(key);
-    const weight = rt && rt.has(core(gloss)) ? 4 : 1;
+    const demoted = labels.some(l => DEMOTED.has(l));
+    const weight = (rt && rt.has(core(gloss)) ? 4 : 1) * (demoted ? 0.2 : 1);
     e.posCount[pos] = (e.posCount[pos] || 0) + weight;
 
     let reg = null, region = null;
@@ -222,7 +232,8 @@ async function main() {
       if (REGISTER[l] && !reg) reg = REGISTER[l];
       if (REGIONS[l] && !region) region = REGIONS[l];
     }
-    e.senses.push({ pos: pos, gloss: gloss, gender: GENDER[rawPos] || null, reg: reg, region: region });
+    e.senses.push({ pos: pos, gloss: gloss, gender: GENDER[rawPos] || null, reg: reg,
+                    region: region, demoted: demoted });
   }
 
   /* — settle each headword — */
@@ -250,7 +261,8 @@ async function main() {
         + (pos === 'v' && /^to\s/i.test(s.gloss) ? -3000 : 0) // verbs read as verbs
         + Math.min(s.gloss.length, 120) * 12
         + (/[;(]/.test(s.gloss) ? 2500 : 0)                   // an elaboration, not a translation
-        + (/^[A-Z]/.test(s.gloss) && pos !== 'prop' ? 1200 : 0);
+        + (/^[A-Z]/.test(s.gloss) && pos !== 'prop' ? 1200 : 0)
+        + (s.demoted ? 40000 : 0);                            // last among its own senses
     }
     senses.sort((a, b) => a.score - b.score);
 
