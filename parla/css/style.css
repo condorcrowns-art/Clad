@@ -28,18 +28,31 @@
   --line-soft: #f7ebda;
   --ink:       #2b1b14;
   --ink-soft:  #75584a;
-  --ink-faint: #a98d7c;
+  /* Was #a98d7c, which is 3.09:1 on white — under the 4.5 a body of small text
+     needs, and this tier carries the stat labels, the card meta lines and half
+     the hints in the app. */
+  --ink-faint: #8a6b56;
 
   --accent:      var(--rosa);
+  /* The ink to put ON a saturated brand fill. White works over these deep
+     light-mode colours; over the bright pastels of the dark theme it does not,
+     which is why the fills below use this token and never #fff. */
   --accent-ink:  #ffffff;
   --accent-soft: #fde4ef;
 
-  --good:      #1f8b52;
+  /* Two shades of each semantic colour, because a colour that reads well as a
+     *fill* behind white and a colour that reads well as *text* on its own pale
+     tint are not the same colour. -text is the darker one. */
+  --good:      #19794a;
   --good-soft: #e2f4e9;
+  --good-text: #15693d;
   --warn:      #b87400;
   --warn-soft: #fdf0d8;
+  --warn-text: #8f5a00;
   --bad:       #c62d3f;
   --bad-soft:  #fce7ea;
+  --bad-text:  #a1222f;
+  --accent-text: #b30d5c;
 
   --r-sm: 10px;
   --r-md: 13px;
@@ -84,18 +97,24 @@ html[data-theme="dark"] {
   --line-soft: #2c2039;
   --ink:       #f8ecf4;
   --ink-soft:  #bfa8c8;
-  --ink-faint: #8b7699;
+  --ink-faint: #9b86a9;
 
   --accent:      var(--rosa);
   --accent-ink:  #2b0a1a;
   --accent-soft: #3a1730;
+  --accent-text: var(--rosa);
 
+  /* Here the bright accent *is* the readable text colour on its own dark
+     tint — 5.5:1 and up — so the two shades collapse into one. */
   --good:      #55d089;
   --good-soft: #14301f;
+  --good-text: var(--good);
   --warn:      #ffc44d;
   --warn-soft: #34260d;
+  --warn-text: var(--warn);
   --bad:       #ff7080;
   --bad-soft:  #38151d;
+  --bad-text:  var(--bad);
 
   --shadow:    0 1px 2px rgba(0,0,0,.5), 0 8px 22px rgba(0,0,0,.4);
   --shadow-lg: 0 2px 8px rgba(0,0,0,.6), 0 22px 50px rgba(0,0,0,.5);
@@ -119,18 +138,24 @@ html[data-theme="dark"] {
     --line-soft: #2c2039;
     --ink:       #f8ecf4;
     --ink-soft:  #bfa8c8;
-    --ink-faint: #8b7699;
+    --ink-faint: #9b86a9;
 
     --accent:      var(--rosa);
     --accent-ink:  #2b0a1a;
     --accent-soft: #3a1730;
+    --accent-text: var(--rosa);
 
+    /* Here the bright accent *is* the readable text colour on its own dark
+       tint — 5.5:1 and up — so the two shades collapse into one. */
     --good:      #55d089;
     --good-soft: #14301f;
+    --good-text: var(--good);
     --warn:      #ffc44d;
     --warn-soft: #34260d;
+    --warn-text: var(--warn);
     --bad:       #ff7080;
     --bad-soft:  #38151d;
+    --bad-text:  var(--bad);
 
     --shadow:    0 1px 2px rgba(0,0,0,.5), 0 8px 22px rgba(0,0,0,.4);
     --shadow-lg: 0 2px 8px rgba(0,0,0,.6), 0 22px 50px rgba(0,0,0,.5);
@@ -227,7 +252,9 @@ main.wide { max-width: 1100px; }
 }
 .nav button .ico { font-size: 1.15rem; line-height: 1; }
 .nav button:hover { color: var(--ink-soft); background: var(--bg-sunken); }
-.nav button[aria-current="page"] { color: var(--accent); }
+/* --accent-text, not --accent: the bar sits on --bg, where the brand pink is
+   4.35:1 — just under what a 0.66rem label needs. */
+.nav button[aria-current="page"] { color: var(--accent-text); }
 
 /* ── Cards & surfaces ──────────────────────────────────── */
 
@@ -507,10 +534,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   padding: 2px 7px; border-radius: 999px; text-transform: uppercase;
   background: var(--bg-sunken); color: var(--ink-faint); flex-shrink: 0;
 }
-.level-tag.a1 { background: var(--good-soft); color: var(--good); }
-.level-tag.a2 { background: var(--accent-soft); color: var(--accent); }
-.level-tag.b1 { background: var(--warn-soft); color: var(--warn); }
-.level-tag.b2 { background: var(--bad-soft); color: var(--bad); }
+.level-tag.a1 { background: var(--good-soft); color: var(--good-text); }
+.level-tag.a2 { background: var(--accent-soft); color: var(--accent-text); }
+.level-tag.b1 { background: var(--warn-soft); color: var(--warn-text); }
+.level-tag.b2 { background: var(--bad-soft); color: var(--bad-text); }
 
 /* ── Flashcards & drills ───────────────────────────────── */
 
@@ -522,7 +549,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 .flashcard .prompt { font-family: var(--serif); font-size: 2rem; line-height: 1.2; }
 .flashcard .pos { font-size: .74rem; color: var(--ink-faint); letter-spacing: .05em; text-transform: uppercase; }
-.flashcard .answer { font-size: 1.2rem; color: var(--accent); font-weight: 600; }
+.flashcard .answer { font-size: 1.2rem; color: var(--accent-text); font-weight: 600; }
 .flashcard .example { font-family: var(--serif); font-size: 1rem; color: var(--ink-soft); margin-top: 6px; }
 .flashcard .example-en { font-size: .82rem; color: var(--ink-faint); }
 
@@ -564,7 +591,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   padding: 0; cursor: pointer;
 }
 .day:hover { border-color: var(--accent); color: var(--ink); }
-.day.done { background: var(--good); color: #fff; border-color: transparent; }
+.day.done { background: var(--good); color: var(--accent-ink); border-color: transparent; }
 .day.today { border-color: var(--accent); border-width: 2px; color: var(--accent); }
 .day.locked { opacity: .4; cursor: default; }
 .day.locked:hover { border-color: var(--line-soft); color: var(--ink-faint); }
@@ -583,10 +610,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   padding: 11px 14px; border-radius: var(--r-sm); font-size: .87rem;
   border: 1px solid transparent; margin-bottom: 14px;
 }
-.banner.info { background: var(--accent-soft); color: var(--accent); }
-.banner.warn { background: var(--warn-soft); color: var(--warn); }
-.banner.bad  { background: var(--bad-soft);  color: var(--bad); }
-.banner.good { background: var(--good-soft); color: var(--good); }
+.banner.info { background: var(--accent-soft); color: var(--accent-text); }
+.banner.warn { background: var(--warn-soft); color: var(--warn-text); }
+.banner.bad  { background: var(--bad-soft);  color: var(--bad-text); }
+.banner.good { background: var(--good-soft); color: var(--good-text); }
 .banner code { background: rgba(128,128,128,.16); padding: 1px 5px; border-radius: 4px;
   font-family: var(--mono); font-size: .84em; }
 

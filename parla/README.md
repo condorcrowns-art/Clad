@@ -801,6 +801,7 @@ node test/say-browser.test.js 8765          # a wrong sound, named and coached
 node test/read-browser.test.js 8765        # a story, tapped, heard and answered
 node test/hear-browser.test.js 8765        # the same story with the text withheld
 node test/write-browser.test.js 8765       # write badly, be caught, be re-drilled
+node test/contrast-browser.test.js 8765    # every screen, both themes, AA measured
 node test/transfer-browser.test.js 8765    # two devices, one deck, nothing lost
 ```
 
@@ -821,6 +822,40 @@ node test/hosted-browser.test.js 8803 flaky
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
+
+## Can you read it?
+
+The most basic quality bar there is, and the app was failing it in a lot of
+places at once — invisibly, because I have good eyes and a bright screen and
+was looking at screenshots.
+
+Two systemic faults, both found by measuring rather than looking:
+
+* **In dark mode every accent is a bright pastel**, and white text on one runs
+  1.58 to 2.83:1 against a 4.5 minimum. Every chip, every completed challenge
+  day, the selected tense button. The theme already had `--accent-ink` for
+  exactly this — white in light, near-black in dark — and nothing used it; the
+  rules said `color: #fff`.
+* **The "faint" text tier was 3.09:1 on white**, under what small text needs,
+  and it is the tier carrying the stat labels, the card meta lines and half the
+  hints in the app.
+
+Two shades of each semantic colour now, because *a colour that reads well as a
+fill behind white* and *a colour that reads well as text on its own pale tint*
+are not the same colour: `--good` fills, `--good-text` writes. In dark mode the
+two collapse, since there the bright accent already reads at 5.5:1 and up on
+its own dark tint. And where the faint tier sits on a tinted row rather than a
+white card it steps up to `--ink-soft` instead of the whole tier being darkened
+into `--ink-soft` everywhere.
+
+`test/contrast-browser.test.js` walks all thirteen screens in both themes and
+measures what a person would actually see: the colour composited through every
+alpha layer down to the opaque ground, against the AA threshold for that text's
+size and weight. It is not a proxy for looking at the screen — it is the thing
+looking cannot do, which is arithmetic. The first version of it read alpha
+colours raw and reported the word bank at 1.27:1, which was the audit's bug and
+not the app's; compositing fixed it. Both classes of regression were confirmed
+by putting the old value back and watching it fail.
 
 ## The plan is now as wide as the app
 

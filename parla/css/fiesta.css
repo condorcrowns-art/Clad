@@ -206,7 +206,7 @@ button:active { transform: scale(.97); }
 
 .nav button .ico { transition: transform .2s var(--ease); display: inline-block; }
 .nav button:hover .ico { transform: translateY(-3px) scale(1.12); }
-.nav button[aria-current="page"] { color: var(--rosa); }
+.nav button[aria-current="page"] { color: var(--accent-text); }
 .nav button[aria-current="page"]::after {
   content: '';
   position: absolute;
@@ -221,8 +221,8 @@ button:active { transform: scale(.97); }
 /* ── Chips ──────────────────────────────────────────────────*/
 .chip { transition: transform .18s var(--ease); }
 .chip:hover { transform: translateY(-1px); }
-.chip.hot { background: linear-gradient(135deg, var(--rosa), var(--naranja)); color: #fff; }
-.chip.good { background: linear-gradient(135deg, var(--verde), var(--turquesa)); color: #fff; }
+.chip.hot { background: var(--accent); color: var(--accent-ink); }
+.chip.good { background: var(--good); color: var(--accent-ink); }
 .chip.pop { animation: pop .45s var(--ease); }
 @keyframes pop {
   0%   { transform: scale(1); }
@@ -267,7 +267,7 @@ button:active { transform: scale(.97); }
 }
 .bubble.you .body {
   background: linear-gradient(135deg, var(--rosa), var(--morado));
-  color: #fff;
+  color: var(--accent-ink);
 }
 .correction {
   border-left: 3px solid var(--amarillo);
@@ -382,7 +382,7 @@ button:active { transform: scale(.97); }
   cursor: pointer;
   flex: none;
 }
-.help-use:hover { background: var(--morado); border-color: var(--morado); color: #fff; }
+.help-use:hover { background: var(--morado); border-color: var(--morado); color: var(--accent-ink); }
 .help-goal { font-size: .84rem; color: var(--ink-soft); padding: 4px 0; }
 
 
@@ -572,7 +572,7 @@ button:active { transform: scale(.97); }
   border-radius: var(--r-sm); padding: 4px 10px; font-size: .76rem; cursor: pointer;
 }
 .tense-btn[aria-pressed="true"] {
-  background: var(--turquesa); border-color: var(--turquesa); color: #fff;
+  background: var(--azul); border-color: var(--azul); color: var(--accent-ink);
 }
 .conj-table { display: grid; gap: 2px; }
 .conj-row {
@@ -634,7 +634,7 @@ button:active { transform: scale(.97); }
 .game-desc { font-size: .82rem; color: var(--ink-soft); margin-top: 2px; }
 .game-final { font-size: 3.2rem; font-weight: 800; color: var(--rosa); line-height: 1; }
 
-.chip.bad-chip { background: var(--bad); color: #fff; }
+.chip.bad-chip { background: var(--bad); color: var(--accent-ink); }
 
 .tile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .tile {
@@ -802,7 +802,10 @@ button:active { transform: scale(.97); }
 .wb-en { font-size: .85rem; color: var(--ink-soft); overflow: hidden;
          text-overflow: ellipsis; white-space: nowrap; }
 .wb-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; }
-.wb-meta span { font-size: .68rem; color: var(--ink-faint); }
+ /* --ink-soft: these rows carry a tint once a word is in the deck, and the
+    faint tier is calibrated against a white one. `.wb-meta span` also beat
+    `.tag-soft` on specificity, so the register chips were faint too. */
+.wb-meta span { font-size: .68rem; color: var(--ink-soft); }
 .small-btn { padding: 4px 10px; font-size: .85rem; min-width: 34px; }
 
 /* ── Ask, with a dictionary behind it ─────────────────────────*/
@@ -954,7 +957,7 @@ button:active { transform: scale(.97); }
 .sound-symbol {
   display: grid; place-items: center; flex: none;
   min-width: 44px; height: 40px; padding: 0 8px;
-  border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent);
+  border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent-text);
   font-family: var(--serif); font-size: 1.15rem; font-weight: 700;
 }
 .sound-symbol.big { min-width: 58px; height: 54px; font-size: 1.5rem; }
@@ -1103,7 +1106,7 @@ button:active { transform: scale(.97); }
   border-radius: 50%; border: 0;
   font-size: 2rem; line-height: 1;
   background: linear-gradient(140deg, var(--rosa), var(--naranja));
-  color: #fff; box-shadow: var(--shadow);
+  color: var(--accent-ink); box-shadow: var(--shadow);
 }
 .hear-play:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .hear-play:active { transform: translateY(0) scale(.97); }
@@ -1189,7 +1192,9 @@ button:active { transform: scale(.97); }
 .second-main { flex: 1; min-width: 0; display: block; }
 .second-what {
   display: block; font-size: .68rem; text-transform: uppercase;
-  letter-spacing: .06em; color: var(--ink-faint);
+  /* --ink-soft, not --ink-faint: the faint tier is calibrated against a white
+     card and this sits on a tinted one, where it drops to 4.27:1. */
+  letter-spacing: .06em; color: var(--ink-soft);
 }
 .second-title { display: block; font-weight: 600; line-height: 1.3; }
 .second-sub {
@@ -1199,7 +1204,7 @@ button:active { transform: scale(.97); }
      the conversation it is meant to sit under. */
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.second-go { flex: none; color: var(--ink-faint); }
+.second-go { flex: none; color: var(--ink-soft); }
 
 @media (max-width: 560px) {
   .second-task { padding: 9px 10px; gap: 9px; }
