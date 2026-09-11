@@ -802,6 +802,7 @@ node test/read-browser.test.js 8765        # a story, tapped, heard and answered
 node test/hear-browser.test.js 8765        # the same story with the text withheld
 node test/write-browser.test.js 8765       # write badly, be caught, be re-drilled
 node test/contrast-browser.test.js 8765    # every screen, both themes, AA measured
+node test/skills-browser.test.js 8765      # six skills, and naming the neglected one
 node test/transfer-browser.test.js 8765    # two devices, one deck, nothing lost
 ```
 
@@ -822,6 +823,27 @@ node test/hosted-browser.test.js 8803 flaky
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
+
+## Six things, and the one you are avoiding
+
+The app teaches six skills and the stats screen counted two. That is not merely
+incomplete — it is misleading, because someone reading it would conclude they
+were doing well while having never once written a sentence.
+
+All six are there now, each with how far in you are. The useful part is not the
+six counters, though; it is the line underneath. People practise what they are
+already good at, so the screen finds the skill you have been skipping and says
+so: *you have not started writing yet*, with a way into it. When you have done
+six writing tasks it stops saying that and names whatever is furthest behind
+instead.
+
+Speaking is the one with no ceiling, so it gets an empty track rather than a
+progress bar. A full bar next to "12 conversations" would say you are finished
+with speaking Spanish, which is not a thing that happens.
+
+Nobody is told off before they have started: on day one there is nothing to be
+behind on, and telling someone who has done nothing that they are neglecting
+writing is noise.
 
 ## Can you read it?
 

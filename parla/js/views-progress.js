@@ -435,6 +435,104 @@ window.PARLA = window.PARLA || {};
     return n ? n + ' to look at' : '20 things that trip you up';
   }
 
+  /* ── The six things ───────────────────────────────────────
+   *
+   * The app teaches six skills and the stats screen counted two. That is not
+   * only incomplete, it is misleading: a learner reading it would conclude
+   * they were doing well while having never once written a sentence.
+   *
+   * So: all six, each with how far in you are, and — the part that is actually
+   * useful — the one you have been avoiding, named, with a way into it. People
+   * practise what they are already good at. A number that says "you have
+   * spoken twelve times and written nothing" is worth more than four more
+   * counters nobody reads.
+   */
+  function skills() {
+    var st = PARLA.store.state;
+    var t = st.progress.totals;
+    var texts = PARLA.data.es.reading || [];
+    var tasks = PARLA.data.es.writing || [];
+    var lessons = PARLA.data.es.grammar || [];
+    var sounds = PARLA.data.es.sounds || [];
+    var r = st.reading || {}, w = st.writing || {};
+    var sndScores = st.sounds || {}, lessonScores = st.grammar || {};
+
+    var count = function (o, f) {
+      return Object.keys(o).filter(function (k) { return f(o[k]); }).length;
+    };
+
+    return [
+      { id: 'speak', icon: '💬', name: 'Speaking',
+        done: t.sessions, of: null,
+        line: t.sessions ? t.sessions + ' conversation' + (t.sessions === 1 ? '' : 's') +
+                           ', ' + ui.dur(t.minutes) : 'No conversations yet',
+        go: 'scenarios' },
+      { id: 'listen', icon: '🎧', name: 'Listening',
+        done: count(r, function (x) { return x.heardAsked; }), of: texts.length,
+        line: 'texts understood by ear', go: 'read' },
+      { id: 'read', icon: '📖', name: 'Reading',
+        done: count(r, function (x) { return x.asked; }), of: texts.length,
+        line: 'stories read', go: 'read' },
+      { id: 'write', icon: '✍️', name: 'Writing',
+        done: Object.keys(w).length, of: tasks.length,
+        line: 'tasks written', go: 'write' },
+      { id: 'sounds', icon: '👄', name: 'Sounds',
+        done: count(sndScores, function (x) { return x.tries >= 4; }), of: sounds.length,
+        line: 'sounds practised', go: 'say' },
+      { id: 'grammar', icon: '📐', name: 'Grammar',
+        done: count(lessonScores, function (x) { return x.tries >= 3; }), of: lessons.length,
+        line: 'lessons drilled', go: 'grammar' }
+    ];
+  }
+
+  function skillsCard() {
+    var all = skills();
+    var wrap = el('div');
+
+    var grid = el('div.skill-grid');
+    all.forEach(function (s) {
+      grid.appendChild(el('button.skill', { onclick: function () { PARLA.app.go(s.go); } },
+        el('div.skill-top',
+          el('span.skill-icon', s.icon),
+          el('span.skill-name', s.name)),
+        el('div.skill-n', s.of ? s.done + ' / ' + s.of : String(s.done)),
+        // Speaking has no ceiling, so it gets an empty track rather than a
+        // bar: a full bar next to "12 conversations" would say you are done
+        // with speaking Spanish, which is not a thing that happens.
+        s.of ? ui.bar(s.done / s.of) : el('div.bar.no-ceiling'),
+        el('div.skill-line', s.line)));
+    });
+    wrap.appendChild(grid);
+
+    /* The one being avoided. Only among the five that have a denominator —
+     * "speaking" has no ceiling to be behind on. */
+    var measured = all.filter(function (s) { return s.of; });
+    var anyDone = measured.some(function (s) { return s.done > 0; }) ||
+      PARLA.store.state.progress.totals.sessions > 0;
+    if (anyDone) {
+      var weakest = measured.slice().sort(function (a, b) {
+        return (a.done / a.of) - (b.done / b.of);
+      })[0];
+      var others = measured.filter(function (s) { return s !== weakest; });
+      var behind = others.every(function (s) { return s.done / s.of > weakest.done / weakest.of; });
+      if (behind) {
+        wrap.appendChild(el('button.fix-banner', { onclick: function () { PARLA.app.go(weakest.go); } },
+          el('div.row',
+            el('span.fix-emoji', weakest.icon),
+            el('div',
+              el('div.fix-title', weakest.done === 0
+                ? 'You have not started ' + weakest.name.toLowerCase() + ' yet'
+                : weakest.name + ' is the one you have been skipping'),
+              el('div.small.muted',
+                'People practise what they are already good at. This is the one ' +
+                'that will move fastest, because there is the most of it left.')),
+            el('div.spacer'),
+            el('span.chip.hot', 'Go →'))));
+      }
+    }
+    return wrap;
+  }
+
   function viewProgress() {
     init();
     var st = PARLA.store.state;
@@ -455,6 +553,9 @@ window.PARLA = window.PARLA || {};
       el('div.small.faint', { style: { marginTop: '4px' } },
         (lp.need - lp.into) + ' xp to level ' + (lp.level + 1))
     ));
+
+    main.appendChild(ui.sectionTitle('The six things'));
+    main.appendChild(skillsCard());
 
     main.appendChild(ui.sectionTitle('Speaking'));
     main.appendChild(el('div.grid.four',
@@ -506,10 +607,16 @@ window.PARLA = window.PARLA || {};
     }
 
     main.appendChild(ui.sectionTitle('Practice'));
+    var rd = st.reading || {}, wr = st.writing || {};
+    var caught = Object.keys(wr).reduce(function (n, k) { return n + (wr[k].caught || 0); }, 0);
+    var linesHeard = Object.keys(rd).reduce(function (n, k) { return n + (rd[k].caught || 0); }, 0);
     main.appendChild(el('div.grid.three.tight',
       ui.stat(t.reviews, 'card reviews'),
       ui.stat(t.conjugations, 'verbs drilled'),
-      ui.stat(t.corrections, 'corrections')
+      ui.stat(t.corrections, 'corrections'),
+      ui.stat(caught, 'caught in writing'),
+      ui.stat(linesHeard, 'lines caught by ear'),
+      ui.stat((st.mistakes || []).length, 'mistakes on file')
     ));
 
     if (st.history.length) {
