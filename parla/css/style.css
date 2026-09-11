@@ -1,0 +1,743 @@
+/* Parla — design system
+ * Light and dark are both first-class; the app follows the OS unless the
+ * user overrides it in settings (data-theme on <html>).
+ */
+
+/* ── Palette ────────────────────────────────────────────────
+ * Mexican folk colour: papel picado pink, Talavera turquoise, marigold,
+ * jacaranda purple, nopal green — sat on warm adobe cream rather than white,
+ * because these hues go muddy against a cold ground.
+ *
+ * The six fiesta hues are exposed as tokens so any component can reach for
+ * one; everything structural still runs on the semantic tokens beneath them,
+ * so the whole app can be recoloured from this block alone.
+ */
+:root {
+  --rosa:     #e01a76;   /* rosa mexicano */
+  --turquesa: #00a3a3;
+  --amarillo: #f0a500;
+  --naranja:  #f0592b;
+  --verde:    #2e9e5b;
+  --morado:   #7a3e9d;
+  --azul:     #1f6f8c;
+
+  --bg:        #fff8ee;
+  --bg-raised: #ffffff;
+  --bg-sunken: #fdeedd;
+  --line:      #f0dcc2;
+  --line-soft: #f7ebda;
+  --ink:       #2b1b14;
+  --ink-soft:  #75584a;
+  /* Was #a98d7c, which is 3.09:1 on white — under the 4.5 a body of small text
+     needs, and this tier carries the stat labels, the card meta lines and half
+     the hints in the app. */
+  --ink-faint: #8a6b56;
+
+  --accent:      var(--rosa);
+  /* The ink to put ON a saturated brand fill. White works over these deep
+     light-mode colours; over the bright pastels of the dark theme it does not,
+     which is why the fills below use this token and never #fff. */
+  --accent-ink:  #ffffff;
+  --accent-soft: #fde4ef;
+
+  /* Two shades of each semantic colour, because a colour that reads well as a
+     *fill* behind white and a colour that reads well as *text* on its own pale
+     tint are not the same colour. -text is the darker one. */
+  --good:      #19794a;
+  --good-soft: #e2f4e9;
+  --good-text: #15693d;
+  --warn:      #b87400;
+  --warn-soft: #fdf0d8;
+  --warn-text: #8f5a00;
+  --bad:       #c62d3f;
+  --bad-soft:  #fce7ea;
+  --bad-text:  #a1222f;
+  --accent-text: #b30d5c;
+
+  --r-sm: 10px;
+  --r-md: 13px;
+  --r:    16px;
+  --r-lg: 26px;
+
+  /* The surface a card sits on. Named separately from --bg-raised because a
+     card is a concept and a raised background is a colour, and eleven rules in
+     fiesta.css were already asking for it — silently, since an undefined
+     custom property makes the whole declaration invalid rather than falling
+     back. Every one of those cards was rendering square and transparent: the
+     reading shelf, the sound cards, the grammar cards, the frequency bands. */
+  --card: var(--bg-raised);
+  --shadow:    0 1px 2px rgba(90,45,20,.07), 0 8px 22px rgba(90,45,20,.08);
+  --shadow-lg: 0 2px 8px rgba(90,45,20,.10), 0 22px 50px rgba(90,45,20,.16);
+  /* A warm, slightly coloured lift — grey shadows read as dust on this ground. */
+  --glow: 0 6px 20px rgba(224,26,118,.28);
+
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  --serif: ui-serif, Georgia, "Times New Roman", serif;
+  --display: "Trebuchet MS", "Gill Sans", var(--sans);
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --ease: cubic-bezier(.22,.9,.28,1);
+}
+
+/* Night: the same fiesta on a jacaranda-dark ground, hues lifted so they
+   still sing rather than sinking into the background. */
+html[data-theme="dark"] {
+  --rosa:     #ff5fa2;
+  --turquesa: #2fd4d4;
+  --amarillo: #ffc44d;
+  --naranja:  #ff855c;
+  --verde:    #55d089;
+  --morado:   #c084e8;
+  --azul:     #63b6d4;
+
+  --bg:        #171020;
+  --bg-raised: #221830;
+  --bg-sunken: #0f0a16;
+  --line:      #3a2b4c;
+  --line-soft: #2c2039;
+  --ink:       #f8ecf4;
+  --ink-soft:  #bfa8c8;
+  --ink-faint: #9b86a9;
+
+  --accent:      var(--rosa);
+  --accent-ink:  #2b0a1a;
+  --accent-soft: #3a1730;
+  --accent-text: var(--rosa);
+
+  /* Here the bright accent *is* the readable text colour on its own dark
+     tint — 5.5:1 and up — so the two shades collapse into one. */
+  --good:      #55d089;
+  --good-soft: #14301f;
+  --good-text: var(--good);
+  --warn:      #ffc44d;
+  --warn-soft: #34260d;
+  --warn-text: var(--warn);
+  --bad:       #ff7080;
+  --bad-soft:  #38151d;
+  --bad-text:  var(--bad);
+
+  --shadow:    0 1px 2px rgba(0,0,0,.5), 0 8px 22px rgba(0,0,0,.4);
+  --shadow-lg: 0 2px 8px rgba(0,0,0,.6), 0 22px 50px rgba(0,0,0,.5);
+  --glow: 0 6px 22px rgba(255,95,162,.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --rosa:     #ff5fa2;
+    --turquesa: #2fd4d4;
+    --amarillo: #ffc44d;
+    --naranja:  #ff855c;
+    --verde:    #55d089;
+    --morado:   #c084e8;
+    --azul:     #63b6d4;
+
+    --bg:        #171020;
+    --bg-raised: #221830;
+    --bg-sunken: #0f0a16;
+    --line:      #3a2b4c;
+    --line-soft: #2c2039;
+    --ink:       #f8ecf4;
+    --ink-soft:  #bfa8c8;
+    --ink-faint: #9b86a9;
+
+    --accent:      var(--rosa);
+    --accent-ink:  #2b0a1a;
+    --accent-soft: #3a1730;
+    --accent-text: var(--rosa);
+
+    /* Here the bright accent *is* the readable text colour on its own dark
+       tint — 5.5:1 and up — so the two shades collapse into one. */
+    --good:      #55d089;
+    --good-soft: #14301f;
+    --good-text: var(--good);
+    --warn:      #ffc44d;
+    --warn-soft: #34260d;
+    --warn-text: var(--warn);
+    --bad:       #ff7080;
+    --bad-soft:  #38151d;
+    --bad-text:  var(--bad);
+
+    --shadow:    0 1px 2px rgba(0,0,0,.5), 0 8px 22px rgba(0,0,0,.4);
+    --shadow-lg: 0 2px 8px rgba(0,0,0,.6), 0 22px 50px rgba(0,0,0,.5);
+    --glow: 0 6px 22px rgba(255,95,162,.35);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { min-height: 100vh; display: flex; flex-direction: column; }
+
+h1, h2, h3 { margin: 0 0 .4em; line-height: 1.2; font-weight: 640; letter-spacing: -.015em; }
+h1 { font-size: 1.7rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1rem; }
+p { margin: 0 0 .8em; }
+a { color: var(--accent); }
+
+.hidden { display: none !important; }
+.muted { color: var(--ink-soft); }
+.faint { color: var(--ink-faint); }
+.small { font-size: .84rem; }
+.center { text-align: center; }
+.mono { font-family: var(--mono); }
+.es { font-family: var(--serif); }
+
+/* ── App shell ─────────────────────────────────────────── */
+
+#app { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.topbar .brand {
+  font-weight: 700; letter-spacing: -.02em; font-size: 1.05rem;
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  background: none; border: 0; color: var(--ink); padding: 0; font-family: inherit;
+}
+.topbar .brand .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+}
+.topbar .spacer { flex: 1; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--line-soft);
+  font-size: .8rem; font-weight: 600; color: var(--ink-soft);
+  white-space: nowrap;
+}
+.chip.hot { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.chip.good { background: var(--good-soft); border-color: transparent; color: var(--good); }
+
+main {
+  flex: 1; width: 100%; max-width: 880px; margin: 0 auto;
+  padding: 20px 16px 96px;
+}
+main.wide { max-width: 1100px; }
+
+/* ── Bottom navigation ─────────────────────────────────── */
+
+.nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  display: flex; justify-content: center; gap: 2px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line-soft);
+}
+.nav button {
+  flex: 1; max-width: 120px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 4px; border: 0; border-radius: var(--r-sm);
+  background: none; color: var(--ink-faint);
+  font-family: inherit; font-size: .68rem; font-weight: 600;
+  cursor: pointer; transition: color .15s, background .15s;
+}
+.nav button .ico { font-size: 1.15rem; line-height: 1; }
+.nav button:hover { color: var(--ink-soft); background: var(--bg-sunken); }
+/* --accent-text, not --accent: the bar sits on --bg, where the brand pink is
+   4.35:1 — just under what a 0.66rem label needs. */
+.nav button[aria-current="page"] { color: var(--accent-text); }
+
+/* ── Cards & surfaces ──────────────────────────────────── */
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.card + .card { margin-top: 14px; }
+.card.flush { padding: 0; overflow: hidden; }
+
+.grid { display: grid; gap: 12px; }
+.grid.two   { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.grid.three { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.grid { align-items: stretch; }
+.grid.four  { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+.row { display: flex; align-items: center; gap: 10px; }
+.row.wrap { flex-wrap: wrap; }
+.row .spacer { flex: 1; }
+
+.stack > * + * { margin-top: 10px; }
+
+.section-title {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 26px 0 10px;
+}
+.section-title h2 { margin: 0; }
+.section-title .spacer { flex: 1; }
+
+/* ── Buttons ───────────────────────────────────────────── */
+
+/* The plain-button look, wrapped in :where() so it carries no specificity at
+ * all. That matters more than it sounds: written as `button:hover` this rule
+ * scores 0,1,1 and beats every single-class rule in the app — `.mic`,
+ * `.primary`, `.tile`, `.quiz-opt` — so hovering the microphone turned it into
+ * a cream circle with white text on it, and every pink button went blank under
+ * the cursor. At zero specificity a class always wins, which is what anyone
+ * writing `.primary { background: ... }` expects to happen. */
+:where(button, .btn) {
+  font-family: inherit; font-size: .92rem; font-weight: 600;
+  padding: 9px 16px; border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-raised); color: var(--ink);
+  cursor: pointer;
+  transition: background .14s, border-color .14s, transform .06s, opacity .14s;
+}
+:where(button, .btn):hover { background: var(--bg-sunken); }
+button:active, .btn:active { transform: translateY(1px); }
+button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+/* Coloured buttons keep their colour and get lit rather than repainted, so
+ * there is no way for a hover state to make one unreadable. */
+button:not(:disabled):hover.primary,
+.primary:not(:disabled):hover,
+.mic:not(:disabled):hover,
+.tile:not(.gone):hover,
+.quiz-opt:hover,
+.game-card:hover,
+.band-card:hover,
+.scenario:hover { filter: brightness(1.05) saturate(1.03); }
+
+button.primary {
+  background: var(--accent); color: var(--accent-ink); border-color: transparent;
+}
+button.primary:hover { filter: brightness(1.07); background: var(--accent); }
+
+button.ghost { background: none; border-color: transparent; color: var(--ink-soft); }
+button.ghost:hover { background: var(--bg-sunken); color: var(--ink); }
+
+button.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+button.danger:hover { background: var(--bad-soft); }
+
+button.big { padding: 14px 24px; font-size: 1rem; border-radius: var(--r); }
+button.wide { width: 100%; }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Forms ─────────────────────────────────────────────── */
+
+label.field { display: block; margin-bottom: 14px; }
+label.field > span {
+  display: block; font-size: .82rem; font-weight: 640;
+  color: var(--ink-soft); margin-bottom: 5px;
+}
+input[type="text"], input[type="password"], input[type="url"], select, textarea {
+  width: 100%; padding: 9px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--bg); color: var(--ink);
+  font-family: inherit; font-size: .94rem;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px; border-color: var(--accent);
+}
+textarea { resize: vertical; min-height: 80px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.hint { font-size: .8rem; color: var(--ink-faint); margin-top: 4px; }
+
+/* A segmented control sits in a flex row next to a couple of chips. On a phone
+ * that row is 412px wide and the control alone wants 379, so as an inline-flex
+ * that refuses to shrink it pushed the whole page 187px sideways. It may now
+ * shrink, and scroll inside itself rather than dragging the document with it. */
+.seg {
+  display: inline-flex; background: var(--bg-sunken);
+  border-radius: var(--r-sm); padding: 3px; gap: 3px;
+  min-width: 0; max-width: 100%;
+  overflow-x: auto; scrollbar-width: none;
+}
+.seg::-webkit-scrollbar { display: none; }
+.seg button { flex: 0 0 auto; white-space: nowrap; }
+.seg button {
+  border: 0; background: none; padding: 6px 13px; border-radius: 6px;
+  font-size: .85rem; color: var(--ink-soft);
+}
+.seg button[aria-pressed="true"] { background: var(--bg-raised); color: var(--ink); box-shadow: var(--shadow); }
+
+/* ── Conversation ──────────────────────────────────────── */
+
+/* Aligned to the top, not the middle: the setting runs to three lines on a
+ * phone, and centring left the emoji floating beside the second line with
+ * "Finish" hovering in empty space opposite it. */
+.convo-head {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding-bottom: 10px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.convo-head .emoji { font-size: 1.7rem; line-height: 1.25; flex: none; }
+.convo-head .meta { min-width: 0; flex: 1; }
+.convo-head .meta h2 { margin: 0; font-size: 1.05rem; }
+.convo-head .meta p {
+  margin: 2px 0 0; font-size: .8rem; color: var(--ink-faint); line-height: 1.35;
+  /* Two lines of scene-setting is plenty above a conversation. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.convo-head > button { flex: none; align-self: flex-start; }
+
+#thread {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 0; min-height: 200px;
+}
+
+.bubble { max-width: 82%; display: flex; flex-direction: column; gap: 3px; }
+.bubble.them { align-self: flex-start; }
+.bubble.you  { align-self: flex-end; align-items: flex-end; }
+
+.bubble .body {
+  padding: 11px 15px; border-radius: var(--r-lg);
+  background: var(--bg-raised); border: 1px solid var(--line-soft);
+  font-family: var(--serif); font-size: 1.06rem; line-height: 1.45;
+}
+.bubble.you .body {
+  background: var(--accent); color: var(--accent-ink); border-color: transparent;
+}
+.bubble .trans {
+  font-size: .8rem; color: var(--ink-faint); padding: 0 8px;
+  font-family: var(--sans);
+}
+.bubble .tools { display: flex; gap: 4px; padding: 0 4px; }
+.bubble .tools button {
+  padding: 2px 8px; font-size: .72rem; border: 0; background: none;
+  color: var(--ink-faint); border-radius: 5px;
+}
+.bubble .tools button:hover { background: var(--bg-sunken); color: var(--ink); }
+
+.bubble.thinking .body { color: var(--ink-faint); font-style: italic; }
+
+.correction {
+  align-self: flex-end; max-width: 82%;
+  background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+  border-radius: var(--r); padding: 10px 13px; font-size: .86rem;
+}
+.correction .lead { font-weight: 700; color: var(--warn); font-size: .74rem;
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+.correction .was { text-decoration: line-through; color: var(--ink-faint); }
+.correction .now { font-family: var(--serif); font-size: 1rem; color: var(--ink); }
+.correction .note { color: var(--ink-soft); margin-top: 4px; }
+
+.mic-dock {
+  position: sticky; bottom: 74px; z-index: 20;
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  padding: 14px 0 4px;
+  background: linear-gradient(to top, var(--bg) 65%, transparent);
+}
+.mic {
+  width: 78px; height: 78px; border-radius: 50%;
+  border: 0; background: var(--accent); color: var(--accent-ink);
+  font-size: 1.9rem; display: grid; place-items: center;
+  box-shadow: var(--shadow-lg); cursor: pointer;
+  transition: transform .12s, box-shadow .12s;
+}
+.mic:hover { transform: scale(1.04); }
+.mic[data-state="listening"] {
+  background: var(--bad); animation: pulse 1.3s ease-in-out infinite;
+}
+.mic[data-state="thinking"] { background: var(--ink-faint); }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 45%, transparent), var(--shadow-lg); }
+  50%      { box-shadow: 0 0 0 16px transparent, var(--shadow-lg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mic[data-state="listening"] { animation: none; }
+}
+
+.mic-label { font-size: .82rem; color: var(--ink-soft); min-height: 1.3em; text-align: center; }
+
+/* The cancel button sits beside the mic without displacing it, so the mic
+   itself never moves under a thumb that is already reaching for it. */
+.mic-row { position: relative; display: flex; align-items: center; justify-content: center; }
+.mic-cancel {
+  position: absolute; left: 50%; margin-left: 38px;
+  width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--bg-sunken);
+  color: var(--ink-faint); font-size: .8rem; line-height: 1; cursor: pointer;
+}
+.mic-cancel:hover { color: var(--bad); border-color: var(--bad); }
+
+/* Your own bubbles only reveal their fix-it button on approach, so the thread
+   does not read as a wall of controls. */
+.bubble.you .tools { opacity: 0; transition: opacity .12s; }
+.bubble.you:hover .tools, .bubble.you:focus-within .tools { opacity: 1; }
+@media (hover: none) { .bubble.you .tools { opacity: 1; } }
+.type-fallback { display: flex; gap: 6px; width: 100%; max-width: 520px; }
+.type-fallback input { flex: 1; }
+
+.phrasebook {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  padding: 4px 0;
+}
+.phrasebook button {
+  font-family: var(--serif); font-size: .88rem; padding: 5px 11px;
+  border-radius: 999px; background: var(--bg-sunken); border: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+}
+.phrasebook button:hover { color: var(--ink); border-color: var(--line); }
+
+/* ── Scenario picker ───────────────────────────────────── */
+
+.scenario {
+  display: flex; align-items: center; gap: 13px; width: 100%;
+  padding: 13px 15px; text-align: left;
+  border: 1px solid var(--line-soft); border-radius: var(--r);
+  background: var(--bg-raised);
+}
+.scenario:hover { border-color: var(--accent); background: var(--bg-raised); }
+.scenario .emoji { font-size: 1.6rem; flex-shrink: 0; }
+.scenario .txt { min-width: 0; flex: 1; }
+.scenario .txt strong { display: block; font-size: .95rem; }
+/* The subtitle used to be one clipped line, which at two tiles across a phone
+ * turned "12 cards waiting" into "12 cards wait…" and "Conjugation trainer"
+ * into "Conjugation t…". Two lines, wrapped, and the tiles in a row keep the
+ * same height. */
+.scenario .txt span {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: .78rem; color: var(--ink-faint); line-height: 1.3;
+}
+.grid .scenario { height: 100%; align-items: flex-start; }
+.grid .scenario .emoji { margin-top: 1px; }
+/* A long chip on the end — "me llamo / ¿cómo te llamas?" — used to hold its
+   full width and squeeze the title into a four-line column beside it. Below
+   this width the chip drops to its own line instead. */
+@media (max-width: 560px) {
+  .scenario:not(.grid .scenario) { flex-wrap: wrap; }
+  /* The title claims most of the line so the chip has nowhere to sit and wraps
+     below it — at its own width, not stretched across the card like a banner,
+     which is what flex-basis:100% on the chip itself would have done. */
+  .scenario:not(.grid .scenario) > .txt { flex: 1 1 62%; }
+  .scenario:not(.grid .scenario) > .chip { flex: 0 0 auto; margin-top: 4px; }
+}
+.level-tag {
+  font-size: .66rem; font-weight: 800; letter-spacing: .06em;
+  padding: 2px 7px; border-radius: 999px; text-transform: uppercase;
+  background: var(--bg-sunken); color: var(--ink-faint); flex-shrink: 0;
+}
+.level-tag.a1 { background: var(--good-soft); color: var(--good-text); }
+.level-tag.a2 { background: var(--accent-soft); color: var(--accent-text); }
+.level-tag.b1 { background: var(--warn-soft); color: var(--warn-text); }
+.level-tag.b2 { background: var(--bad-soft); color: var(--bad-text); }
+
+/* ── Flashcards & drills ───────────────────────────────── */
+
+.flashcard {
+  background: var(--bg-raised); border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg); padding: 34px 24px; text-align: center;
+  box-shadow: var(--shadow); min-height: 240px;
+  display: flex; flex-direction: column; justify-content: center; gap: 10px;
+}
+.flashcard .prompt { font-family: var(--serif); font-size: 2rem; line-height: 1.2; }
+.flashcard .pos { font-size: .74rem; color: var(--ink-faint); letter-spacing: .05em; text-transform: uppercase; }
+.flashcard .answer { font-size: 1.2rem; color: var(--accent-text); font-weight: 600; }
+.flashcard .example { font-family: var(--serif); font-size: 1rem; color: var(--ink-soft); margin-top: 6px; }
+.flashcard .example-en { font-size: .82rem; color: var(--ink-faint); }
+
+.grade-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.grade-row button { padding: 12px 4px; font-size: .82rem; }
+.grade-row button small { display: block; font-weight: 500; font-size: .68rem; color: var(--ink-faint); }
+.grade-row button.g0:hover { background: var(--bad-soft); border-color: var(--bad); }
+.grade-row button.g3:hover { background: var(--warn-soft); border-color: var(--warn); }
+.grade-row button.g4:hover { background: var(--good-soft); border-color: var(--good); }
+.grade-row button.g5:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+.conj-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.conj-table td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); }
+.conj-table td:first-child { color: var(--ink-faint); width: 42%; font-size: .85rem; }
+.conj-table td:last-child { font-family: var(--serif); font-size: 1.05rem; }
+
+.answer-state { font-size: .88rem; padding: 8px 12px; border-radius: var(--r-sm); margin-top: 10px; }
+.answer-state.ok  { background: var(--good-soft); color: var(--good); }
+.answer-state.no  { background: var(--bad-soft); color: var(--bad); }
+
+/* ── Progress ──────────────────────────────────────────── */
+
+.stat {
+  background: var(--bg-raised); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 14px; text-align: center;
+}
+.stat .n { font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.stat .k { font-size: .74rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .05em; }
+
+.bar { height: 8px; border-radius: 999px; background: var(--bg-sunken); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+
+.day-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; }
+@media (max-width: 560px) { .day-grid { grid-template-columns: repeat(6, 1fr); } }
+.day {
+  aspect-ratio: 1; border-radius: 7px; border: 1px solid var(--line-soft);
+  background: var(--bg-raised); color: var(--ink-faint);
+  display: grid; place-items: center; font-size: .74rem; font-weight: 700;
+  padding: 0; cursor: pointer;
+}
+.day:hover { border-color: var(--accent); color: var(--ink); }
+.day.done { background: var(--good); color: var(--accent-ink); border-color: transparent; }
+.day.today { border-color: var(--accent); border-width: 2px; color: var(--accent); }
+.day.locked { opacity: .4; cursor: default; }
+.day.locked:hover { border-color: var(--line-soft); color: var(--ink-faint); }
+
+.mistake {
+  padding: 11px 14px; border-left: 3px solid var(--warn);
+  background: var(--bg-raised); border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.mistake .was { text-decoration: line-through; color: var(--ink-faint); font-size: .88rem; }
+.mistake .now { font-family: var(--serif); font-size: 1.02rem; }
+.mistake .note { font-size: .8rem; color: var(--ink-soft); }
+
+/* ── Banners ───────────────────────────────────────────── */
+
+.banner {
+  padding: 11px 14px; border-radius: var(--r-sm); font-size: .87rem;
+  border: 1px solid transparent; margin-bottom: 14px;
+}
+.banner.info { background: var(--accent-soft); color: var(--accent-text); }
+.banner.warn { background: var(--warn-soft); color: var(--warn-text); }
+.banner.bad  { background: var(--bad-soft);  color: var(--bad-text); }
+.banner.good { background: var(--good-soft); color: var(--good-text); }
+.banner code { background: rgba(128,128,128,.16); padding: 1px 5px; border-radius: 4px;
+  font-family: var(--mono); font-size: .84em; }
+
+/* ── Onboarding ────────────────────────────────────────── */
+
+.onboard {
+  max-width: 460px; margin: 8vh auto; padding: 0 18px;
+}
+.onboard .logo { font-size: 3rem; text-align: center; margin-bottom: 6px; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatch {
+  width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent;
+  cursor: pointer; padding: 0;
+}
+.swatch[aria-pressed="true"] { border-color: var(--ink); }
+
+.empty {
+  text-align: center; padding: 40px 20px; color: var(--ink-faint);
+}
+.empty .big-emoji { font-size: 2.6rem; display: block; margin-bottom: 8px; }
+
+.chip.bad { background: var(--bad-soft); border-color: transparent; color: var(--bad); }
+.chip { cursor: pointer; }
+
+/* ── The nav bar, and what does not fit on it ─────────────
+ * Nine screens, and a phone is about 412 pixels wide. Scrolling the bar was
+ * the first attempt and it was worse than not fitting: the label of whichever
+ * tab landed at the edge was sliced down the middle, and the tab you were
+ * actually on could be off-screen entirely. So below 620px the bar carries the
+ * five screens a learner opens daily plus a More button, and the rest live in
+ * a sheet. Above 620px they all fit and More disappears. */
+.nav-more { }
+
+@media (min-width: 621px) {
+  .nav-more { display: none !important; }
+}
+
+@media (max-width: 620px) {
+  .nav button[data-view]:not([data-primary]) { display: none; }
+  .nav button { min-width: 0; }
+}
+
+.sheet-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, .38);
+  backdrop-filter: blur(2px);
+}
+
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, .18);
+  padding: 8px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(102%);
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1);
+}
+.sheet.up { transform: translateY(0); }
+.sheet-grip {
+  width: 40px; height: 4px; border-radius: 999px;
+  background: var(--line); margin: 4px auto 12px;
+}
+.sheet-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px;
+}
+.sheet-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 6px; border-radius: var(--r-md);
+  border: 1px solid var(--line); background: var(--bg);
+  font-size: .78rem; font-weight: 600; color: var(--ink-soft);
+  min-height: 76px;
+}
+.sheet-item .sheet-ico { font-size: 1.5rem; line-height: 1; }
+.sheet-item.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.tiny-btn { padding: 4px 10px; font-size: .78rem; }
+
+/* ── The conversation column ──────────────────────────────
+ * A chat screen with one line on it used to leave 250 empty pixels between the
+ * bubble and the microphone, and another 230 below the microphone before the
+ * nav — the dock floated in the middle of nowhere. The column fills the
+ * viewport instead, the thread takes the slack, and the controls sit where a
+ * thumb expects them: at the bottom. */
+main.talk {
+  display: flex; flex-direction: column;
+  min-height: calc(100svh - 128px);
+}
+main.talk #thread { flex: 1; min-height: 90px; }
+main.talk .mic-dock { margin-top: auto; }
+
+/* ── The review screen ────────────────────────────────────
+ * A flashcard is 300 pixels tall on a 915-pixel phone, so left alone the card
+ * sat at the top with two thirds of the screen empty under it and the grade
+ * buttons a thumb-stretch away. The column fills the viewport and the card
+ * takes the middle. */
+/* No stretching here: the header above this column is about 190px tall, so a
+ * column sized to the viewport hangs off the bottom and "centre" lands below
+ * the middle of the screen. The card sits where it falls; what mattered was
+ * the mode switcher, below. */
+
+@media (max-width: 620px) {
+  /* The mode switcher gets its own line and all six modes fit on it. */
+  .drill-head { row-gap: 8px; }
+  .drill-head .spacer { display: none; }
+  .drill-head .seg { flex: 1 0 100%; justify-content: space-between; }
+  .drill-head .seg button { padding: 6px 8px; font-size: .8rem; }
+}
+
+/* Three small numbers should be three across a phone, not two and an orphan
+ * on a row of its own. */
+/* The browser hides [hidden] elements with `display: none` from its own
+ * stylesheet, which any author rule setting `display` silently beats. Anything
+ * given `display: flex` or `grid` in here would ignore being hidden — as the
+ * folded tense picker did, appearing open on every visit. */
+[hidden] { display: none !important; }
+
+.grid.three.tight { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.grid.three.tight .stat { padding: 12px 6px; }
+.grid.three.tight .stat .n { font-size: 1.4rem; }
+.grid.three.tight .stat .k { font-size: .62rem; line-height: 1.25; }
+
+/* A section title with a link beside it: the title takes the room it needs and
+ * the link stays on the baseline next to it rather than being pushed onto the
+ * heading's first line. */
+.section-title { flex-wrap: wrap; row-gap: 2px; }
+.section-title > *:first-child { flex: 1 1 auto; min-width: 0; }

@@ -1,0 +1,1276 @@
+/* Parla — the fiesta layer
+ *
+ * Everything decorative lives here, on top of the structural system in
+ * style.css. All artwork is generated from geometry in js/decor.js — no
+ * images, no fonts to fetch, nothing to load. The app still works with this
+ * file deleted; it just stops being a party.
+ *
+ * Motion is real but cheap: transform and opacity only, so nothing here
+ * triggers layout. Everything stops dead under prefers-reduced-motion.
+ */
+
+/* ── Background: a Talavera tile field ──────────────────────
+   Two fixed layers - the tile lattice and a slow colour wash drifting over
+   it - so the page has depth without a single pixel being downloaded. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -2;
+}
+body::before {
+  background-image: var(--tile-art);
+  background-size: 132px 132px;
+  opacity: .5;
+}
+html[data-theme="dark"] body::before { opacity: .28; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) body::before { opacity: .28; }
+}
+
+/* The wash: three soft colour fields breathing against each other. Kept far
+   below the content and very low contrast, so it reads as warmth on the wall
+   rather than as a gradient anyone notices. */
+body::after {
+  z-index: -3;
+  background:
+    radial-gradient(58vw 58vw at 12% -8%,  color-mix(in oklab, var(--rosa) 22%, transparent), transparent 62%),
+    radial-gradient(52vw 52vw at 92% 12%,  color-mix(in oklab, var(--turquesa) 20%, transparent), transparent 60%),
+    radial-gradient(64vw 64vw at 50% 108%, color-mix(in oklab, var(--amarillo) 22%, transparent), transparent 64%);
+  animation: wash 60s var(--ease) infinite alternate;
+}
+@keyframes wash {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-0.6%, 0.5%, 0) scale(1.015); }
+  100% { transform: translate3d(0.6%, -0.5%, 0) scale(1.005); }
+}
+
+/* ── Papel picado ───────────────────────────────────────────
+   Cut-paper bunting strung under the top bar. Each flag swings on its own
+   beat from its top edge, the way paper actually hangs. */
+/* Static, not sticky: a string of paper with gaps in it cannot sit over
+   scrolling text without the text showing through the holes. */
+.papel {
+  position: relative;
+  display: flex;
+  /* space-around, not space-between: with space-between the end flags sit hard
+     against the edges, and since each one swings a few degrees it gets sliced
+     down its own side by the overflow clip. */
+  justify-content: space-around;
+  align-items: flex-start;
+  padding: 0 4px;
+  /* Taller than the flags themselves: each one swings a few degrees and would
+     otherwise be clipped at its own corners by that rotation. */
+  height: 68px;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* The string they hang from. */
+.papel::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 1px;
+  height: 2px;
+  background: color-mix(in oklab, var(--ink) 22%, transparent);
+}
+.papel svg {
+  height: 58px;
+  width: auto;
+  transform-origin: 50% 0;
+  animation: sway 7.5s ease-in-out infinite alternate;
+  filter: drop-shadow(0 3px 3px rgba(90,45,20,.16));
+}
+.papel svg:nth-child(even) { animation-duration: 9.2s; animation-delay: -2.1s; }
+.papel svg:nth-child(3n)   { animation-duration: 10.6s; animation-delay: -4.3s; }
+@keyframes sway {
+  from { transform: rotate(-1.4deg); }
+  to   { transform: rotate(1.4deg); }
+}
+
+/* ── The mural ──────────────────────────────────────────────
+   A flat-colour scene on the home screen: sun, hills, arches, agave. The sun
+   turns, the hills drift, the birds cross. */
+.mural {
+  position: relative;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-lg);
+  isolation: isolate;
+}
+.mural svg { display: block; width: 100%; height: auto; }
+/* transform-origin on an SVG element resolves against the nearest viewport by
+   default, not against the element - so "50% 50%" was the middle of the whole
+   mural, and the sun's rays orbited a point far away from the sun. fill-box
+   makes the reference the element's own bounding box, which for a symmetric
+   ring of rays is its centre, which is the sun. */
+.mural .rays {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: turn 120s linear infinite;
+}
+/* Birds move in user units. A percentage here would be measured against the
+   bird's own tiny bounding box and it would barely twitch. */
+.mural .bird { animation: fly 34s linear infinite; }
+.mural .bird:nth-of-type(2) { animation-duration: 46s; animation-delay: -13s; }
+.mural .bird:nth-of-type(3) { animation-duration: 58s; animation-delay: -27s; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@keyframes fly {
+  from { transform: translateX(-60px); }
+  to   { transform: translateX(860px); }
+}
+
+/* Text laid over the mural, in a scrim so it stays readable whatever is
+   painted underneath it. */
+.mural .over {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 22px 20px 18px;
+  background: linear-gradient(to top, rgba(20,8,14,.82), rgba(20,8,14,.45) 55%, transparent);
+  color: #fff8ee;
+}
+.mural .over .kicker {
+  font-size: .7rem; letter-spacing: .16em; text-transform: uppercase;
+  opacity: .85; margin-bottom: 4px;
+}
+.mural .over .line { font-family: var(--display); font-size: 1.55rem; font-weight: 700; line-height: 1.15; }
+.mural .over .sub { font-size: .86rem; opacity: .9; margin-top: 3px; }
+
+/* ── Entrances ──────────────────────────────────────────────
+   Cards arrive in sequence rather than all at once. The delay is set inline
+   by decor.js so any number of them stagger correctly. */
+.rise { animation: rise .32s var(--ease) both; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Cards ──────────────────────────────────────────────────
+   A woven-ribbon edge on the left, and a lift on approach. */
+.card {
+  position: relative;
+  overflow: hidden;
+  transition: transform .22s var(--ease), box-shadow .22s var(--ease);
+}
+.card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: linear-gradient(to bottom,
+    var(--rosa) 0 20%, var(--amarillo) 20% 40%, var(--turquesa) 40% 60%,
+    var(--verde) 60% 80%, var(--morado) 80% 100%);
+  opacity: .85;
+}
+.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+
+/* ── Buttons ────────────────────────────────────────────────
+   The primary action gets a sheen that crosses it on approach. */
+button.primary, .btn-row button:first-child {
+  position: relative;
+  overflow: hidden;
+}
+button.primary::after, .btn-row button:first-child::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.42) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform .55s var(--ease);
+}
+button.primary:hover::after, .btn-row button:first-child:hover::after { transform: translateX(120%); }
+button { transition: transform .16s var(--ease), box-shadow .16s var(--ease), background .16s; }
+button:active { transform: scale(.97); }
+
+/* ── Top bar and nav ────────────────────────────────────────*/
+.topbar {
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--rosa) 12%, var(--bg-raised)),
+    color-mix(in oklab, var(--amarillo) 12%, var(--bg-raised)),
+    color-mix(in oklab, var(--turquesa) 12%, var(--bg-raised)));
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--rosa), var(--amarillo), var(--turquesa), var(--morado)) 1;
+}
+.topbar .brand .dot {
+  background: var(--rosa);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--rosa) 25%, transparent);
+  animation: beat 2.6s var(--ease) infinite;
+}
+@keyframes beat {
+  0%, 100% { transform: scale(1); }
+  14%      { transform: scale(1.35); }
+  28%      { transform: scale(1); }
+}
+
+.nav button .ico { transition: transform .2s var(--ease); display: inline-block; }
+.nav button:hover .ico { transform: translateY(-3px) scale(1.12); }
+.nav button[aria-current="page"] { color: var(--accent-text); }
+.nav button[aria-current="page"]::after {
+  content: '';
+  position: absolute;
+  bottom: 4px; left: 50%;
+  width: 18px; height: 3px; margin-left: -9px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--rosa), var(--amarillo));
+  animation: rise .3s var(--ease) both;
+}
+.nav button { position: relative; }
+
+/* ── Chips ──────────────────────────────────────────────────*/
+.chip { transition: transform .18s var(--ease); }
+.chip:hover { transform: translateY(-1px); }
+.chip.hot { background: var(--accent); color: var(--accent-ink); }
+.chip.good { background: var(--good); color: var(--accent-ink); }
+.chip.pop { animation: pop .45s var(--ease); }
+@keyframes pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.28) rotate(-4deg); }
+  100% { transform: scale(1); }
+}
+
+/* ── The microphone ─────────────────────────────────────────
+   Listening sends rings outward, so there is never a doubt about whether it
+   is actually hearing you. */
+.mic {
+  background: linear-gradient(140deg, var(--rosa), var(--naranja));
+  box-shadow: var(--glow);
+}
+.mic[data-state="listening"] { background: linear-gradient(140deg, var(--turquesa), var(--verde)); }
+.mic[data-state="thinking"]  { background: linear-gradient(140deg, var(--morado), var(--azul)); }
+.mic-row::before, .mic-row::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 64px; height: 64px; margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  border: 2px solid var(--turquesa);
+  opacity: 0;
+  pointer-events: none;
+}
+.mic-row:has(.mic[data-state="listening"])::before { animation: ring 1.8s var(--ease) infinite; }
+.mic-row:has(.mic[data-state="listening"])::after  { animation: ring 1.8s var(--ease) .9s infinite; }
+@keyframes ring {
+  0%   { transform: scale(1);   opacity: .55; }
+  100% { transform: scale(2.3); opacity: 0; }
+}
+
+/* ── Bubbles ────────────────────────────────────────────────*/
+.bubble { animation: bubble .34s var(--ease) both; }
+@keyframes bubble {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+.bubble.them .body {
+  border-left: 3px solid var(--turquesa);
+}
+.bubble.you .body {
+  background: linear-gradient(135deg, var(--rosa), var(--morado));
+  color: var(--accent-ink);
+}
+.correction {
+  border-left: 3px solid var(--amarillo);
+  background: linear-gradient(100deg, var(--warn-soft), transparent 70%);
+}
+
+/* ── Confetti ───────────────────────────────────────────────
+   Fired on a level-up or a banked session. Purely decorative, removed from
+   the DOM the moment it lands. */
+.confetti-layer { position: fixed; inset: 0; pointer-events: none; z-index: 90; overflow: hidden; }
+.confetti {
+  position: absolute;
+  width: 9px; height: 14px;
+  will-change: transform, opacity;
+  animation: fall var(--dur, 2.4s) linear forwards;
+}
+@keyframes fall {
+  from { transform: translate3d(0,0,0) rotate(0); opacity: 1; }
+  to   { transform: translate3d(var(--dx, 0), 105vh, 0) rotate(var(--spin, 720deg)); opacity: .9; }
+}
+
+/* ── Section headings ───────────────────────────────────────*/
+.section-title h2 {
+  font-family: var(--display);
+  letter-spacing: -.01em;
+}
+.section-title h2::after {
+  content: '';
+  display: block;
+  width: 34px; height: 3px; margin-top: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--rosa), var(--amarillo));
+}
+
+/* ── Respect the setting ────────────────────────────────────
+   Someone who has asked their operating system for less motion means it.
+   Colour stays; everything that moves stops. */
+@media (prefers-reduced-motion: reduce) {
+  body::after,
+  .papel svg,
+  .mural .rays,
+  .mural .bird,
+  .rise,
+  .bubble,
+  .chip.pop,
+  .topbar .brand .dot,
+  .mic-row::before,
+  .mic-row::after,
+  .confetti {
+    animation: none !important;
+  }
+  .card:hover { transform: none; }
+  button.primary::after, .btn-row button:first-child::after { display: none; }
+  * { transition-duration: .01ms !important; }
+}
+
+/* The greeting is painted onto the mural, but it still has to exist as a real
+   heading for screen readers and for anything navigating by landmark. Kept in
+   the accessibility tree, out of the visual one. */
+.sr-head {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── "I don't know what to say" ─────────────────────────────
+   Deliberately quiet until wanted: a learner who never needs it should not
+   have a bright button nagging at them all session. */
+.help-me {
+  background: none;
+  border: 1px dashed var(--line);
+  color: var(--ink-faint);
+  font-size: .78rem;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.help-me:hover {
+  color: var(--morado);
+  border-color: var(--morado);
+  border-style: solid;
+  background: color-mix(in oklab, var(--morado) 8%, transparent);
+}
+.help-box {
+  width: 100%; max-width: 520px;
+  margin-top: 8px; padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--morado);
+  box-shadow: var(--shadow);
+  animation: rise .28s var(--ease) both;
+}
+.help-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0;
+}
+.help-opt + .help-opt { border-top: 1px solid var(--line-soft); }
+.help-text { flex: 1; min-width: 0; }
+.help-text .es { font-family: var(--serif); font-size: .98rem; }
+.help-say, .help-use {
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink-soft);
+  border-radius: var(--r-sm);
+  padding: 4px 9px;
+  font-size: .76rem;
+  cursor: pointer;
+  flex: none;
+}
+.help-use:hover { background: var(--morado); border-color: var(--morado); color: var(--accent-ink); }
+.help-goal { font-size: .84rem; color: var(--ink-soft); padding: 4px 0; }
+
+
+/* ── Layout corrections the fiesta made necessary ───────────*/
+
+/* The dock used to fade into the page with a gradient. That worked when it
+   held a mic and a text box; with the suggestion panel open it is tall enough
+   that the conversation showed straight through it. Opaque, with a short
+   fade above, so the thread slides cleanly underneath. */
+.mic-dock {
+  background: var(--bg);
+  padding-bottom: 10px;
+}
+.mic-dock::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: -28px;
+  height: 28px;
+  background: linear-gradient(to top, var(--bg), transparent);
+  pointer-events: none;
+}
+
+/* On a short screen the suggestions must not push the text box off it. */
+.help-box { max-height: 40vh; overflow-y: auto; }
+
+/* "Say it like this" — supplying Spanish they did not have, as opposed to
+   fixing Spanish they attempted. Marked apart from a correction so the two
+   never read as the same event. */
+.correction.say-this {
+  border-left-color: var(--turquesa);
+  background: linear-gradient(100deg,
+    color-mix(in oklab, var(--turquesa) 14%, transparent), transparent 70%);
+}
+.correction.say-this .lead { color: var(--turquesa); }
+
+/* ── Review ─────────────────────────────────────────────────*/
+.progress-bar {
+  height: 5px; border-radius: 3px; overflow: hidden;
+  background: var(--bg-sunken); margin-bottom: 14px;
+}
+.progress-bar .fill {
+  height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--rosa), var(--amarillo), var(--turquesa));
+  transition: width .35s var(--ease);
+}
+
+.answer-row { display: flex; gap: 8px; width: 100%; max-width: 380px; margin: 14px auto 0; }
+.answer-input {
+  flex: 1; min-width: 0;
+  font-family: var(--serif); font-size: 1.1rem;
+  text-align: center;
+}
+.answer-state { margin-top: 10px; font-size: .95rem; font-weight: 600; }
+.answer-state.ok   { color: var(--good); }
+.answer-state.near { color: var(--warn); }
+.answer-state.no   { color: var(--bad); }
+
+/* The gap in a cloze card, sized so the sentence does not jump when it fills. */
+.prompt.cloze { font-size: 1.15rem; line-height: 1.6; }
+.prompt.cloze .blank {
+  display: inline-block; min-width: 84px;
+  padding: 0 6px; margin: 0 2px;
+  border-bottom: 2px solid var(--rosa);
+  color: var(--rosa); font-weight: 700;
+}
+.listen-prompt { font-size: 3rem; }
+
+/* The grade the typed answer earned, so the obvious button is obvious. */
+.grade-row button[data-suggested="yes"] {
+  outline: 2px solid var(--rosa);
+  outline-offset: 2px;
+}
+
+/* ── Tap any word ───────────────────────────────────────────
+   Every Spanish word your partner says is a word you can learn. The hint has
+   to be almost invisible until reached for, or the thread reads as a field of
+   links rather than someone talking. */
+.bubble.them .body .word {
+  cursor: pointer;
+  border-radius: 3px;
+  position: relative;
+  transition: background .12s var(--ease);
+}
+.bubble.them .body .word:hover {
+  background: color-mix(in oklab, var(--turquesa) 22%, transparent);
+  box-shadow: 0 1px 0 var(--turquesa);
+}
+@media (hover: none) {
+  .bubble.them .body .word { border-bottom: 1px dotted color-mix(in oklab, var(--turquesa) 55%, transparent); }
+}
+
+.word-pop {
+  position: absolute;
+  left: 0; top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 190px; max-width: 260px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--turquesa);
+  box-shadow: var(--shadow-lg);
+  cursor: default;
+  animation: rise .18s var(--ease) both;
+  text-align: left;
+  font-family: var(--sans);
+}
+.word-head { display: flex; align-items: center; gap: 8px; }
+.word-head .es { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; flex: 1; }
+.word-x {
+  border: 0; background: none; color: var(--ink-faint);
+  cursor: pointer; font-size: .8rem; padding: 2px 4px; line-height: 1;
+}
+.word-en { font-size: 1rem; font-weight: 600; color: var(--ink); margin-top: 2px; }
+.word-body { margin-top: 4px; }
+.word-body .btn-row button { padding: 4px 10px; font-size: .78rem; }
+
+/* ── A card that actually flips ─────────────────────────────
+   Front and back stacked on the same spot, the whole thing rotated. The
+   answer arrives from behind the question instead of replacing it. */
+.flashcard { perspective: 1200px; background: none; border: 0; box-shadow: none; padding: 0; }
+.flashcard .faces {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform .34s var(--ease);
+}
+.flashcard[data-flipped="yes"] .faces { transform: rotateY(180deg); }
+
+.flashcard .face {
+  backface-visibility: hidden;
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  padding: 26px 20px;
+  text-align: center;
+  min-height: 210px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+}
+.flashcard .face.back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+  border-top: 3px solid var(--turquesa);
+}
+/* Nothing behind the card may be clickable through it. */
+.flashcard[data-flipped="no"]  .face.back  { pointer-events: none; }
+.flashcard[data-flipped="yes"] .face.front { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flashcard .faces { transition: none; }
+}
+
+.ghost.small { font-size: .78rem; padding: 4px 10px; }
+
+/* ── Ask ────────────────────────────────────────────────────*/
+.ask-row { display: flex; gap: 8px; margin: 14px 0 8px; }
+.ask-input { flex: 1; min-width: 0; font-size: 1.02rem; }
+.ask-recent { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
+.ask-chip {
+  border: 1px solid var(--line); background: var(--bg-sunken);
+  color: var(--ink-soft); border-radius: 999px;
+  padding: 3px 11px; font-size: .78rem; cursor: pointer;
+  font-family: var(--serif);
+}
+.ask-chip:hover { border-color: var(--turquesa); color: var(--turquesa); }
+
+.ask-card { border-left: 4px solid var(--turquesa); }
+.ask-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ask-term { font-size: 1.9rem; font-weight: 600; line-height: 1.1; }
+.ask-en { font-size: 1.15rem; margin-top: 4px; }
+.ask-note { font-size: .85rem; color: var(--ink-faint); margin-top: 2px; }
+
+.ask-block { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.ask-block.warn { border-top-color: var(--amarillo); }
+.ask-label {
+  font-size: .7rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-faint); margin-bottom: 6px;
+}
+.ask-block.warn .ask-label { color: var(--warn); }
+.ask-example { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; }
+.ask-example .es { font-family: var(--serif); font-size: 1.02rem; }
+
+.tense-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.tense-btn {
+  border: 1px solid var(--line); background: var(--bg-sunken); color: var(--ink-soft);
+  border-radius: var(--r-sm); padding: 4px 10px; font-size: .76rem; cursor: pointer;
+}
+.tense-btn[aria-pressed="true"] {
+  background: var(--azul); border-color: var(--azul); color: var(--accent-ink);
+}
+.conj-table { display: grid; gap: 2px; }
+.conj-row {
+  display: grid; grid-template-columns: 1fr 1.3fr auto;
+  align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: var(--r-sm);
+}
+.conj-row:nth-child(odd) { background: var(--bg-sunken); }
+.conj-p { font-size: .82rem; color: var(--ink-faint); }
+.conj-f { font-family: var(--serif); font-size: 1.02rem; font-weight: 600; }
+
+/* When a microphone breaks, the fix is never obvious. The remedy goes on
+   screen next to it, not in a console nobody opens. */
+.mic-help {
+  max-width: 460px;
+  margin: 2px auto 0;
+  padding: 8px 12px;
+  border-radius: var(--r);
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent);
+  font-size: .8rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* ── Microphone check ───────────────────────────────────────*/
+.check-line { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; }
+.check-line + .check-line { border-top: 1px solid var(--line-soft); }
+.check-mark { font-weight: 700; line-height: 1.4; flex: none; width: 1em; text-align: center; }
+.check-mark.ok  { color: var(--good); }
+.check-mark.no  { color: var(--bad); }
+.check-mark.meh { color: var(--ink-faint); }
+
+.mic-live {
+  margin-top: 12px; padding: 14px;
+  border-radius: var(--r);
+  background: var(--bg-sunken);
+  border: 1px dashed var(--line);
+  text-align: center;
+}
+.mic-live-text { font-family: var(--serif); font-size: 1.02rem; color: var(--ink-faint); }
+.mic-live-text.live { color: var(--ink); }
+.mic-live-text.ok   { color: var(--good); font-weight: 600; }
+.mic-live-text.no   { color: var(--bad); font-family: var(--sans); font-size: .88rem; }
+
+/* ── Games ──────────────────────────────────────────────────*/
+.game-card {
+  display: flex; align-items: center; gap: 14px;
+  text-align: left; width: 100%;
+  padding: 16px; border-radius: var(--r-lg);
+  background: var(--bg-raised); border: 1px solid var(--line);
+  box-shadow: var(--shadow); cursor: pointer;
+  transition: transform .18s var(--ease), box-shadow .18s var(--ease);
+}
+.game-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.game-emoji { font-size: 2rem; line-height: 1; flex: none; }
+.game-name { font-weight: 700; font-size: 1.05rem; }
+.game-desc { font-size: .82rem; color: var(--ink-soft); margin-top: 2px; }
+.game-final { font-size: 3.2rem; font-weight: 800; color: var(--rosa); line-height: 1; }
+
+.chip.bad-chip { background: var(--bad); color: var(--accent-ink); }
+
+.tile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tile {
+  min-height: 74px; padding: 8px 6px;
+  border-radius: var(--r); border: 1px solid var(--line);
+  background: var(--bg-raised); color: var(--ink);
+  font-size: .84rem; line-height: 1.25; cursor: pointer;
+  transition: transform .14s var(--ease), background .14s, border-color .14s, opacity .3s;
+}
+.tile.es { font-family: var(--serif); font-size: .95rem; }
+.tile.picked { background: var(--accent-soft); border-color: var(--rosa); transform: scale(1.04); }
+.tile.wrong  { background: var(--bad-soft); border-color: var(--bad); }
+.tile.gone   { opacity: 0; pointer-events: none; transform: scale(.9); }
+
+.quiz { text-align: center; }
+.quiz-prompt { font-size: 2rem; font-weight: 700; line-height: 1.15; margin-bottom: 4px; }
+.quiz-prompt.es { font-family: var(--serif); }
+.quiz-options { display: grid; gap: 8px; margin-top: 16px; }
+.quiz-opt {
+  padding: 14px 12px; border-radius: var(--r);
+  border: 1px solid var(--line); background: var(--bg-raised);
+  color: var(--ink); font-size: .98rem; cursor: pointer;
+  transition: background .14s, border-color .14s, transform .1s;
+}
+.quiz-opt.es { font-family: var(--serif); font-size: 1.3rem; }
+.quiz-opt:active { transform: scale(.98); }
+.quiz-opt.right { background: var(--good-soft); border-color: var(--good); color: var(--good); font-weight: 700; }
+.quiz-opt.wrong { background: var(--bad-soft);  border-color: var(--bad);  color: var(--bad); }
+
+@media (max-width: 520px) {
+  .tile-grid { grid-template-columns: repeat(3, 1fr); }
+  .tile { min-height: 66px; font-size: .78rem; }
+  .quiz-prompt { font-size: 1.6rem; }
+}
+
+/* ── Phone ──────────────────────────────────────────────────
+   The Galaxy S11 lands around 360-412 CSS pixels wide. Eight navigation items
+   do not fit across that, so below 560px they scroll horizontally with the
+   current one kept in view, rather than being squeezed until the labels are
+   unreadable. */
+@media (max-width: 560px) {
+  .nav {
+    /* Clear of the gesture bar at the bottom of a modern Android phone. */
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
+  .nav button {
+    padding: 7px 2px;
+    font-size: .64rem;
+  }
+  .nav button .ico { font-size: 1.25rem; }
+
+  main { padding-left: 14px; padding-right: 14px; }
+  h1 { font-size: 1.42rem; }
+
+  /* The mural is a third of a phone screen. Shorter, so the day's task is
+     visible without scrolling. */
+  .mural svg { min-height: 150px; max-height: 190px; object-fit: cover; }
+  .mural .over { padding: 16px 14px 14px; }
+  .mural .over .line { font-size: 1.25rem; }
+
+  .papel { height: 44px; }
+  .papel svg { height: 38px; }
+
+  /* Bubbles get the width back from the margins. */
+  .bubble { max-width: 92%; }
+
+  /* Thumb-sized targets: 44px is the floor anything tappable should hit. */
+  .bubble .tools button,
+  .phrasebook button,
+  .help-say, .help-use,
+  .tense-btn { min-height: 36px; }
+  .grade-row button { min-height: 54px; }
+  .quiz-opt { min-height: 52px; }
+  .game-card { padding: 14px; }
+  .game-emoji { font-size: 1.7rem; }
+
+  /* A dock holding a mic, a label, a hint, a suggestion panel and a text box
+     can eat a phone screen whole. */
+  .mic { width: 66px; height: 66px; font-size: 1.5rem; }
+  .mic-dock { padding-top: 10px; }
+  .help-box { max-height: 34vh; }
+
+  .word-pop { min-width: 0; width: min(80vw, 250px); }
+  .conj-row { grid-template-columns: 1fr 1.1fr auto; font-size: .92rem; }
+  .ask-term { font-size: 1.5rem; }
+  .flashcard .face { min-height: 190px; padding: 20px 14px; }
+}
+
+/* Landscape on a phone is short, not narrow: the dock and the nav together
+   can leave no room for the conversation at all. */
+/* Landscape on a phone is 412 pixels tall, and the nav bar was taking a third
+   of it — icon over label, at full size, for nine tabs. Here the label sits
+   beside the icon on one short line, and everything else gives up its padding
+   too, because in landscape the only thing anyone wants is the content. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .papel, .mural { display: none; }
+  .mic { width: 52px; height: 52px; }
+  .mic-dock { padding: 6px 0 4px; }
+  .flashcard .face { min-height: 120px; padding: 12px; }
+
+  .topbar { padding-top: 2px; padding-bottom: 2px; }
+  .nav { padding: 2px 6px calc(2px + env(safe-area-inset-bottom, 0px)); }
+  .nav button {
+    flex-direction: row; gap: 5px; padding: 5px 8px; font-size: .7rem;
+  }
+  .nav button .ico { font-size: .95rem; }
+  main { padding-top: 10px; padding-bottom: 60px; }
+  main.talk { min-height: 0; }
+  h1 { font-size: 1.25rem; margin-bottom: .2em; }
+  .convo-head { padding-bottom: 6px; }
+  .convo-head .meta p { display: none; }
+  #thread { padding: 8px 0; gap: 8px; }
+  .mic-label, .mic-help { display: none; }
+  .phrasebook { display: none; }
+  .sheet-item { min-height: 56px; padding: 8px 6px; }
+  .sheet-item .sheet-ico { font-size: 1.2rem; }
+}
+
+/* A phone is a touch device: hover styles that only reveal on hover would hide
+   the control forever. */
+@media (hover: none) {
+  .bubble.you .tools { opacity: 1; }
+  .card:hover { transform: none; }
+}
+
+/* ── The word bank ────────────────────────────────────────────
+ * A list of thirty-one thousand things needs to be scannable before it is
+ * beautiful: one line per word, the Spanish in the serif so it reads as
+ * Spanish, everything else quiet. */
+.wb-big { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+.right { text-align: right; }
+
+.band-card {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 14px; transition: transform .16s ease, box-shadow .16s ease;
+}
+.band-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+/* A card that is a <button> makes everything inside it 600-weight, so the
+   description under the title came out as bold as the title. */
+.band-card .small, .band-card .muted, .band-card .faint,
+.game-card .game-desc { font-weight: 400; }
+/* Titles on one line and descriptions on two would otherwise put the progress
+   bars of a row at different heights. */
+.band-card { display: flex; flex-direction: column; }
+.band-card .band-desc { min-height: 2.4em; }
+.band-card .bar { margin-top: auto; }
+.band-card .bar { margin: 8px 0 6px; }
+
+.wb-controls { margin: 14px 0 6px; }
+.wb-controls .tense-row { margin-top: 8px; }
+
+.wb-list {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden; margin-top: 12px; background: var(--card);
+}
+.wb-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-bottom: 1px solid var(--line);
+}
+.wb-row:last-child { border-bottom: 0; }
+.wb-row.have { background: color-mix(in srgb, var(--good) 6%, transparent); }
+.wb-main { flex: 1; min-width: 0; }
+.wb-term { font-family: var(--serif); font-size: 1.05rem; line-height: 1.2; }
+.wb-en { font-size: .85rem; color: var(--ink-soft); overflow: hidden;
+         text-overflow: ellipsis; white-space: nowrap; }
+.wb-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; }
+ /* --ink-soft: these rows carry a tint once a word is in the deck, and the
+    faint tier is calibrated against a white one. `.wb-meta span` also beat
+    `.tag-soft` on specificity, so the register chips were faint too. */
+.wb-meta span { font-size: .68rem; color: var(--ink-soft); }
+.small-btn { padding: 4px 10px; font-size: .85rem; min-width: 34px; }
+
+/* ── Ask, with a dictionary behind it ─────────────────────────*/
+.ask-senses { font-size: .86rem; color: var(--ink-soft); margin-top: 4px; }
+.ask-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tag-soft, .tag-warn {
+  font-size: .7rem; padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--ink-soft);
+}
+.tag-warn { background: var(--bad-soft); color: var(--bad); font-weight: 700; }
+.ask-reading { display: flex; align-items: baseline; gap: 6px; padding: 4px 0; flex-wrap: wrap; }
+.ask-reading .es { font-family: var(--serif); }
+.linkish {
+  background: none; border: 0; padding: 0 0 0 4px; color: var(--accent);
+  font-size: .78rem; text-decoration: underline; cursor: pointer;
+}
+.conj-extra { display: flex; gap: 16px; margin: 8px 0 4px; flex-wrap: wrap; }
+.conj-extra .es { font-family: var(--serif); }
+.hint.good-hint {
+  border-left: 3px solid var(--good);
+  background: color-mix(in srgb, var(--good) 8%, transparent);
+  color: var(--ink); padding-left: 10px;
+}
+
+@media (max-width: 560px) {
+  .wb-row { padding: 8px; gap: 7px; }
+  .wb-term { font-size: 1rem; }
+  .wb-en { font-size: .8rem; }
+  .band-card { padding: 12px; }
+  .wb-big { font-size: 1.7rem; }
+}
+
+/* The Ask screen with nothing asked yet. A lone text box on an empty screen
+   does not tell anyone what the thing behind it can do; eight taps do. */
+.ask-starter { margin-top: 22px; }
+.ask-starter .ask-recent { margin-top: 8px; }
+.ask-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 7px 12px; border-radius: var(--r-sm);
+  background: var(--bg-raised); border: 1px solid var(--line-soft);
+  text-align: left;
+}
+.ask-chip .es { font-family: var(--serif); font-size: .95rem; color: var(--ink); }
+.ask-chip .small { font-weight: 400; }
+
+/* ── The tense picker ─────────────────────────────────────────
+   Eleven tenses is eleven buttons, and eleven buttons wrapped across a phone
+   is five rows above the drill you came to do. Folded away behind one line
+   that says what is switched on. */
+.tense-summary {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; margin-bottom: 10px;
+  background: var(--bg-raised); border: 1px solid var(--line);
+}
+.tense-summary .spacer { flex: 1; }
+.tense-summary .tense-list { font-weight: 700; }
+.tense-summary .small { font-weight: 400; }
+.tense-panel {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 10px; margin-bottom: 12px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+.tense-panel .tense-btn { font-size: .8rem; }
+.tense-panel .tense-btn[aria-pressed="true"] {
+  background: var(--accent); color: var(--accent-ink); border-color: transparent;
+}
+
+/* A paragraph of platform-specific advice, folded. */
+.fold { margin-top: 10px; }
+.fold-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; font-weight: 700;
+}
+.fold-head .spacer { flex: 1; }
+.fold-head .small { font-weight: 400; }
+.fold > .small { padding: 10px 2px 2px; color: var(--ink-soft); line-height: 1.45; }
+
+/* Hear the word you just failed to remember. */
+.back-audio { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+.card-state {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 10px;
+}
+.card-state .chip { font-size: .68rem; }
+
+.session-row .session-title { font-weight: 700; }
+.session-row .small { margin-top: 2px; }
+
+/* ── Mistakes, and the grammar behind them ────────────────────*/
+.fix-banner {
+  display: block; width: 100%; text-align: left; margin-bottom: 14px;
+  padding: 14px; border-radius: var(--r-md);
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--rosa) 12%, var(--card)),
+    color-mix(in srgb, var(--naranja) 10%, var(--card)));
+  border: 1px solid color-mix(in srgb, var(--rosa) 35%, transparent);
+}
+.fix-banner .row { gap: 12px; align-items: center; }
+.fix-emoji { font-size: 1.7rem; line-height: 1; flex: none; }
+.fix-title { font-weight: 700; }
+.fix-banner .small { font-weight: 400; }
+
+.fix-wrong {
+  font-family: var(--serif); font-size: 1.15rem; line-height: 1.35;
+  padding: 10px 12px; margin: 8px 0;
+  border-radius: var(--r-sm);
+  background: var(--bad-soft); color: var(--ink);
+  text-decoration: line-through; text-decoration-color: var(--bad);
+  text-decoration-thickness: 1px;
+}
+
+.gram-card {
+  display: block; width: 100%; text-align: left;
+  padding: 13px 15px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.gram-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.gram-title { font-weight: 700; font-size: 1rem; }
+.gram-sub { font-size: .82rem; color: var(--ink-soft); font-weight: 400; margin-top: 2px; }
+.gram-q { font-size: 1.35rem; margin: 10px 0 4px; }
+
+.rule-card { border-left: 3px solid var(--accent); }
+.rule-line { font-size: 1.05rem; font-weight: 600; line-height: 1.4; margin-top: 4px; }
+
+.pair {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 10px; border-radius: var(--r-sm); background: var(--card);
+  border: 1px solid var(--line-soft);
+}
+.pair-side { min-width: 0; }
+.pair-side.wrong .pair-es { color: var(--bad); }
+.pair-es { font-family: var(--serif); font-size: 1rem; }
+.pair-x { color: var(--bad); font-weight: 800; }
+.pair .row { gap: 6px; align-items: baseline; }
+
+@media (max-width: 560px) {
+  .pair { grid-template-columns: 1fr; gap: 6px; }
+  .pair-side + .pair-side { border-top: 1px dashed var(--line); padding-top: 6px; }
+  .gram-q { font-size: 1.15rem; }
+}
+
+/* ── Pronunciation ────────────────────────────────────────────*/
+.sound-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.sound-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.sound-symbol {
+  display: grid; place-items: center; flex: none;
+  min-width: 44px; height: 40px; padding: 0 8px;
+  border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent-text);
+  font-family: var(--serif); font-size: 1.15rem; font-weight: 700;
+}
+.sound-symbol.big { min-width: 58px; height: 54px; font-size: 1.5rem; }
+.sound-main { flex: 1; min-width: 0; }
+.sound-title { font-weight: 700; }
+.sound-sub { font-size: .78rem; color: var(--ink-soft); font-weight: 400; }
+
+.say-word {
+  font-family: var(--serif); font-size: 2.1rem; line-height: 1.2;
+  letter-spacing: .01em;
+}
+.say-stress { color: var(--accent); font-weight: 700; }
+.say-ipa { font-size: .95rem; color: var(--ink-faint); margin-top: 2px; letter-spacing: .02em; }
+.say-ipa-inline { font-size: .92rem; letter-spacing: .02em; }
+.say-ipa-inline.no { color: var(--bad); }
+.say-compare {
+  display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 8px; border-radius: var(--r-sm); background: var(--bg-sunken);
+}
+
+.diagnosis {
+  margin-top: 10px; padding: 12px; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--warn) 10%, var(--card));
+  border-left: 3px solid var(--warn);
+}
+.diagnosis .row { gap: 10px; align-items: flex-start; }
+.diag-title { font-weight: 700; margin-bottom: 3px; }
+.diagnosis .small { font-weight: 400; line-height: 1.4; }
+
+@media (max-width: 560px) {
+  .say-word { font-size: 1.75rem; }
+  .sound-symbol { min-width: 38px; height: 36px; font-size: 1rem; }
+}
+
+/* ── Reading ──────────────────────────────────────────────────*/
+.crumb { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+
+.read-card {
+  display: flex; align-items: stretch; gap: 6px; width: 100%;
+  border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+  overflow: hidden;
+}
+.read-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.read-card.read-done { border-left: 3px solid var(--good); }
+.read-open {
+  flex: 1; min-width: 0; text-align: left;
+  padding: 12px 4px 12px 14px;
+  background: none; border: 0; box-shadow: none; border-radius: 0;
+}
+.read-open:hover { background: none; }
+.read-hear {
+  flex: none; width: 52px; padding: 0; font-size: 1.15rem;
+  background: none; border: 0; border-left: 1px solid var(--line-soft);
+  border-radius: 0; box-shadow: none;
+}
+.read-hear:hover { background: var(--accent-soft); }
+.read-main { flex: 1; min-width: 0; }
+.read-title { font-weight: 700; }
+.read-blurb { font-size: .82rem; color: var(--ink-soft); font-weight: 400; line-height: 1.35; }
+.read-meta {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 4px; font-size: .72rem; color: var(--ink-faint);
+}
+.read-tools { margin: 10px 0 4px; flex-wrap: wrap; }
+
+.read-body {
+  margin-top: 6px; padding: 4px 0;
+  border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
+}
+.rd-line {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 7px 6px; border-radius: var(--r-sm);
+  transition: background .18s var(--ease);
+}
+/* The line being read aloud. Following along is the whole reason to have the
+   audio, and that needs the eye to know where the voice is. */
+.rd-line.now { background: var(--accent-soft); }
+.rd-play { flex: none; padding: 2px 7px; font-size: .85rem; line-height: 1.5; }
+.rd-text { flex: 1; min-width: 0; }
+.rd-es { font-size: 1.06rem; line-height: 1.65; }
+.rd-en { font-size: .85rem; color: var(--ink-soft); margin-top: 3px; line-height: 1.4; }
+.rd-text { cursor: pointer; }
+.rd-hint { margin: 0 0 4px; }
+
+/* Every word is one tap from its meaning, so every word has to look tappable
+   without turning the page into a field of links. */
+.rd-es .word {
+  cursor: pointer; border-radius: 3px; position: relative;
+  transition: background .12s var(--ease);
+}
+.rd-es .word:hover { background: var(--accent-soft); }
+@media (hover: none) {
+  .rd-es .word {
+    border-bottom: 1px dotted color-mix(in oklab, var(--turquesa) 32%, transparent);
+  }
+}
+
+.q-count {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-faint); margin-bottom: 6px;
+}
+.q-text { font-size: 1.08rem; font-weight: 600; margin-bottom: 10px; line-height: 1.4; }
+.q-opt { width: 100%; text-align: left; padding: 10px 12px; line-height: 1.35; }
+.q-opt.good, .q-opt.good:hover {
+  background: color-mix(in srgb, var(--good) 16%, var(--card));
+  border-color: var(--good); color: var(--ink);
+}
+.q-opt.bad, .q-opt.bad:hover {
+  background: color-mix(in srgb, var(--bad) 14%, var(--card));
+  border-color: var(--bad); color: var(--ink);
+}
+.q-opt:disabled { opacity: 1; }
+
+@media (max-width: 560px) {
+  .rd-es { font-size: 1rem; line-height: 1.6; }
+  .rd-line { padding: 6px 2px; gap: 6px; }
+  .read-open { padding: 10px 2px 10px 12px; }
+  .read-hear { width: 46px; }
+}
+
+/* ── Carrying progress between devices ────────────────────────*/
+.save-line {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+/* When the counts wrap to their own line they belong at the left margin, not
+   pushed to the right by an auto margin meant for the one-line case. */
+.save-line .small { margin-left: auto; }
+@media (max-width: 560px) {
+  .save-line { display: block; }
+  .save-line .small { margin-left: 0; display: block; margin-top: 2px; }
+}
+
+/* ── Listening ────────────────────────────────────────────────*/
+.hear-speed {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 10px 0 6px;
+}
+.hear-card { text-align: center; padding: 20px 16px; }
+/* The play button is the screen. Everything else on it is what you do after
+   pressing it. */
+.hear-play {
+  display: grid; place-items: center;
+  width: 92px; height: 92px; margin: 10px auto 6px; padding: 0;
+  border-radius: 50%; border: 0;
+  font-size: 2rem; line-height: 1;
+  background: linear-gradient(140deg, var(--rosa), var(--naranja));
+  color: var(--accent-ink); box-shadow: var(--shadow);
+}
+.hear-play:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.hear-play:active { transform: translateY(0) scale(.97); }
+.hear-played { min-height: 1.1em; }
+.hear-es {
+  font-family: var(--serif); font-size: 1.25rem; line-height: 1.5;
+  margin-top: 12px;
+}
+.hear-en { font-size: .88rem; color: var(--ink-soft); margin-top: 6px; line-height: 1.4; }
+.hear-tools { justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+
+@media (max-width: 560px) {
+  .hear-play { width: 78px; height: 78px; font-size: 1.7rem; }
+  .hear-es { font-size: 1.12rem; }
+}
+
+/* ── Writing ──────────────────────────────────────────────────*/
+.write-ask { padding: 14px 16px; }
+.write-ask .q-text { margin-bottom: 4px; }
+
+.write-hints { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+/* Tapping a hint drops it in the box. Looking a word up and then typing it
+   from memory is two chances to spell it wrong for no learning. */
+.hint-chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 5px 10px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--line-soft);
+  font-size: .82rem;
+}
+.hint-chip:hover { background: var(--accent-soft); border-color: var(--accent); }
+.hint-en { color: var(--ink-faint); font-size: .74rem; font-weight: 400; }
+
+.write-box {
+  width: 100%; box-sizing: border-box;
+  font-family: var(--serif); font-size: 1.05rem; line-height: 1.6;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line);
+  color: var(--ink); resize: vertical; min-height: 130px;
+}
+.write-box:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.write-count { text-align: right; min-height: 1.1em; margin: 3px 2px 10px; }
+
+.write-line {
+  padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+  border-left-width: 3px;
+}
+.write-line.ok { border-left-color: var(--good); }
+.write-line.no { border-left-color: var(--bad); }
+/* What you wrote, struck through, above what it should have been. Seeing the
+   two lined up is the whole correction. */
+.write-was { text-decoration: line-through; color: var(--ink-faint); }
+.write-now { color: var(--good); font-weight: 600; margin-top: 2px; }
+
+.write-model {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 13px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.write-model .es { font-family: var(--serif); font-size: 1.02rem; line-height: 1.5; }
+
+@media (max-width: 560px) {
+  .write-box { font-size: 1rem; min-height: 115px; }
+  .write-model .es { font-size: .98rem; }
+}
+
+/* ── The day's second task ────────────────────────────────────*/
+.second-label {
+  margin: 14px 0 6px;
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-faint);
+}
+/* Deliberately quieter than the day's conversation button: speaking is still
+   the spine of the plan and this is the "and then". */
+.second-task {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--bg-sunken); border: 1px solid var(--line-soft);
+}
+.second-task:hover { background: var(--accent-soft); border-color: var(--accent); }
+.second-task.second-done { opacity: .72; }
+.second-icon { flex: none; font-size: 1.25rem; line-height: 1; }
+.second-main { flex: 1; min-width: 0; display: block; }
+.second-what {
+  display: block; font-size: .68rem; text-transform: uppercase;
+  /* --ink-soft, not --ink-faint: the faint tier is calibrated against a white
+     card and this sits on a tinted one, where it drops to 4.27:1. */
+  letter-spacing: .06em; color: var(--ink-soft);
+}
+.second-title { display: block; font-weight: 600; line-height: 1.3; }
+.second-sub {
+  display: block; font-size: .78rem; font-weight: 400; color: var(--ink-soft);
+  line-height: 1.35;
+  /* Two lines at most: a blurb that runs to four makes the card taller than
+     the conversation it is meant to sit under. */
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.second-go { flex: none; color: var(--ink-soft); }
+
+@media (max-width: 560px) {
+  .second-task { padding: 9px 10px; gap: 9px; }
+}
+
+/* ── The six things ───────────────────────────────────────────*/
+.skill-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 8px;
+}
+.skill {
+  display: block; text-align: left; width: 100%;
+  padding: 11px 12px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--line-soft);
+}
+.skill:hover { transform: translateY(-1px); box-shadow: var(--shadow); background: var(--card); }
+.skill-top { display: flex; align-items: center; gap: 7px; }
+.skill-icon { font-size: 1rem; line-height: 1; }
+.skill-name { font-size: .78rem; font-weight: 700; color: var(--ink-soft); }
+.skill-n { font-size: 1.35rem; font-weight: 800; line-height: 1.2; margin: 3px 0 5px; }
+.skill .bar { margin-bottom: 5px; }
+.skill-line { font-size: .7rem; font-weight: 400; color: var(--ink-soft); line-height: 1.3; }
+
+@media (max-width: 560px) {
+  .skill-grid { grid-template-columns: 1fr 1fr; }
+  .skill { padding: 9px 10px; }
+  .skill-n { font-size: 1.2rem; }
+}
+/* An empty track for the one skill with no ceiling. */
+.bar.no-ceiling { opacity: .45; }
+
+/* ── Line length ──────────────────────────────────────────────*/
+/* Around 68 characters is where a line stops being comfortable to track back
+   from — past that the eye loses the start of the next one. `main` is 880px
+   wide on a desktop, which put the intro paragraphs at 96 characters and the
+   reading lines at 104, on the one screen whose whole purpose is sustained
+   reading.
+
+   The numbers below are `ch`, which is the width of a zero — wider than the
+   average lowercase letter — so 60ch lands at roughly 68 real characters.
+
+   Only running prose is capped. Cards, grids and rows keep the full width,
+   because a grid of tiles is not something anybody reads left to right. */
+main > p,
+main > .card > p,
+.rd-text,
+.hear-es, .hear-en,
+.q-text,
+.write-box,
+.write-line > div,
+.second-sub,
+.diagnosis .small {
+  max-width: 60ch;
+}
+/* The Spanish of a story is set in a serif at a larger size, so the same
+   character count is a wider box; it still wants the same measure. */
+.rd-es, .write-model .es { max-width: 58ch; }
+
+/* An answer to a word the learner asked about, mid-conversation. */
+.lookup-card {
+  margin: 8px 0; padding: 10px 13px; border-radius: var(--r-md);
+  background: var(--bg-sunken); border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--azul);
+}
+.lookup-card .lead {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-soft); margin-bottom: 3px;
+}
+.lookup-body { font-size: .9rem; line-height: 1.45; max-width: 60ch; }

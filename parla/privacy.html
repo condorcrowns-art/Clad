@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parla — Privacy</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/fiesta.css">
+<style>
+  main { max-width: 720px; margin: 0 auto; padding: 30px 20px 60px; }
+  h2 { margin-top: 30px; }
+  p, li { line-height: 1.65; }
+  .updated { color: var(--ink-faint); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy</h1>
+  <p class="updated">This describes what the app does. Check it still matches what you are running before publishing it.</p>
+
+  <h2>The short version</h2>
+  <p>Everything Parla knows about you is stored in your own browser and is never
+     sent anywhere — with one exception, which you have to switch on yourself,
+     described below.</p>
+
+  <h2>What is stored, and where</h2>
+  <p>Parla keeps all of this in your browser's <code>localStorage</code>, on the
+     device you are using. There is no account, no server-side profile, and no
+     copy held anywhere else:</p>
+  <ul>
+    <li>the name and level you entered</li>
+    <li>your progress: XP, streak, which of the 60 days you have done</li>
+    <li>your vocabulary deck and its review schedule, including words you added yourself</li>
+    <li>your mistake journal — corrections you have been given</li>
+    <li>notes your conversation partner wrote about you, so it remembers you between sessions</li>
+    <li>your settings, including any API key you enter</li>
+  </ul>
+  <p>Clearing your browser's site data for this domain erases all of it
+     permanently. There is no backup. Settings → Export writes it to a file you
+     control if you want one.</p>
+
+  <h2>Speech</h2>
+  <p><strong>Speaking:</strong> Chrome and Edge perform speech recognition on
+     Google's servers, not on your device. When you use the microphone, the
+     audio is sent to Google by the browser itself. This is how the Web Speech
+     API works in those browsers and Parla cannot change it. If that is not
+     acceptable to you, type instead — everything works by typing.</p>
+  <p><strong>Listening:</strong> speech is generated locally where the neural
+     voice is installed, and by your operating system's own voices otherwise.
+     Nothing is uploaded to produce it.</p>
+
+  <h2>The dictionary</h2>
+  <p>The 31,000-word dictionary is a file served from this site and stored in your
+     browser's cache. Looking a word up, working out what form it is in, and every
+     number on the word bank screen happen entirely on your device. Nothing you look
+     up is sent anywhere, and nobody — including whoever runs this site — can see
+     which words you searched for.</p>
+  <p>It is built from <a href="https://en.wiktionary.org">en.wiktionary.org</a> and
+     from the OpenSubtitles frequency lists published as
+     <a href="https://github.com/hermitdave/FrequencyWords">hermitdave/FrequencyWords</a>,
+     both under Creative Commons Attribution-ShareAlike. The built file carries the
+     same licence.</p>
+
+  <h2>The conversation partner</h2>
+  <ul>
+    <li><strong>Built-in (scripted):</strong> runs entirely in the page. Nothing leaves the device.</li>
+    <li><strong>Ollama:</strong> runs on a machine you control. Nothing leaves that machine.</li>
+    <li><strong>This site:</strong> <em>this one sends data off your device.</em> It is the
+        default on the public site, because it is the only partner that works on a
+        phone. What you type and what the microphone transcribed is sent to
+        Cloudflare's Workers AI — over this site's own address, not to a third-party
+        API you signed up for — along with the scenario and the recent turns of the
+        conversation, and a reply comes back. Cloudflare's own privacy terms apply to
+        that processing. Nothing is stored on the server: there is no account, no
+        conversation history kept off your device, and no key to leak. Switch to
+        Built-in or Ollama if you would rather nothing left the device at all.</li>
+    <li><strong>Gemini:</strong> <em>this one sends data off your device.</em> If you
+        switch it on, what you type and what the microphone transcribed is sent
+        to Google to generate a reply, along with the scenario and recent turns.
+        Google's own privacy policy applies to that. Your API key is stored in
+        your browser and sent only to Google.</li>
+  </ul>
+
+  <h2>Advertising</h2>
+  <p>If ads are enabled on this site, Google AdSense may set cookies and use
+     device identifiers to select and measure them. Google's use of advertising
+     cookies is described in their policies, and you can opt out of personalised
+     advertising in Google's ad settings. Parla does not send Google your
+     progress, your conversations, or anything you have typed into it — the ad
+     script has no access to that data.</p>
+
+  <h2>Analytics</h2>
+  <p>None. There is no analytics script, no telemetry, no error reporting, and
+     no request the app makes on its own.</p>
+
+  <h2>Children</h2>
+  <p>This is a study tool with no accounts and no social features, and it
+     collects nothing that identifies anyone. If ads are enabled, they are
+     subject to Google's own policies on ad serving.</p>
+
+  <h2>Contact</h2>
+  <p>Add an address here before publishing. Advertising programmes generally
+     require a reachable contact.</p>
+
+  <p style="margin-top:34px"><a href="index.html">← Back to Parla</a></p>
+</main>
+</body>
+</html>

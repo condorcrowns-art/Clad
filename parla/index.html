@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parla — learn Spanish by talking</title>
+<meta name="description" content="Speak Spanish out loud and get corrections. Free, offline-capable, no subscription.">
+<meta name="theme-color" content="#e01a76">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/fiesta.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗣️</text></svg>">
+</head>
+<body>
+
+<div class="topbar">
+  <button class="brand" id="brandBtn"><span class="dot"></span>Parla</button>
+  <div class="spacer"></div>
+  <span class="chip" id="chipStreak" title="Day streak">🔥 <span>0</span></span>
+  <span class="chip" id="chipLevel" title="Your level">LV 1</span>
+  <span class="chip" id="chipBrain" title="Conversation engine">scripted</span>
+</div>
+
+<div id="app"><main><p class="muted">Loading…</p></main></div>
+
+<!-- Twelve tabs do not fit across a phone. The five marked data-primary stay on
+     the bar at any width; the rest move into the More sheet below 620px and sit
+     on the bar above it.
+
+     The five are the things you *do* daily, which is why Read is on the bar and
+     Words is not: the word bank is a place to browse thirty thousand words, and
+     Ask already covers looking one up. -->
+<nav class="nav" id="nav">
+  <button data-view="home"      data-primary><span class="ico">🏠</span>Home</button>
+  <button data-view="scenarios" data-primary><span class="ico">💬</span>Talk</button>
+  <button data-view="read"      data-primary><span class="ico">📖</span>Read</button>
+  <button data-view="review"    data-primary><span class="ico">🔁</span>Review</button>
+  <button data-view="coach"     data-primary><span class="ico">🔎</span>Ask</button>
+  <button data-view="words"><span class="ico">📚</span>Words</button>
+  <button data-view="grammar"><span class="ico">📐</span>Grammar</button>
+  <button data-view="say"><span class="ico">👄</span>Sounds</button>
+  <button data-view="write"><span class="ico">✍️</span>Write</button>
+  <button data-view="games"><span class="ico">🎮</span>Games</button>
+  <button data-view="conjugate"><span class="ico">🧩</span>Verbs</button>
+  <button data-view="challenge"><span class="ico">🎯</span>60 days</button>
+  <button data-view="progress"><span class="ico">📊</span>Stats</button>
+  <button class="nav-more" id="navMore" type="button" aria-haspopup="true" aria-expanded="false">
+    <span class="ico">☰</span>More</button>
+</nav>
+
+<div class="sheet-scrim" id="sheetScrim" hidden></div>
+<div class="sheet" id="moreSheet" role="dialog" aria-label="More screens" hidden>
+  <div class="sheet-grip"></div>
+  <div class="sheet-grid" id="sheetGrid"></div>
+</div>
+
+<!-- Data -->
+<script src="js/data/vocab-es.js"></script>
+<script src="js/data/verbs-es.js"></script>
+<script src="js/data/grammar-es.js"></script>
+<script src="js/data/sounds-es.js"></script>
+<script src="js/data/reading-es.js"></script>
+<script src="js/data/writing-es.js"></script>
+<script src="js/dict.js"></script>
+<script src="js/morph.js"></script>
+<script src="js/grammar.js"></script>
+<script src="js/phon.js"></script>
+<script src="js/data/scenarios-es.js"></script>
+<script src="js/data/challenge-es.js"></script>
+
+<!-- Engines -->
+<script src="js/store.js"></script>
+<script src="js/saytext.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/srs.js"></script>
+<script src="js/brain.js"></script>
+
+<!-- Interface -->
+<script src="js/decor.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/views-talk.js"></script>
+<script src="js/views-coach.js"></script>
+<script src="js/views-drill.js"></script>
+<script src="js/views-games.js"></script>
+<script src="js/views-words.js"></script>
+<script src="js/views-grammar.js"></script>
+<script src="js/views-fix.js"></script>
+<script src="js/views-say.js"></script>
+<script src="js/views-read.js"></script>
+<script src="js/views-listen.js"></script>
+<script src="js/views-write.js"></script>
+<script src="js/views-progress.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
