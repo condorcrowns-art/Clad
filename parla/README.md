@@ -824,6 +824,19 @@ node test/hosted-browser.test.js 8803 flaky
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
 
+## How long the lines get
+
+Past about seventy characters the eye loses the start of the next line. `main`
+is 880px wide on a desktop, which put the intro paragraphs at 96 characters and
+the reading lines at 104 — on the one screen whose entire purpose is sustained
+reading, on the machine the app is mostly used on.
+
+Running prose is capped at 60ch now (`ch` is the width of a zero, wider than
+the average lowercase letter, so that lands at roughly 68 real characters).
+Cards, grids and rows keep the full width: a grid of tiles is not something
+anybody reads left to right. On a phone nothing changes, because nothing was
+ever that wide.
+
 ## Six things, and the one you are avoiding
 
 The app teaches six skills and the stats screen counted two. That is not merely

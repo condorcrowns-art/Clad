@@ -72,6 +72,36 @@ async function boot(browser, viewport) {
   check('the bar does not scroll',
     await page.evaluate(() => { const n = document.getElementById('nav'); return n.scrollWidth <= n.clientWidth + 1; }));
 
+  /* ── Line length on a big screen ───────────────────────── */
+  console.log('\nHow long the lines get\n');
+  // Past about 70 characters the eye loses the start of the next line. `main`
+  // is 880px on a desktop, which put the intro paragraphs at 96 characters and
+  // the reading lines at 104 — on the one screen whose whole purpose is
+  // sustained reading.
+  const measure = async (view, sel, id) => {
+    await page.evaluate(([v, i]) => PARLA.app.go(v, i ? { id: i } : null), [view, id]);
+    await page.waitForTimeout(350);
+    return page.evaluate(s => {
+      const e = document.querySelector(s);
+      if (!e) return null;
+      const cs = getComputedStyle(e);
+      const cv = document.createElement('canvas').getContext('2d');
+      cv.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+      const per = cv.measureText('abcdefghijklmnopqrstuvwxyz ').width / 27;
+      return Math.round(e.getBoundingClientRect().width / per);
+    }, sel);
+  };
+  await page.evaluate(() => PARLA.dict.load());
+  for (const [view, sel, id, what] of [
+    ['read', 'main > p', null, 'the shelf blurb'],
+    ['text', '.rd-es', 'taxi', 'a line of a story'],
+    ['task', '.write-box', 'opinion', 'the writing box'],
+    ['grammar', 'main > p', null, 'a lesson intro']
+  ]) {
+    const n = await measure(view, sel, id);
+    check(what + ' stays inside a readable measure', n !== null && n <= 75, n + ' characters');
+  }
+
   /* ── The nav, phone ────────────────────────────────────── */
   console.log('\nThe nav on a phone\n');
   const phone = await boot(browser, { width: 412, height: 915 });

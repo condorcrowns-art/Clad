@@ -1235,3 +1235,30 @@ button:active { transform: scale(.97); }
 }
 /* An empty track for the one skill with no ceiling. */
 .bar.no-ceiling { opacity: .45; }
+
+/* ── Line length ──────────────────────────────────────────────*/
+/* Around 68 characters is where a line stops being comfortable to track back
+   from — past that the eye loses the start of the next one. `main` is 880px
+   wide on a desktop, which put the intro paragraphs at 96 characters and the
+   reading lines at 104, on the one screen whose whole purpose is sustained
+   reading.
+
+   The numbers below are `ch`, which is the width of a zero — wider than the
+   average lowercase letter — so 60ch lands at roughly 68 real characters.
+
+   Only running prose is capped. Cards, grids and rows keep the full width,
+   because a grid of tiles is not something anybody reads left to right. */
+main > p,
+main > .card > p,
+.rd-text,
+.hear-es, .hear-en,
+.q-text,
+.write-box,
+.write-line > div,
+.second-sub,
+.diagnosis .small {
+  max-width: 60ch;
+}
+/* The Spanish of a story is set in a serif at a larger size, so the same
+   character count is a wider box; it still wants the same measure. */
+.rd-es, .write-model .es { max-width: 58ch; }
