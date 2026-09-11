@@ -1262,3 +1262,15 @@ main > .card > p,
 /* The Spanish of a story is set in a serif at a larger size, so the same
    character count is a wider box; it still wants the same measure. */
 .rd-es, .write-model .es { max-width: 58ch; }
+
+/* An answer to a word the learner asked about, mid-conversation. */
+.lookup-card {
+  margin: 8px 0; padding: 10px 13px; border-radius: var(--r-md);
+  background: var(--bg-sunken); border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--azul);
+}
+.lookup-card .lead {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-soft); margin-bottom: 3px;
+}
+.lookup-body { font-size: .9rem; line-height: 1.45; max-width: 60ch; }

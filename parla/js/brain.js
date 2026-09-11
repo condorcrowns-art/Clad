@@ -148,6 +148,139 @@ window.PARLA = window.PARLA || {};
     return null;
   }
 
+  /* Something to say when the script has nothing left. Each one asks a
+   * question, because a reply that does not is a reply the learner cannot
+   * answer, and the point of the screen is that they keep talking.
+   *
+   * There used to be one of these per scenario. In a ten-turn conversation
+   * with a four-beat script that meant the same sentence six times, which is
+   * worse than saying nothing. */
+  var KEEP_GOING = [
+    { es: 'Ya veo. ¿Y eso por qué?', en: 'I see. And why is that?' },
+    { es: 'Cuéntame un poco más.', en: 'Tell me a bit more.' },
+    { es: '¿En serio? ¿Desde cuándo?', en: 'Really? Since when?' },
+    { es: 'Qué bien. ¿Y te gusta?', en: 'Nice. And do you like it?' },
+    { es: 'Ah, ¿sí? ¿Y qué tal?', en: 'Oh, yeah? And how is it?' },
+    { es: 'Vale. ¿Y qué vas a hacer?', en: 'Right. And what are you going to do?' },
+    { es: 'Interesante. ¿Y antes?', en: 'Interesting. And before that?' },
+    { es: 'Claro. ¿Y con quién?', en: 'Of course. And with whom?' },
+    { es: 'Entiendo. ¿Y dónde exactamente?', en: 'I understand. And where exactly?' },
+    { es: 'Ajá. ¿Y eso es normal para ti?', en: 'Uh-huh. And is that normal for you?' },
+    { es: 'Oye, ¿y cuánto tiempo llevas así?', en: 'Hey, and how long have you been like that?' },
+    { es: 'Vaya. ¿Y qué piensas hacer?', en: 'Wow. And what do you plan to do?' }
+  ];
+
+  /* A greeting on its own. Answering it is not the same as answering the
+   * question the scene opened with, and it must not consume a script beat:
+   * "hola" used to match the beat keyed on "llamo/soy/hola", so the learner's
+   * actual name, one turn later, was met with "what is your name?" — the exact
+   * thing that makes a partner feel like a machine. */
+  var GREETING_ONLY = /^(hola|buenas|buenos dias|buenas tardes|buenas noches|hey|que tal|qué tal|hola que tal|holaa+)[\s!.,¡]*$/i;
+
+  var GREET_BACK = [
+    { es: '¡Hola! ', en: 'Hi! ' },
+    { es: '¡Buenas! ', en: 'Hello! ' },
+    { es: '¡Hola, qué tal! ', en: 'Hi, how are you! ' }
+  ];
+
+  /* The question at the end of a line, so greeting someone back does not mean
+   * reciting the whole opening speech at them a second time. */
+  function lastQuestion(line) {
+    var parts = String(line || '').split(/(?<=[.!?])\s+/).filter(Boolean);
+    for (var i = parts.length - 1; i >= 0; i--) {
+      if (/\?/.test(parts[i])) return parts[i];
+    }
+    return parts[parts.length - 1] || String(line || '');
+  }
+
+  /* Something they actually said, handed back. Not comprehension — but
+   * repeating a real word from their sentence is the difference between a
+   * partner who is listening and a recording. */
+  function echoWord(text) {
+    if (!PARLA.dict || !PARLA.dict.ready() || !PARLA.morph) return null;
+    var ws = words(text).filter(function (w) { return w.length >= 4; });
+    for (var i = ws.length - 1; i >= 0; i--) {
+      var a = PARLA.morph.analyse(ws[i]);
+      if (!a.length) continue;
+      var top = a[0];
+      // A noun the learner chose is the thing they were talking about; a
+      // function word is not worth repeating back at them.
+      if (top.pos !== 'n' || !top.entry || !top.entry.band || top.entry.band > 6000) continue;
+      var art = top.entry.gender === 'f' ? 'la ' : (top.entry.gender === 'm' ? 'el ' : '');
+      return { word: art + top.lemma, lemma: top.lemma };
+    }
+    return null;
+  }
+
+  /* English words common enough that finding them in the Spanish dictionary
+   * means the dictionary is wrong about which language you are in. "mean" is
+   * the ellos-form of "mear", which is correct Spanish and produced, for "what
+   * does trabajas mean", a definition of the word for urinating. The
+   * morphology was right; it was asked the wrong question. */
+  var EN_COMMON = {};
+  ('the a an and or but if so then than that this these those there here it its ' +
+   'i you he she we they me him her us them my your his our their mine yours ' +
+   'is are was were be been being am do does did done doing have has had having ' +
+   'will would shall should can could may might must ' +
+   'what how why when where who whom which whose ' +
+   'mean means meant say says said tell told ask asked answer word words ' +
+   'call called name named translate translation pronounce pronounced spell ' +
+   'use used using work works worked working think thought know knew help ' +
+   'make made get got go goes went come came see saw look looked find found ' +
+   'give gave take took put let want wanted need needed like liked love ' +
+   'about because but for with from into onto over under again also just only ' +
+   'very really quite too much many more most less least some any all none ' +
+   'not no yes okay ok please sorry thanks thank hello hi hey bye ' +
+   'in on at to of by up down out off between during before after ' +
+   'time day week month year today tomorrow yesterday now later ' +
+   'good bad big small new old long short right wrong sure fine ' +
+   'one two three four five six seven eight nine ten ' +
+   'thing things people person man woman boy girl ' +
+   'sentence phrase question language spanish english grammar verb noun'
+  ).split(' ').forEach(function (w) { EN_COMMON[w] = 1; });
+
+  /* The Spanish inside an English question, looked up. Quoted first, since
+   * that is what someone asking about a word actually types. */
+  function askedAbout(text) {
+    if (!PARLA.dict || !PARLA.dict.ready() || !PARLA.morph) return null;
+    var raw = String(text || '');
+    var quoted = raw.match(/["'“”«»]([^"'“”«»]{1,40})["'“”«»]/);
+    var cands = [];
+    // Split the raw text, not the normalised one: normalise strips accents,
+    // and answering "«donde» — where" for a learner who wrote "dónde" hands
+    // them back a misspelling of the word they asked about.
+    var raws = raw.split(/[^A-Za-zÀ-ÿñÑ'’-]+/).filter(Boolean);
+    if (quoted) {
+      cands.push(quoted[1].trim());
+      // A quoted phrase: also its own words, longest first, since "de dónde"
+      // is two words and only one of them carries the meaning.
+      quoted[1].trim().split(/\s+/).filter(function (w) { return w.length >= 3; })
+        .sort(function (a, b) { return b.length - a.length; })
+        .forEach(function (w) { cands.push(w); });
+    }
+    // Then whatever is not plainly English, last first — the thing being asked
+    // about is usually at the end of the question.
+    raws.filter(function (w) { return w.length >= 3 && !EN_COMMON[normalise(w)]; })
+      .reverse().forEach(function (w) { cands.push(w); });
+
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i];
+      var a = PARLA.morph.analyse(c);
+      if (!a.length) continue;
+      var top = a[0];
+      var gloss = (top.entry && top.entry.glosses && top.entry.glosses[0]) || top.en;
+      if (!gloss) continue;
+      // A word out of the long tail is more likely a bad match than the word
+      // they meant, unless they quoted it.
+      if (!quoted && top.entry && (!top.entry.band || top.entry.band > 8000)) continue;
+      return '“' + c + '” — ' + gloss +
+        (top.lemma && normalise(top.lemma) !== normalise(c)
+          ? ' (from ' + top.lemma + (top.why ? ', ' + top.why : '') + ')'
+          : '');
+    }
+    return null;
+  }
+
   function scriptedReply(ctx) {
     var sc = ctx.scenario;
     var st = ctx.scriptState || (ctx.scriptState = { used: [], fb: 0 });
@@ -155,14 +288,33 @@ window.PARLA = window.PARLA || {};
     var cut = cutOffReply(ctx.text);
     if (cut) return cut;
 
+    // A bare greeting: greet back and put the scene's own question again,
+    // without spending a beat on it.
+    if (GREETING_ONLY.test(String(ctx.text || '').trim())) {
+      var g = GREET_BACK[(st.fb++) % GREET_BACK.length];
+      var askAgain = sc.opener || { es: '¿Y tú qué tal?', en: 'And how about you?' };
+      return {
+        es: g.es + lastQuestion(askAgain.es),
+        en: g.en + lastQuestion(askAgain.en),
+        correction: null,
+        source: 'scripted'
+      };
+    }
+
     // English, with no model to translate it. Answering as though it were
     // Spanish would be a lie; the honest move is to hand them the phrases this
     // scene actually needs and let them try again.
     if (detectLanguage(ctx.text) === 'en') {
       var phrase = (sc.phrases || [])[0];
+      // "What does 'de dónde' mean?" is a question this app can answer without
+      // a model — it ships thirty-one thousand words and a morphology engine.
+      // Sending them away with "in Spanish please" while holding the answer is
+      // the kind of thing that makes a tool feel obstinate.
+      var asked = askedAbout(ctx.text);
       return {
-        es: 'Perdona, en espanol si puedes. ' + (phrase ? 'Prueba: "' + phrase + '".' : ''),
+        es: 'Perdona, en español si puedes. ' + (phrase ? 'Prueba: "' + phrase + '".' : ''),
         en: 'Sorry, in Spanish if you can. ' + (phrase ? 'Try: "' + phrase + '".' : ''),
+        note: asked || null,
         askedToRepeat: true,
         sayThis: phrase ? { es: phrase, en: '' } : null,
         correction: null,
@@ -217,12 +369,25 @@ window.PARLA = window.PARLA || {};
       };
     }
 
-    var fb = sc.fallback && sc.fallback.length
-      ? sc.fallback[st.fb++ % sc.fallback.length]
-      : { es: 'Sigue, te escucho.', en: 'Go on, I am listening.' };
+    // The scenario's own lines first, then the shared pool — and never the
+    // same one twice running, which is what made the old single fallback
+    // unbearable.
+    var pool = (sc.fallback || []).concat(KEEP_GOING);
+    var fb = null;
+    for (var f = 0; f < pool.length; f++) {
+      var cand = pool[(st.fb + f) % pool.length];
+      if (cand.es !== st.lastFb) { fb = cand; st.fb = (st.fb + f + 1) % pool.length; break; }
+    }
+    if (!fb) fb = pool[0] || { es: 'Sigue, te escucho.', en: 'Go on, I am listening.' };
+    st.lastFb = fb.es;
 
+    // If they said something with a real noun in it, open with that noun. It
+    // is not comprehension, but it is the difference between a partner who was
+    // listening and one reading from a card.
+    var echo = echoWord(ctx.text);
     return {
-      es: fb.es, en: fb.en,
+      es: (echo ? '¿' + echo.word.charAt(0).toUpperCase() + echo.word.slice(1) + '? ' : '') + fb.es,
+      en: (echo ? echo.lemma + '? ' : '') + fb.en,
       correction: correctOffline(ctx.text),
       source: 'scripted'
     };
@@ -319,13 +484,19 @@ window.PARLA = window.PARLA || {};
 
   /* 'en', 'es', or '' when it is too short or too mixed to call. */
   function detectLanguage(text) {
-    var t = normalise(text);
+    // A learner asking about Spanish quotes Spanish: "what does 'de dónde'
+    // mean?" is an English question, and counting the quoted part made it
+    // Spanish — so the partner answered in Spanish and the grammar checker
+    // told them to put a ¿ in front of "What".
+    var outside = String(text || '').replace(/["'“”«»]([^"'“”«»]{1,40})["'“”«»]/g, ' ');
+    var t = normalise(outside);
     if (!t) return '';
     var en = countMatches(t, EN_WORDS);
     var es = countMatches(t, ES_WORDS);
 
-    // Spanish-only letters settle it outright: no English word has them.
-    if (/[ñáéíóúü¿¡]/i.test(String(text))) return 'es';
+    // Spanish-only letters settle it — unless the English evidence is strong,
+    // which is exactly the quoting case above.
+    if (/[ñáéíóúü¿¡]/i.test(outside) && !(en >= 2 && en > es)) return 'es';
 
     if (en >= 2 && en > es) return 'en';
     if (es >= 2 && es > en) return 'es';

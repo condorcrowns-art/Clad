@@ -41,9 +41,23 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
     await page.waitForTimeout(1100);
   }
 
+  // Asked a question in English, mid-conversation: the app has thirty-one
+  // thousand words and a morphology engine, and used to send the learner away
+  // with "in Spanish please" while holding the answer.
+  await page.fill('.type-fallback input', 'What does "de dónde" mean?');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(1100);
+  const lookup = await page.locator('.lookup-card').innerText().catch(() => '');
+  check('an English question about a word is answered from the dictionary',
+    /dónde/.test(lookup) && /where/i.test(lookup), lookup.replace(/\n/g, ' | '));
+  check('and no Spanish grammar correction is applied to the English',
+    !/¿What/.test(await page.locator('main').innerText()));
+
   const corrections = await page.locator('.correction').count();
-  check('three wrong sentences are corrected', corrections === 3, String(corrections));
-  check('and the correct one is left alone', corrections === 3);
+  // The "say it like this" card after the English question is a .correction
+  // too, so four of them, three of which are grammar.
+  check('three wrong sentences are corrected', corrections === 4, String(corrections));
+  check('and the correct one is left alone', corrections === 4);
   const first = await page.locator('.correction').first().innerText();
   check('the correction shows what to say instead', /yo tengo hambre/.test(first), first.replace(/\n/g, ' | '));
   check('and says which rule it is', /the verb takes the yo form/.test(first));

@@ -803,6 +803,8 @@ node test/hear-browser.test.js 8765        # the same story with the text withhe
 node test/write-browser.test.js 8765       # write badly, be caught, be re-drilled
 node test/contrast-browser.test.js 8765    # every screen, both themes, AA measured
 node test/skills-browser.test.js 8765      # six skills, and naming the neglected one
+
+    node test/partner.test.js                  # the no-model partner, end to end
 node test/transfer-browser.test.js 8765    # two devices, one deck, nothing lost
 ```
 
@@ -823,6 +825,54 @@ node test/hosted-browser.test.js 8803 flaky
 
 `serve.ps1` and `piper.exe` themselves are only exercised on Windows — `setup-windows.ps1`
 synthesises a test phrase at the end and tells you if it failed.
+
+## The partner you get when there is no model
+
+The scripted partner runs whenever Ollama is not up, whenever the Workers AI
+binding is not configured, and whenever the network is gone — which makes it
+the first thing a new user is likely to meet. It was bad in four specific ways,
+each of which is now a rule:
+
+* **Say "hola" and it spent a script beat on it.** The beat keyed on
+  *llamo/soy/hola* is the one that replies to being told a name, so one turn
+  later the learner gave their name and was asked for their name. A greeting is
+  greeted back now, with the scene's own question repeated, and no beat is
+  spent.
+* **One fallback line per scenario.** In a ten-turn conversation over a
+  four-beat script that is the same sentence six times, which is worse than
+  saying nothing. There is a pool now, never the same one twice running, and
+  every one of them asks a question so there is always a turn to take. When the
+  learner's sentence contains a common noun it is handed back at the front —
+  *¿La música? Cuéntame un poco más.* Not comprehension, but the difference
+  between a partner listening and a partner reading from a card.
+* **"What does 'de dónde' mean?" was classified as Spanish**, because the
+  quoted Spanish was counted. So the learner got a Spanish brush-off, and the
+  grammar checker told them to put a ¿ in front of *What*. Quoted spans are
+  excluded from the language vote now — and, better, the question is answered:
+  the app ships thirty-one thousand words and a morphology engine, and holding
+  the answer while saying "in Spanish, please" is the kind of thing that makes
+  a tool feel obstinate.
+* **Asked what "trabajas" means, it defined "mean".** Which is the ellos-form
+  of *mear*, so a learner asking about the word for "you work" was told about
+  urinating. The morphology was right; it was asked the wrong question. Common
+  English words are no longer candidates for a Spanish lookup.
+
+### And the morphology bug underneath it
+
+`trabajas` came back as *the feminine plural of trabajo* — and beat the tú-form
+of *trabajar* on frequency, so the commonest verb ending in Spanish was being
+explained as a noun that does not exist. Same for *estudias*, *casos*, *ceños*.
+
+An adjective in -o always has a feminine. A **noun** in -o only has one when it
+names something that can be female: *amigo* has *amiga*, *hermano* has
+*hermana*, and *trabajo* has nothing at all. The ending does not say which.
+
+The fact is written down in exactly one place — the source's own
+`amiga {f} :: feminine form of amigo` lines, which the builder was discarding
+as inflections. It keeps the fact now and throws away the word: 411 headwords
+ship a "has a feminine" flag, and the morphology asks instead of guessing. The
+agent and nationality endings (-or, -ón, -án, -és, -ín) are exempt, because a
+suffix that names a person always has a feminine.
 
 ## How long the lines get
 

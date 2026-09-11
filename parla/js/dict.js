@@ -54,6 +54,14 @@ window.PARLA = window.PARLA || {};
     };
   }
 
+  /* Headwords the source says have a feminine counterpart. The word itself is
+   * not a headword — "amiga" is an inflection and belongs to the morphology
+   * engine — but whether it exists at all is a lexical fact only the source
+   * knows, and guessing it from the ending gets "trabajas" wrong. */
+  function hasFeminine(term) {
+    return !!(state.feminine && state.feminine.has(fold(term)));
+  }
+
   function index() {
     state.byTerm = new Map();
     state.byFold = new Map();
@@ -91,6 +99,7 @@ window.PARLA = window.PARLA || {};
       .then(function (d) {
         state.rows = d.rows || [];
         state.ranked = d.ranked || state.rows.length;
+        state.feminine = new Set(d.feminine || []);
         index();
         state.loaded = true;
         state.loading = null;
@@ -205,6 +214,7 @@ window.PARLA = window.PARLA || {};
   PARLA.dict = {
     load: load, ready: ready, size: size, ranked: rankedCount, failure: failure,
     get: get, all: all, isVerb: isVerb, verbFor: verbFor, search: search, band: band,
+    hasFeminine: hasFeminine,
     coverage: coverage, fold: fold,
     url: URL_
   };

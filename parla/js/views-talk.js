@@ -321,6 +321,15 @@ window.PARLA = window.PARLA || {};
     /* "Here is how you say what you just said." Distinct from a correction:
      * a correction fixes Spanish they attempted, this supplies Spanish they
      * did not have. Same card shape so it reads as part of the same thread. */
+    /* The answer to a word they asked about, in their own language, before
+     * the partner carries on in Spanish. */
+    function addLookup(note) {
+      thread.appendChild(el('div.lookup-card',
+        el('div.lead', 'You asked'),
+        el('div.lookup-body', note)));
+      scrollDown();
+    }
+
     function addSayThis(s2) {
       var card = el('div.correction.say-this',
         el('div.lead', 'Say it like this'),
@@ -613,6 +622,11 @@ window.PARLA = window.PARLA || {};
         // They reached for something and had to use English to get there. Hand
         // them the Spanish before the partner's reply, so it reads as the thing
         // they should have said rather than an afterthought.
+        // They asked what a word meant. The app has thirty-one thousand of them
+        // and a morphology engine, so answer before brushing them back into
+        // Spanish — holding the answer while saying "in Spanish please" is the
+        // kind of thing that makes a tool feel obstinate.
+        if (out.note) addLookup(out.note);
         if (out.sayThis && out.sayThis.es) addSayThis(out.sayThis);
 
         addPartner(out.es, out.en, out.correction);

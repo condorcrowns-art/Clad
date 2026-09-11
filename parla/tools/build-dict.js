@@ -193,6 +193,8 @@ async function main() {
 
   /* — the Spanish side — */
   const LINE = /^(.+?)\s+\{([^}]*)\}\s*(?:\[([^\]]*)\])?\s*::\s*(.*)$/;
+  // Masculine headwords the source says have a feminine counterpart.
+  const hasFeminine = new Set();
   const entries = new Map();
   let glossLines = 0, formLines = 0;
 
@@ -207,7 +209,20 @@ async function main() {
     const gloss = cleanGloss(m[4] || '');
 
     if (!gloss) { formLines++; continue; }
-    if (FORM_OF.test(gloss)) { formLines++; continue; }
+    if (FORM_OF.test(gloss)) {
+      formLines++;
+      /* One thing worth keeping out of a line we are about to throw away:
+       * "amiga :: feminine form of amigo" is the only record anywhere that
+       * amigo *has* a feminine. The word itself does not belong in a
+       * dictionary of headwords, but the fact does — without it the morphology
+       * engine has to guess from the ending, and ending in -o tells you
+       * nothing: amigo has amiga, hermano has hermana, and trabajo has
+       * nothing at all. Guessing gave "trabajas" as the feminine plural of
+       * trabajo, which then beat the tú-form of trabajar. */
+      const fm = gloss.match(/feminine (?:singular )?(?:form|of)\s*(?:of\s*)?([a-záéíóúüñ][a-záéíóúüñ'-]{1,24})/i);
+      if (fm) hasFeminine.add(fold(fm[1]));
+      continue;
+    }
     if (labels.some(l => l === 'obsolete' || l === 'archaic' || l === 'dated' || l === 'historical')) continue;
     if (/[^\p{L}\p{M}'’\- ]/u.test(term) || term.length > 34) continue;
     const pos = POS[rawPos];
@@ -556,12 +571,20 @@ async function main() {
     return row;
   });
 
+  const byFold = new Set(kept.map(e => fold(e.term)));
+
   const out = {
     lang: 'es',
     built: new Date().toISOString().slice(0, 10),
     count: rows.length,
     ranked: ranked,
     fields: ['term', 'pos', 'gender', 'glosses', 'register', 'region'],
+    /* Headwords the source says have a feminine counterpart — amigo, niño,
+       profesor. Shipped as its own list rather than a seventh column because
+       the rows are variable-length and this is a few thousand short strings.
+       The morphology engine needs the fact; the dictionary does not need the
+       word. */
+    feminine: [...hasFeminine].filter(f => byFold.has(f)).sort(),
     note: 'The first `ranked` rows are ordered commonest-first and their index is ' +
           'the word\'s frequency band. The rest are everything else, alphabetical, ' +
           'so that looking up an uncommon word still has an answer.',

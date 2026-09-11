@@ -343,6 +343,11 @@ window.PARLA = window.PARLA || {};
     return kept.length ? kept : out;
   }
 
+  /* The feminine a masculine noun would have, if it had one. */
+  function fem1(term) {
+    return /o$/.test(term) ? term.slice(0, -1) + 'a' : term + 'a';
+  }
+
   function masculines(word) {
     var out = [];
     if (/a$/.test(word)) {
@@ -452,6 +457,21 @@ window.PARLA = window.PARLA || {};
       var term = e.term.toLowerCase();
       var plausible = /o$/.test(term) || /(ón|án|és|ín|or)$/.test(term) || e.pos === 'adj';
       if (!plausible) return;
+      /* An adjective in -o always has a feminine. A *noun* in -o only has one
+       * when it names something that can be female: amigo has amiga, hermano
+       * has hermana, and trabajo has nothing at all. Ending in -o says nothing
+       * about which, so the dictionary carries the fact — it is picked out of
+       * the source's own "amiga :: feminine form of amigo" lines at build
+       * time, which is the only place it is written down.
+       *
+       * Without it, "trabajas" came back as "the feminine plural of trabajo"
+       * and beat the tú-form of trabajar on frequency, so the commonest verb
+       * ending in Spanish was explained as a noun that does not exist. */
+      // Only -o needs asking about. The agent and nationality endings — -or,
+      // -ón, -án, -és, -ín — are suffixes that name people, and a word that
+      // names a person has a feminine: trabajador, profesor, alemán, inglés.
+      if (e.pos === 'n' && /o$/.test(term) &&
+          D.hasFeminine && !D.hasFeminine(e.term) && !D.get(fem1(term))) return;
       out.push({ lemma: e.term, pos: e.pos, en: e.en, entry: e, surface: word,
                  gender: 'f', number: /as$/.test(word) ? 'plural' : 'singular',
                  why: 'feminine' + (/as$/.test(word) ? ' plural' : '') + ' of ' + e.term });
