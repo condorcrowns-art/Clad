@@ -428,8 +428,15 @@ ceiling 1.06K mass, 600 at 70s, 90% of ceiling at 180s, 99% at 349s.
 - Real asset IDs (`Config.SOUNDS` is all empty strings by design; user supplies).
 - Open Cloud auto-publish.
 - Daily login streak.
-- SLAM's shockwave is fired but its landing impulse is not yet applied to
-  nearby blobs; HOOK and SPLIT apply velocity but have no tether/merge logic.
-  The cost, cooldown and mass drop are all live — the visuals are the gap.
-- The tutorial still teaches the old loop in places; it boots and passes, but
-  its copy wants a pass for eat -> melt -> bank.
+- All eight powers are complete. SLAM lands its shockwave at the bottom of the
+  arc and shatters lumps inside the blast (which is its real job: an island
+  that has silted up with an hour of congealed shells needs something that can
+  break it open, or the Vault walls itself in). HOOK reels — bigger drags
+  smaller, smaller drags itself toward bigger, same button. SPLIT is a
+  committed lunge that returns 55% of what it cost rather than a second body
+  you steer, because a second body needs a second controller and a camera that
+  can hold two things.
+- The tutorial teaches eat -> melt -> bank -> power. The melt step is COUNTED
+  (goal 40): the melt event fires every arena tick above the grace mass, so
+  without a goal it advanced on the next frame and the one lesson a child
+  cannot guess flashed past unread.

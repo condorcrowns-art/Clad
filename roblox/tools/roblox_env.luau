@@ -160,6 +160,23 @@ end
 Vector3.__div = function(a, b) return v3(a.X / b, a.Y / b, a.Z / b) end
 Vector3.__eq = function(a, b) return a.X == b.X and a.Y == b.Y and a.Z == b.Z end
 Vector3.__tostring = function(a) return ("(%0.2f, %0.2f, %0.2f)"):format(a.X, a.Y, a.Z) end
+
+-- Cross and Dot were missing entirely, so the roll controller's spin-axis
+-- maths crashed the whole render loop the moment a scenario rolled a body far
+-- enough to need it — and it read as "the game is broken", not "the stub is
+-- incomplete". Anything the real engine gives Vector3 that the game calls has
+-- to exist here, or the harness is testing a different language.
+function Vector3.Cross(a, b)
+    return v3(a.Y * b.Z - a.Z * b.Y,
+              a.Z * b.X - a.X * b.Z,
+              a.X * b.Y - a.Y * b.X)
+end
+function Vector3.Dot(a, b)
+    return a.X * b.X + a.Y * b.Y + a.Z * b.Z
+end
+function Vector3.Lerp(a, b, t)
+    return v3(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, a.Z + (b.Z - a.Z) * t)
+end
 Vector3.__index = function(t, k)
     if k == "Magnitude" then
         return math.sqrt(rawget(t, "X")^2 + rawget(t, "Y")^2 + rawget(t, "Z")^2)

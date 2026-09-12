@@ -316,19 +316,22 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     })
     slab.Parent = parent
 
-    local gui = Instance.new("SurfaceGui")
-    gui.Name = "Board"
-    gui.Face = Enum.NormalId.Front
-    gui.CanvasSize = Vector2.new(size.X * 26, size.Y * 26)
-    gui.LightInfluence = 0
-    gui.Parent = slab
+    -- Named `surface`, not `gui`: apicheck tracks instance classes by variable
+    -- name across the whole file, and a SurfaceGui called `gui` here made it
+    -- read every BillboardGui called `gui` elsewhere as a SurfaceGui too.
+    local surface = Instance.new("SurfaceGui")
+    surface.Name = "Board"
+    surface.Face = Enum.NormalId.Front
+    surface.CanvasSize = Vector2.new(size.X * 26, size.Y * 26)
+    surface.LightInfluence = 0
+    surface.Parent = slab
 
     local pad = Instance.new("Frame")
     pad.Size = UDim2.fromScale(1, 1)
     pad.BackgroundColor3 = Color3.fromRGB(34, 35, 39)
     pad.BorderSizePixel = 0
     pad.ZIndex = 1
-    pad.Parent = gui
+    pad.Parent = surface
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 6
     stroke.Color = tint
@@ -355,7 +358,7 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     -- that into a WaitForChild that never returns and a board that silently
     -- says "loading…" forever.
     entries.ZIndex = 2
-    entries.Parent = gui
+    entries.Parent = surface
 
     return slab
 end

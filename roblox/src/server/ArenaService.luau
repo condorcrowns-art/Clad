@@ -37,6 +37,12 @@ local PICKUP_SLACK = 1.6         -- studs of forgiveness on a pellet grab
 local EAT_OVERLAP = 0.55         -- how far in you must be to swallow someone
 local BANK_MAX_SPEED = 14        -- you must actually stop to bank
 local POP_INVULN = 2.0           -- seconds of grace after respawning
+local SLAM_AIRTIME = 0.85        -- how long a SLAM hangs before it lands
+local SLAM_RADIUS = 46
+local SLAM_IMPULSE = 120
+local HOOK_RANGE = 90
+local HOOK_PULL = 96
+local SPLIT_RETURN = 0.55        -- of the thrown half, how much comes back
 
 export type Run = {
     mass: number,
@@ -44,6 +50,8 @@ export type Run = {
     powerReadyAt: number,
     powerUntil: number,
     activeEffect: string?,
+    slamUntil: number,      -- airborne on a SLAM; the shockwave lands when it ends
+    splitOwed: number,      -- mass thrown by SPLIT, part of which returns
     banking: number,
     leakBuffer: number,
     safeUntil: number,
@@ -79,6 +87,7 @@ type Deps = {
     effect: (player: Player, kind: string, data: any?) -> (),
     loadout: (player: Player) -> ({ string }, string),   -- trinket ids, power id
     sync: (player: Player, state: any) -> (),
+    teach: (player: Player, event: string) -> (),
 }
 local deps: Deps
 
@@ -167,6 +176,8 @@ local function newRun(player: Player): Run
         powerReadyAt = 0,
         powerUntil = 0,
         activeEffect = nil,
+        slamUntil = 0,
+        splitOwed = 0,
         banking = 0,
         leakBuffer = 0,
         safeUntil = os.clock() + POP_INVULN,
@@ -303,6 +314,7 @@ local function bank(player: Player, run: Run)
     deps.effect(player, "bank", { glob = glob, mass = run.mass })
     deps.notify(player, ("🏦 Banked %s mass → 💧%s"):format(
         Format.short(run.mass), Format.short(glob)), "good")
+    deps.teach(player, "bank")
     run.mass = Config.BANK_RESET_MASS
     run.banking = 0
     run.leakBuffer = 0
@@ -359,16 +371,51 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         ball.AssemblyLinearVelocity = dir * 110 + Vector3.new(0, 8, 0)
     elseif run.powerId == "slam" then
         ball.AssemblyLinearVelocity = Vector3.new(0, 74, 0) + dir * 24
-        -- The shockwave lands on the way down, handled in the tick by watching
-        -- for the descent to finish. Shattering nearby lumps is the point:
-        -- SLAM is how a stuck island gets un-stuck.
+        -- The impact is not instant: it lands when you do. tickPlayer watches
+        -- slamUntil and fires the shockwave at the bottom of the arc, which is
+        -- the only timing that reads as a slam rather than a shrug.
+        run.slamUntil = now + SLAM_AIRTIME
     elseif run.powerId == "split" then
         ball.AssemblyLinearVelocity = dir * 128
+        run.splitOwed = cost
+    elseif run.powerId == "hook" then
+        -- Reel. Bigger drags smaller toward it; smaller drags ITSELF toward
+        -- bigger, which is what makes HOOK a chase tool for the hunter and an
+        -- escape-the-open-ground tool for the hunted with the same button.
+        local target, best = nil, HOOK_RANGE
+        for _, other in ipairs(Players:GetPlayers()) do
+            if other ~= player and runs[other.UserId] then
+                local ob = RollService.ballFor(other)
+                if ob and ob.Parent then
+                    local d = (ob.Position - ball.Position).Magnitude
+                    if d < best then target, best = other, d end
+                end
+            end
+        end
+        if target then
+            local tb = RollService.ballFor(target)
+            local tr = runs[target.UserId]
+            if tb and tr then
+                local toward = (ball.Position - tb.Position)
+                toward = Vector3.new(toward.X, 0, toward.Z)
+                if toward.Magnitude > 0.01 then
+                    toward = toward.Unit
+                    if run.mass >= tr.mass then
+                        tb.AssemblyLinearVelocity = toward * HOOK_PULL * tr.trinkets.knockbackMult
+                            + Vector3.new(0, 12, 0)
+                    else
+                        ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
+                    end
+                    deps.effect(player, "hook", { to = target.DisplayName })
+                end
+            end
+        end
     elseif run.powerId == "magnet" then
         -- handled in tick while powerUntil holds
     end
 
     deps.effect(player, "power", { id = run.powerId, cost = cost })
+    deps.teach(player, "power")
     return true, nil
 end
 
@@ -388,6 +435,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
     -- can see the trail.
     local leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult * dt
     if leak > 0 then
+        deps.teach(player, "melt")
         run.mass = math.max(Config.STARTING_MASS, run.mass - leak)
         run.leakBuffer += leak
         while run.leakBuffer >= Config.LEAK_PELLET_MASS do
@@ -418,6 +466,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                         if not mine and d.Magnitude <= reach then
                             run.mass += pellet.value * run.trinkets.pelletMult
                             removePellet(pellet)
+                            deps.teach(player, "eat")
                         end
                     else
                         removePellet(pellet)
@@ -444,6 +493,57 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
 
     if run.mass > run.bestMass then
         run.bestMass = run.mass
+    end
+
+    -- SLAM lands. Everything nearby is thrown outward, and every lump inside
+    -- the blast shatters into pellets — which is the real job: an island that
+    -- has silted up with an hour of congealed shells needs something that can
+    -- break it open again, or the Vault eventually walls itself in.
+    if run.slamUntil > 0 and now >= run.slamUntil then
+        run.slamUntil = 0
+        local hits = 0
+        for _, other in ipairs(Players:GetPlayers()) do
+            local orun = runs[other.UserId]
+            local ob = other ~= player and orun and RollService.ballFor(other)
+            if ob and ob.Parent then
+                local away = ob.Position - pos
+                local flat = Vector3.new(away.X, 0, away.Z)
+                if flat.Magnitude < SLAM_RADIUS and flat.Magnitude > 0.01 then
+                    local falloff = 1 - (flat.Magnitude / SLAM_RADIUS)
+                    ob.AssemblyLinearVelocity = flat.Unit
+                            * (SLAM_IMPULSE * falloff * orun.trinkets.knockbackMult)
+                        + Vector3.new(0, 26 * falloff, 0)
+                    hits += 1
+                end
+            end
+        end
+        for i = #lumps, 1, -1 do
+            local lump = lumps[i]
+            if (lump.part.Position - pos).Magnitude < SLAM_RADIUS then
+                local n = math.clamp(math.floor(lump.mass / Config.LEAK_PELLET_MASS), 1, 12)
+                for k = 1, n do
+                    local a = math.rad((360 / n) * k)
+                    spawnPellet(lump.part.Position
+                        + Vector3.new(math.cos(a) * 8, 2, math.sin(a) * 8),
+                        lump.mass / n, false)
+                end
+                lump.part:Destroy()
+                table.remove(lumps, i)
+            end
+        end
+        deps.effect(player, "slam", { hits = hits })
+    end
+
+    -- SPLIT comes back. The thrown half is not a second body you steer — that
+    -- needs a whole second controller and a camera that can hold two things —
+    -- it is a committed lunge that returns less than it cost. Which is the
+    -- honest version of the same decision: gamble half of yourself on reaching
+    -- something, and eat well or come back smaller.
+    if run.activeEffect == "split" and now >= run.powerUntil and run.splitOwed > 0 then
+        run.mass += run.splitOwed * SPLIT_RETURN
+        run.splitOwed = 0
+        run.activeEffect = nil
+        deps.notify(player, "🫧 Your other half came back.", "info")
     end
 
     RollService.setRadius(player, radius)

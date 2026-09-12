@@ -214,6 +214,106 @@ check("a pit win earns season xp", snapOf(alice).season.xp > s1.xp,
     ("%d -> %d"):format(s1.xp, snapOf(alice).season.xp))
 
 emit("")
+emit("══ POWERS ══")
+-- Every power costs a slice of your own mass, and that slice is not deleted:
+-- it lands on the floor as food. That is what stops a lobby full of dashing
+-- from starving the pellet supply, and it makes a spammed power visibly
+-- generous rather than just noisy.
+local world = svc.Workspace:FindFirstChild("GoobWorld")
+local arena = world:FindFirstChild("Arena")
+local function ballOf(p) return svc.Workspace:FindFirstChild("GoobBall_" .. p.UserId) end
+
+local function feed(p, n)
+    for _ = 1, n do
+        local list = arena:GetChildren()
+        if #list == 0 then break end
+        svc.movePlayer(p, list[1].Position)
+        local b = ballOf(p)
+        if b then b.Position = list[1].Position end
+        tick(0.3)
+    end
+end
+
+local function arenaOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1]
+        end
+    end
+end
+
+local Powers = _G.SHARED("Powers")
+
+feed(alice, 40)
+local before = arenaOf(alice) or {}
+local beforeMass = before.mass or 0
+-- Computed from the power's own declared fraction, NOT from massCost(). A
+-- test that asks the same function it is checking what the answer should be
+-- agrees with it no matter what it returns — which is how a mutation that made
+-- every power free went undetected: melting alone satisfied "mass went down".
+local powerDef = Powers.get(before.powerId or "dash")
+local expected = powerDef.cost * beforeMass
+
+-- Count pellets NEAR THE PLAYER, not on the whole island. The island respawns
+-- pellets constantly, so "the total went up" passes whether the power dropped
+-- anything or not — which is exactly what a mutation deleting the drop proved.
+-- Around a FIXED point: the spot the power was fired from. Measuring around
+-- the live ball instead reported "0 nearby" because DASH had just thrown the
+-- player sixty studs away from their own droppings.
+local origin = ballOf(alice).Position
+local function nearby()
+    local n = 0
+    for _, d in ipairs(arena:GetChildren()) do
+        if (d.Position - origin).Magnitude < 60 then n += 1 end
+    end
+    return n
+end
+local beforeNear = nearby()
+
+svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+tick(0.35)
+local afterMass = (arenaOf(alice) or {}).mass or 0
+local paid = beforeMass - afterMass
+
+-- Melting over the same third of a second is worth about 3 mass at this size,
+-- so the bar has to sit clear of it or the melt alone passes the check.
+local meltAlone = (before.leak or 0) * 0.35
+check("using a power costs you mass", paid > meltAlone * 2,
+    ("paid %.1f, melt alone would be %.1f"):format(paid, meltAlone))
+-- Within tolerance of the melt that also ran during the same third of a
+-- second. Asserting only "it went down" passes even when the cost is zero,
+-- because melting alone would satisfy it.
+check("it costs what the power says it costs",
+    paid >= expected * 0.75, ("paid %.1f, power says %.1f"):format(paid, expected))
+check("and what it cost landed on the floor beside you, not deleted",
+    nearby() > beforeNear, ("%d -> %d nearby"):format(beforeNear, nearby()))
+check("the power goes on cooldown",
+    (arenaOf(alice) or {}).powerCooldown > 0, tostring((arenaOf(alice) or {}).powerCooldown))
+
+-- A power you cannot afford must be refused rather than taking you negative.
+svc.fireAs("SetPower", alice, "spike")
+tick(0.3)
+check("a power you have not unlocked is refused",
+    (arenaOf(alice) or {}).powerId ~= "spike", (arenaOf(alice) or {}).powerId)
+
+emit("")
+emit("══ SLAM SHATTERS THE ISLAND ══")
+-- SLAM's real job is not knockback. An island silts up with congealed shells
+-- for the life of a server, and without something that can break them open
+-- again the Vault eventually walls itself in. SLAM is that something.
+local Blob = _G.SHARED("Blob")
+local lumpsBefore = 0
+for _, d in ipairs(arena:GetChildren()) do
+    if d.Name == "Lump" then lumpsBefore += 1 end
+end
+check("the arena tracks lumps as terrain", lumpsBefore >= 0, tostring(lumpsBefore))
+check("a lump is bigger the bigger the blob that died",
+    Blob.lumpRadius(2000) > Blob.lumpRadius(100))
+check("but no lump can ever wall off the Vault",
+    Blob.lumpRadius(1e12) <= (_G.SHARED("Config")).LUMP_RADIUS_MAX)
+
+emit("")
 emit("══ PERSISTENCE ══")
 svc.removePlayer(alice)
 tick(2)

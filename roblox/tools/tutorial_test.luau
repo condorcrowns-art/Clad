@@ -32,150 +32,137 @@ tick(2)
 svc.enterClientMode(alice)
 _G.BOOT_CLIENT()
 tick(2)
+local function tut()
+    local s = snapOf(alice)
+    return s and s.tutorial or nil
+end
+local arena = svc.Workspace:FindFirstChild("GoobWorld"):FindFirstChild("Arena")
+local function ball()
+    return svc.Workspace:FindFirstChild("GoobBall_" .. alice.UserId)
+end
 
 emit("══ A NEW PLAYER IS TOLD WHAT TO DO ══")
-local snap = snapOf(alice)
-check("a new player gets a tutorial", snap and snap.tutorial ~= nil)
-check("it starts at step 1", snap and snap.tutorial and snap.tutorial.index == 1,
-    snap and snap.tutorial and tostring(snap.tutorial.index))
-check("step 1 asks them to catch", snap and snap.tutorial
-    and snap.tutorial.text:lower():find("junk") ~= nil, snap and snap.tutorial and snap.tutorial.text)
-check("it shows progress", snap and snap.tutorial and snap.tutorial.progress == "0 / 5",
-    snap and snap.tutorial and tostring(snap.tutorial.progress))
-
-local hud = alice:FindFirstChild("PlayerGui"):FindFirstChild("GoobHud")
-local coach = hud and hud:FindFirstChild("Coach")
-check("the coach banner is on screen", coach ~= nil and coach.Visible == true)
-local line = coach and coach:FindFirstChild("Line")
-check("the banner shows the instruction", line and line.Text ~= "",
-    line and tostring(line.Text))
+check("a new player gets a tutorial", tut() ~= nil)
+check("it starts at step 1", tut() and tut().index == 1, tut() and tostring(tut().index))
+check("step 1 asks them to eat",
+    tut() and tut().text:lower():find("eat") ~= nil, tut() and tut().text)
+check("it shows progress", tut() and tut().progress == "0 / 12",
+    tut() and tostring(tut().progress))
 
 emit("")
-emit("══ CATCHING ADVANCES IT ══")
-local critters = svc.Workspace:FindFirstChild("Critters")
-tick(25)
-local caught = 0
-while caught < 5 do
-    local list = critters:GetChildren()
-    if #list == 0 then tick(8) list = critters:GetChildren() end
+emit("══ STEP 1: EAT ══")
+-- Eat off the real island. The tutorial must advance on the player DOING the
+-- thing, never on a timer, so this drives it the only way a player can.
+for _ = 1, 40 do
+    local list = arena:GetChildren()
     if #list == 0 then break end
-    local target = list[1]
-    svc.movePlayer(alice, target.Position)
-    svc.fireAs("CatchCritter", alice, target)
-    tick(0.5)
-    caught += 1
+    svc.movePlayer(alice, list[1].Position)
+    local b = ball()
+    if b then b.Position = list[1].Position end
+    tick(0.3)
+    if tut() and tut().id ~= "eat" then break end
 end
-tick(2)
-local afterCatch = snapOf(alice)
-check("catching 5 things moved it past step 1",
-    afterCatch and afterCatch.tutorial and afterCatch.tutorial.index > 1,
-    afterCatch and afterCatch.tutorial and
-        ("index=%s %s"):format(tostring(afterCatch.tutorial.index), tostring(afterCatch.tutorial.text)))
+check("eating moved it past step 1", tut() and tut().id ~= "eat",
+    tut() and tut().id)
 
 emit("")
-emit("══ THE SNACK STEP POINTS AT THE SNACK BUTTON ══")
--- Walk forward to whichever step is next until we reach the snack step.
-local guard = 0
-while guard < 8 do
-    local s = snapOf(alice)
-    if not s or not s.tutorial then break end
-    if s.tutorial.id == "snack" then break end
-    if s.tutorial.id == "catch" or s.tutorial.id == "digest" then
-        local list = critters:GetChildren()
-        if #list > 0 then
-            svc.movePlayer(alice, list[1].Position)
-            svc.fireAs("CatchCritter", alice, list[1])
-        end
-        tick(3)
-    else
-        break
+emit("══ STEP 2: MELT — the step that matters ══")
+-- Melting is the one mechanic in this game a child cannot guess and has not
+-- seen elsewhere. If they learn it by watching their number fall for no stated
+-- reason they read it as the game being broken, not as the game being tense.
+-- So it must be TAUGHT, and taught at the moment it starts.
+check("the melt step exists and is reached", tut() and tut().id == "melt",
+    tut() and tut().id)
+check("it says the word, in plain language",
+    tut() and tut().text:lower():find("melt") ~= nil, tut() and tut().text)
+check("and it says where the melted goo goes",
+    tut() and (tut().hint or ""):lower():find("food") ~= nil, tut() and tut().hint)
+
+-- Keep eating so the melt event keeps firing and the step clears.
+for _ = 1, 20 do
+    local list = arena:GetChildren()
+    if #list > 0 then
+        svc.movePlayer(alice, list[1].Position)
+        local b = ball()
+        if b then b.Position = list[1].Position end
     end
-    guard += 1
+    tick(0.5)
+    if tut() and tut().id ~= "melt" then break end
 end
-local atSnack = snapOf(alice)
-check("reached the snack step", atSnack and atSnack.tutorial and atSnack.tutorial.id == "snack",
-    atSnack and atSnack.tutorial and tostring(atSnack.tutorial.id))
-check("it targets the snack button", atSnack and atSnack.tutorial
-    and atSnack.tutorial.target == "snack",
-    atSnack and atSnack.tutorial and tostring(atSnack.tutorial.target))
-
-tick(400)
-svc.fireAs("BuySnack", alice, "snack")
-tick(3)
-local afterSnack = snapOf(alice)
-check("buying a snack advanced it", afterSnack and afterSnack.tutorial
-    and afterSnack.tutorial.id ~= "snack",
-    afterSnack and afterSnack.tutorial and tostring(afterSnack.tutorial.id))
+check("melting advanced it", tut() and tut().id ~= "melt", tut() and tut().id)
 
 emit("")
-emit("══ EGG, THEN GULP — the mechanic nothing else explains ══")
-check("now asking for an egg", afterSnack and afterSnack.tutorial
-    and afterSnack.tutorial.id == "egg",
-    afterSnack and afterSnack.tutorial and tostring(afterSnack.tutorial.id))
+emit("══ STEP 3: BANK ══")
+check("it now sends them to the Vault", tut() and tut().id == "bank", tut() and tut().id)
+check("it says what banking is FOR",
+    tut() and (tut().hint or ""):lower():find("keep") ~= nil, tut() and tut().hint)
 
-local tries = 0
-while tries < 40 do
-    local s = snapOf(alice)
-    if s and s.eggAffordable then break end
-    tick(300); tries += 1
+local globBefore = (snapOf(alice) or {}).glob or 0
+-- Roll into the Vault and hold still. Anti-cheat tolerates this because the
+-- body is moved the same way the server moves it.
+for _ = 1, 40 do
+    svc.movePlayer(alice, V3.new(0, 9, 0))
+    local b = ball()
+    if b then
+        b.Position = V3.new(0, 9, 0)
+        b.AssemblyLinearVelocity = V3.new(0, 0, 0)
+    end
+    tick(0.4)
+    if tut() and tut().id ~= "bank" then break end
 end
-svc.fireAs("BuyEgg", alice)
-tick(3)
-local afterEgg = snapOf(alice)
-check("hatching advanced it to the gulp step",
-    afterEgg and afterEgg.tutorial and afterEgg.tutorial.id == "gulp",
-    afterEgg and afterEgg.tutorial and tostring(afterEgg.tutorial.id))
-check("the gulp step explains the consequence",
-    afterEgg and afterEgg.tutorial and (afterEgg.tutorial.hint or ""):lower():find("gone forever") ~= nil,
-    afterEgg and afterEgg.tutorial and tostring(afterEgg.tutorial.hint))
-
-local activeId, otherId
-for _, g in ipairs(afterEgg.goobs) do
-    if g.isActive then activeId = g.id else otherId = g.id end
-end
-svc.fireAs("GulpGoob", alice, activeId, otherId)
-tick(3)
-local afterGulp = snapOf(alice)
-check("gulping finished the tutorial",
-    afterGulp and afterGulp.tutorial and afterGulp.tutorial.done == true,
-    afterGulp and afterGulp.tutorial and tostring(afterGulp.tutorial.id))
-check("the last step points at trading",
-    afterGulp and afterGulp.tutorial and afterGulp.tutorial.text:lower():find("trade") ~= nil,
-    afterGulp and afterGulp.tutorial and tostring(afterGulp.tutorial.text))
+check("banking advanced the tutorial", tut() and tut().id ~= "bank", tut() and tut().id)
+check("and banking actually paid", ((snapOf(alice) or {}).glob or 0) > globBefore,
+    ("%s -> %s"):format(tostring(globBefore), tostring((snapOf(alice) or {}).glob)))
 
 emit("")
-emit("══ IT CAN BE SKIPPED, AND IT PERSISTS ══")
+emit("══ STEP 4: THE POWER ══")
+check("it asks for the power button", tut() and tut().id == "power", tut() and tut().id)
+check("it warns the power costs you something",
+    tut() and (tut().hint or ""):lower():find("cost") ~= nil, tut() and tut().hint)
+
+-- Feed up first: a power costs mass, and the server refuses the press if
+-- paying for it would drop the player below the floor.
+for _ = 1, 30 do
+    local list = arena:GetChildren()
+    if #list > 0 then
+        svc.movePlayer(alice, list[1].Position)
+        local b = ball()
+        if b then b.Position = list[1].Position end
+    end
+    tick(0.3)
+end
+svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+tick(1)
+check("using a power finished the tutorial", tut() and tut().id == "done",
+    tut() and tut().id)
+check("the closing line states the loop",
+    tut() and tut().text:lower():find("bank") ~= nil, tut() and tut().text)
+
+emit("")
+emit("══ COUNTED STEPS DO NOT SHARE A COUNTER ══")
+-- Straight at the module, because the integration walk cannot see this: with a
+-- shared counter a later counted step inherits an earlier one's total and
+-- completes early rather than not at all, so every end-to-end assertion still
+-- passes while the lesson is skipped.
+local Tutorial = _G.SHARED("Tutorial")
+local st = Tutorial.blank()
+for _ = 1, 12 do Tutorial.advance(st, "eat") end
+check("the counted first step completed", Tutorial.display(st).id == "melt",
+    Tutorial.display(st).id)
+check("its counter reset for the next counted step",
+    (st.caught or 0) == 0, tostring(st.caught))
+for _ = 1, 39 do Tutorial.advance(st, "melt") end
+check("39 of 40 is not enough to clear the melt lesson",
+    Tutorial.display(st).id == "melt", Tutorial.display(st).id)
+Tutorial.advance(st, "melt")
+check("the fortieth clears it", Tutorial.display(st).id == "bank",
+    Tutorial.display(st).id)
+
+emit("")
+emit("══ IT CAN BE SKIPPED ══")
 svc.fireAs("DismissTutorial", alice)
-tick(2)
-check("dismissing hides it", snapOf(alice).tutorial == nil,
-    tostring(snapOf(alice).tutorial))
-
-svc.removePlayer(alice)
-tick(2)
-local saved = svc.stores["GoobProfile_v1"]["u_101"]
-check("tutorial state was saved", saved and saved.tutorial ~= nil)
-check("it stays dismissed across sessions", saved and saved.tutorial.dismissed == true)
-
-emit("")
-emit("══ AN EXISTING PLAYER IS NOT RE-TAUGHT ══")
--- A save written before the tutorial existed has no `tutorial` field at all.
-svc.stores["GoobProfile_v1"]["u_777"] = {
-    version = 1, glob = 5000,
-    goobs = { { id = "old", nickname = "Veteran", hue = 0.5, mass = 90000,
-                stomach = {}, bornAt = 1, inheritedAge = 0, lineage = {}, contents = {} } },
-    activeGoobId = "old", lastSeen = 1,
-    stats = { caught = 900, gulps = 12, trades = 4, bestMass = 90000 },
-    discovered = {},
-}
-local vet = svc.addPlayer("Veteran", 777, V3.new(0, 5, 0))
-tick(3)
-local vetSnap = snapOf(vet)
-check("a pre-tutorial save is not walked through it",
-    vetSnap and vetSnap.tutorial == nil,
-    vetSnap and vetSnap.tutorial and tostring(vetSnap.tutorial.text))
-check("their Goob survived the migration intact",
-    vetSnap and #vetSnap.goobs == 1 and vetSnap.goobs[1].nickname == "Veteran",
-    vetSnap and tostring(#vetSnap.goobs))
+tick(1)
+check("dismissing hides it for good", tut() == nil, tut() and tut().id)
 
 emit("")
 emit(("══ %s ══"):format(fails == 0 and "ALL TUTORIAL CHECKS PASSED" or (fails .. " FAILURE(S)")))

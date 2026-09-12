@@ -440,6 +440,7 @@ ArenaService.start({
     end,
 
     sync = function(player, state) ArenaSync:FireClient(player, state) end,
+    teach = teach,
 })
 
 -- One button. The client sends where it is aiming; the server decides
