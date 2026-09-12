@@ -100,6 +100,25 @@ Config.SNACK_TIERS = {
 -- Catching is the intended primary loop; the stand is what your AFK time buys.
 Config.SNACK_MARKUP = 1.35
 
+-- ── The Egg Stand: how you ever get a SECOND Goob ─────────────────────────
+--
+-- Without this the game has no core loop at all. `newGoob` was only ever
+-- called once, at account creation, and trading is zero-sum — so no player
+-- could ever hold two Goobs, the `#goobs <= 1` guard in GoobService.gulp was
+-- permanently true, and gulping (the sink the entire design rests on) was
+-- unreachable dead code.
+--
+-- Eggs hatch a Goob at STARTING_MASS with age zero, so they are NOT a way to
+-- buy power: gulping a fresh egg returns 7.5 mass for a price worth hundreds.
+-- What an egg buys is a SLOT — somewhere to hold a Goob you traded for, and
+-- stock a new player can actually bring to the trade zone on day one.
+--
+-- Price is a steeply rising function of how many Goobs you already hold, so a
+-- stable is a genuine investment and nobody floods the world with vessels.
+Config.EGG_BASE_SECONDS = 900   -- first extra egg = 15 minutes of your income
+Config.EGG_PRICE_GROWTH = 2.5   -- each additional Goob multiplies the price
+Config.MAX_GOOBS = 8            -- hard cap; also bounds the DataStore payload
+
 -- ── Critters (the active loop) ─────────────────────────────────────────────
 Config.CRITTER_MAX_ALIVE = 26
 Config.CRITTER_SPAWN_INTERVAL = 3.5

@@ -107,6 +107,38 @@ local function buildInterior(goob, model: Model, radius: number)
     interior.Parent = model
 end
 
+-- Place the eyes relative to the body for a given radius. Shared by the
+-- initial build and every refresh so the face can never drift off the blob.
+-- `tweenInfo` animates the move; pass nil to snap (used on first build).
+local function layoutFeatures(model: Model, radius: number, tweenInfo: TweenInfo?)
+    local body = model.PrimaryPart
+    if not body then return end
+
+    for _, side in ipairs({ { "L", -0.34 }, { "R", 0.34 } }) do
+        local tag, sx = side[1] :: string, side[2] :: number
+        local eye = model:FindFirstChild("Eye" .. tag) :: BasePart?
+        local pupil = model:FindFirstChild("Pupil" .. tag) :: BasePart?
+        if eye then
+            local eyeSize = Vector3.new(radius * 0.34, radius * 0.34, radius * 0.34)
+            local eyeCF = body.CFrame * CFrame.new(sx * radius, radius * 0.28, -radius * 0.92)
+            if tweenInfo then
+                TweenService:Create(eye, tweenInfo, { Size = eyeSize, CFrame = eyeCF }):Play()
+            else
+                eye.Size, eye.CFrame = eyeSize, eyeCF
+            end
+            if pupil then
+                local pSize = eyeSize * 0.55
+                local pCF = eyeCF * CFrame.new(0, 0, -eyeSize.X * 0.34)
+                if tweenInfo then
+                    TweenService:Create(pupil, tweenInfo, { Size = pSize, CFrame = pCF }):Play()
+                else
+                    pupil.Size, pupil.CFrame = pSize, pCF
+                end
+            end
+        end
+    end
+end
+
 local function buildModel(player: Player, goob): Model
     local plot = WorldBuilder.plotFor(player)
     local center = plot and plot.center or Vector3.new(0, 0, 0)
@@ -129,29 +161,33 @@ local function buildModel(player: Player, goob): Model
     body.Parent = model
     model.PrimaryPart = body
 
-    -- Eyes. Two spheres and a smile — this is 90% of why it reads as a
-    -- character instead of a ball, and it costs almost nothing.
-    for _, sx in ipairs({ -0.34, 0.34 }) do
+    -- Eyes. Two spheres — this is 90% of why it reads as a character instead
+    -- of a ball, and it costs almost nothing.
+    --
+    -- They are anchored and laid out by `layoutFeatures`, which is called on
+    -- build AND on every growth tween. An earlier version positioned them only
+    -- at build time: the body then tweened to its new size and position on
+    -- every feed and the eyes stayed behind, leaving them floating in space
+    -- next to a bigger blob.
+    for _, side in ipairs({ "L", "R" }) do
         local eye = Instance.new("Part")
-        eye.Name = "Eye"
+        eye.Name = "Eye" .. side
         eye.Shape = Enum.PartType.Ball
-        eye.Size = Vector3.new(radius * 0.34, radius * 0.34, radius * 0.34)
         eye.Anchored = true
         eye.CanCollide = false
+        eye.CanQuery = false
         eye.Material = Enum.Material.SmoothPlastic
         eye.Color = Color3.new(1, 1, 1)
-        eye.CFrame = body.CFrame * CFrame.new(sx * radius, radius * 0.28, -radius * 0.92)
         eye.Parent = model
 
         local pupil = Instance.new("Part")
-        pupil.Name = "Pupil"
+        pupil.Name = "Pupil" .. side
         pupil.Shape = Enum.PartType.Ball
-        pupil.Size = eye.Size * 0.55
         pupil.Anchored = true
         pupil.CanCollide = false
+        pupil.CanQuery = false
         pupil.Material = Enum.Material.SmoothPlastic
         pupil.Color = Color3.fromRGB(25, 25, 35)
-        pupil.CFrame = eye.CFrame * CFrame.new(0, 0, -eye.Size.X * 0.34)
         pupil.Parent = model
     end
 
@@ -174,6 +210,7 @@ local function buildModel(player: Player, goob): Model
     text.TextStrokeTransparency = 0.25
     text.Parent = plate
 
+    layoutFeatures(model, radius, nil)
     buildInterior(goob, model, radius)
     model.Parent = Workspace.GoobWorld
     return model
@@ -191,10 +228,17 @@ local function refreshModel(player: Player, goob)
     if (body.Size - targetSize).Magnitude > 0.05 then
         local plot = WorldBuilder.plotFor(player)
         local center = plot and plot.center or Vector3.new(0, 0, 0)
-        TweenService:Create(body, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Size = targetSize,
-            Position = center + Vector3.new(0, radius + 2, 0),
-        }):Play()
+        local newPos = center + Vector3.new(0, radius + 2, 0)
+        local info = TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+        TweenService:Create(body, info, { Size = targetSize, Position = newPos }):Play()
+
+        -- Lay the face out against where the body is GOING, not where it is,
+        -- so the two tweens land together instead of the eyes chasing.
+        local saved = body.CFrame
+        body.CFrame = CFrame.new(newPos)
+        layoutFeatures(model, radius, info)
+        body.CFrame = saved
 
         local plate = body:FindFirstChild("Plate") :: BillboardGui?
         if plate then plate.StudsOffsetWorldSpace = Vector3.new(0, radius + 6, 0) end

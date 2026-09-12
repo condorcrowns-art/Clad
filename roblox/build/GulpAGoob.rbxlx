@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000018"><Properties><string name="Name">Workspace</string><bool name="FilteringEnabled">true</bool></Properties></Item><Item class="Lighting" referent="RBX000019"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000020"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000007"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000018"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000019"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000020"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000007"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Config.luau — every tunable number in GULP A GOOB lives here.
 -- Design rule: no magic numbers anywhere else in the codebase. If you want to
 -- rebalance the game, you should only ever have to open this file.
@@ -99,6 +99,25 @@ Config.SNACK_TIERS = {
 -- A small markup so buying is never strictly better than playing actively.
 -- Catching is the intended primary loop; the stand is what your AFK time buys.
 Config.SNACK_MARKUP = 1.35
+
+-- ── The Egg Stand: how you ever get a SECOND Goob ─────────────────────────
+--
+-- Without this the game has no core loop at all. `newGoob` was only ever
+-- called once, at account creation, and trading is zero-sum — so no player
+-- could ever hold two Goobs, the `#goobs <= 1` guard in GoobService.gulp was
+-- permanently true, and gulping (the sink the entire design rests on) was
+-- unreachable dead code.
+--
+-- Eggs hatch a Goob at STARTING_MASS with age zero, so they are NOT a way to
+-- buy power: gulping a fresh egg returns 7.5 mass for a price worth hundreds.
+-- What an egg buys is a SLOT — somewhere to hold a Goob you traded for, and
+-- stock a new player can actually bring to the trade zone on day one.
+--
+-- Price is a steeply rising function of how many Goobs you already hold, so a
+-- stable is a genuine investment and nobody floods the world with vessels.
+Config.EGG_BASE_SECONDS = 900   -- first extra egg = 15 minutes of your income
+Config.EGG_PRICE_GROWTH = 2.5   -- each additional Goob multiplies the price
+Config.MAX_GOOBS = 8            -- hard cap; also bounds the DataStore payload
 
 -- ── Critters (the active loop) ─────────────────────────────────────────────
 Config.CRITTER_MAX_ALIVE = 26
@@ -465,6 +484,17 @@ function GoobMath.snackPrice(goob: Goob, tier: any, now: number?): number
     return GoobMath.incomePerSecond(goob, now) * tier.seconds * Config.SNACK_MARKUP
 end
 
+-- Price of the next Goob egg, in Glob.
+--
+-- Anchored to income like the Snack Stand (so it stays meaningful at every
+-- scale) but multiplied by EGG_PRICE_GROWTH for each Goob already held. At the
+-- default 2.5x that is 15 minutes of income for your second Goob and roughly
+-- 25 hours for your eighth.
+function GoobMath.eggPrice(goob: Goob, ownedCount: number, now: number?): number
+    local base = GoobMath.incomePerSecond(goob, now) * Config.EGG_BASE_SECONDS
+    return base * (Config.EGG_PRICE_GROWTH ^ math.max(0, ownedCount - 1))
+end
+
 function GoobMath.generation(goob: Goob): number
     return #goob.lineage + 1
 end
@@ -533,6 +563,7 @@ Net.EVENTS = {
     "RenameGoob",     -- C->S
     "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
     "BuySnack",       -- C->S  spend Glob on feedstock rolls
+    "BuyEgg",         -- C->S  hatch a new Goob (the only source of new Goobs)
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S
@@ -663,10 +694,17 @@ local function snapshot(player: Player)
         end
     end
 
+    local eggPrice = active and GoobMath.eggPrice(active, #profile.goobs) or 0
+
     return {
         glob = profile.glob,
         globText = Format.short(profile.glob),
         snacks = snacks,
+        eggPrice = eggPrice,
+        eggPriceText = Format.short(eggPrice),
+        eggAffordable = profile.glob >= eggPrice and #profile.goobs < Config.MAX_GOOBS,
+        eggCapped = #profile.goobs >= Config.MAX_GOOBS,
+        maxGoobs = Config.MAX_GOOBS,
         income = active and GoobMath.incomePerSecond(active) or 0,
         incomeText = active and Format.short(GoobMath.incomePerSecond(active)) or "0",
         goobs = goobs,
@@ -836,6 +874,33 @@ Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: 
             return
         end
     end
+end)
+
+Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local active = GoobService.activeGoob(profile)
+    if not active then return end
+
+    if #profile.goobs >= Config.MAX_GOOBS then
+        notify(player, ("You can only keep %d Goobs at once."):format(Config.MAX_GOOBS), "warn")
+        return
+    end
+
+    -- Price is recomputed server-side from the current Goob and the current
+    -- count. The client sends no price, only the button press.
+    local price = GoobMath.eggPrice(active, #profile.goobs)
+    if profile.glob < price then
+        notify(player, "Not enough 💧 for an egg.", "warn")
+        return
+    end
+
+    profile.glob -= price
+    local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
+    table.insert(profile.goobs, egg)
+    push(player)
+    notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
+        :format(egg.nickname), "good")
 end)
 
 Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: string)
@@ -1349,6 +1414,38 @@ local function buildInterior(goob, model: Model, radius: number)
     interior.Parent = model
 end
 
+-- Place the eyes relative to the body for a given radius. Shared by the
+-- initial build and every refresh so the face can never drift off the blob.
+-- `tweenInfo` animates the move; pass nil to snap (used on first build).
+local function layoutFeatures(model: Model, radius: number, tweenInfo: TweenInfo?)
+    local body = model.PrimaryPart
+    if not body then return end
+
+    for _, side in ipairs({ { "L", -0.34 }, { "R", 0.34 } }) do
+        local tag, sx = side[1] :: string, side[2] :: number
+        local eye = model:FindFirstChild("Eye" .. tag) :: BasePart?
+        local pupil = model:FindFirstChild("Pupil" .. tag) :: BasePart?
+        if eye then
+            local eyeSize = Vector3.new(radius * 0.34, radius * 0.34, radius * 0.34)
+            local eyeCF = body.CFrame * CFrame.new(sx * radius, radius * 0.28, -radius * 0.92)
+            if tweenInfo then
+                TweenService:Create(eye, tweenInfo, { Size = eyeSize, CFrame = eyeCF }):Play()
+            else
+                eye.Size, eye.CFrame = eyeSize, eyeCF
+            end
+            if pupil then
+                local pSize = eyeSize * 0.55
+                local pCF = eyeCF * CFrame.new(0, 0, -eyeSize.X * 0.34)
+                if tweenInfo then
+                    TweenService:Create(pupil, tweenInfo, { Size = pSize, CFrame = pCF }):Play()
+                else
+                    pupil.Size, pupil.CFrame = pSize, pCF
+                end
+            end
+        end
+    end
+end
+
 local function buildModel(player: Player, goob): Model
     local plot = WorldBuilder.plotFor(player)
     local center = plot and plot.center or Vector3.new(0, 0, 0)
@@ -1371,29 +1468,33 @@ local function buildModel(player: Player, goob): Model
     body.Parent = model
     model.PrimaryPart = body
 
-    -- Eyes. Two spheres and a smile — this is 90% of why it reads as a
-    -- character instead of a ball, and it costs almost nothing.
-    for _, sx in ipairs({ -0.34, 0.34 }) do
+    -- Eyes. Two spheres — this is 90% of why it reads as a character instead
+    -- of a ball, and it costs almost nothing.
+    --
+    -- They are anchored and laid out by `layoutFeatures`, which is called on
+    -- build AND on every growth tween. An earlier version positioned them only
+    -- at build time: the body then tweened to its new size and position on
+    -- every feed and the eyes stayed behind, leaving them floating in space
+    -- next to a bigger blob.
+    for _, side in ipairs({ "L", "R" }) do
         local eye = Instance.new("Part")
-        eye.Name = "Eye"
+        eye.Name = "Eye" .. side
         eye.Shape = Enum.PartType.Ball
-        eye.Size = Vector3.new(radius * 0.34, radius * 0.34, radius * 0.34)
         eye.Anchored = true
         eye.CanCollide = false
+        eye.CanQuery = false
         eye.Material = Enum.Material.SmoothPlastic
         eye.Color = Color3.new(1, 1, 1)
-        eye.CFrame = body.CFrame * CFrame.new(sx * radius, radius * 0.28, -radius * 0.92)
         eye.Parent = model
 
         local pupil = Instance.new("Part")
-        pupil.Name = "Pupil"
+        pupil.Name = "Pupil" .. side
         pupil.Shape = Enum.PartType.Ball
-        pupil.Size = eye.Size * 0.55
         pupil.Anchored = true
         pupil.CanCollide = false
+        pupil.CanQuery = false
         pupil.Material = Enum.Material.SmoothPlastic
         pupil.Color = Color3.fromRGB(25, 25, 35)
-        pupil.CFrame = eye.CFrame * CFrame.new(0, 0, -eye.Size.X * 0.34)
         pupil.Parent = model
     end
 
@@ -1416,6 +1517,7 @@ local function buildModel(player: Player, goob): Model
     text.TextStrokeTransparency = 0.25
     text.Parent = plate
 
+    layoutFeatures(model, radius, nil)
     buildInterior(goob, model, radius)
     model.Parent = Workspace.GoobWorld
     return model
@@ -1433,10 +1535,17 @@ local function refreshModel(player: Player, goob)
     if (body.Size - targetSize).Magnitude > 0.05 then
         local plot = WorldBuilder.plotFor(player)
         local center = plot and plot.center or Vector3.new(0, 0, 0)
-        TweenService:Create(body, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Size = targetSize,
-            Position = center + Vector3.new(0, radius + 2, 0),
-        }):Play()
+        local newPos = center + Vector3.new(0, radius + 2, 0)
+        local info = TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+        TweenService:Create(body, info, { Size = targetSize, Position = newPos }):Play()
+
+        -- Lay the face out against where the body is GOING, not where it is,
+        -- so the two tweens land together instead of the eyes chasing.
+        local saved = body.CFrame
+        body.CFrame = CFrame.new(newPos)
+        layoutFeatures(model, radius, info)
+        body.CFrame = saved
 
         local plate = body:FindFirstChild("Plate") :: BillboardGui?
         if plate then plate.StudsOffsetWorldSpace = Vector3.new(0, radius + 6, 0) end
@@ -2273,6 +2382,10 @@ Hud.onBuySnack = function(tierId: string)
     play(sfxCatch, 0.25)
 end
 
+Hud.onBuyEgg = function()
+    Net.get("BuyEgg"):FireServer()
+end
+
 -- Gulping is irreversible, so it gets a real two-step confirmation with the
 -- consequence spelled out in words a child will actually read.
 local pendingGulp: string? = nil
@@ -2544,6 +2657,7 @@ local drawerList: ScrollingFrame
 local toastHolder: Frame
 local drawerOpen = false
 local snackButtons: { [string]: TextButton } = {}
+local eggButton: TextButton
 
 local state: any = nil
 local displayedGlob = 0
@@ -2797,9 +2911,17 @@ function Hud.build(): ScreenGui
     })
     hint.Parent = drawer
 
+    -- Eggs are the ONLY source of new Goobs in the game, so the button lives
+    -- at the top of the drawer rather than behind another menu.
+    eggButton = Theme.button("🥚 HATCH A NEW GOOB", Theme.GOLD, UDim2.new(1, -28, 0, 34))
+    eggButton.Position = UDim2.fromOffset(14, 64)
+    eggButton.TextSize = 16
+    eggButton.Parent = drawer
+    eggButton.Activated:Connect(function() Hud.onBuyEgg() end)
+
     drawerList = Instance.new("ScrollingFrame")
-    drawerList.Position = UDim2.fromOffset(14, 70)
-    drawerList.Size = UDim2.new(1, -28, 1, -84)
+    drawerList.Position = UDim2.fromOffset(14, 106)
+    drawerList.Size = UDim2.new(1, -28, 1, -120)
     drawerList.BackgroundTransparency = 1
     drawerList.BorderSizePixel = 0
     drawerList.ScrollBarThickness = 6
@@ -2900,6 +3022,19 @@ function Hud.update(snap: any)
         end
     end
 
+    if eggButton then
+        if snap.eggCapped then
+            eggButton.Text = ("🥚 FULL — %d / %d Goobs"):format(#snap.goobs, snap.maxGoobs)
+            eggButton.BackgroundColor3 = Theme.BG_SOFT
+            eggButton.TextColor3 = Theme.TEXT_DIM
+        else
+            eggButton.Text = ("🥚 HATCH A GOOB  ·  💧%s  (%d/%d)")
+                :format(snap.eggPriceText or "?", #snap.goobs, snap.maxGoobs or 8)
+            eggButton.BackgroundColor3 = snap.eggAffordable and Theme.GOLD or Theme.BG_SOFT
+            eggButton.TextColor3 = snap.eggAffordable and Color3.fromRGB(20, 22, 34) or Theme.TEXT_DIM
+        end
+    end
+
     if drawerOpen then rebuildDrawer() end
 end
 
@@ -2908,6 +3043,7 @@ Hud.tradeOpen = false
 Hud.onGulp = function(_: string) end
 Hud.onOffer = function(_: string) end
 Hud.onBuySnack = function(_: string) end
+Hud.onBuyEgg = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
 
@@ -3155,14 +3291,24 @@ function TradeUi.build(gui: ScreenGui)
     -- The fill bar lives *inside* the button and grows left to right. It is
     -- the entire anti-scam affordance: you physically cannot confirm by
     -- reflex, and the bar emptying is impossible to miss.
+    --
+    -- ZIndex MUST be above the button, not below it. The ScreenGui runs in
+    -- Sibling ZIndexBehavior, so a child at ZIndex 0 renders behind its
+    -- parent's opaque background — which made the one piece of UI protecting
+    -- nine-year-olds from trade scams completely invisible.
     fillBar = Instance.new("Frame")
+    fillBar.Name = "HoldFill"
     fillBar.Size = UDim2.fromScale(0, 1)
     fillBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     fillBar.BackgroundTransparency = 0.62
     fillBar.BorderSizePixel = 0
-    fillBar.ZIndex = 0
+    fillBar.ZIndex = confirmBtn.ZIndex + 1
     fillBar.Parent = confirmBtn
     Theme.corner(fillBar, 12)
+
+    -- Keep the label readable on top of the fill.
+    confirmBtn.ZIndex = 2
+    fillBar.ZIndex = 3
 
     local cancel = Theme.button("✖ CANCEL", Theme.BAD, UDim2.fromOffset(120, 46))
     cancel.Position = UDim2.new(0.5, 152, 1, -58)

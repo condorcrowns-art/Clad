@@ -4,17 +4,11 @@
     "$className": "DataModel",
 
     "Workspace": {
-      "$className": "Workspace",
-      "$properties": {
-        "FilteringEnabled": true
-      }
+      "$className": "Workspace"
     },
 
     "Lighting": {
-      "$className": "Lighting",
-      "$properties": {
-        "Technology": "ShadowMap"
-      }
+      "$className": "Lighting"
     },
 
     "ReplicatedStorage": {

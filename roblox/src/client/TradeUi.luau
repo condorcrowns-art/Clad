@@ -161,14 +161,24 @@ function TradeUi.build(gui: ScreenGui)
     -- The fill bar lives *inside* the button and grows left to right. It is
     -- the entire anti-scam affordance: you physically cannot confirm by
     -- reflex, and the bar emptying is impossible to miss.
+    --
+    -- ZIndex MUST be above the button, not below it. The ScreenGui runs in
+    -- Sibling ZIndexBehavior, so a child at ZIndex 0 renders behind its
+    -- parent's opaque background — which made the one piece of UI protecting
+    -- nine-year-olds from trade scams completely invisible.
     fillBar = Instance.new("Frame")
+    fillBar.Name = "HoldFill"
     fillBar.Size = UDim2.fromScale(0, 1)
     fillBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     fillBar.BackgroundTransparency = 0.62
     fillBar.BorderSizePixel = 0
-    fillBar.ZIndex = 0
+    fillBar.ZIndex = confirmBtn.ZIndex + 1
     fillBar.Parent = confirmBtn
     Theme.corner(fillBar, 12)
+
+    -- Keep the label readable on top of the fill.
+    confirmBtn.ZIndex = 2
+    fillBar.ZIndex = 3
 
     local cancel = Theme.button("✖ CANCEL", Theme.BAD, UDim2.fromOffset(120, 46))
     cancel.Position = UDim2.new(0.5, 152, 1, -58)

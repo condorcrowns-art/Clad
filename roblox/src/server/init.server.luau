@@ -85,10 +85,17 @@ local function snapshot(player: Player)
         end
     end
 
+    local eggPrice = active and GoobMath.eggPrice(active, #profile.goobs) or 0
+
     return {
         glob = profile.glob,
         globText = Format.short(profile.glob),
         snacks = snacks,
+        eggPrice = eggPrice,
+        eggPriceText = Format.short(eggPrice),
+        eggAffordable = profile.glob >= eggPrice and #profile.goobs < Config.MAX_GOOBS,
+        eggCapped = #profile.goobs >= Config.MAX_GOOBS,
+        maxGoobs = Config.MAX_GOOBS,
         income = active and GoobMath.incomePerSecond(active) or 0,
         incomeText = active and Format.short(GoobMath.incomePerSecond(active)) or "0",
         goobs = goobs,
@@ -258,6 +265,33 @@ Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: 
             return
         end
     end
+end)
+
+Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local active = GoobService.activeGoob(profile)
+    if not active then return end
+
+    if #profile.goobs >= Config.MAX_GOOBS then
+        notify(player, ("You can only keep %d Goobs at once."):format(Config.MAX_GOOBS), "warn")
+        return
+    end
+
+    -- Price is recomputed server-side from the current Goob and the current
+    -- count. The client sends no price, only the button press.
+    local price = GoobMath.eggPrice(active, #profile.goobs)
+    if profile.glob < price then
+        notify(player, "Not enough 💧 for an egg.", "warn")
+        return
+    end
+
+    profile.glob -= price
+    local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
+    table.insert(profile.goobs, egg)
+    push(player)
+    notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
+        :format(egg.nickname), "good")
 end)
 
 Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: string)

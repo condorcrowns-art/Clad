@@ -121,6 +121,17 @@ function GoobMath.snackPrice(goob: Goob, tier: any, now: number?): number
     return GoobMath.incomePerSecond(goob, now) * tier.seconds * Config.SNACK_MARKUP
 end
 
+-- Price of the next Goob egg, in Glob.
+--
+-- Anchored to income like the Snack Stand (so it stays meaningful at every
+-- scale) but multiplied by EGG_PRICE_GROWTH for each Goob already held. At the
+-- default 2.5x that is 15 minutes of income for your second Goob and roughly
+-- 25 hours for your eighth.
+function GoobMath.eggPrice(goob: Goob, ownedCount: number, now: number?): number
+    local base = GoobMath.incomePerSecond(goob, now) * Config.EGG_BASE_SECONDS
+    return base * (Config.EGG_PRICE_GROWTH ^ math.max(0, ownedCount - 1))
+end
+
 function GoobMath.generation(goob: Goob): number
     return #goob.lineage + 1
 end

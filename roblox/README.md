@@ -168,9 +168,10 @@ because nothing ever leaves the economy.
 **In this game, the only way to grow is to destroy.**
 
 Feeding one Goob to another (a *gulp*) permanently deletes the eaten Goob and
-transfers only **75%** of its mass. Every gulp burns 25% of the value involved
-out of existence forever. Combined with a fixed server-wide spawn rate, the
-total mass in the world is self-limiting instead of exponential.
+transfers only **75% of its mass**. The other 25% is burned out of existence
+forever — 12.5% of the pair's combined mass, every single time. Combined with a
+fixed server-wide spawn rate, the total mass in the world is self-limiting
+instead of exponential.
 
 That single rule produces, for free:
 - Rare things stay rare, so trading actually means something
@@ -299,6 +300,49 @@ Pure-AFK growth:                polynomial (mass ~ t^2.5), never exponential
 Snack price at every scale:     exactly 81 seconds of your own income
 ```
 
+### 🐛 5 — The core mechanic was unreachable dead code
+
+The worst one, and it took an audit rather than a simulation to see.
+
+`newGoob` was called **exactly once**, at account creation. Nothing else in the
+game ever created a Goob, and trading is zero-sum. So no player could ever hold
+two Goobs — which meant the `#profile.goobs <= 1` guard inside `gulp()` was
+permanently true, and **the sink this entire design rests on could never run.**
+
+**Fixed** by adding the **Egg Stand**: Glob hatches a new Goob at starting mass
+and zero age. Crucially, an egg is *not* a way to buy power — measured across
+three orders of magnitude, snacks are **309x more mass-per-Glob** than
+hatching-and-gulping, so egg-spam is never a strategy:
+
+```
+mass 1K   egg-gulp vs snack:  snack is 309x better per Glob
+mass 1M   egg-gulp vs snack:  snack is 309x better per Glob
+mass 1B   egg-gulp vs snack:  snack is 309x better per Glob
+```
+
+What an egg buys is a **slot** — somewhere to hold a Goob you traded for, and
+stock a brand-new player can bring to the trade zone on day one. The price
+climbs steeply with how many you already hold (15 minutes of income for your
+second, ~6 days for your eighth), so a full stable is a real investment.
+
+### 🐛 6, 7, 8 — Three found by checking against Roblox's own API dump
+
+Compiling proves the code *parses*. It says nothing about whether a property
+exists or whether you are allowed to write it. So `tools/apicheck*.py` validate
+every enum, class, service and property against Roblox's published API dump:
+
+- **The eyes drifted off the Goob.** They were positioned once at build time,
+  but the body tweens size and position on every feed — so the face stayed
+  behind while the blob grew away from it. Now laid out by a shared routine
+  called on build *and* on every growth tween, against the body's destination.
+- **The anti-scam bar was invisible.** The hold-to-confirm fill sat at
+  `ZIndex = 0` inside a button with an opaque background. Under Sibling
+  ZIndexBehavior that renders *behind* the parent — so the single piece of UI
+  protecting kids from trade scams drew nothing at all.
+- **Three security-locked properties.** `Workspace.FilteringEnabled`
+  (PluginSecurity) and `Lighting.Technology` (RobloxScriptSecurity) cannot be
+  written; their defaults were already correct, so they are simply gone.
+
 ### Run it yourself
 
 ```bash
@@ -383,6 +427,8 @@ the entire game you should only ever have to open one file.
 ✅ DataStore persistence with session handling
 ✅ **Snack Stand** — the Glob sink that connects idle income back to
    progression, priced at a constant number of seconds-of-income at every scale
+✅ **Egg Stand** — the only source of new Goobs, and the reason the gulp
+   mechanic is reachable at all
 ✅ Test + balance harness
 
 **Next, in the order I'd do it:**

@@ -153,7 +153,10 @@ def main() -> int:
 
     body = "".join(
         [
-            service("Workspace", props='<bool name="FilteringEnabled">true</bool>'),
+            # Workspace.FilteringEnabled and Lighting.Technology are security-locked
+            # (PluginSecurity / RobloxScriptSecurity per the API dump) and their
+            # defaults are already what we want, so we do not write them.
+            service("Workspace"),
             service("Lighting"),
             service("ReplicatedStorage", shared),
             service("ServerScriptService", server),

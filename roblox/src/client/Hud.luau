@@ -31,6 +31,7 @@ local drawerList: ScrollingFrame
 local toastHolder: Frame
 local drawerOpen = false
 local snackButtons: { [string]: TextButton } = {}
+local eggButton: TextButton
 
 local state: any = nil
 local displayedGlob = 0
@@ -284,9 +285,17 @@ function Hud.build(): ScreenGui
     })
     hint.Parent = drawer
 
+    -- Eggs are the ONLY source of new Goobs in the game, so the button lives
+    -- at the top of the drawer rather than behind another menu.
+    eggButton = Theme.button("🥚 HATCH A NEW GOOB", Theme.GOLD, UDim2.new(1, -28, 0, 34))
+    eggButton.Position = UDim2.fromOffset(14, 64)
+    eggButton.TextSize = 16
+    eggButton.Parent = drawer
+    eggButton.Activated:Connect(function() Hud.onBuyEgg() end)
+
     drawerList = Instance.new("ScrollingFrame")
-    drawerList.Position = UDim2.fromOffset(14, 70)
-    drawerList.Size = UDim2.new(1, -28, 1, -84)
+    drawerList.Position = UDim2.fromOffset(14, 106)
+    drawerList.Size = UDim2.new(1, -28, 1, -120)
     drawerList.BackgroundTransparency = 1
     drawerList.BorderSizePixel = 0
     drawerList.ScrollBarThickness = 6
@@ -387,6 +396,19 @@ function Hud.update(snap: any)
         end
     end
 
+    if eggButton then
+        if snap.eggCapped then
+            eggButton.Text = ("🥚 FULL — %d / %d Goobs"):format(#snap.goobs, snap.maxGoobs)
+            eggButton.BackgroundColor3 = Theme.BG_SOFT
+            eggButton.TextColor3 = Theme.TEXT_DIM
+        else
+            eggButton.Text = ("🥚 HATCH A GOOB  ·  💧%s  (%d/%d)")
+                :format(snap.eggPriceText or "?", #snap.goobs, snap.maxGoobs or 8)
+            eggButton.BackgroundColor3 = snap.eggAffordable and Theme.GOLD or Theme.BG_SOFT
+            eggButton.TextColor3 = snap.eggAffordable and Color3.fromRGB(20, 22, 34) or Theme.TEXT_DIM
+        end
+    end
+
     if drawerOpen then rebuildDrawer() end
 end
 
@@ -395,6 +417,7 @@ Hud.tradeOpen = false
 Hud.onGulp = function(_: string) end
 Hud.onOffer = function(_: string) end
 Hud.onBuySnack = function(_: string) end
+Hud.onBuyEgg = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
 

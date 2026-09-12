@@ -122,6 +122,10 @@ Hud.onBuySnack = function(tierId: string)
     play(sfxCatch, 0.25)
 end
 
+Hud.onBuyEgg = function()
+    Net.get("BuyEgg"):FireServer()
+end
+
 -- Gulping is irreversible, so it gets a real two-step confirmation with the
 -- consequence spelled out in words a child will actually read.
 local pendingGulp: string? = nil
