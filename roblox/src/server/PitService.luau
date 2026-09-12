@@ -34,6 +34,8 @@ PitService.getGoob = function(_: Player): any return nil end
 PitService.getBall = function(_: Player): BasePart? return nil end
 -- Injected so the Pit can move fighters without the anti-cheat undoing it.
 PitService.teleport = function(_: Player, _pos: Vector3) end
+-- Cosmetic only; a dropped effect costs nothing.
+PitService.onEffect = function(_: Player, _kind: string, _a: any, _b: any) end
 PitService.awardXp = function(_: Player, _source: string) end
 
 local function notify(player: Player, msg: string, kind: string?)
@@ -265,6 +267,9 @@ function PitService.start()
                                         - dir * (Pit.SHOVE_IMPULSE * shareA)
                                     bb.AssemblyLinearVelocity = bb.AssemblyLinearVelocity
                                         + dir * (Pit.SHOVE_IMPULSE * shareB)
+                                    local contact = ba.Position + delta * 0.5
+                                    PitService.onEffect(a.player, "shove", contact, shareA)
+                                    PitService.onEffect(b.player, "shove", contact, shareB)
                                 end
                             end
                         end

@@ -26,6 +26,8 @@ local SUPER = {
     Light = "Instance", PointLight = "Light",
     Sound = "Instance", SoundService = "Instance",
     Constraint = "Instance", WeldConstraint = "Instance",
+    Attachment = "Instance", Trail = "Instance", ParticleEmitter = "Instance",
+    SurfaceGui = "LayerCollector", Beam = "Instance",
     PostEffect = "Instance", BloomEffect = "PostEffect",
     Atmosphere = "Instance", Sky = "Instance",
     RemoteEvent = "Instance", RemoteFunction = "Instance",
@@ -245,6 +247,11 @@ local METHODS = {
     ApplyImpulse = function() end,
     GetMass = function(self) return 1 end,
     CaptureFocus = function(self) rawget(self, "_props").Focused = true end,
+    -- ParticleEmitter:Emit(n) — counted so tests can assert an effect fired.
+    Emit = function(self, n)
+        rawset(self, "_emitted", (rawget(self, "_emitted") or 0) + (n or 1))
+        M.particlesEmitted += (n or 1)
+    end,
     ReleaseFocus = function(self) rawget(self, "_props").Focused = false end,
     TweenSize = function() end,
     TweenPosition = function() end,
@@ -323,6 +330,7 @@ M.newInstance = newInstance
 
 M.clientTraffic = {}
 M.soundsPlayed = 0
+M.particlesEmitted = 0
 
 local function makeRemoteEvent(name)
     local r = newInstance("RemoteEvent")
@@ -334,11 +342,24 @@ local function makeRemoteEvent(name)
     -- it afterwards, so capturing the constructor argument logged all twelve
     -- remotes as "RemoteEvent" and made every assertion unfindable.
     local function label() return rawget(r, "_props").Name end
+
+    -- Recording the traffic is not enough: the harness must also DELIVER it, or
+    -- the client's OnClientEvent handlers never run and every client test is
+    -- only exercising what the UI does on its own. This is what a real client
+    -- experiences, so tests that assert on the client's reaction to a server
+    -- event actually mean something.
+    local function deliver(...)
+        local me = M.getLocalPlayer()
+        if me then rawget(r, "_signals").OnClientEvent:Fire(...) end
+    end
+
     rawget(r, "_props").FireClient = function(_, player, ...)
         table.insert(M.clientTraffic, { remote = label(), player = player, args = table.pack(...) })
+        if player == M.getLocalPlayer() then deliver(...) end
     end
     rawget(r, "_props").FireAllClients = function(_, ...)
         table.insert(M.clientTraffic, { remote = label(), player = "ALL", args = table.pack(...) })
+        deliver(...)
     end
     -- Roblox prepends the calling player to every OnServerEvent handler. The
     -- harness originally did not, and the server-side tests compensated by

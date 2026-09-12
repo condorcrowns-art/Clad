@@ -425,6 +425,46 @@ function WorldBuilder.build()
     road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
     road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -290), 60)
 
+    -- ── THE ARCHIVE ────────────────────────────────────────────────────────
+    -- A monument you roll up to and read. The whole design rests on genuine
+    -- scarcity, and until this existed a player was simply asked to take that
+    -- on faith. This is the number, worldwide, updated live.
+    local archive = part({
+        Name = "Archive",
+        Size = Vector3.new(22, 30, 4),
+        Position = hub.centre + Vector3.new(-86, 15, -70),
+        Color = Color3.fromRGB(38, 32, 56),
+        Material = Enum.Material.Marble,
+    })
+    archive.Parent = world
+
+    local archiveGui = Instance.new("SurfaceGui")
+    archiveGui.Name = "Board"
+    archiveGui.Face = Enum.NormalId.Front
+    archiveGui.CanvasSize = Vector2.new(660, 900)
+    archiveGui.Parent = archive
+
+    local archiveText = Instance.new("TextLabel")
+    archiveText.Name = "Entries"
+    archiveText.Size = UDim2.fromScale(1, 1)
+    archiveText.BackgroundTransparency = 1
+    archiveText.Font = Enum.Font.FredokaOne
+    archiveText.TextColor3 = Color3.fromRGB(235, 225, 255)
+    archiveText.TextXAlignment = Enum.TextXAlignment.Left
+    archiveText.TextYAlignment = Enum.TextYAlignment.Top
+    archiveText.TextSize = 26
+    archiveText.Text = "📜 THE ARCHIVE\n\ncounting…"
+    archiveText.Parent = archiveGui
+
+    local archiveLight = Instance.new("PointLight")
+    archiveLight.Brightness = 3
+    archiveLight.Range = 50
+    archiveLight.Color = Color3.fromRGB(190, 160, 255)
+    archiveLight.Parent = archive
+
+    signpost(world, hub.centre + Vector3.new(-86, 3, -44), "📜", "THE ARCHIVE",
+        "how many still exist", Color3.fromRGB(200, 170, 255))
+
     -- ── THE SUMO PIT ───────────────────────────────────────────────────────
     -- Raised and open-sided on purpose: the danger has to be legible from
     -- outside, and you have to be able to SEE someone get knocked off.

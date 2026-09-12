@@ -33,13 +33,16 @@ node integration.mjs .. mobile_test.luau
 echo "── 9. live systems: cosmetics · season · pit · crews ──"
 node integration.mjs .. live_test.luau
 
-echo "── 10. adversarial: attack it ──"
+echo "── 10. census + juice: the Archive and the feel layer ──"
+node integration.mjs .. census_test.luau
+
+echo "── 11. adversarial: attack it ──"
 node integration.mjs .. adversarial.luau
 
-echo "── 11. balance sweeps"
+echo "── 12. balance sweeps"
 node sim.mjs ../src/shared move.luau
 node sim.mjs ../src/shared fmt.luau
-echo "── 12. economy sweeps ──"
+echo "── 13. economy sweeps ──"
 node sim.mjs ../src/shared season.luau
 node sim.mjs ../src/shared pit.luau
 node sim.mjs ../src/shared systems.luau

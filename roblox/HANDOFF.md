@@ -17,7 +17,7 @@ and why it mattered, the conventions, the traps, and what comes next.
 | CI | none configured — "all suites pass" means `roblox/tools/run_all.sh`, run locally |
 | Check-ins | an hourly self-wake re-checks PR #8; re-arm silently if nothing changed, stop when merged/closed |
 | Build | `cd roblox && python3 build_place.py` → `build/GulpAGoob.rbxlx` |
-| Test | `cd roblox/tools && ./run_all.sh` (12 suites) |
+| Test | `cd roblox/tools && ./run_all.sh` (13 suites) |
 
 **Deliver builds to the user with `SendUserFile`** — they open the `.rbxlx` in
 Studio directly. They are a solo dev testing in Studio, not reading the repo.
@@ -167,7 +167,7 @@ Do not undo these without understanding the reason.
 ## 4. The verification harness (`roblox/tools/`)
 
 There is no Roblox runtime in CI, so the game is verified four ways.
-`./run_all.sh` runs **12 suites**.
+`./run_all.sh` runs **13 suites**.
 
 1. **Compiles** — `check.mjs` uses a real **Luau v733 compiler** via
    `@luau-rs/luau` (WebAssembly, from npm).
@@ -207,7 +207,7 @@ residue. **Do this for any new suite.**
 
 ---
 
-## 5. Every bug found (16), and why each mattered
+## 5. Every bug found (17), and why each mattered
 
 ### Balance (simulation)
 1. **Every Goob past 1M mass looked identical** — cube-root size hit its clamp
@@ -254,7 +254,11 @@ residue. **Do this for any new suite.**
     teleporting itself from the server placing a fighter in the arena. Every Pit
     match started, dropped both in, snapped them out, ended instantly with the
     pot refunded. → `RollService.teleport()` tells the sampler.
-16. **The season completed in 8 days** — a 50-tier track finishing in a week
+16. **`FireClient` never delivered.** The harness RECORDED server→client traffic
+    but never fired `OnClientEvent`, so every client-side handler had never run
+    in a test — client suites were only exercising what the UI does on its own.
+    Fixed; client tests are now genuinely end-to-end.
+17. **The season completed in 8 days** — a 50-tier track finishing in a week
     leaves engaged players with nothing for five weeks. → ~40 days, asserted.
 
 ### Tests caught passing for the WRONG reason (my errors, worth remembering)
@@ -280,7 +284,7 @@ visible interior ✅ dash + air dash ✅ four zones + ramps + signage ✅ Ascens
 ✅ 21 feedstock types, server-authoritative catching ✅ gulping ✅ full trade
 system with anti-scam ✅ DataStore persistence ✅ first-run coach ✅ responsive
 mobile ✅ 30 cosmetics ✅ 50-tier season pass ✅ Sumo Pit ✅ Crews ✅
-monetisation scaffolding.
+monetisation scaffolding ✅ global scarcity census + the Archive ✅ juice.
 
 **Never play-tested by a human beyond a first pass** — the user has played v3
 (pre-rolling). v4 (rolling) and v5 (systems) are unverified by human hands.
@@ -288,15 +292,19 @@ The harness proves the code doesn't explode; it cannot prove the game is fun.
 
 ## 7. Next up (in order)
 
-1. **Global scarcity census** — a live world-wide count of how many of each
-   Secret still exist, on the leaderboard pillar. This is the scarcity thesis
-   made *visible*, and it is the most thematically important thing left.
-2. **Juice / aliveness** — catch particles, impact sounds, screen shake on big
-   shoves, critters visibly fleeing. The user explicitly asked for "more alive".
-3. **Daily login streak** — retention scaffolding.
+1. ✅ **Global scarcity census** — `CensusService` + the **Archive** monument at
+   the hub. ALIVE = CAUGHT − DESTROYED, worldwide. Ascension is the sink: a Goob
+   consumed at the altar takes its whole belly with it, so the prestige loop
+   feeds the scarcity loop and both are readable on one wall.
+2. ✅ **Juice** — `Juice.luau`: rarity-scaled particle bursts, camera shake,
+   catch/gulp/ascend/shove sounds, and critters that visibly flee when you close
+   on them.
+3. **Daily login streak** — retention scaffolding. Not built.
 4. **Real asset IDs** — user must supply them from the Creator Dashboard before
-   anything is purchasable.
+   anything is purchasable. Everything is `assetId = 0` today.
 5. **Open Cloud auto-publish** — needs their API key as a repo secret.
+6. **Second-client play-test of the Pit** — the only system whose value cannot
+   be judged alone.
 
 ## 8. Conventions
 

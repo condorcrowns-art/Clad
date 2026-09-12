@@ -31,6 +31,7 @@ local TradeService = require(script.TradeService)
 local RollService = require(script.RollService)
 local PitService = require(script.PitService)
 local CrewStore = require(script.CrewStore)
+local CensusService = require(script.CensusService)
 
 print(("[%s] booting…"):format(Config.GAME_NAME))
 
@@ -53,11 +54,13 @@ CritterService.originFor = function(player: Player): BasePart?
 end
 
 RollService.start(activeGoobOf)
+CensusService.start()
 
 local Notify = Net.get("Notify")
 local StateSync = Net.get("StateSync")
 local TradeSync = Net.get("TradeSync")
 local LeaderboardSync = Net.get("LeaderboardSync")
+local Effect = Net.get("Effect")
 
 local function notify(player: Player, msg: string, kind: string?)
     Notify:FireClient(player, msg, kind or "info")
@@ -288,6 +291,7 @@ PitService.getProfile = function(p) return Data.get(p) end
 PitService.getGoob = activeGoobOf
 PitService.getBall = function(p) return RollService.ballFor(p) end
 PitService.teleport = function(p, pos) RollService.teleport(p, pos) end
+PitService.onEffect = function(p, kind, a, b) Effect:FireClient(p, kind, a, b) end
 PitService.awardXp = function(p, source) progress(p, source) end
 PitService.start()
 
@@ -316,6 +320,33 @@ task.spawn(function()
 end)
 
 -- ── Leaderboard ────────────────────────────────────────────────────────────
+
+-- The Archive board.
+task.spawn(function()
+    local world = Workspace:WaitForChild("GoobWorld")
+    local archive = world:WaitForChild("Archive")
+    local entries = archive:WaitForChild("Board"):WaitForChild("Entries") :: TextLabel
+    local function render(rows)
+        local text = "📜 THE ARCHIVE\nhow many still exist, worldwide\n\n"
+        for _, row in ipairs(rows) do
+            local odds = row.weight > 0
+                and ("1 in " .. Format.comma(math.floor(Feedstock.TOTAL_WEIGHT / row.weight)))
+                or "?"
+            text ..= ("%s\n   %s alive   ·   %s found   ·   %s eaten\n   %s\n\n")
+                :format(row.name, Format.comma(row.alive), Format.comma(row.caught),
+                        Format.comma(row.destroyed), odds)
+        end
+        if #rows == 0 then text ..= "nothing rare has been found yet." end
+        text ..= "\nAscending destroys everything in a Goob's belly."
+        entries.Text = text
+    end
+    render(CensusService.snapshot())
+    CensusService.onUpdate.Event:Connect(render)
+    while true do
+        task.wait(20)
+        render(CensusService.snapshot())
+    end
+end)
 
 task.spawn(function()
     local pillar = Workspace:WaitForChild("GoobWorld"):WaitForChild("Leaderboard")
@@ -417,6 +448,8 @@ Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: I
     if not ok then return end
     GoobService.feed(player, item.id)
     progress(player, "catch")
+    CensusService.recordCaught(item.id)
+    Effect:FireClient(player, "catch", item.id)
     if item.rarity == "Secret" then progress(player, "secret") end
     teach(player, "catch")
     -- The digest step has no action of its own; catching enough to see the
@@ -483,6 +516,9 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
 
     local name = goob.nickname
     local wasMass = goob.mass
+    -- Everything in its belly goes with it. This is what makes old Secrets
+    -- genuinely rarer over time rather than just slower to find.
+    CensusService.recordDestroyed(goob.contents)
 
     -- Consume it. Same rule as every other sink in this game.
     for i, g in ipairs(profile.goobs) do
@@ -497,6 +533,7 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
     end
     profile.activeGoobId = profile.goobs[1].id
 
+    Effect:FireClient(player, "ascend")
     GoobService.spawnFor(player)
     progress(player, "ascend")
     checkAchievements(player)
@@ -758,6 +795,7 @@ Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: strin
         -- `false` = no Secrets from the shop. See Feedstock.roll.
         local item = Feedstock.roll(rng, tier.luck, false)
         GoobService.feed(player, item.id)
+        CensusService.recordCaught(item.id)
         local rank = rarityRank[item.rarity] or 0
         if rank > bestRarity then best, bestRarity = item, rank end
     end
@@ -776,6 +814,7 @@ Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: stri
     local ok, reason = GoobService.gulp(player, eaterId, eatenId)
     if ok then
         notify(player, "😋 GULP! Your Goob swallowed another one.", "good")
+        Effect:FireClient(player, "gulp")
         teach(player, "gulp")
         progress(player, "gulp")
         push(player)

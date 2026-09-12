@@ -32,6 +32,7 @@ Net.EVENTS = {
     "CrewClaim",      -- C->S  take the weekly crew reward
     "CrewSync",       -- S->C
     "BuyProduct",     -- C->S  prompt a Robux purchase
+    "Effect",         -- S->C  cosmetic feedback: catch, gulp, ascend, shove
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S

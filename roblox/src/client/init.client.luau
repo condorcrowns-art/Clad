@@ -29,6 +29,7 @@ local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 local Roll = require(script.Roll)
 local Panels = require(script.Panels)
+local Juice = require(script.Juice)
 
 local player = Players.LocalPlayer
 local gui = Hud.build()
@@ -495,10 +496,19 @@ task.spawn(function()
     end
 end)
 
+Juice.start()
+
+Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
+    if kind == "catch" then Juice.onCatch(a)
+    elseif kind == "gulp" then Juice.onGulp()
+    elseif kind == "ascend" then Juice.onAscend()
+    elseif kind == "shove" then Juice.onShove(a, b or 0.5) end
+end)
+
 Roll.bindInput()
 Roll.onDash = function()
     Net.get("Dashed"):FireServer()
-    play(sfxCatch, 0.3)
+    Juice.play("catch", 0.6)
 end
 
 RunService.RenderStepped:Connect(function(dt)

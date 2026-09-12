@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000032"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000033"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000034"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000015"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000034"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000035"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000036"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000015"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Ascension.luau — the terminus.
 --
 -- Numbers that only ever rise have no end, so nothing is ever an achievement.
@@ -1144,6 +1144,7 @@ Net.EVENTS = {
     "CrewClaim",      -- C->S  take the weekly crew reward
     "CrewSync",       -- S->C
     "BuyProduct",     -- C->S  prompt a Robux purchase
+    "Effect",         -- S->C  cosmetic feedback: catch, gulp, ascend, shove
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S
@@ -1564,7 +1565,7 @@ function Tutorial.display(state: any)
 end
 
 return Tutorial
-]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000035"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000024"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000037"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000025"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.server.luau — the single entry point. Wires every service together and
 -- owns all the RemoteEvent handlers, so there is exactly one file to read to
 -- understand what the client is allowed to ask the server to do.
@@ -1597,6 +1598,7 @@ local TradeService = require(script.TradeService)
 local RollService = require(script.RollService)
 local PitService = require(script.PitService)
 local CrewStore = require(script.CrewStore)
+local CensusService = require(script.CensusService)
 
 print(("[%s] booting…"):format(Config.GAME_NAME))
 
@@ -1619,11 +1621,13 @@ CritterService.originFor = function(player: Player): BasePart?
 end
 
 RollService.start(activeGoobOf)
+CensusService.start()
 
 local Notify = Net.get("Notify")
 local StateSync = Net.get("StateSync")
 local TradeSync = Net.get("TradeSync")
 local LeaderboardSync = Net.get("LeaderboardSync")
+local Effect = Net.get("Effect")
 
 local function notify(player: Player, msg: string, kind: string?)
     Notify:FireClient(player, msg, kind or "info")
@@ -1854,6 +1858,7 @@ PitService.getProfile = function(p) return Data.get(p) end
 PitService.getGoob = activeGoobOf
 PitService.getBall = function(p) return RollService.ballFor(p) end
 PitService.teleport = function(p, pos) RollService.teleport(p, pos) end
+PitService.onEffect = function(p, kind, a, b) Effect:FireClient(p, kind, a, b) end
 PitService.awardXp = function(p, source) progress(p, source) end
 PitService.start()
 
@@ -1882,6 +1887,33 @@ task.spawn(function()
 end)
 
 -- ── Leaderboard ────────────────────────────────────────────────────────────
+
+-- The Archive board.
+task.spawn(function()
+    local world = Workspace:WaitForChild("GoobWorld")
+    local archive = world:WaitForChild("Archive")
+    local entries = archive:WaitForChild("Board"):WaitForChild("Entries") :: TextLabel
+    local function render(rows)
+        local text = "📜 THE ARCHIVE\nhow many still exist, worldwide\n\n"
+        for _, row in ipairs(rows) do
+            local odds = row.weight > 0
+                and ("1 in " .. Format.comma(math.floor(Feedstock.TOTAL_WEIGHT / row.weight)))
+                or "?"
+            text ..= ("%s\n   %s alive   ·   %s found   ·   %s eaten\n   %s\n\n")
+                :format(row.name, Format.comma(row.alive), Format.comma(row.caught),
+                        Format.comma(row.destroyed), odds)
+        end
+        if #rows == 0 then text ..= "nothing rare has been found yet." end
+        text ..= "\nAscending destroys everything in a Goob's belly."
+        entries.Text = text
+    end
+    render(CensusService.snapshot())
+    CensusService.onUpdate.Event:Connect(render)
+    while true do
+        task.wait(20)
+        render(CensusService.snapshot())
+    end
+end)
 
 task.spawn(function()
     local pillar = Workspace:WaitForChild("GoobWorld"):WaitForChild("Leaderboard")
@@ -1983,6 +2015,8 @@ Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: I
     if not ok then return end
     GoobService.feed(player, item.id)
     progress(player, "catch")
+    CensusService.recordCaught(item.id)
+    Effect:FireClient(player, "catch", item.id)
     if item.rarity == "Secret" then progress(player, "secret") end
     teach(player, "catch")
     -- The digest step has no action of its own; catching enough to see the
@@ -2049,6 +2083,9 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
 
     local name = goob.nickname
     local wasMass = goob.mass
+    -- Everything in its belly goes with it. This is what makes old Secrets
+    -- genuinely rarer over time rather than just slower to find.
+    CensusService.recordDestroyed(goob.contents)
 
     -- Consume it. Same rule as every other sink in this game.
     for i, g in ipairs(profile.goobs) do
@@ -2063,6 +2100,7 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
     end
     profile.activeGoobId = profile.goobs[1].id
 
+    Effect:FireClient(player, "ascend")
     GoobService.spawnFor(player)
     progress(player, "ascend")
     checkAchievements(player)
@@ -2324,6 +2362,7 @@ Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: strin
         -- `false` = no Secrets from the shop. See Feedstock.roll.
         local item = Feedstock.roll(rng, tier.luck, false)
         GoobService.feed(player, item.id)
+        CensusService.recordCaught(item.id)
         local rank = rarityRank[item.rarity] or 0
         if rank > bestRarity then best, bestRarity = item, rank end
     end
@@ -2342,6 +2381,7 @@ Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: stri
     local ok, reason = GoobService.gulp(player, eaterId, eatenId)
     if ok then
         notify(player, "😋 GULP! Your Goob swallowed another one.", "good")
+        Effect:FireClient(player, "gulp")
         teach(player, "gulp")
         progress(player, "gulp")
         push(player)
@@ -2381,7 +2421,198 @@ end)
 
 print(("[%s] ready. %d plots, %d feedstock types.")
     :format(Config.GAME_NAME, Config.PLOT_COUNT, #Feedstock.ITEMS))
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">CensusService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- CensusService.luau — how many of each thing still exist, worldwide.
+--
+-- WHY THIS IS THE MOST IMPORTANT SCREEN IN THE GAME:
+-- the entire design rests on genuine scarcity, and until now that scarcity was
+-- invisible. A player was told Secrets are rare and asked to take it on faith.
+-- This counts them for real, across every server, and puts the number on a
+-- monument you can roll up to and read.
+--
+-- ALIVE = CAUGHT − DESTROYED.
+--
+-- Things are destroyed by ASCENSION: a Goob consumed at the altar takes
+-- everything in its belly with it. So the more people reach the endgame, the
+-- rarer old Secrets genuinely become — the prestige loop feeds the scarcity
+-- loop, and both are visible on the same wall.
+--
+-- WRITE DISCIPLINE: DataStore budgets are per-server and small. Counting on
+-- every catch would blow through them within minutes of a busy server. Deltas
+-- accumulate in memory and flush on an interval, and a failed flush is retried
+-- rather than dropped.
+
+local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Feedstock = require(Shared.Feedstock)
+
+local CensusService = {}
+
+local store = DataStoreService:GetDataStore("GoobCensus_v1")
+
+-- Only the tiers worth counting. Nobody cares how many Lost Socks exist, and
+-- counting them would multiply the write volume for no payoff.
+CensusService.TRACKED_RARITIES = {
+    Legendary = true, Mythic = true, Secret = true,
+}
+
+CensusService.FLUSH_SECONDS = 60
+
+local pendingCaught: { [string]: number } = {}
+local pendingDestroyed: { [string]: number } = {}
+local totals: { [string]: { caught: number, destroyed: number } } = {}
+local enabled = true
+local lastFlush = 0
+
+CensusService.onUpdate = Instance.new("BindableEvent")
+
+local function tracked(itemId: string): boolean
+    local item = Feedstock.get(itemId)
+    return item ~= nil and CensusService.TRACKED_RARITIES[item.rarity] == true
+end
+
+function CensusService.recordCaught(itemId: string, count: number?)
+    if not tracked(itemId) then return end
+    pendingCaught[itemId] = (pendingCaught[itemId] or 0) + (count or 1)
+end
+
+-- Called when a Goob is consumed at the altar: everything inside it is gone.
+function CensusService.recordDestroyed(contents: { [string]: number }?)
+    if not contents then return end
+    for itemId, count in pairs(contents) do
+        if tracked(itemId) then
+            pendingDestroyed[itemId] = (pendingDestroyed[itemId] or 0) + count
+        end
+    end
+end
+
+local function applyLocally(itemId: string, caught: number, destroyed: number)
+    local row = totals[itemId] or { caught = 0, destroyed = 0 }
+    row.caught += caught
+    row.destroyed += destroyed
+    totals[itemId] = row
+end
+
+function CensusService.flush()
+    local caughtBatch, destroyedBatch = pendingCaught, pendingDestroyed
+    pendingCaught, pendingDestroyed = {}, {}
+
+    local any = false
+    for _ in pairs(caughtBatch) do any = true break end
+    if not any then
+        for _ in pairs(destroyedBatch) do any = true break end
+    end
+    if not any then return end
+
+    -- Optimistically apply so the monument on THIS server is live even if the
+    -- write is still in flight or the store is down.
+    for id, n in pairs(caughtBatch) do applyLocally(id, n, 0) end
+    for id, n in pairs(destroyedBatch) do applyLocally(id, 0, n) end
+    CensusService.onUpdate:Fire(CensusService.snapshot())
+
+    if not enabled or RunService:IsStudio() then return end
+
+    for id, n in pairs(caughtBatch) do
+        local ok = pcall(function()
+            store:UpdateAsync("caught_" .. id, function(old)
+                return (old or 0) + n
+            end)
+        end)
+        if not ok then
+            -- Put it back so the count is delayed rather than silently lost.
+            pendingCaught[id] = (pendingCaught[id] or 0) + n
+            enabled = false
+            warn("[Goob/Census] store unavailable; counting locally only")
+            break
+        end
+    end
+    for id, n in pairs(destroyedBatch) do
+        local ok = pcall(function()
+            store:UpdateAsync("destroyed_" .. id, function(old)
+                return (old or 0) + n
+            end)
+        end)
+        if not ok then
+            pendingDestroyed[id] = (pendingDestroyed[id] or 0) + n
+            enabled = false
+            break
+        end
+    end
+end
+
+-- Pull the authoritative worldwide numbers. Runs rarely; the monument is happy
+-- being a minute stale and the read budget is not.
+function CensusService.refresh()
+    if not enabled or RunService:IsStudio() then return end
+    for _, item in ipairs(Feedstock.ITEMS) do
+        if CensusService.TRACKED_RARITIES[item.rarity] then
+            local okC, caught = pcall(function() return store:GetAsync("caught_" .. item.id) end)
+            local okD, destroyed = pcall(function() return store:GetAsync("destroyed_" .. item.id) end)
+            if okC and okD then
+                totals[item.id] = { caught = caught or 0, destroyed = destroyed or 0 }
+            else
+                enabled = false
+                return
+            end
+        end
+    end
+    CensusService.onUpdate:Fire(CensusService.snapshot())
+end
+
+-- Rarest first, because that is the row people came to read.
+function CensusService.snapshot()
+    local rows = {}
+    for _, item in ipairs(Feedstock.ITEMS) do
+        if CensusService.TRACKED_RARITIES[item.rarity] then
+            local row = totals[item.id] or { caught = 0, destroyed = 0 }
+            table.insert(rows, {
+                id = item.id,
+                name = item.name,
+                rarity = item.rarity,
+                weight = item.weight,
+                caught = row.caught,
+                destroyed = row.destroyed,
+                alive = math.max(0, row.caught - row.destroyed),
+            })
+        end
+    end
+    table.sort(rows, function(a, b)
+        if a.weight ~= b.weight then return a.weight < b.weight end
+        return a.name < b.name
+    end)
+    return rows
+end
+
+function CensusService.isEnabled(): boolean
+    return enabled
+end
+
+function CensusService.start()
+    task.spawn(function()
+        CensusService.refresh()
+        while true do
+            task.wait(CensusService.FLUSH_SECONDS)
+            CensusService.flush()
+            lastFlush = os.clock()
+        end
+    end)
+    -- Re-read far less often than we write: other servers' contributions can
+    -- afford to arrive late, and read budget is the scarcer resource.
+    task.spawn(function()
+        while true do
+            task.wait(CensusService.FLUSH_SECONDS * 5)
+            CensusService.refresh()
+        end
+    end)
+    game:BindToClose(function()
+        CensusService.flush()
+    end)
+end
+
+return CensusService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CrewStore.luau — crews live in their own DataStore because they are shared
 -- between players and between servers. A crew read here may have been written
 -- by a different server thirty seconds ago, so every mutation goes through
@@ -2485,7 +2716,7 @@ function CrewStore.isEnabled(): boolean
 end
 
 return CrewStore
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CritterService.luau — the ACTIVE half of the loop.
 --
 -- Grow a Garden's weakness is that there is almost nothing to do while you
@@ -2669,7 +2900,7 @@ function CritterService.start()
 end
 
 return CritterService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000019"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Data.luau — profile persistence.
 --
 -- Uses DataStore with session locking, retry/backoff and a bind-to-close
@@ -2855,7 +3086,7 @@ function Data.isEnabled(): boolean
 end
 
 return Data
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000019"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- GoobService.luau — spawns, renders and simulates the Goobs sitting on plots.
 --
 -- The visual gimmick of the whole game lives here: a Goob is a translucent
@@ -3291,7 +3522,7 @@ function GoobService.applyOffline(player: Player)
 end
 
 return GoobService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">PitService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">PitService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- PitService.luau — runs Sumo Pit matches.
 --
 -- Server-authoritative on everything that decides money: who is in the ring,
@@ -3327,6 +3558,8 @@ PitService.getGoob = function(_: Player): any return nil end
 PitService.getBall = function(_: Player): BasePart? return nil end
 -- Injected so the Pit can move fighters without the anti-cheat undoing it.
 PitService.teleport = function(_: Player, _pos: Vector3) end
+-- Cosmetic only; a dropped effect costs nothing.
+PitService.onEffect = function(_: Player, _kind: string, _a: any, _b: any) end
 PitService.awardXp = function(_: Player, _source: string) end
 
 local function notify(player: Player, msg: string, kind: string?)
@@ -3558,6 +3791,9 @@ function PitService.start()
                                         - dir * (Pit.SHOVE_IMPULSE * shareA)
                                     bb.AssemblyLinearVelocity = bb.AssemblyLinearVelocity
                                         + dir * (Pit.SHOVE_IMPULSE * shareB)
+                                    local contact = ba.Position + delta * 0.5
+                                    PitService.onEffect(a.player, "shove", contact, shareA)
+                                    PitService.onEffect(b.player, "shove", contact, shareB)
                                 end
                             end
                         end
@@ -3587,7 +3823,7 @@ function PitService.state()
 end
 
 return PitService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">RollService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">RollService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- RollService.luau — you don't stand next to your Goob, you ARE your Goob.
 --
 -- This is the change the whole redesign hangs off. Previously the active Goob
@@ -3958,7 +4194,7 @@ function RollService.start(getGoob: (Player) -> any)
 end
 
 return RollService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeService.luau — player-to-player Goob trading.
 --
 -- Trading is the reason this game has a community instead of a player count.
@@ -4239,7 +4475,7 @@ function TradeService.cleanup(player: Player)
 end
 
 return TradeService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000024"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
 -- WorldBuilder.luau — the entire map, generated at runtime from code.
 --
 -- WHY FROM CODE: a .rbxl is an opaque binary. If the map lives in the place
@@ -4666,6 +4902,46 @@ function WorldBuilder.build()
     road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
     road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -290), 60)
 
+    -- ── THE ARCHIVE ────────────────────────────────────────────────────────
+    -- A monument you roll up to and read. The whole design rests on genuine
+    -- scarcity, and until this existed a player was simply asked to take that
+    -- on faith. This is the number, worldwide, updated live.
+    local archive = part({
+        Name = "Archive",
+        Size = Vector3.new(22, 30, 4),
+        Position = hub.centre + Vector3.new(-86, 15, -70),
+        Color = Color3.fromRGB(38, 32, 56),
+        Material = Enum.Material.Marble,
+    })
+    archive.Parent = world
+
+    local archiveGui = Instance.new("SurfaceGui")
+    archiveGui.Name = "Board"
+    archiveGui.Face = Enum.NormalId.Front
+    archiveGui.CanvasSize = Vector2.new(660, 900)
+    archiveGui.Parent = archive
+
+    local archiveText = Instance.new("TextLabel")
+    archiveText.Name = "Entries"
+    archiveText.Size = UDim2.fromScale(1, 1)
+    archiveText.BackgroundTransparency = 1
+    archiveText.Font = Enum.Font.FredokaOne
+    archiveText.TextColor3 = Color3.fromRGB(235, 225, 255)
+    archiveText.TextXAlignment = Enum.TextXAlignment.Left
+    archiveText.TextYAlignment = Enum.TextYAlignment.Top
+    archiveText.TextSize = 26
+    archiveText.Text = "📜 THE ARCHIVE\n\ncounting…"
+    archiveText.Parent = archiveGui
+
+    local archiveLight = Instance.new("PointLight")
+    archiveLight.Brightness = 3
+    archiveLight.Range = 50
+    archiveLight.Color = Color3.fromRGB(190, 160, 255)
+    archiveLight.Parent = archive
+
+    signpost(world, hub.centre + Vector3.new(-86, 3, -44), "📜", "THE ARCHIVE",
+        "how many still exist", Color3.fromRGB(200, 170, 255))
+
     -- ── THE SUMO PIT ───────────────────────────────────────────────────────
     -- Raised and open-sided on purpose: the danger has to be legible from
     -- outside, and you have to be able to SEE someone get knocked off.
@@ -4774,7 +5050,7 @@ function WorldBuilder.altarPosition(): Vector3
 end
 
 return WorldBuilder
-]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000037"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000036"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000031"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000039"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000038"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000033"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.client.luau — client entry point.
 --
 -- Everything the client does falls into one of three jobs:
@@ -4805,6 +5081,7 @@ local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 local Roll = require(script.Roll)
 local Panels = require(script.Panels)
+local Juice = require(script.Juice)
 
 local player = Players.LocalPlayer
 local gui = Hud.build()
@@ -5271,10 +5548,19 @@ task.spawn(function()
     end
 end)
 
+Juice.start()
+
+Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
+    if kind == "catch" then Juice.onCatch(a)
+    elseif kind == "gulp" then Juice.onGulp()
+    elseif kind == "ascend" then Juice.onAscend()
+    elseif kind == "shove" then Juice.onShove(a, b or 0.5) end
+end)
+
 Roll.bindInput()
 Roll.onDash = function()
     Net.get("Dashed"):FireServer()
-    play(sfxCatch, 0.3)
+    Juice.play("catch", 0.6)
 end
 
 RunService.RenderStepped:Connect(function(dt)
@@ -5571,7 +5857,7 @@ task.spawn(function()
 end)
 
 print("[GULP A GOOB] client ready")
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000025"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000026"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Hud.luau — the heads-up display and the Goob drawer.
 --
 -- Layout philosophy: ONE always-visible number (your power), ONE always-visible
@@ -6382,7 +6668,205 @@ function Hud.setTradeOpen(open: boolean)
 end
 
 return Hud
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000026"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000027"><Properties><string name="Name">Juice</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Juice.luau — the feedback that makes a world feel inhabited.
+--
+-- The play-test note was "the area is so bland, needs to feel more alive".
+-- Half of that was structural and got fixed by rolling and the zones. The other
+-- half is this: things that pop, flash, rattle and react. None of it changes a
+-- single number; all of it changes whether the game feels responsive.
+--
+-- Everything here is CLIENT-side and cosmetic. A dropped effect costs nothing,
+-- so nothing here is ever allowed to error out of a gameplay path.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
+local SoundService = game:GetService("SoundService")
+
+local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
+local Feedstock = require(Shared.Feedstock)
+
+local player = Players.LocalPlayer
+local Juice = {}
+
+local RARITY_BURST = {
+    Common = 6, Uncommon = 10, Rare = 16, Epic = 26,
+    Legendary = 40, Mythic = 60, Secret = 110,
+}
+
+-- ── Camera shake ───────────────────────────────────────────────────────────
+-- Applied as an offset to the camera's own CFrame each frame and decayed, so it
+-- never fights the default camera controller for ownership.
+
+local shake = 0
+
+function Juice.shakeCamera(amount: number)
+    shake = math.min(3.5, shake + amount)
+end
+
+-- ── Particle bursts ────────────────────────────────────────────────────────
+
+local function burst(position: Vector3, colour: Color3, count: number, size: number)
+    local anchor = Instance.new("Part")
+    anchor.Anchored = true
+    anchor.CanCollide = false
+    anchor.CanQuery = false
+    anchor.Transparency = 1
+    anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+    anchor.Position = position
+    anchor.Parent = Workspace
+
+    local attach = Instance.new("Attachment")
+    attach.Parent = anchor
+
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.Color = ColorSequence.new(colour)
+    emitter.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, size),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    emitter.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.1),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    emitter.Lifetime = NumberRange.new(0.35, 0.8)
+    emitter.Speed = NumberRange.new(12, 30)
+    emitter.SpreadAngle = Vector2.new(180, 180)
+    emitter.Rate = 0
+    emitter.LightEmission = 0.7
+    emitter.Parent = attach
+    emitter:Emit(count)
+
+    Debris:AddItem(anchor, 2)
+end
+
+Juice.burst = burst
+
+-- ── Sounds ─────────────────────────────────────────────────────────────────
+
+local function sound(id: string, volume: number): Sound
+    local s = Instance.new("Sound")
+    s.SoundId = id
+    s.Volume = volume
+    s.Parent = SoundService
+    return s
+end
+
+local sfx = {
+    catch = sound("rbxassetid://6026984224", 0.30),
+    rare  = sound("rbxassetid://9125402735", 0.55),
+    gulp  = sound("rbxassetid://5852470908", 0.60),
+    thud  = sound("rbxassetid://9125600534", 0.45),
+}
+
+function Juice.play(name: string, pitchJitter: number?)
+    local s = sfx[name]
+    if not s then return end
+    if pitchJitter then
+        s.PlaybackSpeed = 1 + (math.random() - 0.5) * pitchJitter
+    end
+    s:Play()
+end
+
+-- ── Public effects ─────────────────────────────────────────────────────────
+
+function Juice.onCatch(itemId: string, position: Vector3?)
+    local item = Feedstock.get(itemId)
+    if not item then return end
+    local pos = position
+    if not pos then
+        local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+        pos = ball and ball.Position or nil
+    end
+    if not pos then return end
+
+    burst(pos, item.color, RARITY_BURST[item.rarity] or 8,
+        item.rarity == "Secret" and 3 or 1.4)
+
+    if item.rarity == "Secret" or item.rarity == "Mythic" then
+        Juice.play("rare")
+        Juice.shakeCamera(item.rarity == "Secret" and 2.4 or 1.2)
+    elseif item.rarity == "Legendary" or item.rarity == "Epic" then
+        Juice.play("catch", 0.35)
+        Juice.shakeCamera(0.4)
+    else
+        Juice.play("catch", 0.5)
+    end
+end
+
+function Juice.onGulp(position: Vector3?)
+    local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+    local pos = position or (ball and ball.Position)
+    if pos then burst(pos, Color3.fromRGB(255, 120, 150), 70, 3) end
+    Juice.play("gulp")
+    Juice.shakeCamera(1.8)
+end
+
+function Juice.onAscend(position: Vector3?)
+    local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+    local pos = position or (ball and ball.Position)
+    if pos then
+        burst(pos, Color3.fromRGB(255, 240, 170), 160, 5)
+        burst(pos + Vector3.new(0, 14, 0), Color3.fromRGB(255, 255, 255), 90, 3)
+    end
+    Juice.play("rare")
+    Juice.shakeCamera(3.5)
+end
+
+function Juice.onShove(position: Vector3, force: number)
+    burst(position, Color3.fromRGB(255, 200, 120), math.clamp(force * 20, 10, 60), 2)
+    Juice.play("thud", 0.3)
+    Juice.shakeCamera(math.clamp(force * 2, 0.3, 2.2))
+end
+
+-- ── Living world ───────────────────────────────────────────────────────────
+-- Critters visibly flinch away when you get close. It costs one distance check
+-- per critter per frame and it is the single cheapest thing that makes a field
+-- of floating junk read as a field of creatures.
+
+local FLEE_RADIUS = 26
+
+function Juice.start()
+    local critters = Workspace:WaitForChild("Critters")
+
+    RunService.RenderStepped:Connect(function(dt)
+        -- Camera shake, decayed.
+        local camera = Workspace.CurrentCamera
+        if camera and shake > 0.01 then
+            local o = shake
+            camera.CFrame = camera.CFrame * CFrame.new(
+                (math.random() - 0.5) * o,
+                (math.random() - 0.5) * o,
+                0)
+            shake = shake * math.max(0, 1 - dt * 7)
+        else
+            shake = 0
+        end
+
+        local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+        if not ball then return end
+
+        for _, c in ipairs(critters:GetChildren()) do
+            if c:IsA("BasePart") then
+                local away = c.Position - ball.Position
+                local d = away.Magnitude
+                if d < FLEE_RADIUS and d > 0.1 then
+                    -- Lean away and bob harder the closer you are. Purely
+                    -- visual: the server owns where critters actually are.
+                    local urgency = 1 - (d / FLEE_RADIUS)
+                    c.CFrame = c.CFrame * CFrame.new(away.Unit * urgency * dt * 14)
+                        * CFrame.Angles(0, dt * urgency * 6, 0)
+                end
+            end
+        end
+    end)
+end
+
+return Juice
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000028"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Layout.luau — one place that knows how big the screen is and what that means.
 --
 -- MEASURED, NOT GUESSED. Before this existed, at 568x320 (iPhone SE landscape)
@@ -6519,7 +7003,7 @@ function Layout.start()
 end
 
 return Layout
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000027"><Properties><string name="Name">Panels</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000029"><Properties><string name="Name">Panels</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Panels.luau — the wardrobe, season pass and crew screens.
 --
 -- All three live as TABS inside the drawer that already exists rather than
@@ -6902,7 +7386,7 @@ function Panels.render(tab: string, container: Frame, state: any)
 end
 
 return Panels
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000028"><Properties><string name="Name">Roll</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000030"><Properties><string name="Name">Roll</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Roll.luau — the controller.
 --
 -- Direct velocity control rather than forces. Forces are more "physical" and
@@ -7107,7 +7591,7 @@ function Roll.bindInput()
 end
 
 return Roll
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000029"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000031"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Theme.luau — one place for every colour, corner radius and font in the UI.
 -- Chunky, high-contrast, oversized text: the target player is nine and may be
 -- on a phone, so nothing here is subtle.
@@ -7179,7 +7663,7 @@ function Theme.button(text: string, color: Color3, size: UDim2): TextButton
 end
 
 return Theme
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000030"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000032"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeUi.luau — the trade window.
 --
 -- The whole design goal is SCAM RESISTANCE made visible. A young player cannot

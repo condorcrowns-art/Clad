@@ -64,6 +64,25 @@ the game: ascend as many times as you can, holding the oldest Goobs when you do.
 **Read `DESIGN.md`** for the full reasoning, including why there's no PvP yet,
 why guilds would be premature, and what can and can't be sold for Robux.
 
+## v6: the Archive, and it feels alive now
+
+**📜 THE ARCHIVE** — a monument west of the hub. It shows, **worldwide**, how
+many of each rare thing still exist:
+
+```
+Pocket Singularity
+   7 alive   ·   19 found   ·   12 eaten
+   1 in 101,733
+```
+
+`ALIVE = FOUND − EATEN`. **Ascending destroys everything in your Goob's belly**,
+so the more people reach the endgame, the genuinely rarer old Secrets become.
+Until now you were asked to take the scarcity on faith. This is the real number.
+
+**Juice** — catches burst particles scaled to rarity (a Secret throws 110 and
+shakes the camera), gulps and ascensions get their own effects, Pit shoves thud,
+and **critters now visibly flinch away when you close on them**.
+
 ## v5: everything else
 
 **Tabs in the drawer** (🫧 MY GOOBS): 🫧 Goobs · 👕 Wear · ⭐ Season · 🛡️ Crew.

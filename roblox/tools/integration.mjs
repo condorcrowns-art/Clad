@@ -70,6 +70,11 @@ TweenInfo, BrickColor, Enum = env.TweenInfo, env.BrickColor, env.Enum
 Random = env.Random
 RaycastParams = env.RaycastParams
 PhysicalProperties = env.PhysicalProperties
+NumberSequence = env.NumberSequence
+ColorSequence = env.ColorSequence
+NumberSequenceKeypoint = env.NumberSequenceKeypoint
+ColorSequenceKeypoint = env.ColorSequenceKeypoint
+NumberRange = env.NumberRange
 Instance = rgame.Instance
 game = svc.game
 workspace = svc.Workspace
@@ -90,6 +95,7 @@ os = setmetatable({
 _G.SVC = svc
 _G.ENV = env
 _G.TRAFFIC = rgame.clientTraffic
+_G.PARTICLES = function() return rgame.particlesEmitted end
 
 -- Build the instance tree.
 local function moduleInstance(class, name, loader)

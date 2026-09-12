@@ -238,6 +238,27 @@ env.UDim2 = {
     fromOffset = function(x, y) return env.UDim2.new(0, x, 0, y) end,
 }
 env.TweenInfo = { new = function(...) return { args = { ... } } end }
+-- Sequence datatypes used by trails and particle emitters.
+env.NumberSequenceKeypoint = {
+    new = function(t, v, env_) return { Time = t, Value = v, Envelope = env_ or 0 } end,
+}
+env.ColorSequenceKeypoint = {
+    new = function(t, v) return { Time = t, Value = v } end,
+}
+env.NumberSequence = {
+    new = function(a, b)
+        if type(a) == "table" then return { Keypoints = a } end
+        return { Keypoints = { { Time = 0, Value = a }, { Time = 1, Value = b or a } } }
+    end,
+}
+env.ColorSequence = {
+    new = function(a, b)
+        if type(a) == "table" and a[1] then return { Keypoints = a } end
+        return { Keypoints = { { Time = 0, Value = a }, { Time = 1, Value = b or a } } }
+    end,
+}
+env.NumberRange = { new = function(a, b) return { Min = a, Max = b or a } end }
+
 env.RaycastParams = {
     new = function()
         return { FilterType = nil, FilterDescendantsInstances = {}, IgnoreWater = false }
