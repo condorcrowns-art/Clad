@@ -15,6 +15,8 @@ local HttpService = game:GetService("HttpService")
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
 local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
+local Cosmetics = require(game.ReplicatedStorage.GoobShared.Cosmetics)
+local Season = require(game.ReplicatedStorage.GoobShared.Season)
 
 local Data = {}
 
@@ -53,6 +55,13 @@ function Data.blankProfile(userId: number)
         tutorial = Tutorial.blank(),
         crests = 0,
         totalAscensions = 0,
+        pitWins = 0,
+        cosmeticsOwned = Cosmetics.starterOwned(),
+        loadout = Cosmetics.starterLoadout(),
+        season = Season.blank(),
+        achievements = {} :: { [string]: boolean },
+        crewId = nil :: string?,
+        purchases = {} :: { [string]: boolean },
     }
 end
 
@@ -107,6 +116,21 @@ function Data.load(player: Player)
     profile.discovered = profile.discovered or {}
     profile.crests = profile.crests or 0
     profile.totalAscensions = profile.totalAscensions or 0
+    profile.pitWins = profile.pitWins or 0
+    profile.achievements = profile.achievements or {}
+    profile.purchases = profile.purchases or {}
+
+    -- Cosmetics: always merge in the starters rather than replacing, so a
+    -- profile written before a slot existed gains the new slot's default
+    -- without losing anything it already owned.
+    profile.cosmeticsOwned = profile.cosmeticsOwned or {}
+    for id in pairs(Cosmetics.starterOwned()) do
+        profile.cosmeticsOwned[id] = true
+    end
+    profile.loadout = Cosmetics.sanitise(profile.loadout, profile.cosmeticsOwned)
+
+    profile.season = profile.season or Season.blank()
+    Season.rollIfNeeded(profile.season)
     -- Players who joined before the tutorial existed already know the game, so
     -- they get it marked complete rather than being walked through it.
     if not profile.tutorial then

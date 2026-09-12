@@ -23,6 +23,7 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
+local Pit = require(game.ReplicatedStorage.GoobShared.Pit)
 
 local WorldBuilder = {}
 
@@ -198,6 +199,23 @@ function WorldBuilder.build()
     local world = Instance.new("Folder")
     world.Name = "GoobWorld"
     world.Parent = Workspace
+
+    -- Roads connect the zones, so travelling somewhere is a route rather than a
+    -- void. Declared early because the Pit uses it too.
+    local function road(from: Vector3, to: Vector3, width: number)
+        local mid = (from + to) / 2
+        local delta = to - from
+        local len = delta.Magnitude
+        local r = part({
+            Name = "Road",
+            Size = Vector3.new(width, 4, len),
+            CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
+            Color = Color3.fromRGB(198, 186, 162),
+            Material = Enum.Material.Concrete,
+        })
+        r.Parent = world
+        return r
+    end
 
     -- ── HUB ────────────────────────────────────────────────────────────────
     local hub = WorldBuilder.ZONES.HUB
@@ -403,24 +421,62 @@ function WorldBuilder.build()
         l.Parent = glow
     end
 
-    -- ── Roads between zones, so rolling somewhere is a route not a void ────
-    local function road(from: Vector3, to: Vector3, width: number)
-        local mid = (from + to) / 2
-        local delta = to - from
-        local len = delta.Magnitude
-        local r = part({
-            Name = "Road",
-            Size = Vector3.new(width, 4, len),
-            CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
-            Color = Color3.fromRGB(198, 186, 162),
-            Material = Enum.Material.Concrete,
-        })
-        r.Parent = world
-        return r
-    end
     road(hub.centre + Vector3.new(150, -1, 0), sy.centre + Vector3.new(-220, -1, 0), 60)
     road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
     road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -290), 60)
+
+    -- ── THE SUMO PIT ───────────────────────────────────────────────────────
+    -- Raised and open-sided on purpose: the danger has to be legible from
+    -- outside, and you have to be able to SEE someone get knocked off.
+    local pitFloor = disc(world, Pit.CENTRE - Vector3.new(0, 4, 0), Pit.START_RADIUS + 8, 8,
+        Color3.fromRGB(74, 58, 58), Enum.Material.Slate, "PitFloor")
+    pitFloor.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.4, 1, 1)
+
+    -- The ring itself is resized live by PitService as the arena closes.
+    local ring = part({
+        Name = "PitRing",
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(1.5, Pit.START_RADIUS * 2, Pit.START_RADIUS * 2),
+        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, 0.6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+        Color = Color3.fromRGB(255, 90, 110),
+        Material = Enum.Material.Neon,
+        Transparency = 0.45,
+        CanCollide = false,
+    })
+    ring.Parent = world
+
+    -- Stands, so a crowd has somewhere to watch from.
+    for i = 1, 24 do
+        local a = (i / 24) * math.pi * 2
+        local r = Pit.START_RADIUS + 34
+        local seat = part({
+            Name = "PitStand",
+            Size = Vector3.new(14, 10, 14),
+            Position = Pit.CENTRE + Vector3.new(math.cos(a) * r, -2, math.sin(a) * r),
+            Color = Color3.fromRGB(96, 74, 74),
+            Material = Enum.Material.WoodPlanks,
+        })
+        seat.Parent = world
+    end
+
+    signpost(world, Pit.CENTRE + Vector3.new(0, -4, Pit.START_RADIUS + 60), "🥊", "SUMO PIT",
+        "stake 💧 · last one in wins", Color3.fromRGB(255, 110, 130))
+
+    -- The join pad. Rolling onto it enters the queue; nothing drags you here.
+    local joinPad = part({
+        Name = "PitJoinPad",
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(2, 34, 34),
+        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, -3, Pit.START_RADIUS + 40))
+            * CFrame.Angles(0, 0, math.rad(90)),
+        Color = Color3.fromRGB(120, 255, 160),
+        Material = Enum.Material.Neon,
+        Transparency = 0.35,
+        CanCollide = false,
+    })
+    joinPad.Parent = world
+
+    road(hub.centre + Vector3.new(0, -1, 150), Pit.CENTRE + Vector3.new(0, -4, -Pit.START_RADIUS - 50), 60)
 
     local spawn = Instance.new("SpawnLocation")
     spawn.Name = "HubSpawn"

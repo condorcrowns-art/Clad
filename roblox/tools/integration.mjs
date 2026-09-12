@@ -124,6 +124,13 @@ for (const m of others) {
   code += `\ndo local m = moduleInstance("ModuleScript", "${m.name}", function(script)\n${m.src}\nend) m.Parent = serverScript end\n`;
 }
 code += `
+-- Scenario files reach the game's shared modules through here. A bare
+-- require("Pit") hits the harness module table instead, which only holds the
+-- stub engine.
+_G.SHARED = function(name)
+  return require(sharedFolder:FindFirstChild(name))
+end
+
 _G.BOOT_SERVER = function()
   local script = serverScript
   ${init.src.split('\n').join('\n  ')}

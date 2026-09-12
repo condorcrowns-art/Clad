@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000024"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000025"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000026"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000010"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000032"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000033"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000034"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000015"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Ascension.luau — the terminus.
 --
 -- Numbers that only ever rise have no end, so nothing is ever an achievement.
@@ -190,7 +190,293 @@ Config.PLOT_SIZE = 90
 Config.PLOT_SPACING = 130
 
 return Config
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000003"><Properties><string name="Name">Feedstock</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000003"><Properties><string name="Name">Cosmetics</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Cosmetics.luau — what you wear, and where it can come from.
+--
+-- THE HARD RULE, enforced by the `source` field on every entry:
+-- cosmetics may be BOUGHT, but power, mass, age and Secrets may never be. The
+-- moment Robux touches the economy, the trading market dies — the balance sim
+-- already caught that failure once arriving through the shop, and a cash
+-- register is the same failure wearing a different hat.
+--
+-- So everything here is visual. Nothing in this file changes a number.
+
+local Cosmetics = {}
+
+export type Item = {
+    id: string,
+    name: string,
+    kind: string,        -- skin | trail | eyes | crown
+    rarity: string,
+    source: string,      -- starter | season | shop | ascend | achievement | event
+    tier: number?,       -- season tier that grants it
+    premium: boolean?,   -- season premium track only
+    colour: Color3?,
+    material: Enum.Material?,
+    emoji: string?,
+}
+
+Cosmetics.KINDS = { "skin", "trail", "eyes", "crown" }
+
+Cosmetics.RARITY_COLOUR = {
+    Common    = Color3.fromRGB(190, 195, 205),
+    Uncommon  = Color3.fromRGB(120, 225, 140),
+    Rare      = Color3.fromRGB(105, 175, 255),
+    Epic      = Color3.fromRGB(190, 130, 255),
+    Legendary = Color3.fromRGB(255, 190,  70),
+    Mythic    = Color3.fromRGB(255, 105, 140),
+}
+
+local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
+
+Cosmetics.ITEMS = {
+    -- ── Skins: the body itself ─────────────────────────────────────────────
+    { id = "skin_default", name = "Classic Goo",   kind = "skin", rarity = "Common",
+      source = "starter", material = Enum.Material.Glass },
+    { id = "skin_jelly",   name = "Jelly",         kind = "skin", rarity = "Common",
+      source = "season", tier = 3, material = Enum.Material.Glass, colour = rgb(255, 140, 180) },
+    { id = "skin_bubble",  name = "Soap Bubble",   kind = "skin", rarity = "Uncommon",
+      source = "season", tier = 8, material = Enum.Material.ForceField },
+    { id = "skin_stone",   name = "Boulder",       kind = "skin", rarity = "Uncommon",
+      source = "shop", material = Enum.Material.Slate, colour = rgb(130, 128, 122) },
+    { id = "skin_chrome",  name = "Chrome",        kind = "skin", rarity = "Rare",
+      source = "season", tier = 18, material = Enum.Material.Metal, colour = rgb(220, 226, 236) },
+    { id = "skin_lava",    name = "Molten",        kind = "skin", rarity = "Epic",
+      source = "season", tier = 28, premium = true, material = Enum.Material.Neon, colour = rgb(255, 110, 40) },
+    { id = "skin_void",    name = "Void",          kind = "skin", rarity = "Epic",
+      source = "shop", material = Enum.Material.Neon, colour = rgb(24, 18, 40) },
+    { id = "skin_prism",   name = "Prism",         kind = "skin", rarity = "Legendary",
+      source = "season", tier = 45, premium = true, material = Enum.Material.Glass, colour = rgb(180, 220, 255) },
+    { id = "skin_ancient", name = "Ancient Amber", kind = "skin", rarity = "Legendary",
+      source = "ascend", material = Enum.Material.Glass, colour = rgb(255, 190, 90) },
+    { id = "skin_goldleaf",name = "Gold Leaf",     kind = "skin", rarity = "Mythic",
+      source = "achievement", material = Enum.Material.Foil, colour = rgb(255, 210, 90) },
+
+    -- ── Trails ─────────────────────────────────────────────────────────────
+    { id = "trail_none",   name = "No Trail",      kind = "trail", rarity = "Common", source = "starter" },
+    { id = "trail_dust",   name = "Dust Puff",     kind = "trail", rarity = "Common",
+      source = "season", tier = 2, colour = rgb(220, 210, 190) },
+    { id = "trail_spark",  name = "Sparks",        kind = "trail", rarity = "Uncommon",
+      source = "season", tier = 11, colour = rgb(255, 215, 120) },
+    { id = "trail_frost",  name = "Frost",         kind = "trail", rarity = "Rare",
+      source = "shop", colour = rgb(160, 230, 255) },
+    { id = "trail_flame",  name = "Flame",         kind = "trail", rarity = "Epic",
+      source = "season", tier = 33, premium = true, colour = rgb(255, 120, 50) },
+    { id = "trail_rainbow",name = "Rainbow",       kind = "trail", rarity = "Legendary",
+      source = "season", tier = 50, premium = true, colour = rgb(255, 255, 255) },
+    { id = "trail_crest",  name = "Crest Wake",    kind = "trail", rarity = "Mythic",
+      source = "ascend", colour = rgb(255, 240, 170) },
+
+    -- ── Eyes ───────────────────────────────────────────────────────────────
+    { id = "eyes_default", name = "Googly",        kind = "eyes", rarity = "Common", source = "starter", emoji = "👀" },
+    { id = "eyes_sleepy",  name = "Sleepy",        kind = "eyes", rarity = "Common",
+      source = "season", tier = 5, emoji = "😴" },
+    { id = "eyes_angry",   name = "Cross",         kind = "eyes", rarity = "Uncommon",
+      source = "season", tier = 14, emoji = "😠" },
+    { id = "eyes_star",    name = "Starstruck",    kind = "eyes", rarity = "Rare",
+      source = "shop", emoji = "🤩" },
+    { id = "eyes_cyber",   name = "Visor",         kind = "eyes", rarity = "Epic",
+      source = "season", tier = 24, premium = true, emoji = "🕶️" },
+    { id = "eyes_ghost",   name = "Hollow",        kind = "eyes", rarity = "Legendary",
+      source = "achievement", emoji = "👻" },
+
+    -- ── Crowns: worn above the nameplate ──────────────────────────────────
+    { id = "crown_none",   name = "Bare Head",     kind = "crown", rarity = "Common", source = "starter", emoji = "" },
+    { id = "crown_party",  name = "Party Hat",     kind = "crown", rarity = "Common",
+      source = "season", tier = 6, emoji = "🎉" },
+    { id = "crown_cap",    name = "Cap",           kind = "crown", rarity = "Common",
+      source = "shop", emoji = "🧢" },
+    { id = "crown_horns",  name = "Horns",         kind = "crown", rarity = "Uncommon",
+      source = "season", tier = 16, emoji = "😈" },
+    { id = "crown_halo",   name = "Halo",          kind = "crown", rarity = "Rare",
+      source = "season", tier = 22, emoji = "😇" },
+    { id = "crown_pit",    name = "Pit Champion",  kind = "crown", rarity = "Epic",
+      source = "achievement", emoji = "🥇" },
+    { id = "crown_gold",   name = "Ascendant",     kind = "crown", rarity = "Legendary",
+      source = "ascend", emoji = "👑" },
+}
+
+local byId: { [string]: Item } = {}
+for _, item in ipairs(Cosmetics.ITEMS) do byId[item.id] = item end
+
+function Cosmetics.get(id: string): Item?
+    return byId[id]
+end
+
+function Cosmetics.ofKind(kind: string): { Item }
+    local out = {}
+    for _, item in ipairs(Cosmetics.ITEMS) do
+        if item.kind == kind then table.insert(out, item) end
+    end
+    return out
+end
+
+-- Everything a brand-new player starts with. There is always at least one
+-- option per slot so the wardrobe is never an empty room.
+function Cosmetics.starterLoadout(): { [string]: string }
+    return { skin = "skin_default", trail = "trail_none", eyes = "eyes_default", crown = "crown_none" }
+end
+
+function Cosmetics.starterOwned(): { [string]: boolean }
+    local owned = {}
+    for _, item in ipairs(Cosmetics.ITEMS) do
+        if item.source == "starter" then owned[item.id] = true end
+    end
+    return owned
+end
+
+-- Equip validation. Returns the corrected loadout rather than erroring, so a
+-- profile that references a cosmetic removed in a later patch still loads.
+function Cosmetics.sanitise(loadout: { [string]: string }?, owned: { [string]: boolean }?)
+    local starter = Cosmetics.starterLoadout()
+    local out = {}
+    for _, kind in ipairs(Cosmetics.KINDS) do
+        local wanted = loadout and loadout[kind]
+        local item = wanted and byId[wanted]
+        if item and item.kind == kind and owned and owned[wanted] then
+            out[kind] = wanted
+        else
+            out[kind] = starter[kind]
+        end
+    end
+    return out
+end
+
+function Cosmetics.owns(owned: { [string]: boolean }?, id: string): boolean
+    return owned ~= nil and owned[id] == true
+end
+
+-- Rewards granted by reaching an ascension count / achievement, so the flexiest
+-- items in the game are earned rather than bought.
+Cosmetics.ASCEND_REWARDS = {
+    [1]  = "crown_gold",
+    [3]  = "trail_crest",
+    [6]  = "skin_ancient",
+}
+
+Cosmetics.ACHIEVEMENTS = {
+    { id = "pitwins5",   cosmetic = "crown_pit",     label = "Win 5 Sumo Pit matches" },
+    { id = "secret1",    cosmetic = "eyes_ghost",    label = "Catch a Secret" },
+    { id = "colossal3",  cosmetic = "skin_goldleaf", label = "Reach Colossal 3 times" },
+}
+
+return Cosmetics
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000004"><Properties><string name="Name">Crew</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Crew.luau — lightweight crews.
+--
+-- I argued against this in DESIGN.md and the argument was: guilds solve
+-- COORDINATION, and the game had nothing to coordinate. A crew system then
+-- would have been a roster, a chat tab and a name tag — surface area with no
+-- payoff.
+--
+-- The Sumo Pit changes that. There is now a shared, repeatable objective worth
+-- pursuing together, so a crew gets a weekly target that no one person can hit
+-- alone and everybody's contribution is visible.
+--
+-- It stays deliberately small: no ranks, no permissions tree, no bank, no crew
+-- vs crew war. Those are answers to problems this game does not have yet.
+
+local Crew = {}
+
+Crew.MAX_MEMBERS = 20
+Crew.TAG_LENGTH = 4
+Crew.CREATE_COST_SECONDS = 600   -- ten minutes of your income
+
+-- One weekly target that rotates, so a crew always has a current answer to
+-- "what are we doing". Each is reachable by a handful of active members.
+Crew.GOALS = {
+    { id = "catches", label = "Catch %s things",       target = 4000,  metric = "catches" },
+    { id = "gulps",   label = "Gulp %s Goobs",          target = 120,   metric = "gulps" },
+    { id = "pit",     label = "Win %s Pit matches",     target = 45,    metric = "pitWins" },
+    { id = "trades",  label = "Complete %s trades",     target = 150,   metric = "trades" },
+    { id = "ascend",  label = "Ascend %s times",        target = 12,    metric = "ascensions" },
+}
+
+Crew.REWARD_GLOB_SECONDS = 1800  -- half an hour of income, each
+
+function Crew.goalForWeek(week: number)
+    return Crew.GOALS[(week % #Crew.GOALS) + 1]
+end
+
+function Crew.currentWeek(now: number?): number
+    return math.floor((now or os.time()) / (7 * 86400))
+end
+
+-- Tags are what appear on a nameplate, so they must be short, loud and free of
+-- anything that reads as impersonation or an insult once filtered.
+function Crew.sanitiseTag(raw: string): string?
+    if typeof(raw) ~= "string" then return nil end
+    local t = raw:upper():gsub("[^A-Z0-9]", "")
+    if #t < 2 or #t > Crew.TAG_LENGTH then return nil end
+    return t
+end
+
+function Crew.sanitiseName(raw: string): string?
+    if typeof(raw) ~= "string" then return nil end
+    local n = raw:match("^%s*(.-)%s*$") or ""
+    if #n < 3 or #n > 20 then return nil end
+    if n:match("[^%w%s'%-!]") then return nil end
+    return n
+end
+
+function Crew.blank(id: string, name: string, tag: string, ownerId: number, week: number)
+    return {
+        id = id,
+        name = name,
+        tag = tag,
+        ownerId = ownerId,
+        members = { [tostring(ownerId)] = { name = "", joined = os.time(), contributed = 0 } },
+        week = week,
+        progress = 0,
+        claimed = {} :: { [string]: boolean },
+    }
+end
+
+function Crew.memberCount(crew: any): number
+    local n = 0
+    for _ in pairs(crew.members or {}) do n += 1 end
+    return n
+end
+
+function Crew.isFull(crew: any): boolean
+    return Crew.memberCount(crew) >= Crew.MAX_MEMBERS
+end
+
+-- Reset progress when the week rolls, but never wipe membership.
+function Crew.rollWeek(crew: any, week: number): boolean
+    if crew.week == week then return false end
+    crew.week = week
+    crew.progress = 0
+    crew.claimed = {}
+    for _, m in pairs(crew.members or {}) do m.contributed = 0 end
+    return true
+end
+
+function Crew.contribute(crew: any, userId: number, metric: string, amount: number, week: number): boolean
+    Crew.rollWeek(crew, week)
+    local goal = Crew.goalForWeek(week)
+    if goal.metric ~= metric then return false end
+    crew.progress = math.min(goal.target, (crew.progress or 0) + amount)
+    local m = crew.members and crew.members[tostring(userId)]
+    if m then m.contributed = (m.contributed or 0) + amount end
+    return crew.progress >= goal.target
+end
+
+function Crew.isComplete(crew: any, week: number): boolean
+    return (crew.progress or 0) >= Crew.goalForWeek(week).target
+end
+
+function Crew.hasClaimed(crew: any, userId: number): boolean
+    return (crew.claimed or {})[tostring(userId)] == true
+end
+
+function Crew.markClaimed(crew: any, userId: number)
+    crew.claimed = crew.claimed or {}
+    crew.claimed[tostring(userId)] = true
+end
+
+return Crew
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000005"><Properties><string name="Name">Feedstock</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Feedstock.luau — the catalogue of everything a Goob can swallow.
 --
 -- DESIGN NOTE: the contents of a Goob are VISIBLE through its translucent
@@ -357,7 +643,7 @@ function Feedstock.roll(rng: Random, luck: number?, allowSecret: boolean?): Item
 end
 
 return Feedstock
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000004"><Properties><string name="Name">Format</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000006"><Properties><string name="Name">Format</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Format.luau — number formatting for a genuinely huge power scale.
 -- Goob mass is expected to reach 1e30+. Roblox's default tostring() gives you
 -- "1e+30" which means nothing to a nine-year-old, so we ladder suffixes.
@@ -453,7 +739,7 @@ function Format.duration(sec: number): string
 end
 
 return Format
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000005"><Properties><string name="Name">GoobMath</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000007"><Properties><string name="Name">GoobMath</string><ProtectedString name="Source"><![CDATA[--!strict
 -- GoobMath.luau — the single source of truth for how a Goob's numbers work.
 -- Shared between server (authority) and client (prediction/display) so the HUD
 -- never disagrees with the server about how big your Goob is.
@@ -592,7 +878,104 @@ function GoobMath.generation(goob: Goob): number
 end
 
 return GoobMath
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000006"><Properties><string name="Name">Movement</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000008"><Properties><string name="Name">Monetisation</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Monetisation.luau — what may be sold, and the wall around the economy.
+--
+-- THE WALL: Robux may buy expression and convenience. It may never buy mass,
+-- age, luck, Secrets, or a trading advantage. The balance simulation already
+-- caught the failure where money reached the collectibles through the snack
+-- shop; a cash register is the same failure in a different coat.
+--
+-- Every product below is checked against that rule by the test suite, so
+-- adding a pay-to-win item is a build failure rather than a judgement call.
+
+local Monetisation = {}
+
+-- Replace the zeros with real IDs from the Creator Dashboard. They are kept
+-- here rather than inline so there is exactly one place to edit, and so the
+-- suite can assert that nothing unconfigured is ever shown for sale.
+Monetisation.GAMEPASSES = {
+    {
+        id = "premium_pass",
+        assetId = 0,
+        name = "Season Pass — Premium",
+        blurb = "Unlocks the second reward column on tiers you have already earned.",
+        grants = "season_premium",
+        affects = "cosmetic",
+    },
+    {
+        id = "extra_slots",
+        assetId = 0,
+        name = "+4 Goob Slots",
+        blurb = "Room for twelve Goobs instead of eight. Slots hold; they do not generate.",
+        grants = "goob_slots_4",
+        affects = "convenience",
+    },
+    {
+        id = "double_glob",
+        assetId = 0,
+        name = "2× Glob",
+        blurb = "Doubles passive income. Glob only buys snacks and eggs, both deliberately weak.",
+        grants = "glob_2x",
+        affects = "convenience",
+    },
+}
+
+Monetisation.PRODUCTS = {
+    { id = "skin_void",  assetId = 0, name = "Void Skin",   cosmetic = "skin_void",   affects = "cosmetic" },
+    { id = "skin_stone", assetId = 0, name = "Boulder Skin",cosmetic = "skin_stone",  affects = "cosmetic" },
+    { id = "trail_frost",assetId = 0, name = "Frost Trail", cosmetic = "trail_frost", affects = "cosmetic" },
+    { id = "eyes_star",  assetId = 0, name = "Starstruck",  cosmetic = "eyes_star",   affects = "cosmetic" },
+    { id = "crown_cap",  assetId = 0, name = "Cap",         cosmetic = "crown_cap",   affects = "cosmetic" },
+}
+
+-- The allowed categories. Anything else is pay-to-win by definition.
+Monetisation.ALLOWED_EFFECTS = { cosmetic = true, convenience = true }
+
+-- Things that must NEVER appear as a purchasable grant, named explicitly so the
+-- rule is testable rather than aspirational.
+Monetisation.FORBIDDEN_GRANTS = {
+    "mass", "power", "age", "crest", "secret", "luck", "drop_rate",
+    "trade_fee", "market", "goob", "ascend",
+}
+
+function Monetisation.isConfigured(entry: any): boolean
+    return (entry.assetId or 0) > 0
+end
+
+-- Only offer what has a real asset id behind it. Showing an unconfigured
+-- product is a purchase prompt that silently fails, which reads as a scam.
+function Monetisation.purchasable(list: { any }): { any }
+    local out = {}
+    for _, e in ipairs(list) do
+        if Monetisation.isConfigured(e) then table.insert(out, e) end
+    end
+    return out
+end
+
+function Monetisation.violations(): { string }
+    local bad = {}
+    local function scan(list, label)
+        for _, e in ipairs(list) do
+            if not Monetisation.ALLOWED_EFFECTS[e.affects or ""] then
+                table.insert(bad, ("%s/%s has affects=%q"):format(label, e.id, tostring(e.affects)))
+            end
+            local grant = tostring(e.grants or e.cosmetic or "")
+            for _, forbidden in ipairs(Monetisation.FORBIDDEN_GRANTS) do
+                -- "goob_slots_4" is a slot, not a Goob; match whole words only.
+                if grant == forbidden or grant:match("^" .. forbidden .. "$") then
+                    table.insert(bad, ("%s/%s grants %q"):format(label, e.id, grant))
+                end
+            end
+        end
+    end
+    scan(Monetisation.GAMEPASSES, "gamepass")
+    scan(Monetisation.PRODUCTS, "product")
+    return bad
+end
+
+return Monetisation
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000009"><Properties><string name="Name">Movement</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Movement.luau — mass IS handling.
 --
 -- THE WHOLE POINT: in Grow a Garden your number is a label on a crop. Here your
@@ -683,7 +1066,7 @@ function Movement.maxPlausibleSpeed(mass: number): number
 end
 
 return Movement
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000007"><Properties><string name="Name">Names</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000010"><Properties><string name="Name">Names</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Names.luau — every Goob is auto-named at hatch. Names are silly, readable,
 -- and pronounceable by a seven-year-old, because the name is what gets shouted
 -- across a trading server.
@@ -727,7 +1110,7 @@ function Names.sanitize(raw: string): string?
 end
 
 return Names
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000008"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000011"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Net.luau — one manifest of every RemoteEvent/RemoteFunction in the game.
 -- The server creates them; the client waits for them. Neither side hardcodes a
 -- string anywhere else, so a typo becomes a Luau error instead of a silent
@@ -750,6 +1133,17 @@ Net.EVENTS = {
     "DismissTutorial",-- C->S  stop showing the first-run guide
     "Ascend",         -- C->S  consume a Colossal Goob for a permanent Crest
     "Dashed",         -- C->S  cosmetic: tell the server a dash happened
+    "EquipCosmetic",  -- C->S  wear something you own
+    "ClaimSeason",    -- C->S  take an earned season reward
+    "PitJoin",        -- C->S  enter the Sumo Pit queue
+    "PitLeave",       -- C->S  leave it
+    "PitSync",        -- S->C  live arena state
+    "CrewCreate",     -- C->S
+    "CrewJoin",       -- C->S
+    "CrewLeave",      -- C->S
+    "CrewClaim",      -- C->S  take the weekly crew reward
+    "CrewSync",       -- S->C
+    "BuyProduct",     -- C->S  prompt a Robux purchase
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S
@@ -793,7 +1187,247 @@ function Net.get(name: string): any
 end
 
 return Net
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000009"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000012"><Properties><string name="Name">Pit</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Pit.luau — rules for the Sumo Pit.
+--
+-- TWO RULES THAT ARE NOT NEGOTIABLE, and the reason PvP exists at all here:
+--
+--   1. It is OPT-IN. You roll in. Nothing drags you there, and nothing outside
+--      the ring can be taken from you. Grow a Garden became a comfort game for
+--      millions precisely because no one can touch your things.
+--   2. You stake GLOB, never Goobs. A nine-year-old who loses a week-old Goob
+--      to a stranger does not come back — and a Goob that can be taken by force
+--      is a Goob nobody will ever trade.
+--
+-- Mass is an advantage AND a liability: heavy wins the exchange but cannot stop
+-- before the edge, so a small Goob wins by baiting an overcommit.
+
+local Movement = require(script.Parent.Movement)
+
+local Pit = {}
+
+Pit.CENTRE = Vector3.new(-40, 6, 430)
+Pit.START_RADIUS = 96
+Pit.MIN_RADIUS = 18
+Pit.FLOOR_Y = 6
+
+Pit.MIN_PLAYERS = 2
+Pit.MAX_PLAYERS = 8
+Pit.LOBBY_SECONDS = 20
+Pit.MATCH_SECONDS = 120
+Pit.SHRINK_START = 15          -- grace before the ring closes
+Pit.ELIMINATION_DROP = 24      -- studs below the floor before you're out
+
+-- Entry is a flat, small stake rather than a percentage, so a whale cannot buy
+-- a lopsided pot and a newcomer is never priced out of trying it.
+Pit.STAKE_SECONDS = 45         -- expressed as seconds of your own income
+Pit.HOUSE_CUT = 0              -- no rake: this is a player-vs-player pot
+
+function Pit.radiusAt(elapsed: number): number
+    if elapsed <= Pit.SHRINK_START then return Pit.START_RADIUS end
+    local span = math.max(1, Pit.MATCH_SECONDS - Pit.SHRINK_START)
+    local t = math.clamp((elapsed - Pit.SHRINK_START) / span, 0, 1)
+    -- Ease in: the ring barely moves early and closes hard at the end, so
+    -- matches resolve instead of stalemating.
+    local eased = t * t
+    return Pit.START_RADIUS + (Pit.MIN_RADIUS - Pit.START_RADIUS) * eased
+end
+
+function Pit.isInside(position: Vector3, elapsed: number): boolean
+    if position.Y < Pit.FLOOR_Y - Pit.ELIMINATION_DROP then return false end
+    local flat = Vector3.new(position.X - Pit.CENTRE.X, 0, position.Z - Pit.CENTRE.Z)
+    return flat.Magnitude <= Pit.radiusAt(elapsed)
+end
+
+-- Collision response. The shove each side receives is proportional to the
+-- OTHER's momentum, so being heavy is only an advantage while you are moving.
+function Pit.shove(massA: number, velA: Vector3, massB: number, velB: Vector3)
+    local pA = Movement.momentum(massA, velA.Magnitude)
+    local pB = Movement.momentum(massB, velB.Magnitude)
+    local total = math.max(1, pA + pB)
+    -- Each side keeps a share of the exchange inversely to its own contribution.
+    return (pB / total), (pA / total)
+end
+
+Pit.SHOVE_IMPULSE = 140        -- studs/sec at a full-share exchange
+
+function Pit.stakeFor(incomePerSecond: number): number
+    return math.max(10, incomePerSecond * Pit.STAKE_SECONDS)
+end
+
+-- Winner takes the pot. With no rake, everything staked comes back out, which
+-- keeps the Pit economy-neutral: it moves Glob between players rather than
+-- printing or burning it.
+function Pit.payout(stakes: { number }): number
+    local total = 0
+    for _, s in ipairs(stakes) do total += s end
+    return total * (1 - Pit.HOUSE_CUT)
+end
+
+return Pit
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000013"><Properties><string name="Name">Season</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Season.luau — the retention track.
+--
+-- XP comes from PLAYING, never from paying. The premium track unlocks a second
+-- reward column on tiers you have already earned; it does not sell tiers, and
+-- it does not sell anything that touches mass, age, luck or Secrets.
+--
+-- Seasons also rotate which Secrets can spawn. That is not a cosmetic detail —
+-- it is the scarcity thesis expressed as a calendar. Last season's Secrets can
+-- never be produced again, so a two-season-old Secret is genuinely finite in a
+-- way no drop rate can fake.
+
+local Cosmetics = require(script.Parent.Cosmetics)
+
+local Season = {}
+
+Season.CURRENT = 1
+Season.NAME = "Season 1 · First Roll"
+Season.TIERS = 50
+-- Paced so that a dedicated player hitting the daily cap finishes in ~40 days,
+-- i.e. a season takes a season. An earlier pass had the whole 50-tier track
+-- completing in EIGHT days, which would have left the most engaged players with
+-- nothing to chase for five weeks out of six. The suite now asserts the
+-- completion window rather than trusting the constants to stay sane.
+Season.XP_PER_TIER = 5600
+
+-- What each action is worth. Deliberately weighted so the track rewards the
+-- whole game rather than whichever loop is most afk-able.
+Season.XP = {
+    catch      = 4,
+    secret     = 800,
+    snack      = 12,
+    egg        = 150,
+    gulp       = 110,
+    trade      = 90,
+    ascend     = 3200,
+    pitEnter   = 30,
+    pitWin     = 300,
+    crewGoal   = 1100,
+}
+
+-- Daily cap on grindable XP, so the track takes a season rather than a weekend
+-- and nobody feels obliged to play eight hours a day. Big one-off events
+-- (ascend, pit wins) are exempt — those are achievements, not grinding.
+-- ~1750 catches, or about two hours of engaged play, to cap out for the day.
+Season.DAILY_CAP = 7000
+Season.UNCAPPED = { ascend = true, pitWin = true, secret = true, crewGoal = true }
+
+function Season.blank()
+    return {
+        id = Season.CURRENT,
+        xp = 0,
+        premium = false,
+        claimedFree = {} :: { [string]: boolean },
+        claimedPremium = {} :: { [string]: boolean },
+        dailyXp = 0,
+        dailyStamp = 0,
+    }
+end
+
+function Season.tierOf(xp: number): number
+    return math.clamp(math.floor(xp / Season.XP_PER_TIER) + 1, 1, Season.TIERS)
+end
+
+function Season.progressInTier(xp: number): number
+    return (xp % Season.XP_PER_TIER) / Season.XP_PER_TIER
+end
+
+-- The reward table, derived from the cosmetics catalogue rather than duplicated
+-- so the two can never disagree about which tier grants what.
+local rewardCache: { [number]: { free: string?, premium: string? } }? = nil
+
+function Season.rewards(): { [number]: { free: string?, premium: string? } }
+    if rewardCache then return rewardCache end
+    local out = {}
+    for i = 1, Season.TIERS do out[i] = {} end
+    for _, item in ipairs(Cosmetics.ITEMS) do
+        if item.source == "season" and item.tier then
+            local slot = out[item.tier]
+            if slot then
+                if item.premium then slot.premium = item.id else slot.free = item.id end
+            end
+        end
+    end
+    rewardCache = out
+    return out
+end
+
+function Season.rewardAt(tier: number, premium: boolean): string?
+    local row = Season.rewards()[tier]
+    if not row then return nil end
+    return premium and row.premium or row.free
+end
+
+-- Award XP, honouring the daily cap and the new-day reset.
+function Season.award(state: any, source: string, now: number?): (number, boolean)
+    if not state then return 0, false end
+    local amount = Season.XP[source]
+    if not amount then return 0, false end
+
+    local day = math.floor((now or os.time()) / 86400)
+    if state.dailyStamp ~= day then
+        state.dailyStamp = day
+        state.dailyXp = 0
+    end
+
+    if not Season.UNCAPPED[source] then
+        local room = math.max(0, Season.DAILY_CAP - (state.dailyXp or 0))
+        amount = math.min(amount, room)
+        if amount <= 0 then return 0, false end
+        state.dailyXp = (state.dailyXp or 0) + amount
+    end
+
+    local before = Season.tierOf(state.xp)
+    state.xp += amount
+    local after = Season.tierOf(state.xp)
+    return amount, after > before
+end
+
+-- Which tiers are earned but unclaimed, per track.
+function Season.claimable(state: any): { { tier: number, premium: boolean, cosmetic: string } }
+    local out = {}
+    if not state then return out end
+    local tier = Season.tierOf(state.xp)
+    for t = 1, tier do
+        local key = tostring(t)
+        local free = Season.rewardAt(t, false)
+        if free and not (state.claimedFree or {})[key] then
+            table.insert(out, { tier = t, premium = false, cosmetic = free })
+        end
+        if state.premium then
+            local prem = Season.rewardAt(t, true)
+            if prem and not (state.claimedPremium or {})[key] then
+                table.insert(out, { tier = t, premium = true, cosmetic = prem })
+            end
+        end
+    end
+    return out
+end
+
+function Season.markClaimed(state: any, tier: number, premium: boolean)
+    local key = tostring(tier)
+    if premium then
+        state.claimedPremium = state.claimedPremium or {}
+        state.claimedPremium[key] = true
+    else
+        state.claimedFree = state.claimedFree or {}
+        state.claimedFree[key] = true
+    end
+end
+
+-- Rolling a season wipes progress but NOT owned cosmetics. Losing what you
+-- earned would be the one thing that makes a battle pass feel like a scam.
+function Season.rollIfNeeded(state: any): boolean
+    if not state or state.id == Season.CURRENT then return false end
+    local fresh = Season.blank()
+    fresh.premium = false
+    for k, v in pairs(fresh) do state[k] = v end
+    return true
+end
+
+return Season
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000014"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Tutorial.luau — the first-run guided loop.
 --
 -- WHY THIS IS NOT OPTIONAL. A new player spawns next to a blob with some junk
@@ -930,7 +1564,7 @@ function Tutorial.display(state: any)
 end
 
 return Tutorial
-]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000027"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000017"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000035"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000024"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.server.luau — the single entry point. Wires every service together and
 -- owns all the RemoteEvent handlers, so there is exactly one file to read to
 -- understand what the client is allowed to ask the server to do.
@@ -949,6 +1583,11 @@ local Feedstock = require(Shared.Feedstock)
 local Tutorial = require(Shared.Tutorial)
 local Ascension = require(Shared.Ascension)
 local Movement = require(Shared.Movement)
+local Cosmetics = require(Shared.Cosmetics)
+local Season = require(Shared.Season)
+local Pit = require(Shared.Pit)
+local Crew = require(Shared.Crew)
+local Monetisation = require(Shared.Monetisation)
 
 local Data = require(script.Data)
 local WorldBuilder = require(script.WorldBuilder)
@@ -956,6 +1595,8 @@ local GoobService = require(script.GoobService)
 local CritterService = require(script.CritterService)
 local TradeService = require(script.TradeService)
 local RollService = require(script.RollService)
+local PitService = require(script.PitService)
+local CrewStore = require(script.CrewStore)
 
 print(("[%s] booting…"):format(Config.GAME_NAME))
 
@@ -1064,6 +1705,23 @@ local function snapshot(player: Player)
         ascendReason = ascReason,
         ascendPreview = (active and canAsc) and Ascension.preview(active, crests) or nil,
         colossalMass = Config.COLOSSAL_MASS,
+        pitWins = profile.pitWins or 0,
+        cosmeticsOwned = profile.cosmeticsOwned,
+        loadout = profile.loadout,
+        season = {
+            id = profile.season.id,
+            name = Season.NAME,
+            xp = profile.season.xp,
+            tier = Season.tierOf(profile.season.xp),
+            tiers = Season.TIERS,
+            progress = Season.progressInTier(profile.season.xp),
+            premium = profile.season.premium == true,
+            claimable = Season.claimable(profile.season),
+            dailyXp = profile.season.dailyXp or 0,
+            dailyCap = Season.DAILY_CAP,
+        },
+        achievements = profile.achievements,
+        crewId = profile.crewId,
         moveTopSpeed = active and Movement.topSpeed(active.mass) or 0,
         moveStopDistance = active and Movement.stoppingDistance(active.mass) or 0,
         datastore = Data.isEnabled(),
@@ -1087,6 +1745,130 @@ local function push(player: Player)
     local snap = snapshot(player)
     if snap then StateSync:FireClient(player, snap) end
 end
+
+-- NOTE ON PLACEMENT: everything below must come AFTER notify, push and the
+-- remote handles. `local function` only enters scope from its declaration
+-- onward, so an earlier draft had this block sitting above them and every call
+-- to notify/push/Net resolved to a nil GLOBAL — the server booted fine and then
+-- errored the moment a player joined or ascended.
+
+-- ── Season XP, achievements and crew contributions ─────────────────────────
+-- One funnel, so every gameplay event feeds the progression systems without
+-- each handler having to remember four different calls.
+
+local function grantCosmetic(player: Player, id: string, why: string)
+    local profile = Data.get(player)
+    if not profile or not id then return end
+    if profile.cosmeticsOwned[id] then return end
+    local item = Cosmetics.get(id)
+    if not item then return end
+    profile.cosmeticsOwned[id] = true
+    notify(player, ("🎁 Unlocked %s (%s) — %s"):format(item.name, item.rarity, why), "good")
+end
+
+local function checkAchievements(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local function earn(id: string, cosmetic: string, label: string)
+        if profile.achievements[id] then return end
+        profile.achievements[id] = true
+        grantCosmetic(player, cosmetic, label)
+    end
+    if (profile.pitWins or 0) >= 5 then earn("pitwins5", "crown_pit", "5 Pit wins") end
+    if (profile.totalAscensions or 0) >= 3 then earn("colossal3", "skin_goldleaf", "3 ascensions") end
+    for id in pairs(profile.discovered or {}) do
+        local item = Feedstock.get(id)
+        if item and item.rarity == "Secret" then
+            earn("secret1", "eyes_ghost", "caught a Secret")
+            break
+        end
+    end
+    -- Ascension crowns.
+    for count, cosmetic in pairs(Cosmetics.ASCEND_REWARDS) do
+        if (profile.totalAscensions or 0) >= count then
+            grantCosmetic(player, cosmetic, ("Crest %d"):format(count))
+        end
+    end
+end
+
+local CREW_METRIC_FOR = {
+    catch = "catches", gulp = "gulps", pitWin = "pitWins",
+    trade = "trades", ascend = "ascensions",
+}
+
+local function progress(player: Player, source: string, amount: number?)
+    local profile = Data.get(player)
+    if not profile then return end
+
+    local gained, tierUp = Season.award(profile.season, source)
+    if tierUp then
+        local tier = Season.tierOf(profile.season.xp)
+        notify(player, ("⭐ Season tier %d!"):format(tier), "good")
+    end
+
+    local metric = CREW_METRIC_FOR[source]
+    if metric and profile.crewId then
+        local week = Crew.currentWeek()
+        CrewStore.update(profile.crewId, function(crew)
+            Crew.contribute(crew, player.UserId, metric, amount or 1, week)
+            return crew
+        end)
+    end
+    checkAchievements(player)
+end
+
+-- Defined here rather than beside the crew remotes: `local function` only
+-- enters scope from its declaration onward, so defining it further down left
+-- onJoin resolving `syncCrew` to a nil GLOBAL and every player join erroring.
+local function syncCrew(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local crew = profile.crewId and CrewStore.get(profile.crewId) or nil
+    if not crew then
+        Net.get("CrewSync"):FireClient(player, nil)
+        return
+    end
+    local week = Crew.currentWeek()
+    Crew.rollWeek(crew, week)
+    local goal = Crew.goalForWeek(week)
+    local members = {}
+    for idStr, m in pairs(crew.members or {}) do
+        table.insert(members, { name = m.name, contributed = m.contributed or 0,
+                                owner = tostring(crew.ownerId) == idStr })
+    end
+    table.sort(members, function(a, b) return a.contributed > b.contributed end)
+    Net.get("CrewSync"):FireClient(player, {
+        id = crew.id, name = crew.name, tag = crew.tag,
+        members = members, memberCount = Crew.memberCount(crew),
+        maxMembers = Crew.MAX_MEMBERS,
+        goalLabel = goal.label:format(Format.comma(goal.target)),
+        progress = crew.progress or 0,
+        target = goal.target,
+        complete = Crew.isComplete(crew, week),
+        claimed = Crew.hasClaimed(crew, player.UserId),
+    })
+end
+
+-- ── Sumo Pit wiring ────────────────────────────────────────────────────────
+PitService.getProfile = function(p) return Data.get(p) end
+PitService.getGoob = activeGoobOf
+PitService.getBall = function(p) return RollService.ballFor(p) end
+PitService.teleport = function(p, pos) RollService.teleport(p, pos) end
+PitService.awardXp = function(p, source) progress(p, source) end
+PitService.start()
+
+PitService.onNotify.Event:Connect(function(player, msg, kind)
+    notify(player, msg, kind)
+end)
+PitService.onSync.Event:Connect(function(state)
+    Net.get("PitSync"):FireAllClients(state)
+end)
+PitService.onResult.Event:Connect(function(winner)
+    local profile = Data.get(winner)
+    if profile then checkAchievements(winner) end
+    push(winner)
+end)
+
 
 -- Steady HUD refresh. 2Hz is plenty — glob ticks up smoothly on the client via
 -- local interpolation, so we only need to correct it twice a second.
@@ -1153,12 +1935,16 @@ local function onJoin(player: Player)
     end)
 
     GoobService.spawnFor(player)
+    RollService.applyCosmetics(player, profile.loadout)
+    syncCrew(player)
+    checkAchievements(player)
     push(player)
 
     notify(player, "Welcome to " .. Config.GAME_NAME .. "! Chase the junk, feed your Goob. 🫧", "good")
 end
 
 local function onLeave(player: Player)
+    PitService.cleanup(player)
     TradeService.cleanup(player)
     GoobService.despawnFor(player)
     WorldBuilder.releasePlot(player)
@@ -1196,6 +1982,8 @@ Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: I
     local ok, item = CritterService.tryCatch(player, target)
     if not ok then return end
     GoobService.feed(player, item.id)
+    progress(player, "catch")
+    if item.rarity == "Secret" then progress(player, "secret") end
     teach(player, "catch")
     -- The digest step has no action of its own; catching enough to see the
     -- number move is the lesson, so it clears alongside.
@@ -1276,6 +2064,8 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
     profile.activeGoobId = profile.goobs[1].id
 
     GoobService.spawnFor(player)
+    progress(player, "ascend")
+    checkAchievements(player)
     Data.save(player)
     push(player)
 
@@ -1287,6 +2077,167 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
 end)
 
 -- Purely cosmetic: lets other clients see a dash trail.
+Net.get("EquipCosmetic").OnServerEvent:Connect(function(player: Player, kind: string, id: string)
+    local profile = Data.get(player)
+    if not profile or typeof(kind) ~= "string" or typeof(id) ~= "string" then return end
+    local item = Cosmetics.get(id)
+    if not item or item.kind ~= kind then return end
+    if not Cosmetics.owns(profile.cosmeticsOwned, id) then
+        notify(player, "You don't own that yet.", "warn")
+        return
+    end
+    profile.loadout[kind] = id
+    profile.loadout = Cosmetics.sanitise(profile.loadout, profile.cosmeticsOwned)
+    RollService.applyCosmetics(player, profile.loadout)
+    push(player)
+end)
+
+Net.get("ClaimSeason").OnServerEvent:Connect(function(player: Player, tier: number, premium: boolean)
+    local profile = Data.get(player)
+    if not profile or typeof(tier) ~= "number" then return end
+    premium = premium == true
+    if premium and not profile.season.premium then
+        notify(player, "That reward needs the Premium pass.", "warn")
+        return
+    end
+    -- Re-derive what is claimable server-side; the client sends only which row
+    -- it pressed, never whether it has earned it.
+    for _, entry in ipairs(Season.claimable(profile.season)) do
+        if entry.tier == tier and entry.premium == premium then
+            Season.markClaimed(profile.season, tier, premium)
+            grantCosmetic(player, entry.cosmetic, ("Season tier %d"):format(tier))
+            push(player)
+            return
+        end
+    end
+    notify(player, "Nothing to claim there.", "warn")
+end)
+
+Net.get("PitJoin").OnServerEvent:Connect(function(player: Player)
+    PitService.join(player)
+    push(player)
+end)
+Net.get("PitLeave").OnServerEvent:Connect(function(player: Player)
+    PitService.leave(player)
+    push(player)
+end)
+
+-- ── Crews ──────────────────────────────────────────────────────────────────
+
+
+Net.get("CrewCreate").OnServerEvent:Connect(function(player: Player, name: string, tag: string)
+    local profile = Data.get(player)
+    if not profile then return end
+    if profile.crewId then notify(player, "You're already in a crew.", "warn") return end
+
+    local cleanName = Crew.sanitiseName(name)
+    local cleanTag = Crew.sanitiseTag(tag)
+    if not cleanName or not cleanTag then
+        notify(player, "Name 3-20 letters, tag 2-4 letters.", "warn")
+        return
+    end
+
+    local goob = GoobService.activeGoob(profile)
+    local cost = goob and GoobMath.incomePerSecond(goob) * Crew.CREATE_COST_SECONDS or 1000
+    if profile.glob < cost then
+        notify(player, ("Founding a crew costs 💧%s."):format(Format.short(cost)), "warn")
+        return
+    end
+
+    -- Filter anything other players will read, exactly as for Goob names.
+    local ok, filteredName = pcall(function()
+        local res = TextService:FilterStringAsync(cleanName, player.UserId,
+            Enum.TextFilterContext.PublicChat)
+        return res:GetNonChatStringForBroadcastAsync()
+    end)
+    if not ok then notify(player, "Couldn't check that name, try again.", "warn") return end
+
+    local crew = CrewStore.create(filteredName, cleanTag, player.UserId, player.DisplayName)
+    if not crew then
+        notify(player, "That tag is taken — pick another.", "warn")
+        return
+    end
+    profile.glob -= cost
+    profile.crewId = crew.id
+    notify(player, ("🛡️ Founded [%s] %s!"):format(crew.tag, crew.name), "good")
+    syncCrew(player); push(player)
+end)
+
+Net.get("CrewJoin").OnServerEvent:Connect(function(player: Player, tag: string)
+    local profile = Data.get(player)
+    if not profile then return end
+    if profile.crewId then notify(player, "Leave your crew first.", "warn") return end
+    local cleanTag = Crew.sanitiseTag(tag)
+    if not cleanTag then notify(player, "That's not a valid tag.", "warn") return end
+
+    local crew = CrewStore.findByTag(cleanTag)
+    if not crew then notify(player, "No crew with that tag.", "warn") return end
+    if Crew.isFull(crew) then notify(player, "That crew is full.", "warn") return end
+
+    CrewStore.update(crew.id, function(c)
+        c.members = c.members or {}
+        c.members[tostring(player.UserId)] = {
+            name = player.DisplayName, joined = os.time(), contributed = 0,
+        }
+        return c
+    end)
+    profile.crewId = crew.id
+    notify(player, ("🛡️ Joined [%s] %s!"):format(crew.tag, crew.name), "good")
+    syncCrew(player); push(player)
+end)
+
+Net.get("CrewLeave").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile or not profile.crewId then return end
+    local id = profile.crewId
+    CrewStore.update(id, function(c)
+        if c.members then c.members[tostring(player.UserId)] = nil end
+        return c
+    end)
+    profile.crewId = nil
+    notify(player, "Left your crew.", "info")
+    syncCrew(player); push(player)
+end)
+
+Net.get("CrewClaim").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile or not profile.crewId then return end
+    local week = Crew.currentWeek()
+    local crew = CrewStore.get(profile.crewId)
+    if not crew or not Crew.isComplete(crew, week) then
+        notify(player, "The weekly goal isn't finished yet.", "warn")
+        return
+    end
+    if Crew.hasClaimed(crew, player.UserId) then
+        notify(player, "You've already claimed this week.", "warn")
+        return
+    end
+    local goob = GoobService.activeGoob(profile)
+    local reward = goob and GoobMath.incomePerSecond(goob) * Crew.REWARD_GLOB_SECONDS or 500
+    profile.glob += reward
+    CrewStore.update(crew.id, function(c) Crew.markClaimed(c, player.UserId) return c end)
+    progress(player, "crewGoal")
+    notify(player, ("🛡️ Crew goal reward: +💧%s"):format(Format.short(reward)), "good")
+    syncCrew(player); push(player)
+end)
+
+Net.get("BuyProduct").OnServerEvent:Connect(function(player: Player, id: string)
+    -- Purchases are prompted client-side via MarketplaceService; this handler
+    -- exists so the client can ask what is actually for sale, and so an
+    -- unconfigured product says so plainly instead of failing silently.
+    if typeof(id) ~= "string" then return end
+    for _, list in ipairs({ Monetisation.GAMEPASSES, Monetisation.PRODUCTS }) do
+        for _, entry in ipairs(list) do
+            if entry.id == id then
+                if not Monetisation.isConfigured(entry) then
+                    notify(player, "That isn't on sale yet.", "warn")
+                end
+                return
+            end
+        end
+    end
+end)
+
 Net.get("Dashed").OnServerEvent:Connect(function(player: Player)
     local ball = RollService.ballFor(player)
     if not ball then return end
@@ -1337,6 +2288,7 @@ Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
     local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
     table.insert(profile.goobs, egg)
     teach(player, "egg")
+    progress(player, "egg")
     push(player)
     notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
         :format(egg.nickname), "good")
@@ -1377,6 +2329,7 @@ Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: strin
     end
 
     teach(player, "snack")
+    progress(player, "snack")
     push(player)
     if best then
         notify(player, ("%s %s — %d items, best was %s (%s)")
@@ -1390,6 +2343,7 @@ Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: stri
     if ok then
         notify(player, "😋 GULP! Your Goob swallowed another one.", "good")
         teach(player, "gulp")
+        progress(player, "gulp")
         push(player)
     elseif reason then
         notify(player, reason, "warn")
@@ -1427,7 +2381,111 @@ end)
 
 print(("[%s] ready. %d plots, %d feedstock types.")
     :format(Config.GAME_NAME, Config.PLOT_COUNT, #Feedstock.ITEMS))
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000011"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
+-- CrewStore.luau — crews live in their own DataStore because they are shared
+-- between players and between servers. A crew read here may have been written
+-- by a different server thirty seconds ago, so every mutation goes through
+-- UpdateAsync rather than get-modify-set, which would silently drop the other
+-- server\'s changes.
+
+local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+
+local Crew = require(game.ReplicatedStorage.GoobShared.Crew)
+
+local CrewStore = {}
+
+local store = DataStoreService:GetDataStore("GoobCrews_v1")
+local memory: { [string]: any } = {}
+local tagIndex: { [string]: string } = {}
+local enabled = true
+
+local function key(id: string): string
+    return "crew_" .. id
+end
+
+local function fallback(): boolean
+    return (not enabled) or RunService:IsStudio()
+end
+
+function CrewStore.get(id: string?): any
+    if not id then return nil end
+    if memory[id] then return memory[id] end
+    if fallback() then return nil end
+    local ok, res = pcall(function() return store:GetAsync(key(id)) end)
+    if not ok then
+        enabled = false
+        warn("[Goob/Crew] store unavailable; running in memory")
+        return nil
+    end
+    if res then memory[id] = res end
+    return res
+end
+
+function CrewStore.findByTag(tag: string): any
+    local id = tagIndex[tag]
+    if id then return CrewStore.get(id) end
+    for _, crew in pairs(memory) do
+        if crew.tag == tag then return crew end
+    end
+    if fallback() then return nil end
+    local ok, res = pcall(function() return store:GetAsync("tag_" .. tag) end)
+    if ok and res then
+        tagIndex[tag] = res
+        return CrewStore.get(res)
+    end
+    return nil
+end
+
+function CrewStore.create(name: string, tag: string, ownerId: number, ownerName: string): any?
+    if CrewStore.findByTag(tag) then return nil end
+    local id = HttpService:GenerateGUID(false)
+    local crew = Crew.blank(id, name, tag, ownerId, Crew.currentWeek())
+    crew.members[tostring(ownerId)].name = ownerName
+    memory[id] = crew
+    tagIndex[tag] = id
+    if not fallback() then
+        pcall(function()
+            store:SetAsync(key(id), crew)
+            store:SetAsync("tag_" .. tag, id)
+        end)
+    end
+    return crew
+end
+
+-- Mutate under UpdateAsync so two servers changing the same crew cannot clobber
+-- each other. `mutator` receives the authoritative copy and returns it changed.
+function CrewStore.update(id: string, mutator: (any) -> any?): any?
+    local current = CrewStore.get(id)
+    if not current then return nil end
+
+    if fallback() then
+        local changed = mutator(current)
+        if changed then memory[id] = changed end
+        return changed or current
+    end
+
+    local ok, res = pcall(function()
+        return store:UpdateAsync(key(id), function(stored)
+            local base = stored or current
+            return mutator(base) or base
+        end)
+    end)
+    if not ok then
+        warn("[Goob/Crew] update failed for " .. id)
+        return current
+    end
+    memory[id] = res
+    return res
+end
+
+function CrewStore.isEnabled(): boolean
+    return enabled
+end
+
+return CrewStore
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CritterService.luau — the ACTIVE half of the loop.
 --
 -- Grow a Garden's weakness is that there is almost nothing to do while you
@@ -1611,7 +2669,7 @@ function CritterService.start()
 end
 
 return CritterService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000012"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Data.luau — profile persistence.
 --
 -- Uses DataStore with session locking, retry/backoff and a bind-to-close
@@ -1628,6 +2686,8 @@ local HttpService = game:GetService("HttpService")
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
 local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
+local Cosmetics = require(game.ReplicatedStorage.GoobShared.Cosmetics)
+local Season = require(game.ReplicatedStorage.GoobShared.Season)
 
 local Data = {}
 
@@ -1666,6 +2726,13 @@ function Data.blankProfile(userId: number)
         tutorial = Tutorial.blank(),
         crests = 0,
         totalAscensions = 0,
+        pitWins = 0,
+        cosmeticsOwned = Cosmetics.starterOwned(),
+        loadout = Cosmetics.starterLoadout(),
+        season = Season.blank(),
+        achievements = {} :: { [string]: boolean },
+        crewId = nil :: string?,
+        purchases = {} :: { [string]: boolean },
     }
 end
 
@@ -1720,6 +2787,21 @@ function Data.load(player: Player)
     profile.discovered = profile.discovered or {}
     profile.crests = profile.crests or 0
     profile.totalAscensions = profile.totalAscensions or 0
+    profile.pitWins = profile.pitWins or 0
+    profile.achievements = profile.achievements or {}
+    profile.purchases = profile.purchases or {}
+
+    -- Cosmetics: always merge in the starters rather than replacing, so a
+    -- profile written before a slot existed gains the new slot's default
+    -- without losing anything it already owned.
+    profile.cosmeticsOwned = profile.cosmeticsOwned or {}
+    for id in pairs(Cosmetics.starterOwned()) do
+        profile.cosmeticsOwned[id] = true
+    end
+    profile.loadout = Cosmetics.sanitise(profile.loadout, profile.cosmeticsOwned)
+
+    profile.season = profile.season or Season.blank()
+    Season.rollIfNeeded(profile.season)
     -- Players who joined before the tutorial existed already know the game, so
     -- they get it marked complete rather than being walked through it.
     if not profile.tutorial then
@@ -1773,7 +2855,7 @@ function Data.isEnabled(): boolean
 end
 
 return Data
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000013"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000019"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- GoobService.luau — spawns, renders and simulates the Goobs sitting on plots.
 --
 -- The visual gimmick of the whole game lives here: a Goob is a translucent
@@ -2209,7 +3291,303 @@ function GoobService.applyOffline(player: Player)
 end
 
 return GoobService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000014"><Properties><string name="Name">RollService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">PitService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- PitService.luau — runs Sumo Pit matches.
+--
+-- Server-authoritative on everything that decides money: who is in the ring,
+-- who got shoved, who won, who pays. The client owns its ball's movement for
+-- responsiveness, but it does not get a vote on the outcome of a staked match.
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Pit = require(Shared.Pit)
+local Movement = require(Shared.Movement)
+local Format = require(Shared.Format)
+local GoobMath = require(Shared.GoobMath)
+
+local PitService = {}
+
+PitService.onNotify = Instance.new("BindableEvent")
+PitService.onSync = Instance.new("BindableEvent")
+PitService.onResult = Instance.new("BindableEvent")   -- (winner, pot, entrants)
+
+type Entrant = { player: Player, stake: number, alive: boolean }
+
+local queue: { Entrant } = {}
+local match: { entrants: { Entrant }, startedAt: number, pot: number }? = nil
+local lobbyUntil = 0
+local ringPart: BasePart? = nil
+
+-- Injected by init.server so this module needs no knowledge of the others.
+PitService.getProfile = function(_: Player): any return nil end
+PitService.getGoob = function(_: Player): any return nil end
+PitService.getBall = function(_: Player): BasePart? return nil end
+-- Injected so the Pit can move fighters without the anti-cheat undoing it.
+PitService.teleport = function(_: Player, _pos: Vector3) end
+PitService.awardXp = function(_: Player, _source: string) end
+
+local function notify(player: Player, msg: string, kind: string?)
+    PitService.onNotify:Fire(player, msg, kind or "info")
+end
+
+local function broadcastState()
+    local names = {}
+    for _, e in ipairs(match and match.entrants or queue) do
+        if not match or e.alive then table.insert(names, e.player.DisplayName) end
+    end
+    PitService.onSync:Fire({
+        inMatch = match ~= nil,
+        queued = #queue,
+        minPlayers = Pit.MIN_PLAYERS,
+        maxPlayers = Pit.MAX_PLAYERS,
+        lobbySeconds = match and 0 or math.max(0, math.ceil(lobbyUntil - os.clock())),
+        elapsed = match and (os.clock() - match.startedAt) or 0,
+        matchSeconds = Pit.MATCH_SECONDS,
+        radius = match and Pit.radiusAt(os.clock() - match.startedAt) or Pit.START_RADIUS,
+        alive = names,
+        pot = match and match.pot or 0,
+        potText = Format.short(match and match.pot or 0),
+    })
+end
+
+local function inQueue(player: Player): number?
+    for i, e in ipairs(queue) do
+        if e.player == player then return i end
+    end
+    return nil
+end
+
+function PitService.isFighting(player: Player): boolean
+    if not match then return false end
+    for _, e in ipairs(match.entrants) do
+        if e.player == player and e.alive then return true end
+    end
+    return false
+end
+
+function PitService.join(player: Player)
+    if match then
+        notify(player, "A match is already running — wait for the next one.", "warn")
+        return
+    end
+    if inQueue(player) then return end
+    if #queue >= Pit.MAX_PLAYERS then
+        notify(player, "The Pit is full this round.", "warn")
+        return
+    end
+
+    local profile = PitService.getProfile(player)
+    local goob = PitService.getGoob(player)
+    if not profile or not goob then return end
+
+    local stake = Pit.stakeFor(GoobMath.incomePerSecond(goob))
+    if profile.glob < stake then
+        notify(player, ("You need 💧%s to enter."):format(Format.short(stake)), "warn")
+        return
+    end
+
+    table.insert(queue, { player = player, stake = stake, alive = true })
+    notify(player, ("🥊 Entered the Pit. Stake 💧%s. %d/%d waiting.")
+        :format(Format.short(stake), #queue, Pit.MIN_PLAYERS), "good")
+
+    if #queue >= Pit.MIN_PLAYERS and lobbyUntil <= os.clock() then
+        lobbyUntil = os.clock() + Pit.LOBBY_SECONDS
+    end
+    broadcastState()
+end
+
+function PitService.leave(player: Player)
+    local i = inQueue(player)
+    if i then
+        table.remove(queue, i)
+        notify(player, "Left the Pit queue.", "info")
+        if #queue < Pit.MIN_PLAYERS then lobbyUntil = 0 end
+        broadcastState()
+    end
+end
+
+local function eliminate(entrant: Entrant, reason: string)
+    if not entrant.alive then return end
+    entrant.alive = false
+    notify(entrant.player, "💀 Knocked out! " .. reason, "warn")
+    PitService.teleport(entrant.player,
+        Pit.CENTRE + Vector3.new(0, 8, Pit.START_RADIUS + 70))
+end
+
+local function startMatch()
+    local entrants = {}
+    local pot = 0
+    for _, e in ipairs(queue) do
+        local profile = PitService.getProfile(e.player)
+        -- Re-check affordability: Glob may have been spent while queueing.
+        if profile and profile.glob >= e.stake then
+            profile.glob -= e.stake
+            pot += e.stake
+            e.alive = true
+            table.insert(entrants, e)
+            PitService.awardXp(e.player, "pitEnter")
+        else
+            notify(e.player, "You couldn't cover the stake — sat out.", "warn")
+        end
+    end
+    queue = {}
+    lobbyUntil = 0
+
+    if #entrants < Pit.MIN_PLAYERS then
+        -- Refund and abort rather than running a one-player match.
+        for _, e in ipairs(entrants) do
+            local profile = PitService.getProfile(e.player)
+            if profile then profile.glob += e.stake end
+            notify(e.player, "Not enough fighters — stake refunded.", "info")
+        end
+        broadcastState()
+        return
+    end
+
+    match = { entrants = entrants, startedAt = os.clock(), pot = pot }
+
+    for i, e in ipairs(entrants) do
+        local a = (i - 1) / #entrants * math.pi * 2
+        PitService.teleport(e.player, Pit.CENTRE
+            + Vector3.new(math.cos(a) * (Pit.START_RADIUS * 0.6), 10,
+                          math.sin(a) * (Pit.START_RADIUS * 0.6)))
+        notify(e.player, ("🥊 FIGHT! Pot: 💧%s"):format(Format.short(pot)), "good")
+    end
+    broadcastState()
+end
+
+local function endMatch()
+    if not match then return end
+    local alive = {}
+    for _, e in ipairs(match.entrants) do
+        if e.alive then table.insert(alive, e) end
+    end
+
+    local winner = alive[1]
+    if #alive > 1 then
+        -- Timer ran out with several standing: biggest Goob takes it, which is
+        -- the only tiebreak that cannot be gamed by hiding at the edge.
+        table.sort(alive, function(a, b)
+            local ga, gb = PitService.getGoob(a.player), PitService.getGoob(b.player)
+            return (ga and ga.mass or 0) > (gb and gb.mass or 0)
+        end)
+        winner = alive[1]
+    end
+
+    local pot = Pit.payout({ match.pot })
+    if winner then
+        local profile = PitService.getProfile(winner.player)
+        if profile then
+            profile.glob += pot
+            profile.pitWins = (profile.pitWins or 0) + 1
+        end
+        PitService.awardXp(winner.player, "pitWin")
+        notify(winner.player, ("🥇 YOU WON THE PIT! +💧%s"):format(Format.short(pot)), "good")
+        PitService.onResult:Fire(winner.player, pot, match.entrants)
+    else
+        -- Everyone fell out at once: split it back rather than eating it.
+        local share = pot / math.max(1, #match.entrants)
+        for _, e in ipairs(match.entrants) do
+            local profile = PitService.getProfile(e.player)
+            if profile then profile.glob += share end
+            notify(e.player, "Everyone fell out — the pot was split back.", "info")
+        end
+    end
+
+    match = nil
+    broadcastState()
+end
+
+function PitService.start()
+    -- The visible ring.
+    task.spawn(function()
+        local world = Workspace:WaitForChild("GoobWorld")
+        ringPart = world:WaitForChild("PitRing") :: BasePart
+    end)
+
+    task.spawn(function()
+        while true do
+            task.wait(0.1)
+
+            if not match then
+                if #queue >= Pit.MIN_PLAYERS and lobbyUntil > 0 and os.clock() >= lobbyUntil then
+                    startMatch()
+                end
+            else
+                local elapsed = os.clock() - match.startedAt
+                local radius = Pit.radiusAt(elapsed)
+
+                if ringPart then
+                    ringPart.Size = Vector3.new(1.5, radius * 2, radius * 2)
+                end
+
+                -- Eliminations.
+                local aliveCount = 0
+                for _, e in ipairs(match.entrants) do
+                    if e.alive then
+                        local ball = PitService.getBall(e.player)
+                        if not ball or not ball.Parent or not e.player.Parent then
+                            eliminate(e, "left the arena")
+                        elseif not Pit.isInside(ball.Position, elapsed) then
+                            eliminate(e, "out of the ring!")
+                        else
+                            aliveCount += 1
+                        end
+                    end
+                end
+
+                -- Shoves. O(n^2) over at most 8 entrants, ten times a second.
+                for i = 1, #match.entrants do
+                    for j = i + 1, #match.entrants do
+                        local a, b = match.entrants[i], match.entrants[j]
+                        if a.alive and b.alive then
+                            local ba, bb = PitService.getBall(a.player), PitService.getBall(b.player)
+                            local ga, gb = PitService.getGoob(a.player), PitService.getGoob(b.player)
+                            if ba and bb and ga and gb then
+                                local delta = bb.Position - ba.Position
+                                local touching = (ba.Size.X + bb.Size.X) / 2 + 2
+                                if delta.Magnitude < touching and delta.Magnitude > 0.01 then
+                                    local dir = delta.Unit
+                                    local shareA, shareB = Pit.shove(
+                                        ga.mass, ba.AssemblyLinearVelocity,
+                                        gb.mass, bb.AssemblyLinearVelocity)
+                                    ba.AssemblyLinearVelocity = ba.AssemblyLinearVelocity
+                                        - dir * (Pit.SHOVE_IMPULSE * shareA)
+                                    bb.AssemblyLinearVelocity = bb.AssemblyLinearVelocity
+                                        + dir * (Pit.SHOVE_IMPULSE * shareB)
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if aliveCount <= 1 or elapsed >= Pit.MATCH_SECONDS then
+                    endMatch()
+                end
+            end
+            broadcastState()
+        end
+    end)
+end
+
+function PitService.cleanup(player: Player)
+    PitService.leave(player)
+    if match then
+        for _, e in ipairs(match.entrants) do
+            if e.player == player then e.alive = false end
+        end
+    end
+end
+
+function PitService.state()
+    return { inMatch = match ~= nil, queued = #queue }
+end
+
+return PitService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">RollService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- RollService.luau — you don't stand next to your Goob, you ARE your Goob.
 --
 -- This is the change the whole redesign hangs off. Previously the active Goob
@@ -2234,6 +3612,7 @@ local Config = require(Shared.Config)
 local GoobMath = require(Shared.GoobMath)
 local Movement = require(Shared.Movement)
 local Feedstock = require(Shared.Feedstock)
+local Cosmetics = require(Shared.Cosmetics)
 
 local RollService = {}
 
@@ -2359,6 +3738,56 @@ local function buildBall(player: Player, goob): BasePart
     return ball
 end
 
+-- Cosmetics are applied to the live ball rather than baked in at build time,
+-- so equipping something is instant instead of respawning the player's body
+-- out from under them mid-roll.
+function RollService.applyCosmetics(player: Player, loadout: { [string]: string }?)
+    local ball = balls[player.UserId]
+    if not ball or not loadout then return end
+
+    local skin = Cosmetics.get(loadout.skin or "")
+    if skin then
+        if skin.material then ball.Material = skin.material end
+        if skin.colour then ball.Color = skin.colour end
+        -- The default skin keeps the Goob's own hue, which is its identity.
+        ball:SetAttribute("Skin", skin.id)
+    end
+
+    -- Trail. Rebuilt rather than tweaked because Trail needs two attachments
+    -- and changing colour alone would leave a stale one behind.
+    local old = ball:FindFirstChild("GoobTrail")
+    if old then old:Destroy() end
+    local trail = Cosmetics.get(loadout.trail or "")
+    if trail and trail.id ~= "trail_none" and trail.colour then
+        local r = ball.Size.X / 2
+        local a0 = Instance.new("Attachment")
+        a0.Name = "TrailA0"
+        a0.Position = Vector3.new(-r * 0.5, 0, 0)
+        a0.Parent = ball
+        local a1 = Instance.new("Attachment")
+        a1.Name = "TrailA1"
+        a1.Position = Vector3.new(r * 0.5, 0, 0)
+        a1.Parent = ball
+
+        local t = Instance.new("Trail")
+        t.Name = "GoobTrail"
+        t.Attachment0 = a0
+        t.Attachment1 = a1
+        t.Lifetime = 0.8
+        t.MinLength = 0.2
+        t.LightEmission = 0.6
+        t.Transparency = NumberSequence.new(0.25, 1)
+        t.Color = ColorSequence.new(trail.colour)
+        t.Parent = ball
+    end
+
+    -- Eyes and crown ride on the nameplate, which every other player can read
+    -- from across the map. That is the entire point of a cosmetic.
+    ball:SetAttribute("Eyes", loadout.eyes or "")
+    ball:SetAttribute("Crown", loadout.crown or "")
+    RollService.refreshPlate(player)
+end
+
 function RollService.ballFor(player: Player): BasePart?
     return balls[player.UserId]
 end
@@ -2413,6 +3842,28 @@ function RollService.spawn(player: Player, goob, atPosition: Vector3?)
     violations[player.UserId] = 0
 end
 
+-- Move a ball somewhere the SERVER decided it should be.
+--
+-- This exists because the anti-cheat cannot tell the difference between a
+-- client teleporting itself and the server placing a player in the arena. The
+-- first version of the Sumo Pit started a match, dropped both fighters into the
+-- ring, and then the sampler snapped them straight back out again and
+-- eliminated them — every match ended instantly with the pot refunded. Any
+-- legitimate reposition MUST go through here so the sampler is told about it.
+function RollService.teleport(player: Player, position: Vector3)
+    local ball = balls[player.UserId]
+    if not ball then return end
+    ball.CFrame = CFrame.new(position)
+    ball.AssemblyLinearVelocity = Vector3.zero
+    ball.AssemblyAngularVelocity = Vector3.zero
+    local seen = lastSeen[player.UserId]
+    if seen then
+        seen.pos = position
+        seen.t = os.clock()
+    end
+    violations[player.UserId] = 0
+end
+
 function RollService.despawn(player: Player)
     local ball = balls[player.UserId]
     if ball then ball:Destroy() end
@@ -2422,6 +3873,19 @@ end
 
 -- Rebuild only when the size has drifted enough to matter. Rebuilding on every
 -- feed would yank the ball out from under the player mid-roll.
+-- Split out so cosmetics can redraw the plate without needing the Goob record.
+function RollService.refreshPlate(player: Player)
+    local ball = balls[player.UserId]
+    if not ball then return end
+    local plate = ball:FindFirstChild("Plate")
+    local info = plate and plate:FindFirstChild("Info") :: TextLabel?
+    if info then
+        local crown = Cosmetics.get(ball:GetAttribute("Crown") or "")
+        local prefix = (crown and crown.emoji ~= "" and crown.emoji) and (crown.emoji .. " ") or ""
+        info.Text = prefix .. info.Text:gsub("^[^%a%d👑]*", "")
+    end
+end
+
 function RollService.refresh(player: Player, goob)
     local ball = balls[player.UserId]
     if not ball or not goob then return end
@@ -2436,10 +3900,14 @@ function RollService.refresh(player: Player, goob)
     local info = plate and plate:FindFirstChild("Info") :: TextLabel?
     if info then
         local tier = GoobMath.ageTier(goob)
+        local crown = Cosmetics.get(ball:GetAttribute("Crown") or "")
+        local hat = (crown and crown.emoji and crown.emoji ~= "") and (crown.emoji .. " ") or ""
         local crest = (goob.crests and goob.crests > 0)
             and ("👑" .. tostring(goob.crests) .. " ") or ""
-        info.Text = ("%s%s\n%s %s · Gen %d\n⚡ %s")
-            :format(crest, goob.nickname, tier.emoji, tier.name,
+        local tag = ball:GetAttribute("CrewTag")
+        local crew = (tag and tag ~= "") and ("[" .. tag .. "] ") or ""
+        info.Text = ("%s%s%s%s\n%s %s · Gen %d\n⚡ %s")
+            :format(hat, crest, crew, goob.nickname, tier.emoji, tier.name,
                     #goob.lineage + 1, require(Shared.Format).short(GoobMath.power(goob)))
         info.TextColor3 = tier.color
     end
@@ -2478,10 +3946,10 @@ function RollService.start(getGoob: (Player) -> any)
                     end
                     prev.t = now
 
-                    -- Fell off the world.
+                    -- Fell off the world. Recorded as a legitimate move, or the
+                    -- next sample would read the rescue itself as a teleport.
                     if ball.Position.Y < -80 then
-                        ball.CFrame = CFrame.new(0, 30, 40)
-                        ball.AssemblyLinearVelocity = Vector3.zero
+                        RollService.teleport(player, Vector3.new(0, 30, 40))
                     end
                 end
             end
@@ -2490,7 +3958,7 @@ function RollService.start(getGoob: (Player) -> any)
 end
 
 return RollService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000015"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeService.luau — player-to-player Goob trading.
 --
 -- Trading is the reason this game has a community instead of a player count.
@@ -2771,7 +4239,7 @@ function TradeService.cleanup(player: Player)
 end
 
 return TradeService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
 -- WorldBuilder.luau — the entire map, generated at runtime from code.
 --
 -- WHY FROM CODE: a .rbxl is an opaque binary. If the map lives in the place
@@ -2796,6 +4264,7 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
+local Pit = require(game.ReplicatedStorage.GoobShared.Pit)
 
 local WorldBuilder = {}
 
@@ -2971,6 +4440,23 @@ function WorldBuilder.build()
     local world = Instance.new("Folder")
     world.Name = "GoobWorld"
     world.Parent = Workspace
+
+    -- Roads connect the zones, so travelling somewhere is a route rather than a
+    -- void. Declared early because the Pit uses it too.
+    local function road(from: Vector3, to: Vector3, width: number)
+        local mid = (from + to) / 2
+        local delta = to - from
+        local len = delta.Magnitude
+        local r = part({
+            Name = "Road",
+            Size = Vector3.new(width, 4, len),
+            CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
+            Color = Color3.fromRGB(198, 186, 162),
+            Material = Enum.Material.Concrete,
+        })
+        r.Parent = world
+        return r
+    end
 
     -- ── HUB ────────────────────────────────────────────────────────────────
     local hub = WorldBuilder.ZONES.HUB
@@ -3176,24 +4662,62 @@ function WorldBuilder.build()
         l.Parent = glow
     end
 
-    -- ── Roads between zones, so rolling somewhere is a route not a void ────
-    local function road(from: Vector3, to: Vector3, width: number)
-        local mid = (from + to) / 2
-        local delta = to - from
-        local len = delta.Magnitude
-        local r = part({
-            Name = "Road",
-            Size = Vector3.new(width, 4, len),
-            CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
-            Color = Color3.fromRGB(198, 186, 162),
-            Material = Enum.Material.Concrete,
-        })
-        r.Parent = world
-        return r
-    end
     road(hub.centre + Vector3.new(150, -1, 0), sy.centre + Vector3.new(-220, -1, 0), 60)
     road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
     road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -290), 60)
+
+    -- ── THE SUMO PIT ───────────────────────────────────────────────────────
+    -- Raised and open-sided on purpose: the danger has to be legible from
+    -- outside, and you have to be able to SEE someone get knocked off.
+    local pitFloor = disc(world, Pit.CENTRE - Vector3.new(0, 4, 0), Pit.START_RADIUS + 8, 8,
+        Color3.fromRGB(74, 58, 58), Enum.Material.Slate, "PitFloor")
+    pitFloor.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.4, 1, 1)
+
+    -- The ring itself is resized live by PitService as the arena closes.
+    local ring = part({
+        Name = "PitRing",
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(1.5, Pit.START_RADIUS * 2, Pit.START_RADIUS * 2),
+        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, 0.6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+        Color = Color3.fromRGB(255, 90, 110),
+        Material = Enum.Material.Neon,
+        Transparency = 0.45,
+        CanCollide = false,
+    })
+    ring.Parent = world
+
+    -- Stands, so a crowd has somewhere to watch from.
+    for i = 1, 24 do
+        local a = (i / 24) * math.pi * 2
+        local r = Pit.START_RADIUS + 34
+        local seat = part({
+            Name = "PitStand",
+            Size = Vector3.new(14, 10, 14),
+            Position = Pit.CENTRE + Vector3.new(math.cos(a) * r, -2, math.sin(a) * r),
+            Color = Color3.fromRGB(96, 74, 74),
+            Material = Enum.Material.WoodPlanks,
+        })
+        seat.Parent = world
+    end
+
+    signpost(world, Pit.CENTRE + Vector3.new(0, -4, Pit.START_RADIUS + 60), "🥊", "SUMO PIT",
+        "stake 💧 · last one in wins", Color3.fromRGB(255, 110, 130))
+
+    -- The join pad. Rolling onto it enters the queue; nothing drags you here.
+    local joinPad = part({
+        Name = "PitJoinPad",
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(2, 34, 34),
+        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, -3, Pit.START_RADIUS + 40))
+            * CFrame.Angles(0, 0, math.rad(90)),
+        Color = Color3.fromRGB(120, 255, 160),
+        Material = Enum.Material.Neon,
+        Transparency = 0.35,
+        CanCollide = false,
+    })
+    joinPad.Parent = world
+
+    road(hub.centre + Vector3.new(0, -1, 150), Pit.CENTRE + Vector3.new(0, -4, -Pit.START_RADIUS - 50), 60)
 
     local spawn = Instance.new("SpawnLocation")
     spawn.Name = "HubSpawn"
@@ -3250,7 +4774,7 @@ function WorldBuilder.altarPosition(): Vector3
 end
 
 return WorldBuilder
-]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000029"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000028"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000023"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000037"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000036"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000031"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.client.luau — client entry point.
 --
 -- Everything the client does falls into one of three jobs:
@@ -3273,12 +4797,14 @@ local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Format = require(Shared.Format)
 local Movement = require(Shared.Movement)
+local Pit = require(Shared.Pit)
 
 local Theme = require(script.Theme)
 local Layout = require(script.Layout)
 local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 local Roll = require(script.Roll)
+local Panels = require(script.Panels)
 
 local player = Players.LocalPlayer
 local gui = Hud.build()
@@ -3852,6 +5378,112 @@ do
     end)
 end
 
+-- ── Panels: wardrobe, season, crew ─────────────────────────────────────────
+
+Panels.onEquip = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
+Panels.onClaimSeason = function(tier, premium) Net.get("ClaimSeason"):FireServer(tier, premium) end
+Panels.onCrewCreate = function(name, tag) Net.get("CrewCreate"):FireServer(name, tag) end
+Panels.onCrewJoin = function(tag) Net.get("CrewJoin"):FireServer(tag) end
+Panels.onCrewLeave = function() Net.get("CrewLeave"):FireServer() end
+Panels.onCrewClaim = function() Net.get("CrewClaim"):FireServer() end
+Panels.onBuy = function(id)
+    -- MarketplaceService prompts live client-side. The server is told so it can
+    -- say plainly when something is not on sale yet, rather than the prompt
+    -- failing silently and reading as a broken shop.
+    Net.get("BuyProduct"):FireServer(id)
+end
+
+Net.get("CrewSync").OnClientEvent:Connect(function(data)
+    Panels.setCrew(data)
+    local snap = Hud.getState()
+    if snap then Hud.update(snap) end
+end)
+
+-- ── The Sumo Pit ───────────────────────────────────────────────────────────
+-- A small always-on strip rather than a menu: the Pit is a place you roll to,
+-- and what matters is knowing whether a match is forming while you are moving.
+do
+    local Layout = require(script.Layout)
+
+    local strip = Instance.new("Frame")
+    strip.Name = "PitStrip"
+    strip.BackgroundColor3 = Theme.BG
+    strip.BackgroundTransparency = 0.1
+    strip.Visible = false
+    strip.Parent = gui
+    Theme.corner(strip, 14)
+    Theme.stroke(strip, Color3.fromRGB(255, 110, 130), 3)
+
+    local line = Theme.label({ Name = "Line", Text = "", TextSize = 15 })
+    line.Parent = strip
+    local sub = Theme.label({ Name = "Sub", Text = "", TextSize = 12,
+        TextColor3 = Theme.TEXT_DIM })
+    sub.Parent = strip
+
+    local joinBtn = Theme.button("🥊 ENTER", Theme.BAD, UDim2.fromOffset(110, 36))
+    joinBtn.Name = "PitJoin"
+    joinBtn.TextSize = 15
+    joinBtn.Parent = strip
+    local queued = false
+    joinBtn.Activated:Connect(function()
+        if queued then Net.get("PitLeave"):FireServer()
+        else Net.get("PitJoin"):FireServer() end
+    end)
+
+    local function layoutPit()
+        local compact = Layout.isCompact()
+        local touch = Layout.isTouch()
+        local u = Layout.usable()
+        local w = compact and math.min(300, u.X - 24) or 340
+        local h = compact and 60 or 66
+        strip.Size = UDim2.fromOffset(w, h)
+        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 90 or 108)
+        line.Position = UDim2.fromOffset(12, 6)
+        line.Size = UDim2.new(1, -140, 0, 20)
+        sub.Position = UDim2.fromOffset(12, 28)
+        sub.Size = UDim2.new(1, -140, 0, 18)
+        local bh = touch and Layout.MIN_TAP or 36
+        joinBtn.Size = UDim2.fromOffset(110, bh)
+        joinBtn.Position = UDim2.fromOffset(w - 122, math.floor((h - bh) / 2))
+    end
+    layoutPit()
+    Layout.changed.Event:Connect(layoutPit)
+
+    local nearPit = false
+    RunService.Heartbeat:Connect(function()
+        local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+        if not ball then strip.Visible = false return end
+        local d = (ball.Position - Pit.CENTRE).Magnitude
+        nearPit = d < Pit.START_RADIUS + 140
+        strip.Visible = nearPit
+    end)
+
+    Net.get("PitSync").OnClientEvent:Connect(function(state)
+        if not state then return end
+        local mine = false
+        for _, n in ipairs(state.alive or {}) do
+            if n == player.DisplayName then mine = true end
+        end
+        queued = mine and not state.inMatch
+
+        if state.inMatch then
+            line.Text = ("🥊 FIGHT  ·  %d left"):format(#(state.alive or {}))
+            sub.Text = ("ring %.0f  ·  pot 💧%s  ·  %ds")
+                :format(state.radius or 0, state.potText or "0",
+                        math.max(0, math.ceil((state.matchSeconds or 0) - (state.elapsed or 0))))
+            joinBtn.Text = mine and "FIGHTING" or "WATCHING"
+            joinBtn.BackgroundColor3 = Theme.BG_SOFT
+        else
+            line.Text = ("🥊 SUMO PIT  ·  %d/%d waiting"):format(state.queued or 0, state.minPlayers or 2)
+            sub.Text = (state.lobbySeconds or 0) > 0
+                and ("starting in %ds"):format(state.lobbySeconds)
+                or "stake 💧 · last one in the ring wins the pot"
+            joinBtn.Text = queued and "✖ LEAVE" or "🥊 ENTER"
+            joinBtn.BackgroundColor3 = queued and Theme.WARN or Theme.BAD
+        end
+    end)
+end
+
 -- ── Ascension prompt ───────────────────────────────────────────────────────
 do
     local Layout = require(script.Layout)
@@ -3939,7 +5571,7 @@ task.spawn(function()
 end)
 
 print("[GULP A GOOB] client ready")
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000025"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Hud.luau — the heads-up display and the Goob drawer.
 --
 -- Layout philosophy: ONE always-visible number (your power), ONE always-visible
@@ -3959,6 +5591,7 @@ local Net = require(Shared.Net)
 
 local Theme = require(script.Parent.Theme)
 local Layout = require(script.Parent.Layout)
+local Panels = require(script.Parent.Panels)
 
 local player = Players.LocalPlayer
 local Hud = {}
@@ -3986,6 +5619,10 @@ local openButton: TextButton
 local standTitle: TextLabel
 local drawerTitle: TextLabel
 local drawerHint: TextLabel
+local tabBar: Frame
+local tabButtons: { [string]: TextButton } = {}
+local tabContent: Frame
+local currentTab = "goobs"
 
 local state: any = nil
 local displayedGlob = 0
@@ -4273,9 +5910,53 @@ function Hud.applyLayout()
         eggButton.TextSize = compact and 16 or 16
     end
 
-    local listTop = eggY + (compact and 52 or 42)
+    -- Tab strip sits under the title; everything below it belongs to the tab.
+    local tabH = touch and 42 or 34
+    local tabTop = compact and 36 or 44
+    tabBar.Position = UDim2.fromOffset(10, tabTop)
+    tabBar.Size = UDim2.new(1, -20, 0, tabH)
+    local tabW = math.floor((drawerW - 20 - 18) / 4)
+    local ti = 0
+    for _, id in ipairs({ "goobs", "wear", "season", "crew" }) do
+        local btn = tabButtons[id]
+        if btn then
+            btn.Size = UDim2.fromOffset(tabW, tabH)
+            btn.Position = UDim2.fromOffset(ti * (tabW + 6), 0)
+            btn.BackgroundColor3 = (currentTab == id) and Theme.ACCENT or Theme.BG_SOFT
+            btn.TextColor3 = (currentTab == id) and Color3.fromRGB(20, 22, 34) or Theme.TEXT
+            ti += 1
+        end
+    end
+
+    local contentTop = tabTop + tabH + 8
+    local isGoobs = currentTab == "goobs"
+
+    standFrame.Visible = compact and isGoobs or not compact
+    if eggButton then eggButton.Visible = isGoobs end
+    drawerHint.Visible = (not compact) and isGoobs
+    drawerList.Visible = isGoobs
+    tabContent.Visible = not isGoobs
+
+    tabContent.Position = UDim2.fromOffset(10, contentTop)
+    tabContent.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - contentTop - 10))
+
+    local listTop = isGoobs and (compact and (eggY + 52) or (eggY + 42)) or contentTop
+    if compact and isGoobs then
+        standFrame.Position = UDim2.fromOffset(10, contentTop)
+        if eggButton then
+            eggButton.Position = UDim2.fromOffset(10, contentTop + standH + 6)
+        end
+        listTop = contentTop + standH + 6 + 52
+    elseif isGoobs then
+        if eggButton then eggButton.Position = UDim2.fromOffset(10, contentTop) end
+        listTop = contentTop + 42
+    end
     drawerList.Position = UDim2.fromOffset(10, listTop)
     drawerList.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - listTop - 10))
+
+    if not isGoobs and state then
+        Panels.render(currentTab, tabContent, state)
+    end
 
     -- The one action button. On touch it goes in the gap between the
     -- thumbstick and the jump button, which is the only reachable part of the
@@ -4421,6 +6102,39 @@ function Hud.build(): ScreenGui
     eggButton.TextSize = 16
     eggButton.Parent = drawer
     eggButton.Activated:Connect(function() Hud.onBuyEgg() end)
+
+    -- Tabs. Everything that used to want its own floating button lives here
+    -- instead: a phone has room for about one persistent control.
+    tabBar = Instance.new("Frame")
+    tabBar.Name = "Tabs"
+    tabBar.BackgroundTransparency = 1
+    tabBar.Parent = drawer
+
+    local TABS = {
+        { id = "goobs",  label = "🫧" },
+        { id = "wear",   label = "👕" },
+        { id = "season", label = "⭐" },
+        { id = "crew",   label = "🛡️" },
+    }
+    for i, t in ipairs(TABS) do
+        local btn = Theme.button(t.label, Theme.BG_SOFT, UDim2.fromOffset(50, 34))
+        btn.Name = "Tab_" .. t.id
+        btn.TextSize = 18
+        btn.TextColor3 = Theme.TEXT
+        btn.LayoutOrder = i
+        btn.Parent = tabBar
+        tabButtons[t.id] = btn
+        btn.Activated:Connect(function()
+            currentTab = t.id
+            Hud.applyLayout()
+        end)
+    end
+
+    tabContent = Instance.new("Frame")
+    tabContent.Name = "TabContent"
+    tabContent.BackgroundTransparency = 1
+    tabContent.Visible = false
+    tabContent.Parent = drawer
 
     drawerList = Instance.new("ScrollingFrame")
     drawerList.Position = UDim2.fromOffset(14, 106)
@@ -4640,7 +6354,13 @@ function Hud.update(snap: any)
         end
     end
 
-    if drawerOpen then rebuildDrawer() end
+    if drawerOpen then
+        if currentTab == "goobs" then
+            rebuildDrawer()
+        else
+            Panels.render(currentTab, tabContent, snap)
+        end
+    end
 end
 
 -- Wired up by init.client.
@@ -4662,7 +6382,7 @@ function Hud.setTradeOpen(open: boolean)
 end
 
 return Hud
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000019"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000026"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Layout.luau — one place that knows how big the screen is and what that means.
 --
 -- MEASURED, NOT GUESSED. Before this existed, at 568x320 (iPhone SE landscape)
@@ -4799,7 +6519,390 @@ function Layout.start()
 end
 
 return Layout
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">Roll</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000027"><Properties><string name="Name">Panels</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Panels.luau — the wardrobe, season pass and crew screens.
+--
+-- All three live as TABS inside the drawer that already exists rather than
+-- behind new buttons. A phone screen has room for roughly one persistent
+-- control, and every extra floating button is one more thing competing with
+-- the thumbstick for a thumb.
+
+local Players = game:GetService("Players")
+
+local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
+local Cosmetics = require(Shared.Cosmetics)
+local Season = require(Shared.Season)
+local Format = require(Shared.Format)
+
+local Theme = require(script.Parent.Theme)
+local Layout = require(script.Parent.Layout)
+
+local Panels = {}
+
+Panels.onEquip = function(_kind: string, _id: string) end
+Panels.onClaimSeason = function(_tier: number, _premium: boolean) end
+Panels.onCrewCreate = function(_name: string, _tag: string) end
+Panels.onCrewJoin = function(_tag: string) end
+Panels.onCrewLeave = function() end
+Panels.onCrewClaim = function() end
+Panels.onBuy = function(_id: string) end
+
+local function clear(frame: Instance)
+    for _, c in ipairs(frame:GetChildren()) do
+        if c:IsA("GuiObject") then c:Destroy() end
+    end
+end
+
+local function scroller(parent: Frame): ScrollingFrame
+    local sf = Instance.new("ScrollingFrame")
+    sf.Size = UDim2.fromScale(1, 1)
+    sf.BackgroundTransparency = 1
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 6
+    sf.ScrollBarImageColor3 = Theme.ACCENT
+    sf.Parent = parent
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 6)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = sf
+    return sf
+end
+
+-- ── Wardrobe ───────────────────────────────────────────────────────────────
+
+local function wardrobe(container: Frame, state: any)
+    local touch = Layout.isTouch()
+    local sf = scroller(container)
+    local order = 0
+    local rowH = touch and 52 or 42
+
+    for _, kind in ipairs(Cosmetics.KINDS) do
+        local header = Theme.label({
+            Size = UDim2.new(1, -10, 0, 24),
+            Text = ({ skin = "🎨 SKIN", trail = "💫 TRAIL",
+                      eyes = "👀 EYES", crown = "👑 CROWN" })[kind] or kind,
+            TextSize = 16, TextColor3 = Theme.GOLD,
+        })
+        order += 1; header.LayoutOrder = order; header.Parent = sf
+
+        for _, item in ipairs(Cosmetics.ofKind(kind)) do
+            local ownsIt = (state.cosmeticsOwned or {})[item.id] == true
+            local worn = (state.loadout or {})[kind] == item.id
+
+            local row = Instance.new("TextButton")
+            row.Size = UDim2.new(1, -10, 0, rowH)
+            row.BackgroundColor3 = worn and Theme.BG_SOFT or Theme.PANEL
+            row.Text = ""
+            row.AutoButtonColor = ownsIt
+            Theme.corner(row, 10)
+            Theme.stroke(row, worn and Theme.ACCENT
+                or (Cosmetics.RARITY_COLOUR[item.rarity] or Theme.PANEL), worn and 3 or 2)
+            order += 1; row.LayoutOrder = order; row.Parent = sf
+
+            local swatch = Instance.new("Frame")
+            swatch.Size = UDim2.fromOffset(rowH - 16, rowH - 16)
+            swatch.Position = UDim2.fromOffset(8, 8)
+            swatch.BackgroundColor3 = item.colour or Cosmetics.RARITY_COLOUR[item.rarity]
+            swatch.Parent = row
+            Theme.corner(swatch, (rowH - 16) / 2)
+
+            if item.emoji and item.emoji ~= "" then
+                local e = Theme.label({ Size = UDim2.fromScale(1, 1), Text = item.emoji,
+                    TextSize = 18, TextXAlignment = Enum.TextXAlignment.Center })
+                e.Parent = swatch
+            end
+
+            local name = Theme.label({
+                Position = UDim2.fromOffset(rowH + 2, 4),
+                Size = UDim2.new(1, -rowH - 90, 0, 20),
+                Text = item.name, TextSize = 15,
+                TextColor3 = ownsIt and Theme.TEXT or Theme.TEXT_DIM,
+            })
+            name.Parent = row
+
+            local sub = Theme.label({
+                Position = UDim2.fromOffset(rowH + 2, rowH - 26),
+                Size = UDim2.new(1, -rowH - 90, 0, 18),
+                Text = ownsIt and (worn and "equipped" or "tap to wear")
+                    or ({ season = "season tier " .. tostring(item.tier or "?"),
+                          shop = "in the shop", ascend = "ascension reward",
+                          achievement = "achievement", starter = "" })[item.source] or "locked",
+                TextSize = 12,
+                TextColor3 = ownsIt and Theme.TEXT_DIM
+                    or (Cosmetics.RARITY_COLOUR[item.rarity] or Theme.TEXT_DIM),
+            })
+            sub.Parent = row
+
+            local badge = Theme.label({
+                Position = UDim2.new(1, -84, 0, 4),
+                Size = UDim2.fromOffset(78, rowH - 8),
+                Text = ownsIt and (worn and "✓" or "") or "🔒",
+                TextSize = 18, TextXAlignment = Enum.TextXAlignment.Right,
+                TextColor3 = worn and Theme.GOOD or Theme.TEXT_DIM,
+            })
+            badge.Parent = row
+
+            if ownsIt then
+                row.Activated:Connect(function() Panels.onEquip(kind, item.id) end)
+            end
+        end
+    end
+    sf.CanvasSize = UDim2.new(0, 0, 0, order * (rowH + 6) + 20)
+end
+
+-- ── Season pass ────────────────────────────────────────────────────────────
+
+local function season(container: Frame, state: any)
+    local s = state.season
+    if not s then return end
+    local touch = Layout.isTouch()
+
+    local head = Instance.new("Frame")
+    head.Size = UDim2.new(1, -10, 0, 66)
+    head.BackgroundColor3 = Theme.PANEL
+    head.Parent = container
+    Theme.corner(head, 12)
+
+    local title = Theme.label({
+        Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -24, 0, 22),
+        Text = ("⭐ %s"):format(s.name or "Season"), TextSize = 17, TextColor3 = Theme.GOLD,
+    })
+    title.Parent = head
+
+    local tierLabel = Theme.label({
+        Position = UDim2.fromOffset(12, 28), Size = UDim2.new(1, -24, 0, 18),
+        Text = ("Tier %d / %d   ·   %s / %s xp today")
+            :format(s.tier, s.tiers, Format.comma(s.dailyXp or 0), Format.comma(s.dailyCap or 0)),
+        TextSize = 13, TextColor3 = Theme.TEXT_DIM,
+    })
+    tierLabel.Parent = head
+
+    local barBg = Instance.new("Frame")
+    barBg.Position = UDim2.fromOffset(12, 48)
+    barBg.Size = UDim2.new(1, -24, 0, 10)
+    barBg.BackgroundColor3 = Theme.BG
+    barBg.Parent = head
+    Theme.corner(barBg, 5)
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.fromScale(math.clamp(s.progress or 0, 0, 1), 1)
+    bar.BackgroundColor3 = Theme.GOLD
+    bar.Parent = barBg
+    Theme.corner(bar, 5)
+
+    local body = Instance.new("Frame")
+    body.Position = UDim2.fromOffset(0, 72)
+    body.Size = UDim2.new(1, 0, 1, -72)
+    body.BackgroundTransparency = 1
+    body.Parent = container
+    local sf = scroller(body)
+
+    local order = 0
+    if not s.premium then
+        local buy = Theme.button("💎 GET PREMIUM — unlock the second column",
+            Theme.GOLD, UDim2.new(1, -10, 0, touch and 48 or 38))
+        buy.TextSize = 14
+        order += 1; buy.LayoutOrder = order; buy.Parent = sf
+        buy.Activated:Connect(function() Panels.onBuy("premium_pass") end)
+    end
+
+    local claimable = s.claimable or {}
+    if #claimable == 0 then
+        local none = Theme.label({
+            Size = UDim2.new(1, -10, 0, 30),
+            Text = "Nothing to claim — keep playing to earn tiers.",
+            TextSize = 13, TextColor3 = Theme.TEXT_DIM,
+        })
+        order += 1; none.LayoutOrder = order; none.Parent = sf
+    end
+
+    for _, entry in ipairs(claimable) do
+        local item = Cosmetics.get(entry.cosmetic)
+        local row = Theme.button(
+            ("🎁 Tier %d%s — %s"):format(entry.tier, entry.premium and " 💎" or "",
+                item and item.name or entry.cosmetic),
+            entry.premium and Theme.GOLD or Theme.GOOD,
+            UDim2.new(1, -10, 0, touch and 48 or 38))
+        row.TextSize = 14
+        order += 1; row.LayoutOrder = order; row.Parent = sf
+        row.Activated:Connect(function() Panels.onClaimSeason(entry.tier, entry.premium) end)
+    end
+
+    -- The rest of the track, so the reason to keep playing is visible.
+    local rewards = Season.rewards()
+    for t = 1, Season.TIERS do
+        local row = rewards[t]
+        if row.free or row.premium then
+            local names = {}
+            if row.free then
+                local i = Cosmetics.get(row.free); table.insert(names, i and i.name or row.free)
+            end
+            if row.premium then
+                local i = Cosmetics.get(row.premium)
+                table.insert(names, "💎 " .. (i and i.name or row.premium))
+            end
+            local done = t <= s.tier
+            local line = Theme.label({
+                Size = UDim2.new(1, -10, 0, 22),
+                Text = ("%s Tier %-2d  %s"):format(done and "✓" or "·", t, table.concat(names, "  ·  ")),
+                TextSize = 13,
+                TextColor3 = done and Theme.TEXT or Theme.TEXT_DIM,
+            })
+            order += 1; line.LayoutOrder = order; line.Parent = sf
+        end
+    end
+    sf.CanvasSize = UDim2.new(0, 0, 0, order * 34 + 20)
+end
+
+-- ── Crew ───────────────────────────────────────────────────────────────────
+
+local crewState: any = nil
+function Panels.setCrew(data: any) crewState = data end
+function Panels.crew() return crewState end
+
+local function crew(container: Frame, _state: any)
+    local touch = Layout.isTouch()
+    local btnH = touch and 48 or 38
+
+    if not crewState then
+        local blurb = Theme.label({
+            Position = UDim2.fromOffset(6, 0), Size = UDim2.new(1, -12, 0, 54),
+            Text = "Crews share a weekly goal. Nobody hits it alone — and everyone who helps gets paid.",
+            TextSize = 14, TextWrapped = true, TextColor3 = Theme.TEXT_DIM,
+        })
+        blurb.Parent = container
+
+        local nameBox = Instance.new("TextBox")
+        nameBox.Position = UDim2.fromOffset(6, 60)
+        nameBox.Size = UDim2.new(1, -12, 0, btnH)
+        nameBox.BackgroundColor3 = Theme.BG_SOFT
+        nameBox.Font = Theme.FONT
+        nameBox.TextSize = 15
+        nameBox.TextColor3 = Theme.TEXT
+        nameBox.PlaceholderText = "Crew name (3–20 letters)"
+        nameBox.Text = ""
+        nameBox.ClearTextOnFocus = false
+        nameBox.Parent = container
+        Theme.corner(nameBox, 10)
+
+        local tagBox = Instance.new("TextBox")
+        tagBox.Position = UDim2.fromOffset(6, 60 + btnH + 8)
+        tagBox.Size = UDim2.new(0.45, -12, 0, btnH)
+        tagBox.BackgroundColor3 = Theme.BG_SOFT
+        tagBox.Font = Theme.FONT
+        tagBox.TextSize = 15
+        tagBox.TextColor3 = Theme.TEXT
+        tagBox.PlaceholderText = "TAG"
+        tagBox.Text = ""
+        tagBox.ClearTextOnFocus = false
+        tagBox.Parent = container
+        Theme.corner(tagBox, 10)
+
+        local create = Theme.button("🛡️ FOUND CREW", Theme.GOOD,
+            UDim2.new(0.55, -12, 0, btnH))
+        create.Position = UDim2.new(0.45, 6, 0, 60 + btnH + 8)
+        create.TextSize = 14
+        create.Parent = container
+        create.Activated:Connect(function()
+            Panels.onCrewCreate(nameBox.Text, tagBox.Text)
+        end)
+
+        local joinBox = Instance.new("TextBox")
+        joinBox.Position = UDim2.fromOffset(6, 60 + (btnH + 8) * 2 + 8)
+        joinBox.Size = UDim2.new(0.45, -12, 0, btnH)
+        joinBox.BackgroundColor3 = Theme.BG_SOFT
+        joinBox.Font = Theme.FONT
+        joinBox.TextSize = 15
+        joinBox.TextColor3 = Theme.TEXT
+        joinBox.PlaceholderText = "Join by TAG"
+        joinBox.Text = ""
+        joinBox.ClearTextOnFocus = false
+        joinBox.Parent = container
+        Theme.corner(joinBox, 10)
+
+        local join = Theme.button("JOIN", Theme.ACCENT, UDim2.new(0.55, -12, 0, btnH))
+        join.Position = UDim2.new(0.45, 6, 0, 60 + (btnH + 8) * 2 + 8)
+        join.TextSize = 14
+        join.Parent = container
+        join.Activated:Connect(function() Panels.onCrewJoin(joinBox.Text) end)
+        return
+    end
+
+    local head = Theme.label({
+        Position = UDim2.fromOffset(6, 0), Size = UDim2.new(1, -12, 0, 26),
+        Text = ("🛡️ [%s] %s"):format(crewState.tag, crewState.name),
+        TextSize = 19, TextColor3 = Theme.GOLD,
+    })
+    head.Parent = container
+
+    local goal = Theme.label({
+        Position = UDim2.fromOffset(6, 28), Size = UDim2.new(1, -12, 0, 20),
+        Text = ("%s  —  %s / %s"):format(crewState.goalLabel,
+            Format.comma(crewState.progress), Format.comma(crewState.target)),
+        TextSize = 14,
+    })
+    goal.Parent = container
+
+    local barBg = Instance.new("Frame")
+    barBg.Position = UDim2.fromOffset(6, 50)
+    barBg.Size = UDim2.new(1, -12, 0, 12)
+    barBg.BackgroundColor3 = Theme.BG
+    barBg.Parent = container
+    Theme.corner(barBg, 6)
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.fromScale(math.clamp(crewState.progress / math.max(1, crewState.target), 0, 1), 1)
+    bar.BackgroundColor3 = crewState.complete and Theme.GOOD or Theme.ACCENT
+    bar.Parent = barBg
+    Theme.corner(bar, 6)
+
+    local y = 68
+    if crewState.complete and not crewState.claimed then
+        local claim = Theme.button("🎁 CLAIM WEEKLY REWARD", Theme.GOOD,
+            UDim2.new(1, -12, 0, btnH))
+        claim.Position = UDim2.fromOffset(6, y)
+        claim.TextSize = 14
+        claim.Parent = container
+        claim.Activated:Connect(function() Panels.onCrewClaim() end)
+        y += btnH + 8
+    end
+
+    local listHolder = Instance.new("Frame")
+    listHolder.Position = UDim2.fromOffset(6, y)
+    listHolder.Size = UDim2.new(1, -12, 1, -y - btnH - 14)
+    listHolder.BackgroundTransparency = 1
+    listHolder.Parent = container
+    local sf = scroller(listHolder)
+
+    for i, m in ipairs(crewState.members or {}) do
+        local row = Theme.label({
+            Size = UDim2.new(1, -8, 0, 22),
+            Text = ("%d. %s%s  —  %s"):format(i, m.name,
+                m.owner and " 👑" or "", Format.comma(m.contributed)),
+            TextSize = 13,
+        })
+        row.LayoutOrder = i
+        row.Parent = sf
+    end
+    sf.CanvasSize = UDim2.new(0, 0, 0, #(crewState.members or {}) * 28 + 10)
+
+    local leave = Theme.button("LEAVE CREW", Theme.BAD, UDim2.new(1, -12, 0, btnH))
+    leave.Position = UDim2.new(0, 6, 1, -btnH - 6)
+    leave.TextSize = 14
+    leave.Parent = container
+    leave.Activated:Connect(function() Panels.onCrewLeave() end)
+end
+
+-- ── Entry point ────────────────────────────────────────────────────────────
+
+function Panels.render(tab: string, container: Frame, state: any)
+    clear(container)
+    if not state then return end
+    if tab == "wear" then wardrobe(container, state)
+    elseif tab == "season" then season(container, state)
+    elseif tab == "crew" then crew(container, state) end
+end
+
+return Panels
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000028"><Properties><string name="Name">Roll</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Roll.luau — the controller.
 --
 -- Direct velocity control rather than forces. Forces are more "physical" and
@@ -5004,7 +7107,7 @@ function Roll.bindInput()
 end
 
 return Roll
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000029"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Theme.luau — one place for every colour, corner radius and font in the UI.
 -- Chunky, high-contrast, oversized text: the target player is nine and may be
 -- on a phone, so nothing here is subtle.
@@ -5076,7 +7179,7 @@ function Theme.button(text: string, color: Color3, size: UDim2): TextButton
 end
 
 return Theme
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000030"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeUi.luau — the trade window.
 --
 -- The whole design goal is SCAM RESISTANCE made visible. A young player cannot

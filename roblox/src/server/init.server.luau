@@ -17,6 +17,11 @@ local Feedstock = require(Shared.Feedstock)
 local Tutorial = require(Shared.Tutorial)
 local Ascension = require(Shared.Ascension)
 local Movement = require(Shared.Movement)
+local Cosmetics = require(Shared.Cosmetics)
+local Season = require(Shared.Season)
+local Pit = require(Shared.Pit)
+local Crew = require(Shared.Crew)
+local Monetisation = require(Shared.Monetisation)
 
 local Data = require(script.Data)
 local WorldBuilder = require(script.WorldBuilder)
@@ -24,6 +29,8 @@ local GoobService = require(script.GoobService)
 local CritterService = require(script.CritterService)
 local TradeService = require(script.TradeService)
 local RollService = require(script.RollService)
+local PitService = require(script.PitService)
+local CrewStore = require(script.CrewStore)
 
 print(("[%s] booting…"):format(Config.GAME_NAME))
 
@@ -132,6 +139,23 @@ local function snapshot(player: Player)
         ascendReason = ascReason,
         ascendPreview = (active and canAsc) and Ascension.preview(active, crests) or nil,
         colossalMass = Config.COLOSSAL_MASS,
+        pitWins = profile.pitWins or 0,
+        cosmeticsOwned = profile.cosmeticsOwned,
+        loadout = profile.loadout,
+        season = {
+            id = profile.season.id,
+            name = Season.NAME,
+            xp = profile.season.xp,
+            tier = Season.tierOf(profile.season.xp),
+            tiers = Season.TIERS,
+            progress = Season.progressInTier(profile.season.xp),
+            premium = profile.season.premium == true,
+            claimable = Season.claimable(profile.season),
+            dailyXp = profile.season.dailyXp or 0,
+            dailyCap = Season.DAILY_CAP,
+        },
+        achievements = profile.achievements,
+        crewId = profile.crewId,
         moveTopSpeed = active and Movement.topSpeed(active.mass) or 0,
         moveStopDistance = active and Movement.stoppingDistance(active.mass) or 0,
         datastore = Data.isEnabled(),
@@ -155,6 +179,130 @@ local function push(player: Player)
     local snap = snapshot(player)
     if snap then StateSync:FireClient(player, snap) end
 end
+
+-- NOTE ON PLACEMENT: everything below must come AFTER notify, push and the
+-- remote handles. `local function` only enters scope from its declaration
+-- onward, so an earlier draft had this block sitting above them and every call
+-- to notify/push/Net resolved to a nil GLOBAL — the server booted fine and then
+-- errored the moment a player joined or ascended.
+
+-- ── Season XP, achievements and crew contributions ─────────────────────────
+-- One funnel, so every gameplay event feeds the progression systems without
+-- each handler having to remember four different calls.
+
+local function grantCosmetic(player: Player, id: string, why: string)
+    local profile = Data.get(player)
+    if not profile or not id then return end
+    if profile.cosmeticsOwned[id] then return end
+    local item = Cosmetics.get(id)
+    if not item then return end
+    profile.cosmeticsOwned[id] = true
+    notify(player, ("🎁 Unlocked %s (%s) — %s"):format(item.name, item.rarity, why), "good")
+end
+
+local function checkAchievements(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local function earn(id: string, cosmetic: string, label: string)
+        if profile.achievements[id] then return end
+        profile.achievements[id] = true
+        grantCosmetic(player, cosmetic, label)
+    end
+    if (profile.pitWins or 0) >= 5 then earn("pitwins5", "crown_pit", "5 Pit wins") end
+    if (profile.totalAscensions or 0) >= 3 then earn("colossal3", "skin_goldleaf", "3 ascensions") end
+    for id in pairs(profile.discovered or {}) do
+        local item = Feedstock.get(id)
+        if item and item.rarity == "Secret" then
+            earn("secret1", "eyes_ghost", "caught a Secret")
+            break
+        end
+    end
+    -- Ascension crowns.
+    for count, cosmetic in pairs(Cosmetics.ASCEND_REWARDS) do
+        if (profile.totalAscensions or 0) >= count then
+            grantCosmetic(player, cosmetic, ("Crest %d"):format(count))
+        end
+    end
+end
+
+local CREW_METRIC_FOR = {
+    catch = "catches", gulp = "gulps", pitWin = "pitWins",
+    trade = "trades", ascend = "ascensions",
+}
+
+local function progress(player: Player, source: string, amount: number?)
+    local profile = Data.get(player)
+    if not profile then return end
+
+    local gained, tierUp = Season.award(profile.season, source)
+    if tierUp then
+        local tier = Season.tierOf(profile.season.xp)
+        notify(player, ("⭐ Season tier %d!"):format(tier), "good")
+    end
+
+    local metric = CREW_METRIC_FOR[source]
+    if metric and profile.crewId then
+        local week = Crew.currentWeek()
+        CrewStore.update(profile.crewId, function(crew)
+            Crew.contribute(crew, player.UserId, metric, amount or 1, week)
+            return crew
+        end)
+    end
+    checkAchievements(player)
+end
+
+-- Defined here rather than beside the crew remotes: `local function` only
+-- enters scope from its declaration onward, so defining it further down left
+-- onJoin resolving `syncCrew` to a nil GLOBAL and every player join erroring.
+local function syncCrew(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local crew = profile.crewId and CrewStore.get(profile.crewId) or nil
+    if not crew then
+        Net.get("CrewSync"):FireClient(player, nil)
+        return
+    end
+    local week = Crew.currentWeek()
+    Crew.rollWeek(crew, week)
+    local goal = Crew.goalForWeek(week)
+    local members = {}
+    for idStr, m in pairs(crew.members or {}) do
+        table.insert(members, { name = m.name, contributed = m.contributed or 0,
+                                owner = tostring(crew.ownerId) == idStr })
+    end
+    table.sort(members, function(a, b) return a.contributed > b.contributed end)
+    Net.get("CrewSync"):FireClient(player, {
+        id = crew.id, name = crew.name, tag = crew.tag,
+        members = members, memberCount = Crew.memberCount(crew),
+        maxMembers = Crew.MAX_MEMBERS,
+        goalLabel = goal.label:format(Format.comma(goal.target)),
+        progress = crew.progress or 0,
+        target = goal.target,
+        complete = Crew.isComplete(crew, week),
+        claimed = Crew.hasClaimed(crew, player.UserId),
+    })
+end
+
+-- ── Sumo Pit wiring ────────────────────────────────────────────────────────
+PitService.getProfile = function(p) return Data.get(p) end
+PitService.getGoob = activeGoobOf
+PitService.getBall = function(p) return RollService.ballFor(p) end
+PitService.teleport = function(p, pos) RollService.teleport(p, pos) end
+PitService.awardXp = function(p, source) progress(p, source) end
+PitService.start()
+
+PitService.onNotify.Event:Connect(function(player, msg, kind)
+    notify(player, msg, kind)
+end)
+PitService.onSync.Event:Connect(function(state)
+    Net.get("PitSync"):FireAllClients(state)
+end)
+PitService.onResult.Event:Connect(function(winner)
+    local profile = Data.get(winner)
+    if profile then checkAchievements(winner) end
+    push(winner)
+end)
+
 
 -- Steady HUD refresh. 2Hz is plenty — glob ticks up smoothly on the client via
 -- local interpolation, so we only need to correct it twice a second.
@@ -221,12 +369,16 @@ local function onJoin(player: Player)
     end)
 
     GoobService.spawnFor(player)
+    RollService.applyCosmetics(player, profile.loadout)
+    syncCrew(player)
+    checkAchievements(player)
     push(player)
 
     notify(player, "Welcome to " .. Config.GAME_NAME .. "! Chase the junk, feed your Goob. 🫧", "good")
 end
 
 local function onLeave(player: Player)
+    PitService.cleanup(player)
     TradeService.cleanup(player)
     GoobService.despawnFor(player)
     WorldBuilder.releasePlot(player)
@@ -264,6 +416,8 @@ Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: I
     local ok, item = CritterService.tryCatch(player, target)
     if not ok then return end
     GoobService.feed(player, item.id)
+    progress(player, "catch")
+    if item.rarity == "Secret" then progress(player, "secret") end
     teach(player, "catch")
     -- The digest step has no action of its own; catching enough to see the
     -- number move is the lesson, so it clears alongside.
@@ -344,6 +498,8 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
     profile.activeGoobId = profile.goobs[1].id
 
     GoobService.spawnFor(player)
+    progress(player, "ascend")
+    checkAchievements(player)
     Data.save(player)
     push(player)
 
@@ -355,6 +511,167 @@ Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
 end)
 
 -- Purely cosmetic: lets other clients see a dash trail.
+Net.get("EquipCosmetic").OnServerEvent:Connect(function(player: Player, kind: string, id: string)
+    local profile = Data.get(player)
+    if not profile or typeof(kind) ~= "string" or typeof(id) ~= "string" then return end
+    local item = Cosmetics.get(id)
+    if not item or item.kind ~= kind then return end
+    if not Cosmetics.owns(profile.cosmeticsOwned, id) then
+        notify(player, "You don't own that yet.", "warn")
+        return
+    end
+    profile.loadout[kind] = id
+    profile.loadout = Cosmetics.sanitise(profile.loadout, profile.cosmeticsOwned)
+    RollService.applyCosmetics(player, profile.loadout)
+    push(player)
+end)
+
+Net.get("ClaimSeason").OnServerEvent:Connect(function(player: Player, tier: number, premium: boolean)
+    local profile = Data.get(player)
+    if not profile or typeof(tier) ~= "number" then return end
+    premium = premium == true
+    if premium and not profile.season.premium then
+        notify(player, "That reward needs the Premium pass.", "warn")
+        return
+    end
+    -- Re-derive what is claimable server-side; the client sends only which row
+    -- it pressed, never whether it has earned it.
+    for _, entry in ipairs(Season.claimable(profile.season)) do
+        if entry.tier == tier and entry.premium == premium then
+            Season.markClaimed(profile.season, tier, premium)
+            grantCosmetic(player, entry.cosmetic, ("Season tier %d"):format(tier))
+            push(player)
+            return
+        end
+    end
+    notify(player, "Nothing to claim there.", "warn")
+end)
+
+Net.get("PitJoin").OnServerEvent:Connect(function(player: Player)
+    PitService.join(player)
+    push(player)
+end)
+Net.get("PitLeave").OnServerEvent:Connect(function(player: Player)
+    PitService.leave(player)
+    push(player)
+end)
+
+-- ── Crews ──────────────────────────────────────────────────────────────────
+
+
+Net.get("CrewCreate").OnServerEvent:Connect(function(player: Player, name: string, tag: string)
+    local profile = Data.get(player)
+    if not profile then return end
+    if profile.crewId then notify(player, "You're already in a crew.", "warn") return end
+
+    local cleanName = Crew.sanitiseName(name)
+    local cleanTag = Crew.sanitiseTag(tag)
+    if not cleanName or not cleanTag then
+        notify(player, "Name 3-20 letters, tag 2-4 letters.", "warn")
+        return
+    end
+
+    local goob = GoobService.activeGoob(profile)
+    local cost = goob and GoobMath.incomePerSecond(goob) * Crew.CREATE_COST_SECONDS or 1000
+    if profile.glob < cost then
+        notify(player, ("Founding a crew costs 💧%s."):format(Format.short(cost)), "warn")
+        return
+    end
+
+    -- Filter anything other players will read, exactly as for Goob names.
+    local ok, filteredName = pcall(function()
+        local res = TextService:FilterStringAsync(cleanName, player.UserId,
+            Enum.TextFilterContext.PublicChat)
+        return res:GetNonChatStringForBroadcastAsync()
+    end)
+    if not ok then notify(player, "Couldn't check that name, try again.", "warn") return end
+
+    local crew = CrewStore.create(filteredName, cleanTag, player.UserId, player.DisplayName)
+    if not crew then
+        notify(player, "That tag is taken — pick another.", "warn")
+        return
+    end
+    profile.glob -= cost
+    profile.crewId = crew.id
+    notify(player, ("🛡️ Founded [%s] %s!"):format(crew.tag, crew.name), "good")
+    syncCrew(player); push(player)
+end)
+
+Net.get("CrewJoin").OnServerEvent:Connect(function(player: Player, tag: string)
+    local profile = Data.get(player)
+    if not profile then return end
+    if profile.crewId then notify(player, "Leave your crew first.", "warn") return end
+    local cleanTag = Crew.sanitiseTag(tag)
+    if not cleanTag then notify(player, "That's not a valid tag.", "warn") return end
+
+    local crew = CrewStore.findByTag(cleanTag)
+    if not crew then notify(player, "No crew with that tag.", "warn") return end
+    if Crew.isFull(crew) then notify(player, "That crew is full.", "warn") return end
+
+    CrewStore.update(crew.id, function(c)
+        c.members = c.members or {}
+        c.members[tostring(player.UserId)] = {
+            name = player.DisplayName, joined = os.time(), contributed = 0,
+        }
+        return c
+    end)
+    profile.crewId = crew.id
+    notify(player, ("🛡️ Joined [%s] %s!"):format(crew.tag, crew.name), "good")
+    syncCrew(player); push(player)
+end)
+
+Net.get("CrewLeave").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile or not profile.crewId then return end
+    local id = profile.crewId
+    CrewStore.update(id, function(c)
+        if c.members then c.members[tostring(player.UserId)] = nil end
+        return c
+    end)
+    profile.crewId = nil
+    notify(player, "Left your crew.", "info")
+    syncCrew(player); push(player)
+end)
+
+Net.get("CrewClaim").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile or not profile.crewId then return end
+    local week = Crew.currentWeek()
+    local crew = CrewStore.get(profile.crewId)
+    if not crew or not Crew.isComplete(crew, week) then
+        notify(player, "The weekly goal isn't finished yet.", "warn")
+        return
+    end
+    if Crew.hasClaimed(crew, player.UserId) then
+        notify(player, "You've already claimed this week.", "warn")
+        return
+    end
+    local goob = GoobService.activeGoob(profile)
+    local reward = goob and GoobMath.incomePerSecond(goob) * Crew.REWARD_GLOB_SECONDS or 500
+    profile.glob += reward
+    CrewStore.update(crew.id, function(c) Crew.markClaimed(c, player.UserId) return c end)
+    progress(player, "crewGoal")
+    notify(player, ("🛡️ Crew goal reward: +💧%s"):format(Format.short(reward)), "good")
+    syncCrew(player); push(player)
+end)
+
+Net.get("BuyProduct").OnServerEvent:Connect(function(player: Player, id: string)
+    -- Purchases are prompted client-side via MarketplaceService; this handler
+    -- exists so the client can ask what is actually for sale, and so an
+    -- unconfigured product says so plainly instead of failing silently.
+    if typeof(id) ~= "string" then return end
+    for _, list in ipairs({ Monetisation.GAMEPASSES, Monetisation.PRODUCTS }) do
+        for _, entry in ipairs(list) do
+            if entry.id == id then
+                if not Monetisation.isConfigured(entry) then
+                    notify(player, "That isn't on sale yet.", "warn")
+                end
+                return
+            end
+        end
+    end
+end)
+
 Net.get("Dashed").OnServerEvent:Connect(function(player: Player)
     local ball = RollService.ballFor(player)
     if not ball then return end
@@ -405,6 +722,7 @@ Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
     local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
     table.insert(profile.goobs, egg)
     teach(player, "egg")
+    progress(player, "egg")
     push(player)
     notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
         :format(egg.nickname), "good")
@@ -445,6 +763,7 @@ Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: strin
     end
 
     teach(player, "snack")
+    progress(player, "snack")
     push(player)
     if best then
         notify(player, ("%s %s — %d items, best was %s (%s)")
@@ -458,6 +777,7 @@ Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: stri
     if ok then
         notify(player, "😋 GULP! Your Goob swallowed another one.", "good")
         teach(player, "gulp")
+        progress(player, "gulp")
         push(player)
     elseif reason then
         notify(player, reason, "warn")

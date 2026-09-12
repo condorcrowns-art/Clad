@@ -21,12 +21,14 @@ local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Format = require(Shared.Format)
 local Movement = require(Shared.Movement)
+local Pit = require(Shared.Pit)
 
 local Theme = require(script.Theme)
 local Layout = require(script.Layout)
 local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 local Roll = require(script.Roll)
+local Panels = require(script.Panels)
 
 local player = Players.LocalPlayer
 local gui = Hud.build()
@@ -596,6 +598,112 @@ do
                 pip.BackgroundColor3 = Theme.BG_SOFT
                 pip.BackgroundTransparency = 0.35
             end
+        end
+    end)
+end
+
+-- ── Panels: wardrobe, season, crew ─────────────────────────────────────────
+
+Panels.onEquip = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
+Panels.onClaimSeason = function(tier, premium) Net.get("ClaimSeason"):FireServer(tier, premium) end
+Panels.onCrewCreate = function(name, tag) Net.get("CrewCreate"):FireServer(name, tag) end
+Panels.onCrewJoin = function(tag) Net.get("CrewJoin"):FireServer(tag) end
+Panels.onCrewLeave = function() Net.get("CrewLeave"):FireServer() end
+Panels.onCrewClaim = function() Net.get("CrewClaim"):FireServer() end
+Panels.onBuy = function(id)
+    -- MarketplaceService prompts live client-side. The server is told so it can
+    -- say plainly when something is not on sale yet, rather than the prompt
+    -- failing silently and reading as a broken shop.
+    Net.get("BuyProduct"):FireServer(id)
+end
+
+Net.get("CrewSync").OnClientEvent:Connect(function(data)
+    Panels.setCrew(data)
+    local snap = Hud.getState()
+    if snap then Hud.update(snap) end
+end)
+
+-- ── The Sumo Pit ───────────────────────────────────────────────────────────
+-- A small always-on strip rather than a menu: the Pit is a place you roll to,
+-- and what matters is knowing whether a match is forming while you are moving.
+do
+    local Layout = require(script.Layout)
+
+    local strip = Instance.new("Frame")
+    strip.Name = "PitStrip"
+    strip.BackgroundColor3 = Theme.BG
+    strip.BackgroundTransparency = 0.1
+    strip.Visible = false
+    strip.Parent = gui
+    Theme.corner(strip, 14)
+    Theme.stroke(strip, Color3.fromRGB(255, 110, 130), 3)
+
+    local line = Theme.label({ Name = "Line", Text = "", TextSize = 15 })
+    line.Parent = strip
+    local sub = Theme.label({ Name = "Sub", Text = "", TextSize = 12,
+        TextColor3 = Theme.TEXT_DIM })
+    sub.Parent = strip
+
+    local joinBtn = Theme.button("🥊 ENTER", Theme.BAD, UDim2.fromOffset(110, 36))
+    joinBtn.Name = "PitJoin"
+    joinBtn.TextSize = 15
+    joinBtn.Parent = strip
+    local queued = false
+    joinBtn.Activated:Connect(function()
+        if queued then Net.get("PitLeave"):FireServer()
+        else Net.get("PitJoin"):FireServer() end
+    end)
+
+    local function layoutPit()
+        local compact = Layout.isCompact()
+        local touch = Layout.isTouch()
+        local u = Layout.usable()
+        local w = compact and math.min(300, u.X - 24) or 340
+        local h = compact and 60 or 66
+        strip.Size = UDim2.fromOffset(w, h)
+        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 90 or 108)
+        line.Position = UDim2.fromOffset(12, 6)
+        line.Size = UDim2.new(1, -140, 0, 20)
+        sub.Position = UDim2.fromOffset(12, 28)
+        sub.Size = UDim2.new(1, -140, 0, 18)
+        local bh = touch and Layout.MIN_TAP or 36
+        joinBtn.Size = UDim2.fromOffset(110, bh)
+        joinBtn.Position = UDim2.fromOffset(w - 122, math.floor((h - bh) / 2))
+    end
+    layoutPit()
+    Layout.changed.Event:Connect(layoutPit)
+
+    local nearPit = false
+    RunService.Heartbeat:Connect(function()
+        local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+        if not ball then strip.Visible = false return end
+        local d = (ball.Position - Pit.CENTRE).Magnitude
+        nearPit = d < Pit.START_RADIUS + 140
+        strip.Visible = nearPit
+    end)
+
+    Net.get("PitSync").OnClientEvent:Connect(function(state)
+        if not state then return end
+        local mine = false
+        for _, n in ipairs(state.alive or {}) do
+            if n == player.DisplayName then mine = true end
+        end
+        queued = mine and not state.inMatch
+
+        if state.inMatch then
+            line.Text = ("🥊 FIGHT  ·  %d left"):format(#(state.alive or {}))
+            sub.Text = ("ring %.0f  ·  pot 💧%s  ·  %ds")
+                :format(state.radius or 0, state.potText or "0",
+                        math.max(0, math.ceil((state.matchSeconds or 0) - (state.elapsed or 0))))
+            joinBtn.Text = mine and "FIGHTING" or "WATCHING"
+            joinBtn.BackgroundColor3 = Theme.BG_SOFT
+        else
+            line.Text = ("🥊 SUMO PIT  ·  %d/%d waiting"):format(state.queued or 0, state.minPlayers or 2)
+            sub.Text = (state.lobbySeconds or 0) > 0
+                and ("starting in %ds"):format(state.lobbySeconds)
+                or "stake 💧 · last one in the ring wins the pot"
+            joinBtn.Text = queued and "✖ LEAVE" or "🥊 ENTER"
+            joinBtn.BackgroundColor3 = queued and Theme.WARN or Theme.BAD
         end
     end)
 end

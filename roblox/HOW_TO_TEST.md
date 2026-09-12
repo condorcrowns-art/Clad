@@ -64,6 +64,30 @@ the game: ascend as many times as you can, holding the oldest Goobs when you do.
 **Read `DESIGN.md`** for the full reasoning, including why there's no PvP yet,
 why guilds would be premature, and what can and can't be sold for Robux.
 
+## v5: everything else
+
+**Tabs in the drawer** (🫧 MY GOOBS): 🫧 Goobs · 👕 Wear · ⭐ Season · 🛡️ Crew.
+
+- **👕 Wardrobe** — 30 cosmetics across skins, trails, eyes and crowns. Skins
+  change your body material and colour; trails follow you; crowns and crew tags
+  show on your nameplate. Locked items say exactly how to get them.
+- **⭐ Season pass** — 50 tiers, XP from *playing*. Daily cap of 7,000 (~2h),
+  so the track takes ~40 days. Premium adds a second reward column on tiers you
+  already earned; it never sells tiers.
+- **🛡️ Crews** — found one for 10 minutes of income, or join by 4-letter tag.
+  A rotating weekly goal nobody hits alone; everyone who helped gets paid.
+
+**🥊 The Sumo Pit** — roll south of the hub. Stake Glob, last one in the ring
+takes the pot. The ring shrinks and closes hard at the end.
+
+**You can never lose a Goob in the Pit.** Glob only. That is deliberate and
+permanent — a Goob that can be taken by force is a Goob nobody will trade.
+
+**Monetisation is scaffolded, not live.** Every gamepass and product has
+`assetId = 0`, so nothing is offered for sale until you put real IDs in
+`src/shared/Monetisation.luau`. A test fails the build if anything purchasable
+would touch mass, age, luck or Secrets.
+
 ## There's a coach now
 
 A brand-new save gets a gold banner at the top walking you through the whole

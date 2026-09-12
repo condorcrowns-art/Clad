@@ -23,6 +23,7 @@ local Config = require(Shared.Config)
 local GoobMath = require(Shared.GoobMath)
 local Movement = require(Shared.Movement)
 local Feedstock = require(Shared.Feedstock)
+local Cosmetics = require(Shared.Cosmetics)
 
 local RollService = {}
 
@@ -148,6 +149,56 @@ local function buildBall(player: Player, goob): BasePart
     return ball
 end
 
+-- Cosmetics are applied to the live ball rather than baked in at build time,
+-- so equipping something is instant instead of respawning the player's body
+-- out from under them mid-roll.
+function RollService.applyCosmetics(player: Player, loadout: { [string]: string }?)
+    local ball = balls[player.UserId]
+    if not ball or not loadout then return end
+
+    local skin = Cosmetics.get(loadout.skin or "")
+    if skin then
+        if skin.material then ball.Material = skin.material end
+        if skin.colour then ball.Color = skin.colour end
+        -- The default skin keeps the Goob's own hue, which is its identity.
+        ball:SetAttribute("Skin", skin.id)
+    end
+
+    -- Trail. Rebuilt rather than tweaked because Trail needs two attachments
+    -- and changing colour alone would leave a stale one behind.
+    local old = ball:FindFirstChild("GoobTrail")
+    if old then old:Destroy() end
+    local trail = Cosmetics.get(loadout.trail or "")
+    if trail and trail.id ~= "trail_none" and trail.colour then
+        local r = ball.Size.X / 2
+        local a0 = Instance.new("Attachment")
+        a0.Name = "TrailA0"
+        a0.Position = Vector3.new(-r * 0.5, 0, 0)
+        a0.Parent = ball
+        local a1 = Instance.new("Attachment")
+        a1.Name = "TrailA1"
+        a1.Position = Vector3.new(r * 0.5, 0, 0)
+        a1.Parent = ball
+
+        local t = Instance.new("Trail")
+        t.Name = "GoobTrail"
+        t.Attachment0 = a0
+        t.Attachment1 = a1
+        t.Lifetime = 0.8
+        t.MinLength = 0.2
+        t.LightEmission = 0.6
+        t.Transparency = NumberSequence.new(0.25, 1)
+        t.Color = ColorSequence.new(trail.colour)
+        t.Parent = ball
+    end
+
+    -- Eyes and crown ride on the nameplate, which every other player can read
+    -- from across the map. That is the entire point of a cosmetic.
+    ball:SetAttribute("Eyes", loadout.eyes or "")
+    ball:SetAttribute("Crown", loadout.crown or "")
+    RollService.refreshPlate(player)
+end
+
 function RollService.ballFor(player: Player): BasePart?
     return balls[player.UserId]
 end
@@ -202,6 +253,28 @@ function RollService.spawn(player: Player, goob, atPosition: Vector3?)
     violations[player.UserId] = 0
 end
 
+-- Move a ball somewhere the SERVER decided it should be.
+--
+-- This exists because the anti-cheat cannot tell the difference between a
+-- client teleporting itself and the server placing a player in the arena. The
+-- first version of the Sumo Pit started a match, dropped both fighters into the
+-- ring, and then the sampler snapped them straight back out again and
+-- eliminated them — every match ended instantly with the pot refunded. Any
+-- legitimate reposition MUST go through here so the sampler is told about it.
+function RollService.teleport(player: Player, position: Vector3)
+    local ball = balls[player.UserId]
+    if not ball then return end
+    ball.CFrame = CFrame.new(position)
+    ball.AssemblyLinearVelocity = Vector3.zero
+    ball.AssemblyAngularVelocity = Vector3.zero
+    local seen = lastSeen[player.UserId]
+    if seen then
+        seen.pos = position
+        seen.t = os.clock()
+    end
+    violations[player.UserId] = 0
+end
+
 function RollService.despawn(player: Player)
     local ball = balls[player.UserId]
     if ball then ball:Destroy() end
@@ -211,6 +284,19 @@ end
 
 -- Rebuild only when the size has drifted enough to matter. Rebuilding on every
 -- feed would yank the ball out from under the player mid-roll.
+-- Split out so cosmetics can redraw the plate without needing the Goob record.
+function RollService.refreshPlate(player: Player)
+    local ball = balls[player.UserId]
+    if not ball then return end
+    local plate = ball:FindFirstChild("Plate")
+    local info = plate and plate:FindFirstChild("Info") :: TextLabel?
+    if info then
+        local crown = Cosmetics.get(ball:GetAttribute("Crown") or "")
+        local prefix = (crown and crown.emoji ~= "" and crown.emoji) and (crown.emoji .. " ") or ""
+        info.Text = prefix .. info.Text:gsub("^[^%a%d👑]*", "")
+    end
+end
+
 function RollService.refresh(player: Player, goob)
     local ball = balls[player.UserId]
     if not ball or not goob then return end
@@ -225,10 +311,14 @@ function RollService.refresh(player: Player, goob)
     local info = plate and plate:FindFirstChild("Info") :: TextLabel?
     if info then
         local tier = GoobMath.ageTier(goob)
+        local crown = Cosmetics.get(ball:GetAttribute("Crown") or "")
+        local hat = (crown and crown.emoji and crown.emoji ~= "") and (crown.emoji .. " ") or ""
         local crest = (goob.crests and goob.crests > 0)
             and ("👑" .. tostring(goob.crests) .. " ") or ""
-        info.Text = ("%s%s\n%s %s · Gen %d\n⚡ %s")
-            :format(crest, goob.nickname, tier.emoji, tier.name,
+        local tag = ball:GetAttribute("CrewTag")
+        local crew = (tag and tag ~= "") and ("[" .. tag .. "] ") or ""
+        info.Text = ("%s%s%s%s\n%s %s · Gen %d\n⚡ %s")
+            :format(hat, crest, crew, goob.nickname, tier.emoji, tier.name,
                     #goob.lineage + 1, require(Shared.Format).short(GoobMath.power(goob)))
         info.TextColor3 = tier.color
     end
@@ -267,10 +357,10 @@ function RollService.start(getGoob: (Player) -> any)
                     end
                     prev.t = now
 
-                    -- Fell off the world.
+                    -- Fell off the world. Recorded as a legitimate move, or the
+                    -- next sample would read the rescue itself as a teleport.
                     if ball.Position.Y < -80 then
-                        ball.CFrame = CFrame.new(0, 30, 40)
-                        ball.AssemblyLinearVelocity = Vector3.zero
+                        RollService.teleport(player, Vector3.new(0, 30, 40))
                     end
                 end
             end

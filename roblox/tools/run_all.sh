@@ -30,13 +30,19 @@ node integration.mjs .. tutorial_test.luau
 echo "── 8. mobile: every panel on 5 real device sizes ──"
 node integration.mjs .. mobile_test.luau
 
-echo "── 9. adversarial: attack it ──"
+echo "── 9. live systems: cosmetics · season · pit · crews ──"
+node integration.mjs .. live_test.luau
+
+echo "── 10. adversarial: attack it ──"
 node integration.mjs .. adversarial.luau
 
-echo "── 10. balance sweeps"
+echo "── 11. balance sweeps"
 node sim.mjs ../src/shared move.luau
 node sim.mjs ../src/shared fmt.luau
-echo "── 11. economy sweeps ──"
+echo "── 12. economy sweeps ──"
+node sim.mjs ../src/shared season.luau
+node sim.mjs ../src/shared pit.luau
+node sim.mjs ../src/shared systems.luau
 node sim.mjs ../src/shared snack.luau
 node sim.mjs ../src/shared egg.luau
 

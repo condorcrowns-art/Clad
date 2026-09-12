@@ -21,6 +21,17 @@ Net.EVENTS = {
     "DismissTutorial",-- C->S  stop showing the first-run guide
     "Ascend",         -- C->S  consume a Colossal Goob for a permanent Crest
     "Dashed",         -- C->S  cosmetic: tell the server a dash happened
+    "EquipCosmetic",  -- C->S  wear something you own
+    "ClaimSeason",    -- C->S  take an earned season reward
+    "PitJoin",        -- C->S  enter the Sumo Pit queue
+    "PitLeave",       -- C->S  leave it
+    "PitSync",        -- S->C  live arena state
+    "CrewCreate",     -- C->S
+    "CrewJoin",       -- C->S
+    "CrewLeave",      -- C->S
+    "CrewClaim",      -- C->S  take the weekly crew reward
+    "CrewSync",       -- S->C
+    "BuyProduct",     -- C->S  prompt a Robux purchase
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S

@@ -41,8 +41,37 @@ HELPERS = {
 findings = []
 
 def keys_in_table(text):
-    """Top-level `Key =` names inside one balanced {...} literal."""
-    return re.findall(r"[{,]\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", text)
+    """
+    `Key =` names at the TOP level of one balanced {...} literal.
+
+    Depth matters. A naive regex also matches keys of nested tables, and this
+    codebase legitimately writes lookup tables inside an argument, e.g.
+
+        Text = ({ skin = "SKIN", crown = "CROWN" })[kind]
+
+    Treating `skin` and `crown` as TextLabel properties produced nine false
+    findings, which is how a checker stops being read.
+    """
+    keys = []
+    depth = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch in "{([":
+            depth += 1
+        elif ch in "})]":
+            depth -= 1
+        elif depth == 1 and (ch.isalpha() or ch == "_"):
+            m = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)", text[i:])
+            if m:
+                # Only a key if what precedes it is the opening brace or a comma.
+                before = text[:i].rstrip()
+                if before.endswith("{") or before.endswith(","):
+                    keys.append(m.group(1))
+                i += m.end() - 1
+        i += 1
+    return keys
 
 def balanced(src, start):
     depth, i = 0, start

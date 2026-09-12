@@ -127,18 +127,19 @@ scarcity thesis, expressed as a live-service calendar.
 
 ---
 
-## Guilds and clans — **not yet, and here's why**
+## Crews — built, once there was something to coordinate
 
-You said don't add it if it doesn't make sense. It doesn't, yet.
+The original answer here was **not yet**, and the reason was that guilds solve
+*coordination* while the game had nothing to coordinate. A crew would have been
+a roster, a chat tab and a name tag.
 
-Guilds solve *coordination*. This game currently has nothing to coordinate:
-no raids, no shared objectives, no group content. A guild system now would be a
-roster, a chat tab and a name tag — surface area with no payoff, in a game whose
-core loop still hasn't been validated by real players.
+**The Sumo Pit changed that.** There is now a shared, repeatable objective, so
+Crews ship with exactly one feature: a **rotating weekly goal** that no single
+player can hit alone, with every member's contribution visible and a payout for
+everyone who helped.
 
-**When it would make sense:** if Pit team modes or a server-wide "feed the
-Colossal Goob" event ship and land. Then a Crew with a shared stash and a weekly
-target has something to actually do. Build the reason first, the roster second.
+Deliberately absent: ranks, permissions trees, a crew bank, crew-vs-crew war.
+Those answer problems this game still does not have.
 
 ---
 
@@ -165,12 +166,19 @@ every interactive point.
 Shipping all of this at once would produce a broad, shallow game. Order by
 "what changes the felt experience most per unit of risk":
 
-1. **Roll + dash + the rebuilt world** — the feel and the blandness, together.
-   Nothing else matters if moving isn't fun.
-2. **Ascension** — gives the numbers a terminus.
-3. **Sumo Pit** — gives other players a reason to exist beyond trading.
-4. **Season pass + cosmetics** — retention and revenue, once there's a game worth
-   retaining people in.
-5. **Crews** — only if 3 lands.
+1. ✅ **Roll + dash + the rebuilt world** — the feel and the blandness, together.
+2. ✅ **Ascension** — gives the numbers a terminus.
+3. ✅ **Sumo Pit** — gives other players a reason to exist beyond trading.
+4. ✅ **Season pass + cosmetics** — 30 cosmetics, a 50-tier track pacing to ~40
+   days, free and premium columns.
+5. ✅ **Crews** — a rotating weekly goal, now that the Pit gives one meaning.
 
-Everything above 3 is speculative until real players touch 1 and 2.
+### Still deliberately absent
+
+- **Trading Goobs in the Pit.** Never. Glob only.
+- **Crew banks, ranks, crew war.** No problem to solve yet.
+- **Anything purchasable that touches mass, age, luck or Secrets.** The
+  `Monetisation.violations()` check fails the build if one is added.
+- **Real asset IDs.** Every gamepass and product is `assetId = 0`, and nothing
+  unconfigured is ever shown for sale — an unconfigured purchase prompt fails
+  silently and reads as a scam. Fill them in from the Creator Dashboard.

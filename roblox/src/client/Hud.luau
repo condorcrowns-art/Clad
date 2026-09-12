@@ -18,6 +18,7 @@ local Net = require(Shared.Net)
 
 local Theme = require(script.Parent.Theme)
 local Layout = require(script.Parent.Layout)
+local Panels = require(script.Parent.Panels)
 
 local player = Players.LocalPlayer
 local Hud = {}
@@ -45,6 +46,10 @@ local openButton: TextButton
 local standTitle: TextLabel
 local drawerTitle: TextLabel
 local drawerHint: TextLabel
+local tabBar: Frame
+local tabButtons: { [string]: TextButton } = {}
+local tabContent: Frame
+local currentTab = "goobs"
 
 local state: any = nil
 local displayedGlob = 0
@@ -332,9 +337,53 @@ function Hud.applyLayout()
         eggButton.TextSize = compact and 16 or 16
     end
 
-    local listTop = eggY + (compact and 52 or 42)
+    -- Tab strip sits under the title; everything below it belongs to the tab.
+    local tabH = touch and 42 or 34
+    local tabTop = compact and 36 or 44
+    tabBar.Position = UDim2.fromOffset(10, tabTop)
+    tabBar.Size = UDim2.new(1, -20, 0, tabH)
+    local tabW = math.floor((drawerW - 20 - 18) / 4)
+    local ti = 0
+    for _, id in ipairs({ "goobs", "wear", "season", "crew" }) do
+        local btn = tabButtons[id]
+        if btn then
+            btn.Size = UDim2.fromOffset(tabW, tabH)
+            btn.Position = UDim2.fromOffset(ti * (tabW + 6), 0)
+            btn.BackgroundColor3 = (currentTab == id) and Theme.ACCENT or Theme.BG_SOFT
+            btn.TextColor3 = (currentTab == id) and Color3.fromRGB(20, 22, 34) or Theme.TEXT
+            ti += 1
+        end
+    end
+
+    local contentTop = tabTop + tabH + 8
+    local isGoobs = currentTab == "goobs"
+
+    standFrame.Visible = compact and isGoobs or not compact
+    if eggButton then eggButton.Visible = isGoobs end
+    drawerHint.Visible = (not compact) and isGoobs
+    drawerList.Visible = isGoobs
+    tabContent.Visible = not isGoobs
+
+    tabContent.Position = UDim2.fromOffset(10, contentTop)
+    tabContent.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - contentTop - 10))
+
+    local listTop = isGoobs and (compact and (eggY + 52) or (eggY + 42)) or contentTop
+    if compact and isGoobs then
+        standFrame.Position = UDim2.fromOffset(10, contentTop)
+        if eggButton then
+            eggButton.Position = UDim2.fromOffset(10, contentTop + standH + 6)
+        end
+        listTop = contentTop + standH + 6 + 52
+    elseif isGoobs then
+        if eggButton then eggButton.Position = UDim2.fromOffset(10, contentTop) end
+        listTop = contentTop + 42
+    end
     drawerList.Position = UDim2.fromOffset(10, listTop)
     drawerList.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - listTop - 10))
+
+    if not isGoobs and state then
+        Panels.render(currentTab, tabContent, state)
+    end
 
     -- The one action button. On touch it goes in the gap between the
     -- thumbstick and the jump button, which is the only reachable part of the
@@ -480,6 +529,39 @@ function Hud.build(): ScreenGui
     eggButton.TextSize = 16
     eggButton.Parent = drawer
     eggButton.Activated:Connect(function() Hud.onBuyEgg() end)
+
+    -- Tabs. Everything that used to want its own floating button lives here
+    -- instead: a phone has room for about one persistent control.
+    tabBar = Instance.new("Frame")
+    tabBar.Name = "Tabs"
+    tabBar.BackgroundTransparency = 1
+    tabBar.Parent = drawer
+
+    local TABS = {
+        { id = "goobs",  label = "🫧" },
+        { id = "wear",   label = "👕" },
+        { id = "season", label = "⭐" },
+        { id = "crew",   label = "🛡️" },
+    }
+    for i, t in ipairs(TABS) do
+        local btn = Theme.button(t.label, Theme.BG_SOFT, UDim2.fromOffset(50, 34))
+        btn.Name = "Tab_" .. t.id
+        btn.TextSize = 18
+        btn.TextColor3 = Theme.TEXT
+        btn.LayoutOrder = i
+        btn.Parent = tabBar
+        tabButtons[t.id] = btn
+        btn.Activated:Connect(function()
+            currentTab = t.id
+            Hud.applyLayout()
+        end)
+    end
+
+    tabContent = Instance.new("Frame")
+    tabContent.Name = "TabContent"
+    tabContent.BackgroundTransparency = 1
+    tabContent.Visible = false
+    tabContent.Parent = drawer
 
     drawerList = Instance.new("ScrollingFrame")
     drawerList.Position = UDim2.fromOffset(14, 106)
@@ -699,7 +781,13 @@ function Hud.update(snap: any)
         end
     end
 
-    if drawerOpen then rebuildDrawer() end
+    if drawerOpen then
+        if currentTab == "goobs" then
+            rebuildDrawer()
+        else
+            Panels.render(currentTab, tabContent, snap)
+        end
+    end
 end
 
 -- Wired up by init.client.
