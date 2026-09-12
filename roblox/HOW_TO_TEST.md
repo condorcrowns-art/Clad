@@ -28,6 +28,42 @@ window and send me what it says.
 
 ---
 
+## v4: you ARE the Goob now
+
+The biggest change. You no longer stand next to your Goob — **you roll as it.**
+
+| Control | Desktop | Mobile |
+|---|---|---|
+| Move | WASD | thumbstick |
+| Jump | Space | Roblox's jump button |
+| **Dash** | Shift or Q | the ⚡ button |
+
+**Mass is now handling.** A big Goob has a higher top speed but takes far
+longer to get going and much longer to stop. A 1T Goob needs 258 studs to
+come to rest; a fresh one needs 8.
+
+**Dash** has 3 charges that refill over ~8 seconds, with exactly **one air
+dash** per jump. It's not flight — it's a correction, and it's the only way
+into The Deep.
+
+### Four zones, not one flat plane
+
+- **The Hub** — trade ring, snack stand, hatchery, leaderboard, ascension
+  altar. Every one signposted with a big icon.
+- **The Scrapyard** — ramps and a half-pipe. Learn to dash here.
+- **The Slickfield** — near-zero friction. You will overshoot.
+- **The Deep** — rarest spawns, across a gap you must dash to clear.
+
+### The goal: ASCEND
+
+At **Colossal**, roll to the 👑 altar at the hub. Your Goob is **destroyed
+forever** and you keep a **Crest** — worn on your nameplate, and every Crest
+makes all food permanently worth +18% more, compounding. That's the point of
+the game: ascend as many times as you can, holding the oldest Goobs when you do.
+
+**Read `DESIGN.md`** for the full reasoning, including why there's no PvP yet,
+why guilds would be premature, and what can and can't be sold for Robux.
+
 ## There's a coach now
 
 A brand-new save gets a gold banner at the top walking you through the whole

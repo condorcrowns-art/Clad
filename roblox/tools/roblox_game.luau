@@ -81,6 +81,8 @@ local function defaultsFor(className)
         d.TextWrapped = false
     end
     if isPart then
+        d.AssemblyLinearVelocity = env.Vector3.new(0, 0, 0)
+        d.AssemblyAngularVelocity = env.Vector3.new(0, 0, 0)
         d.Transparency = 0
         d.Reflectance = 0
         d.Anchored = false
@@ -91,6 +93,11 @@ local function defaultsFor(className)
         d.Size = env.Vector3.new(4, 1, 2)
         d.Position = env.Vector3.new(0, 0, 0)
         d.CFrame = env.CFrame.new(0, 0, 0)
+    end
+    if className == "Camera" then
+        d.CFrame = env.CFrame.new(0, 20, 30)
+        d.CameraType = nil
+        d.FieldOfView = 70
     end
     if className == "Sound" then
         d.Volume = 0.5
@@ -230,6 +237,13 @@ local METHODS = {
         return sigs[key]
     end,
     SetPrimaryPartCFrame = function(self, c) rawget(self, "_props").PrimaryPartCFrame = c end,
+    -- Network ownership is a no-op here, but the call must exist: RollService
+    -- hands the ball to the client and warns if that fails.
+    SetNetworkOwner = function() end,
+    GetNetworkOwner = function() return nil end,
+    SetNetworkOwnershipAuto = function() end,
+    ApplyImpulse = function() end,
+    GetMass = function(self) return 1 end,
     CaptureFocus = function(self) rawget(self, "_props").Focused = true end,
     ReleaseFocus = function(self) rawget(self, "_props").Focused = false end,
     TweenSize = function() end,
@@ -246,6 +260,10 @@ local LAZY_SIGNALS = {
     MouseButton1Up = true, MouseEnter = true, MouseLeave = true,
     InputBegan = true, InputEnded = true, FocusLost = true, Focused = true,
     TouchTap = true, Ended = true,
+    -- Humanoid events. Jumping is how the rolling controller receives the
+    -- player's jump on every platform, so it must exist before it is connected.
+    Jumping = true, Died = true, Seated = true, StateChanged = true,
+    Running = true, FreeFalling = true, Climbing = true,
 }
 
 Instance_mt.__index = function(self, key)

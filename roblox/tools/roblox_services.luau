@@ -76,6 +76,9 @@ function S.addPlayer(name, userId, pos)
     root.CFrame = env.CFrame.new(root.Position.X, root.Position.Y, root.Position.Z)
     root.Parent = char
     local hum = newInstance("Humanoid")
+    hum.MoveDirection = env.Vector3.new(0, 0, 0)
+    hum.WalkSpeed = 16
+    hum.JumpPower = 50
     hum.Parent = char
     char.Parent = Workspace
     rawget(p, "_props").Character = char
@@ -90,16 +93,58 @@ function S.addPlayer(name, userId, pos)
     return p
 end
 
+-- Drive the controller the way a real input would.
+function S.setMoveDirection(p, dir)
+    local hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.MoveDirection = dir end
+end
+
+-- Fire the humanoid's jump the way the jump button or Space bar would.
+function S.jump(p)
+    local hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.Jumping:Fire(true) end
+end
+
 function S.movePlayer(p, pos)
     local root = p.Character:FindFirstChild("HumanoidRootPart")
     root.Position = pos
     root.CFrame = env.CFrame.new(pos.X, pos.Y, pos.Z)
+    -- The rolling body is welded to the character in the real game, so moving
+    -- one moves the other. Without this the harness left the ball at spawn
+    -- while the character walked off, and every catch failed its distance
+    -- check for a reason that cannot happen in the engine.
+    local ball = Workspace:FindFirstChild("GoobBall_" .. tostring(p.UserId))
+    if ball then
+        ball.Position = pos
+        ball.CFrame = env.CFrame.new(pos.X, pos.Y, pos.Z)
+    end
 end
 
 function S.removePlayer(p)
     for i, q in ipairs(roster) do if q == p then table.remove(roster, i) break end end
     rawget(Players, "_signals").PlayerRemoving:Fire(p)
 end
+
+-- Physics stand-ins. There is no simulation here: Raycast always reports solid
+-- ground just below the caster so the controller's grounded check behaves, and
+-- Gravity is the Roblox default. This exercises every code path without
+-- pretending to be a physics engine.
+rawget(Workspace, "_props").Gravity = 196.2
+S.raycastHits = true
+rawget(Workspace, "_props").Raycast = function(_, origin, direction)
+    if not S.raycastHits then return nil end
+    return {
+        Position = env.Vector3.new(origin.X, origin.Y + direction.Y, origin.Z),
+        Normal = env.Vector3.new(0, 1, 0),
+        Distance = math.abs(direction.Y),
+        Material = nil,
+        Instance = nil,
+    }
+end
+local terrain = newInstance("Terrain")
+terrain.Name = "Terrain"
+terrain.Parent = Workspace
+rawget(Workspace, "_props").Terrain = terrain
 
 -- ── Camera / viewport ──────────────────────────────────────────────────────
 -- The whole mobile pass depends on being able to resize the screen and watch
@@ -132,6 +177,11 @@ for _, n in ipairs({ "InputBegan", "InputEnded", "InputChanged", "TouchTap" }) d
     rawget(UserInputService, "_signals")[n] = Signal.new(n)
 end
 rawget(UserInputService, "_props").GetMouseLocation = function() return env.Vector2.new(0, 0) end
+S.keysDown = {}
+rawget(UserInputService, "_props").IsKeyDown = function(_, key)
+    local name = type(key) == "table" and key.Name or tostring(key)
+    return S.keysDown[name] == true
+end
 rawget(UserInputService, "_props").TouchEnabled = false
 rawget(UserInputService, "_props").KeyboardEnabled = true
 rawget(UserInputService, "_props").MouseEnabled = true

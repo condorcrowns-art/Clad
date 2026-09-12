@@ -51,6 +51,8 @@ function Data.blankProfile(userId: number)
         stats = { caught = 0, gulps = 0, trades = 0, bestMass = Config.STARTING_MASS },
         discovered = {} :: { [string]: boolean },
         tutorial = Tutorial.blank(),
+        crests = 0,
+        totalAscensions = 0,
     }
 end
 
@@ -103,6 +105,8 @@ function Data.load(player: Player)
     -- Forward-migrate older saves here as the schema grows.
     profile.stats = profile.stats or { caught = 0, gulps = 0, trades = 0, bestMass = 0 }
     profile.discovered = profile.discovered or {}
+    profile.crests = profile.crests or 0
+    profile.totalAscensions = profile.totalAscensions or 0
     -- Players who joined before the tutorial existed already know the game, so
     -- they get it marked complete rather than being walked through it.
     if not profile.tutorial then

@@ -19,6 +19,8 @@ Net.EVENTS = {
     "BuySnack",       -- C->S  spend Glob on feedstock rolls
     "BuyEgg",         -- C->S  hatch a new Goob (the only source of new Goobs)
     "DismissTutorial",-- C->S  stop showing the first-run guide
+    "Ascend",         -- C->S  consume a Colossal Goob for a permanent Crest
+    "Dashed",         -- C->S  cosmetic: tell the server a dash happened
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S

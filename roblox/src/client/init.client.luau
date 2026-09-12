@@ -20,11 +20,13 @@ local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
 local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Format = require(Shared.Format)
+local Movement = require(Shared.Movement)
 
 local Theme = require(script.Theme)
 local Layout = require(script.Layout)
 local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
+local Roll = require(script.Roll)
 
 local player = Players.LocalPlayer
 local gui = Hud.build()
@@ -447,6 +449,235 @@ end
 
 layoutDialogs()
 Layout.changed.Event:Connect(layoutDialogs)
+
+-- ── Rolling ────────────────────────────────────────────────────────────────
+-- Find our ball whenever the server (re)creates it, point the camera at it, and
+-- drive the controller every frame.
+
+local currentBall: BasePart? = nil
+
+local function findBall(): BasePart?
+    return Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+end
+
+local function bindBall(ball: BasePart?)
+    currentBall = ball
+    local snap = Hud.getState()
+    local mass = 10
+    if snap then
+        for _, g in ipairs(snap.goobs) do
+            if g.isActive then mass = g.mass end
+        end
+    end
+    Roll.setBall(ball, mass)
+    local camera = Workspace.CurrentCamera
+    if camera and ball then
+        camera.CameraSubject = ball
+        camera.CameraType = Enum.CameraType.Custom
+    end
+end
+
+Workspace.ChildAdded:Connect(function(child)
+    if child.Name == "GoobBall_" .. player.UserId then
+        task.wait(0.1)
+        bindBall(child :: BasePart)
+    end
+end)
+
+task.spawn(function()
+    -- The ball may already exist before this script finishes loading.
+    for _ = 1, 60 do
+        local b = findBall()
+        if b then bindBall(b) break end
+        task.wait(0.25)
+    end
+end)
+
+Roll.bindInput()
+Roll.onDash = function()
+    Net.get("Dashed"):FireServer()
+    play(sfxCatch, 0.3)
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    if currentBall and not currentBall.Parent then
+        bindBall(findBall())
+    end
+    Roll.step(dt)
+end)
+
+-- Jump is Roblox's OWN jump button and Space bar. The default controls are
+-- deliberately left enabled: Humanoid.MoveDirection gives us keyboard, gamepad
+-- and the mobile thumbstick for free, and Humanoid.Jumping gives us the jump
+-- button for free. Disabling them to draw our own would have cost the
+-- thumbstick, and adding a second jump button on top of Roblox's would have put
+-- an unreachable control under a real one.
+do
+    local function bindJump(character)
+        local hum = character:WaitForChild("Humanoid", 5)
+        if not hum then return end
+        hum.Jumping:Connect(function(active)
+            if active then Roll.jump() end
+        end)
+    end
+    if player.Character then bindJump(player.Character) end
+    player.CharacterAdded:Connect(bindJump)
+end
+
+-- Dash is the one verb Roblox has no button for, so it gets ours — stacked in
+-- the gap between the thumbstick and the jump button, the only reachable part
+-- of a phone's bottom edge.
+do
+    local Layout = require(script.Layout)
+
+    local dashBtn = Theme.button("⚡", Theme.ACCENT, UDim2.fromOffset(64, 64))
+    dashBtn.Name = "DashButton"
+    dashBtn.TextSize = 30
+    dashBtn.Parent = gui
+    dashBtn.Activated:Connect(function() Roll.dash() end)
+
+    -- A charge meter, because a dash you cannot count is a dash you cannot plan.
+    local meter = Instance.new("Frame")
+    meter.Name = "DashMeter"
+    meter.BackgroundTransparency = 1
+    meter.Parent = gui
+    local pips = {}
+    for i = 1, Movement.DASH_CHARGES do
+        local pip = Instance.new("Frame")
+        pip.Name = "Pip" .. i
+        pip.BackgroundColor3 = Theme.ACCENT
+        pip.Parent = meter
+        Theme.corner(pip, 6)
+        Theme.stroke(pip, Color3.fromRGB(16, 18, 30), 2)
+        table.insert(pips, pip)
+    end
+
+    local function layoutRoll()
+        local compact = Layout.isCompact()
+        local touch = Layout.isTouch()
+        local u = Layout.usable()
+        local size = touch and (Layout.MIN_TAP + 20) or 56
+
+        dashBtn.Visible = touch
+        dashBtn.Size = UDim2.fromOffset(size, size)
+
+        -- Sit directly above the drawer button, both inside the safe gap.
+        local gapL, gapR = Layout.bottomGap()
+        local cx = (gapL + gapR) / 2
+        if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
+        dashBtn.Position = UDim2.fromOffset(
+            math.clamp(cx - size / 2, 8, u.X - size - 8),
+            u.Y - size * 2 - 26)
+
+        local pw, ph, gap = compact and 24 or 34, compact and 8 or 10, 5
+        meter.Size = UDim2.fromOffset(Movement.DASH_CHARGES * (pw + gap), ph)
+        meter.Position = UDim2.fromOffset(
+            touch and math.clamp(cx - meter.Size.X.Offset / 2, 8, u.X - meter.Size.X.Offset - 8)
+                  or math.floor((u.X - meter.Size.X.Offset) / 2),
+            touch and (u.Y - size * 2 - 40) or (u.Y - 34))
+        for i, pip in ipairs(pips) do
+            pip.Size = UDim2.fromOffset(pw, ph)
+            pip.Position = UDim2.fromOffset((i - 1) * (pw + gap), 0)
+        end
+    end
+    layoutRoll()
+    Layout.changed.Event:Connect(layoutRoll)
+
+    RunService.RenderStepped:Connect(function()
+        local have = Roll.charges()
+        for i, pip in ipairs(pips) do
+            if i <= have then
+                pip.BackgroundColor3 = Theme.ACCENT
+                pip.BackgroundTransparency = 0
+            elseif i == have + 1 then
+                pip.BackgroundColor3 = Theme.ACCENT
+                pip.BackgroundTransparency = 1 - Roll.refillProgress() * 0.75
+            else
+                pip.BackgroundColor3 = Theme.BG_SOFT
+                pip.BackgroundTransparency = 0.35
+            end
+        end
+    end)
+end
+
+-- ── Ascension prompt ───────────────────────────────────────────────────────
+do
+    local Layout = require(script.Layout)
+    local prompt = Theme.button("👑 ASCEND", Theme.GOLD, UDim2.fromOffset(240, 60))
+    prompt.Name = "AscendPrompt"
+    prompt.TextSize = 24
+    prompt.Visible = false
+    prompt.Parent = gui
+
+    local confirm = Instance.new("Frame")
+    confirm.Name = "AscendConfirm"
+    confirm.BackgroundColor3 = Theme.BG
+    confirm.Visible = false
+    confirm.ZIndex = 30
+    confirm.Parent = gui
+    Theme.corner(confirm, 18)
+    Theme.stroke(confirm, Theme.GOLD, 4)
+
+    local title = Theme.label({ Text = "👑 ASCEND?", TextSize = 28,
+        TextColor3 = Theme.GOLD, ZIndex = 31 })
+    title.Parent = confirm
+    local body = Theme.label({ Name = "Body", Text = "", TextSize = 16,
+        TextWrapped = true, TextColor3 = Theme.TEXT_DIM, ZIndex = 31,
+        TextYAlignment = Enum.TextYAlignment.Top })
+    body.Parent = confirm
+
+    local yes = Theme.button("👑 DO IT", Theme.GOLD, UDim2.fromOffset(160, 44))
+    yes.Name = "AscendYes"; yes.ZIndex = 31; yes.Parent = confirm
+    local no = Theme.button("✖ NOT YET", Theme.ACCENT, UDim2.fromOffset(160, 44))
+    no.Name = "AscendNo"; no.ZIndex = 31; no.Parent = confirm
+
+    local function layoutAscend()
+        local compact = Layout.isCompact()
+        local u = Layout.usable()
+        local pw = compact and math.min(220, u.X - 40) or 240
+        local ph = compact and Layout.MIN_TAP or 60
+        prompt.Size = UDim2.fromOffset(pw, ph)
+        prompt.Position = UDim2.fromOffset(math.floor((u.X - pw) / 2), math.floor(u.Y * 0.62))
+        prompt.TextSize = compact and 18 or 24
+
+        local size = Layout.panel(440, compact and 270 or 240)
+        confirm.Size = size
+        confirm.Position = Layout.centre(size)
+        local cw, ch = size.X.Offset, size.Y.Offset
+        local pad = compact and 12 or 20
+        title.Position = UDim2.fromOffset(pad, 14)
+        title.Size = UDim2.new(1, -pad * 2, 0, 30)
+        body.Position = UDim2.fromOffset(pad, 50)
+        body.Size = UDim2.new(1, -pad * 2, 0, ch - 50 - (compact and 52 or 60) - pad)
+        local bh = compact and Layout.MIN_TAP or 44
+        local half = math.floor((cw - pad * 3) / 2)
+        yes.Size = UDim2.fromOffset(half, bh)
+        yes.Position = UDim2.fromOffset(pad, ch - bh - pad)
+        no.Size = UDim2.fromOffset(half, bh)
+        no.Position = UDim2.fromOffset(pad * 2 + half, ch - bh - pad)
+    end
+    layoutAscend()
+    Layout.changed.Event:Connect(layoutAscend)
+
+    prompt.Activated:Connect(function()
+        local snap = Hud.getState()
+        local p = snap and snap.ascendPreview
+        if not p then return end
+        body.Text = ("%s will be DESTROYED forever.\n\n⚡ %s of mass and %s of age, gone.\n\nYou keep Crest %d — every bite of food becomes worth %.0f%% instead of %.0f%%, permanently, for every Goob you ever raise.")
+            :format(p.losing, Format.short(p.losingMass), Format.duration(p.losingAge),
+                    p.crestsAfter, p.multiplierAfter * 100, p.multiplierBefore * 100)
+        confirm.Visible = true
+    end)
+    yes.Activated:Connect(function()
+        Net.get("Ascend"):FireServer()
+        confirm.Visible = false
+    end)
+    no.Activated:Connect(function() confirm.Visible = false end)
+
+    Net.get("StateSync").OnClientEvent:Connect(function(snap)
+        prompt.Visible = snap.canAscend == true and not confirm.Visible
+    end)
+end
 
 -- ── Boot ───────────────────────────────────────────────────────────────────
 

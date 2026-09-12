@@ -21,16 +21,22 @@ node integration.mjs .. integration.luau
 echo "── 5. client: boot the real UI and click it ──"
 node integration.mjs .. client_test.luau
 
-echo "── 6. tutorial: walk a new player through the first run ──"
+echo "── 6. roll + world + ascension ──"
+node integration.mjs .. roll_test.luau
+
+echo "── 7. tutorial: walk a new player through the first run ──"
 node integration.mjs .. tutorial_test.luau
 
-echo "── 7. mobile: every panel on 5 real device sizes ──"
+echo "── 8. mobile: every panel on 5 real device sizes ──"
 node integration.mjs .. mobile_test.luau
 
-echo "── 8. adversarial: attack it ──"
+echo "── 9. adversarial: attack it ──"
 node integration.mjs .. adversarial.luau
 
-echo "── 9. balance sweeps ──"
+echo "── 10. balance sweeps"
+node sim.mjs ../src/shared move.luau
+node sim.mjs ../src/shared fmt.luau
+echo "── 11. economy sweeps ──"
 node sim.mjs ../src/shared snack.luau
 node sim.mjs ../src/shared egg.luau
 

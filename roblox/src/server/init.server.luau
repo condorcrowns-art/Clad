@@ -15,12 +15,15 @@ local Format = require(Shared.Format)
 local Names = require(Shared.Names)
 local Feedstock = require(Shared.Feedstock)
 local Tutorial = require(Shared.Tutorial)
+local Ascension = require(Shared.Ascension)
+local Movement = require(Shared.Movement)
 
 local Data = require(script.Data)
 local WorldBuilder = require(script.WorldBuilder)
 local GoobService = require(script.GoobService)
 local CritterService = require(script.CritterService)
 local TradeService = require(script.TradeService)
+local RollService = require(script.RollService)
 
 print(("[%s] booting…"):format(Config.GAME_NAME))
 
@@ -28,6 +31,21 @@ Net.init()
 WorldBuilder.build()
 CritterService.start()
 GoobService.start()
+
+local function activeGoobOf(player: Player)
+    local profile = Data.get(player)
+    return profile and GoobService.activeGoob(profile) or nil
+end
+
+-- Reach and catch validation both key off the rolling body.
+CritterService.originFor = function(player: Player): BasePart?
+    local ball = RollService.ballFor(player)
+    if ball then return ball end
+    local char = player.Character
+    return char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+end
+
+RollService.start(activeGoobOf)
 
 local Notify = Net.get("Notify")
 local StateSync = Net.get("StateSync")
@@ -88,6 +106,9 @@ local function snapshot(player: Player)
 
     local eggPrice = active and GoobMath.eggPrice(active, #profile.goobs) or 0
     local tutorial = Tutorial.display(profile.tutorial)
+    local crests = profile.crests or 0
+    local canAsc, ascReason = false, nil
+    if active then canAsc, ascReason = Ascension.canAscend(active, crests) end
 
     return {
         glob = profile.glob,
@@ -105,6 +126,14 @@ local function snapshot(player: Player)
         stats = profile.stats,
         discovered = profile.discovered,
         tutorial = tutorial,
+        crests = crests,
+        foodMultiplier = Ascension.foodMultiplier(crests),
+        canAscend = canAsc,
+        ascendReason = ascReason,
+        ascendPreview = (active and canAsc) and Ascension.preview(active, crests) or nil,
+        colossalMass = Config.COLOSSAL_MASS,
+        moveTopSpeed = active and Movement.topSpeed(active.mass) or 0,
+        moveStopDistance = active and Movement.stoppingDistance(active.mass) or 0,
         datastore = Data.isEnabled(),
     }
 end
@@ -271,6 +300,65 @@ Net.get("RenameGoob").OnServerEvent:Connect(function(player: Player, goobId: str
             return
         end
     end
+end)
+
+Net.get("Ascend").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local goob = GoobService.activeGoob(profile)
+    local crests = profile.crests or 0
+
+    local ok, reason = Ascension.canAscend(goob, crests)
+    if not ok then
+        notify(player, reason or "Not yet.", "warn")
+        return
+    end
+
+    -- Must physically be at the altar. Ascension is the biggest moment in the
+    -- game; making it a place you travel to is most of what makes it feel like
+    -- one, and it keeps the action off a menu the client could spam.
+    local ball = RollService.ballFor(player)
+    local pos = ball and ball.Position
+        or (player.Character and (player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?)
+            and (player.Character.HumanoidRootPart :: BasePart).Position)
+    if not pos then return end
+    if (pos - WorldBuilder.altarPosition()).Magnitude > Ascension.ALTAR_RANGE + (ball and ball.Size.X / 2 or 0) then
+        notify(player, "Roll to the 👑 ASCEND altar at the hub first.", "warn")
+        return
+    end
+
+    local name = goob.nickname
+    local wasMass = goob.mass
+
+    -- Consume it. Same rule as every other sink in this game.
+    for i, g in ipairs(profile.goobs) do
+        if g.id == goob.id then table.remove(profile.goobs, i) break end
+    end
+    profile.crests = crests + 1
+    profile.totalAscensions = (profile.totalAscensions or 0) + 1
+
+    -- Always leave them with something to play.
+    if #profile.goobs == 0 then
+        table.insert(profile.goobs, Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId)))
+    end
+    profile.activeGoobId = profile.goobs[1].id
+
+    GoobService.spawnFor(player)
+    Data.save(player)
+    push(player)
+
+    notify(player, ("👑 ASCENDED! %s (⚡%s) is gone. Crest %d earned — all food is now worth %.0f%% more.")
+        :format(name, Format.short(wasMass), profile.crests,
+                Ascension.foodMultiplier(profile.crests) * 100), "good")
+    Notify:FireAllClients(("👑 %s just ASCENDED for Crest %d!")
+        :format(player.DisplayName, profile.crests), "secret")
+end)
+
+-- Purely cosmetic: lets other clients see a dash trail.
+Net.get("Dashed").OnServerEvent:Connect(function(player: Player)
+    local ball = RollService.ballFor(player)
+    if not ball then return end
+    ball:SetAttribute("DashAt", os.clock())
 end)
 
 Net.get("DismissTutorial").OnServerEvent:Connect(function(player: Player)

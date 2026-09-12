@@ -97,6 +97,13 @@ local function despawn(p: BasePart)
     p:Destroy()
 end
 
+-- Injected by init.server so this module does not need to know about
+-- RollService directly.
+CritterService.originFor = function(player: Player): BasePart?
+    local char = player.Character
+    return char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+end
+
 CritterService.onSecret = Instance.new("BindableEvent")
 CritterService.onCatch = Instance.new("BindableEvent")
 
@@ -104,15 +111,20 @@ CritterService.onCatch = Instance.new("BindableEvent")
 -- it tells us which part it touched, and we verify distance ourselves. This is
 -- the single most important anti-exploit line in the game.
 function CritterService.tryCatch(player: Player, target: Instance): (boolean, any)
-    local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+    -- Prefer the Goob ball: it is where the player actually is now, and its
+    -- radius is what should decide reach. The character is welded to it and
+    -- works as a fallback while the ball is being rebuilt after a size change.
+    local root = CritterService.originFor(player)
     if not root then return false end
     if not target or not target:IsA("BasePart") then return false end
 
     local entry = alive[target]
     if not entry then return false end   -- already taken; first to touch wins
 
-    if (root.Position - target.Position).Magnitude > Config.CRITTER_CATCH_RADIUS then
+    -- A bigger Goob has genuinely longer reach, which is the right answer both
+    -- physically and for feel: at Colossal you plough through a field of junk.
+    local reach = Config.CRITTER_CATCH_RADIUS + root.Size.X / 2
+    if (root.Position - target.Position).Magnitude > reach then
         return false
     end
 

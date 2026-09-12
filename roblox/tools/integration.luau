@@ -76,14 +76,13 @@ local snap = snapshotFor(alice)
 check("Alice got a state snapshot", snap ~= nil)
 check("Alice starts with 1 Goob", snap and #snap.goobs == 1, snap and tostring(#snap.goobs))
 check("Alice has starting Glob", snap and snap.glob > 0, snap and tostring(snap.glob))
-check("Alice's Goob model spawned", world and world:FindFirstChild("Goob_101") ~= nil)
-
-local goobModel = world and world:FindFirstChild("Goob_101")
-check("Goob has a Body", goobModel and goobModel:FindFirstChild("Body") ~= nil)
-check("Goob has both eyes", goobModel and goobModel:FindFirstChild("EyeL") ~= nil
-    and goobModel:FindFirstChild("EyeR") ~= nil)
-check("Goob has a nameplate", goobModel and goobModel:FindFirstChild("Body")
-    and goobModel.Body:FindFirstChild("Plate") ~= nil)
+-- The active Goob is now the player's body, not a model parked on a pad.
+local goobBall = svc.Workspace:FindFirstChild("GoobBall_101")
+check("Alice's Goob spawned as a rolling body", goobBall ~= nil)
+check("it has both eyes", goobBall and goobBall:FindFirstChild("EyeL") ~= nil
+    and goobBall:FindFirstChild("EyeR") ~= nil)
+check("it carries a nameplate", goobBall and goobBall:FindFirstChild("Plate") ~= nil)
+check("it is unanchored so physics can move it", goobBall and goobBall.Anchored == false)
 
 emit("")
 emit("══ CATCHING ══")
@@ -114,7 +113,8 @@ check("mass increased after catching",
     after and after.goobs[1].mass > beforeMass,
     after and ("%f -> %f"):format(beforeMass, after.goobs[1].mass))
 check("stomach digests down over time", after and after.goobs[1].stomachCount >= 0)
-check("Goob body grew", goobModel and goobModel.Body.Size.X > 0)
+local grownBall = svc.Workspace:FindFirstChild("GoobBall_101")
+check("Goob body grew", grownBall and grownBall.Size.X > 0)
 
 emit("")
 emit("══ THE GLOB SINK: SNACK STAND ══")
@@ -188,7 +188,7 @@ emit("")
 emit("══ TRADING ══")
 local bob = svc.addPlayer("Bob", 202, V3.new(0, 5, 0))
 tick(2)
-check("Bob joined and got a plot", world:FindFirstChild("Goob_202") ~= nil)
+check("Bob joined and got a body", svc.Workspace:FindFirstChild("GoobBall_202") ~= nil)
 
 -- Both must be inside the trade zone; give Alice a second Goob to offer.
 svc.movePlayer(alice, V3.new(2, 5, 2))

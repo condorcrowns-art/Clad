@@ -1,10 +1,23 @@
 --!strict
--- WorldBuilder.luau — the entire map is generated at runtime from code.
+-- WorldBuilder.luau — the entire map, generated at runtime from code.
 --
--- WHY: a .rbxl place file is an opaque binary blob. If the map lives in the
--- place file, nothing about the world is reviewable in a diff, mergeable
--- between two people, or restorable after a bad save. Building it from code
--- means the whole game — world included — is plain text in git.
+-- WHY FROM CODE: a .rbxl is an opaque binary. If the map lives in the place
+-- file, nothing about the world is reviewable in a diff, mergeable between two
+-- people, or restorable after a bad save. Built from code, the whole game —
+-- world included — is plain text in git.
+--
+-- WHY THIS SHAPE: the first version was a flat green plane with eight glowing
+-- pads, and it read as unfinished because it WAS unfinished — there was nothing
+-- to do in space, so space was decoration. With momentum movement, surface and
+-- elevation become gameplay, so the map is now built around them:
+--
+--   HUB        flat, signposted, safe. Every service has a big readable icon.
+--   SCRAPYARD  ramps and a half-pipe. The learning zone for dashing.
+--   SLICKFIELD low friction. You slide. Fast lines, hard stops.
+--   THE DEEP   sunken, rare spawns, only entered across a gap that needs a dash.
+--
+-- Every zone is reachable by rolling; only The Deep demands a dash, which is
+-- what makes the dash meter mean something instead of being a speed toy.
 
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
@@ -13,6 +26,13 @@ local Config = require(game.ReplicatedStorage.GoobShared.Config)
 
 local WorldBuilder = {}
 
+WorldBuilder.ZONES = {
+    HUB        = { name = "The Hub",     centre = Vector3.new(0, 0, 0),      radius = 170 },
+    SCRAPYARD  = { name = "Scrapyard",   centre = Vector3.new(520, 0, 0),    radius = 260 },
+    SLICKFIELD = { name = "Slickfield",  centre = Vector3.new(-520, 0, 120), radius = 260 },
+    DEEP       = { name = "The Deep",    centre = Vector3.new(40, -46, -560),radius = 240 },
+}
+
 local function part(props: { [string]: any }): BasePart
     local p = Instance.new("Part")
     p.Anchored = true
@@ -20,148 +40,210 @@ local function part(props: { [string]: any }): BasePart
     p.Material = Enum.Material.SmoothPlastic
     p.TopSurface = Enum.SurfaceType.Smooth
     p.BottomSurface = Enum.SurfaceType.Smooth
-    for k, v in pairs(props) do
-        (p :: any)[k] = v
-    end
+    for k, v in pairs(props) do (p :: any)[k] = v end
     return p
 end
 
-local function label(text: string, size: number, parent: BasePart, offset: Vector3?)
+local function wedge(props: { [string]: any }): BasePart
+    local p = Instance.new("WedgePart")
+    p.Anchored = true
+    p.CanCollide = true
+    p.Material = Enum.Material.SmoothPlastic
+    for k, v in pairs(props) do (p :: any)[k] = v end
+    return p
+end
+
+-- A big floating icon + label. The old map told you nothing about what anything
+-- was; a nine-year-old should be able to read the whole world at a glance.
+local function signpost(parent: Instance, position: Vector3, icon: string, title: string,
+                        subtitle: string?, tint: Color3?)
+    local post = part({
+        Name = "Sign_" .. title,
+        Size = Vector3.new(2, 14, 2),
+        Position = position + Vector3.new(0, 7, 0),
+        Color = Color3.fromRGB(70, 62, 58),
+        Material = Enum.Material.Wood,
+    })
+    post.Parent = parent
+
+    local board = part({
+        Name = "Board",
+        Size = Vector3.new(0.6, 0.6, 0.6),
+        Position = position + Vector3.new(0, 16, 0),
+        Transparency = 1,
+        CanCollide = false,
+    })
+    board.Parent = post
+
     local gui = Instance.new("BillboardGui")
-    gui.Size = UDim2.fromScale(14, 3)
-    gui.StudsOffset = offset or Vector3.new(0, 5, 0)
-    gui.AlwaysOnTop = true
-    gui.MaxDistance = 260
-    local tl = Instance.new("TextLabel")
-    tl.Size = UDim2.fromScale(1, 1)
-    tl.BackgroundTransparency = 1
-    tl.Font = Enum.Font.FredokaOne
-    tl.TextScaled = true
-    tl.TextColor3 = Color3.new(1, 1, 1)
-    tl.TextStrokeTransparency = 0.2
-    tl.TextStrokeColor3 = Color3.new(0, 0, 0)
-    tl.Text = text
-    tl.Parent = gui
-    gui.Parent = parent
-    return gui
+    gui.Size = UDim2.fromScale(22, 11)
+    gui.AlwaysOnTop = false
+    gui.MaxDistance = 700
+    gui.Parent = board
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromScale(1, 1)
+    frame.BackgroundColor3 = Color3.fromRGB(26, 28, 44)
+    frame.BackgroundTransparency = 0.15
+    frame.Parent = gui
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 18)
+    corner.Parent = frame
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 4
+    stroke.Color = tint or Color3.fromRGB(255, 210, 90)
+    stroke.Parent = frame
+
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Size = UDim2.fromScale(1, 0.5)
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.Font = Enum.Font.FredokaOne
+    iconLabel.TextScaled = true
+    iconLabel.Text = icon
+    iconLabel.Parent = frame
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Position = UDim2.fromScale(0, 0.48)
+    titleLabel.Size = UDim2.fromScale(1, 0.3)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Font = Enum.Font.FredokaOne
+    titleLabel.TextScaled = true
+    titleLabel.TextColor3 = tint or Color3.fromRGB(255, 210, 90)
+    titleLabel.Text = title
+    titleLabel.Parent = frame
+
+    if subtitle then
+        local sub = Instance.new("TextLabel")
+        sub.Position = UDim2.fromScale(0.05, 0.76)
+        sub.Size = UDim2.fromScale(0.9, 0.2)
+        sub.BackgroundTransparency = 1
+        sub.Font = Enum.Font.FredokaOne
+        sub.TextScaled = true
+        sub.TextColor3 = Color3.fromRGB(190, 198, 220)
+        sub.Text = subtitle
+        sub.Parent = frame
+    end
+    return post
+end
+WorldBuilder.signpost = signpost
+
+-- A ramp you can hit at speed. Angle is gentle on purpose: steep ramps stop a
+-- heavy Goob dead, which punishes exactly the players who earned their mass.
+local function ramp(parent: Instance, position: Vector3, size: Vector3, yaw: number, color: Color3)
+    local w = wedge({
+        Name = "Ramp",
+        Size = size,
+        CFrame = CFrame.new(position) * CFrame.Angles(0, math.rad(yaw), 0),
+        Color = color,
+        Material = Enum.Material.Metal,
+    })
+    w.Parent = parent
+    return w
+end
+
+local function disc(parent: Instance, centre: Vector3, radius: number, thickness: number,
+                    color: Color3, material: Enum.Material, name: string): BasePart
+    local d = part({
+        Name = name,
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(thickness, radius * 2, radius * 2),
+        CFrame = CFrame.new(centre) * CFrame.Angles(0, 0, math.rad(90)),
+        Color = color,
+        Material = material,
+    })
+    d.Parent = parent
+    return d
 end
 
 WorldBuilder.plots = {} :: { { index: number, center: Vector3, owner: Player? } }
 
-function WorldBuilder.build()
-    -- Sky & atmosphere: bright, saturated, high-contrast. Young players read
-    -- shape and colour far faster than detail, so we lean cartoon.
-    Lighting.Ambient = Color3.fromRGB(120, 120, 140)
-    Lighting.OutdoorAmbient = Color3.fromRGB(140, 145, 170)
-    Lighting.Brightness = 2.4
-    Lighting.ClockTime = 14.5
-    Lighting.GeographicLatitude = 12
-    Lighting.FogEnd = 1400
-    Lighting.FogColor = Color3.fromRGB(180, 215, 240)
+local function buildAmbience()
+    Lighting.Ambient = Color3.fromRGB(118, 120, 140)
+    Lighting.OutdoorAmbient = Color3.fromRGB(148, 152, 178)
+    Lighting.Brightness = 2.6
+    Lighting.ClockTime = 15.2
+    Lighting.GeographicLatitude = 14
+    Lighting.FogEnd = 2200
+    Lighting.FogColor = Color3.fromRGB(186, 218, 244)
+    Lighting.EnvironmentDiffuseScale = 0.45
 
     local atmo = Instance.new("Atmosphere")
-    atmo.Density = 0.32
-    atmo.Haze = 1.2
-    atmo.Color = Color3.fromRGB(210, 230, 255)
-    atmo.Decay = Color3.fromRGB(160, 190, 230)
+    atmo.Density = 0.34
+    atmo.Haze = 1.6
+    atmo.Glare = 0.25
+    atmo.Color = Color3.fromRGB(214, 232, 255)
+    atmo.Decay = Color3.fromRGB(150, 184, 228)
     atmo.Parent = Lighting
 
     local bloom = Instance.new("BloomEffect")
-    bloom.Intensity = 0.45
-    bloom.Threshold = 0.9
-    bloom.Size = 22
+    bloom.Intensity = 0.5
+    bloom.Threshold = 0.88
+    bloom.Size = 24
     bloom.Parent = Lighting
+
+    local sky = Instance.new("Sky")
+    sky.Name = "GoobSky"
+    sky.Parent = Lighting
+
+    local clouds = Instance.new("Clouds")
+    clouds.Cover = 0.55
+    clouds.Density = 0.6
+    clouds.Color = Color3.fromRGB(255, 255, 255)
+    clouds.Parent = Workspace.Terrain
+end
+
+function WorldBuilder.build()
+    buildAmbience()
 
     local world = Instance.new("Folder")
     world.Name = "GoobWorld"
     world.Parent = Workspace
 
-    -- Ground: a big soft-green field. Deliberately NOT a Roblox baseplate —
-    -- the default grey grid instantly reads as "unfinished".
-    local ground = part({
-        Name = "Ground",
-        Size = Vector3.new(1400, 8, 1400),
-        Position = Vector3.new(0, -4, 0),
-        Color = Color3.fromRGB(126, 196, 118),
-        Material = Enum.Material.Grass,
-    })
-    ground.Parent = world
+    -- ── HUB ────────────────────────────────────────────────────────────────
+    local hub = WorldBuilder.ZONES.HUB
+    disc(world, hub.centre + Vector3.new(0, -1, 0), hub.radius, 6,
+        Color3.fromRGB(246, 238, 214), Enum.Material.Sand, "HubFloor")
 
-    -- Central hub disc where the shop / leaderboard / trade booth live.
-    local hub = part({
-        Name = "Hub",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(3, 130, 130),
-        CFrame = CFrame.new(0, 0.5, 0) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(245, 238, 220),
-        Material = Enum.Material.Sand,
-    })
-    hub.Parent = world
-
-    -- Plots arranged in a ring around the hub. Each player claims one on join.
-    local count = Config.PLOT_COUNT
-    for i = 1, count do
-        local angle = (i - 1) / count * math.pi * 2
-        local radius = Config.PLOT_SPACING * 1.6
-        local center = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
-
-        local pad = part({
-            Name = "Plot" .. i,
-            Size = Vector3.new(Config.PLOT_SIZE, 2, Config.PLOT_SIZE),
-            Position = center + Vector3.new(0, 1, 0),
-            Color = Color3.fromRGB(238, 224, 196),
-            Material = Enum.Material.Sand,
-        })
-        pad.Parent = world
-
-        -- A low rim so the plot reads as "yours" from the ground.
-        for _, side in ipairs({ Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0), Vector3.new(0, 0, 1), Vector3.new(0, 0, -1) }) do
-            local rim = part({
-                Name = "Rim",
-                Size = if side.X ~= 0 then Vector3.new(2, 4, Config.PLOT_SIZE) else Vector3.new(Config.PLOT_SIZE, 4, 2),
-                Position = center + side * (Config.PLOT_SIZE / 2) + Vector3.new(0, 2, 0),
-                Color = Color3.fromRGB(120, 190, 235),
-                Material = Enum.Material.Neon,
-                Transparency = 0.45,
-                CanCollide = false,
-            })
-            rim.Parent = pad
-        end
-
-        local sign = part({
-            Name = "Sign",
-            Size = Vector3.new(10, 1, 1),
-            Position = center + Vector3.new(0, 8, -Config.PLOT_SIZE / 2),
-            Transparency = 1,
+    -- Rim so the hub reads as a raised island rather than a paint patch.
+    for i = 1, 40 do
+        local a = (i / 40) * math.pi * 2
+        local post = part({
+            Name = "HubRim",
+            Size = Vector3.new(3, 7, 3),
+            Position = hub.centre + Vector3.new(math.cos(a) * hub.radius, 3, math.sin(a) * hub.radius),
+            Color = Color3.fromRGB(120, 196, 236),
+            Material = Enum.Material.Neon,
+            Transparency = 0.35,
             CanCollide = false,
         })
-        sign.Parent = pad
-        label("PLOT " .. i .. "\nOPEN", 3, sign).Name = "PlotLabel"
-
-        table.insert(WorldBuilder.plots, { index = i, center = center, owner = nil })
+        post.Parent = world
     end
 
-    -- Trade booth: a physical place you have to walk to. Making trading
-    -- location-bound (rather than a menu you open anywhere) is what turns the
-    -- hub into a crowded, noisy market — which is the social hook.
     local booth = part({
         Name = "TradeBooth",
-        Size = Vector3.new(26, 2, 26),
-        Position = Vector3.new(0, 2, 0),
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(1.6, Config.TRADE_RANGE * 2, Config.TRADE_RANGE * 2),
+        CFrame = CFrame.new(hub.centre + Vector3.new(0, 2.4, 0)) * CFrame.Angles(0, 0, math.rad(90)),
         Color = Color3.fromRGB(255, 205, 90),
         Material = Enum.Material.Neon,
-        Transparency = 0.25,
+        Transparency = 0.3,
         CanCollide = false,
     })
     booth.Parent = world
-    label("🤝 TRADE ZONE\nstand here with a friend", 4, booth, Vector3.new(0, 9, 0))
+    signpost(world, hub.centre + Vector3.new(0, 3, -34), "🤝", "TRADE RING",
+        "roll in here with a friend", Color3.fromRGB(255, 205, 90))
+
+    signpost(world, hub.centre + Vector3.new(-64, 3, 20), "🍪", "SNACK STAND",
+        "spend 💧 on food", Color3.fromRGB(255, 170, 90))
+    signpost(world, hub.centre + Vector3.new(64, 3, 20), "🥚", "HATCHERY",
+        "new Goobs", Color3.fromRGB(160, 230, 255))
 
     -- Leaderboard pillar.
     local pillar = part({
         Name = "Leaderboard",
-        Size = Vector3.new(14, 26, 3),
-        Position = Vector3.new(0, 13, -52),
-        Color = Color3.fromRGB(45, 50, 70),
+        Size = Vector3.new(18, 34, 4),
+        Position = hub.centre + Vector3.new(0, 17, -96),
+        Color = Color3.fromRGB(42, 46, 68),
         Material = Enum.Material.Metal,
     })
     pillar.Parent = world
@@ -184,15 +266,171 @@ function WorldBuilder.build()
     list.Text = "🏆 BIGGEST GOOBS\n\nloading…"
     list.Parent = surface
 
-    -- Spawn location on the hub.
+    -- Ascension altar: the terminus. Deliberately the tallest thing on the hub.
+    local altar = part({
+        Name = "AscensionAltar",
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(4, 40, 40),
+        CFrame = CFrame.new(hub.centre + Vector3.new(0, 3, 96)) * CFrame.Angles(0, 0, math.rad(90)),
+        Color = Color3.fromRGB(255, 246, 200),
+        Material = Enum.Material.Neon,
+        Transparency = 0.25,
+        CanCollide = false,
+    })
+    altar.Parent = world
+    local altarLight = Instance.new("PointLight")
+    altarLight.Brightness = 5
+    altarLight.Range = 70
+    altarLight.Color = Color3.fromRGB(255, 240, 170)
+    altarLight.Parent = altar
+    signpost(world, hub.centre + Vector3.new(0, 3, 124), "👑", "ASCEND",
+        "Colossal Goobs only", Color3.fromRGB(255, 246, 180))
+
+    -- Home pads: where your OTHER Goobs sit on display now that the active one
+    -- is your body.
+    local count = Config.PLOT_COUNT
+    for i = 1, count do
+        local angle = (i - 1) / count * math.pi * 2
+        local centre = hub.centre + Vector3.new(math.cos(angle) * 132, 1, math.sin(angle) * 132)
+        local pad = part({
+            Name = "Plot" .. i,
+            Shape = Enum.PartType.Cylinder,
+            Size = Vector3.new(2, 40, 40),
+            CFrame = CFrame.new(centre) * CFrame.Angles(0, 0, math.rad(90)),
+            Color = Color3.fromRGB(228, 216, 190),
+            Material = Enum.Material.Slate,
+        })
+        pad.Parent = world
+
+        local sign = part({
+            Name = "Sign", Size = Vector3.new(1, 1, 1),
+            Position = centre + Vector3.new(0, 9, 0), Transparency = 1, CanCollide = false,
+        })
+        sign.Parent = pad
+        local gui = Instance.new("BillboardGui")
+        gui.Name = "PlotLabel"
+        gui.Size = UDim2.fromScale(14, 3.4)
+        gui.MaxDistance = 300
+        gui.Parent = sign
+        local tl = Instance.new("TextLabel")
+        tl.Size = UDim2.fromScale(1, 1)
+        tl.BackgroundTransparency = 1
+        tl.Font = Enum.Font.FredokaOne
+        tl.TextScaled = true
+        tl.TextColor3 = Color3.new(1, 1, 1)
+        tl.TextStrokeTransparency = 0.3
+        tl.Text = "OPEN PAD"
+        tl.Parent = gui
+
+        table.insert(WorldBuilder.plots, { index = i, center = centre, owner = nil })
+    end
+
+    -- ── SCRAPYARD: ramps, the learning zone ────────────────────────────────
+    local sy = WorldBuilder.ZONES.SCRAPYARD
+    disc(world, sy.centre + Vector3.new(0, -1, 0), sy.radius, 6,
+        Color3.fromRGB(138, 128, 112), Enum.Material.Ground, "ScrapyardFloor")
+    signpost(world, sy.centre + Vector3.new(-210, 3, 0), "🔧", "SCRAPYARD",
+        "ramps · common junk", Color3.fromRGB(255, 150, 90))
+
+    for i = 1, 7 do
+        local a = (i / 7) * math.pi * 2
+        ramp(world, sy.centre + Vector3.new(math.cos(a) * 120, 7, math.sin(a) * 120),
+            Vector3.new(30, 14, 58), math.deg(a) + 90, Color3.fromRGB(168, 96, 72))
+    end
+    -- A half-pipe to bounce between.
+    for _, sx in ipairs({ -1, 1 }) do
+        ramp(world, sy.centre + Vector3.new(sx * 56, 11, -40),
+            Vector3.new(70, 22, 40), sx > 0 and 90 or 270, Color3.fromRGB(120, 124, 132))
+    end
+
+    -- ── SLICKFIELD: low friction ───────────────────────────────────────────
+    local sf = WorldBuilder.ZONES.SLICKFIELD
+    local ice = disc(world, sf.centre + Vector3.new(0, -1, 0), sf.radius, 6,
+        Color3.fromRGB(196, 232, 250), Enum.Material.Ice, "SlickfieldFloor")
+    -- Almost no friction: this is the zone's entire identity.
+    ice.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.02, 0.3, 1, 1)
+    signpost(world, sf.centre + Vector3.new(210, 3, 0), "🧊", "SLICKFIELD",
+        "no grip · go fast", Color3.fromRGB(150, 220, 255))
+
+    for i = 1, 5 do
+        local a = (i / 5) * math.pi * 2
+        local pillar2 = part({
+            Name = "IcePillar",
+            Size = Vector3.new(16, 46, 16),
+            Position = sf.centre + Vector3.new(math.cos(a) * 130, 22, math.sin(a) * 130),
+            Color = Color3.fromRGB(214, 240, 255),
+            Material = Enum.Material.Ice,
+            Transparency = 0.25,
+        })
+        pillar2.Parent = world
+    end
+
+    -- ── THE DEEP: gated by a dash ──────────────────────────────────────────
+    local dp = WorldBuilder.ZONES.DEEP
+    disc(world, dp.centre + Vector3.new(0, -1, 0), dp.radius, 6,
+        Color3.fromRGB(58, 48, 78), Enum.Material.Slate, "DeepFloor")
+    signpost(world, dp.centre + Vector3.new(0, 3, 190), "🌑", "THE DEEP",
+        "rarest spawns · dash to cross", Color3.fromRGB(200, 150, 255))
+
+    -- The launch ramp, then a gap. Crossing it needs a dash off the lip; that
+    -- is the moment the dash meter stops being a toy and becomes a key.
+    ramp(world, Vector3.new(20, 9, -300), Vector3.new(70, 18, 80), 0, Color3.fromRGB(150, 120, 200))
+    local landing = part({
+        Name = "DeepLanding",
+        Size = Vector3.new(110, 6, 80),
+        Position = dp.centre + Vector3.new(0, 2, 214),
+        Color = Color3.fromRGB(92, 74, 124),
+        Material = Enum.Material.Slate,
+    })
+    landing.Parent = world
+
+    for i = 1, 6 do
+        local a = (i / 6) * math.pi * 2
+        local glow = part({
+            Name = "DeepGlow",
+            Shape = Enum.PartType.Ball,
+            Size = Vector3.new(9, 9, 9),
+            Position = dp.centre + Vector3.new(math.cos(a) * 150, 14, math.sin(a) * 150),
+            Color = Color3.fromRGB(190, 140, 255),
+            Material = Enum.Material.Neon,
+            CanCollide = false,
+        })
+        glow.Parent = world
+        local l = Instance.new("PointLight")
+        l.Brightness = 4
+        l.Range = 46
+        l.Color = Color3.fromRGB(190, 140, 255)
+        l.Parent = glow
+    end
+
+    -- ── Roads between zones, so rolling somewhere is a route not a void ────
+    local function road(from: Vector3, to: Vector3, width: number)
+        local mid = (from + to) / 2
+        local delta = to - from
+        local len = delta.Magnitude
+        local r = part({
+            Name = "Road",
+            Size = Vector3.new(width, 4, len),
+            CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
+            Color = Color3.fromRGB(198, 186, 162),
+            Material = Enum.Material.Concrete,
+        })
+        r.Parent = world
+        return r
+    end
+    road(hub.centre + Vector3.new(150, -1, 0), sy.centre + Vector3.new(-220, -1, 0), 60)
+    road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
+    road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -290), 60)
+
     local spawn = Instance.new("SpawnLocation")
     spawn.Name = "HubSpawn"
-    spawn.Size = Vector3.new(16, 1, 16)
-    spawn.Position = Vector3.new(0, 2.5, 34)
+    spawn.Size = Vector3.new(20, 1, 20)
+    spawn.Position = hub.centre + Vector3.new(0, 4, 40)
     spawn.Anchored = true
+    spawn.CanCollide = false
     spawn.Color = Color3.fromRGB(255, 255, 255)
     spawn.Material = Enum.Material.Neon
-    spawn.Transparency = 0.4
+    spawn.Transparency = 0.5
     spawn.Neutral = true
     spawn.Parent = world
 
@@ -204,13 +442,9 @@ function WorldBuilder.claimPlot(player: Player)
         if plot.owner == nil then
             plot.owner = player
             local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
-            if pad then
-                local sign = pad:FindFirstChild("Sign")
-                local gui = sign and sign:FindFirstChild("PlotLabel")
-                if gui then
-                    (gui :: any).TextLabel.Text = player.DisplayName .. "'s\nGOOB"
-                end
-            end
+            local sign = pad and pad:FindFirstChild("Sign")
+            local gui = sign and sign:FindFirstChild("PlotLabel")
+            if gui then (gui :: any).TextLabel.Text = player.DisplayName .. "'s PAD" end
             return plot
         end
     end
@@ -222,13 +456,9 @@ function WorldBuilder.releasePlot(player: Player)
         if plot.owner == player then
             plot.owner = nil
             local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
-            if pad then
-                local sign = pad:FindFirstChild("Sign")
-                local gui = sign and sign:FindFirstChild("PlotLabel")
-                if gui then
-                    (gui :: any).TextLabel.Text = "PLOT " .. plot.index .. "\nOPEN"
-                end
-            end
+            local sign = pad and pad:FindFirstChild("Sign")
+            local gui = sign and sign:FindFirstChild("PlotLabel")
+            if gui then (gui :: any).TextLabel.Text = "OPEN PAD" end
             return
         end
     end
@@ -239,6 +469,11 @@ function WorldBuilder.plotFor(player: Player)
         if plot.owner == player then return plot end
     end
     return nil
+end
+
+-- Where the ascension altar is, for the proximity check.
+function WorldBuilder.altarPosition(): Vector3
+    return WorldBuilder.ZONES.HUB.centre + Vector3.new(0, 3, 96)
 end
 
 return WorldBuilder

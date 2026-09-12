@@ -16,9 +16,11 @@ local Config = require(Shared.Config)
 local GoobMath = require(Shared.GoobMath)
 local Feedstock = require(Shared.Feedstock)
 local Format = require(Shared.Format)
+local Ascension = require(Shared.Ascension)
 
 local Data = require(script.Parent.Data)
 local WorldBuilder = require(script.Parent.WorldBuilder)
+local RollService = require(script.Parent.RollService)
 
 local GoobService = {}
 
@@ -269,7 +271,11 @@ local function refreshModel(player: Player, goob)
     end
 end
 
-GoobService.refreshModel = refreshModel
+-- Public refresh now goes through the rolling body.
+function GoobService.refresh(player: Player, goob)
+    RollService.refresh(player, goob)
+end
+GoobService.refreshModel = GoobService.refresh
 
 function GoobService.activeGoob(profile)
     if not profile then return nil end
@@ -280,19 +286,18 @@ function GoobService.activeGoob(profile)
 end
 
 function GoobService.spawnFor(player: Player)
+    -- The active Goob is no longer a model parked on a pad — it is the player's
+    -- body. RollService owns it; this stays as the entry point so every caller
+    -- keeps working.
     local profile = Data.get(player)
     if not profile then return end
     local goob = GoobService.activeGoob(profile)
     if not goob then return end
-    if models[player.UserId] then models[player.UserId]:Destroy() end
-    models[player.UserId] = buildModel(player, goob)
-    refreshModel(player, goob)
+    RollService.spawn(player, goob)
 end
 
 function GoobService.despawnFor(player: Player)
-    local m = models[player.UserId]
-    if m then m:Destroy() end
-    models[player.UserId] = nil
+    RollService.despawn(player)
 end
 
 -- Add an item to the active Goob's stomach. Returns false if something's wrong
@@ -305,7 +310,10 @@ function GoobService.feed(player: Player, itemId: string): boolean
     local item = Feedstock.get(itemId)
     if not item then return false end
 
-    table.insert(goob.stomach, { id = itemId, mass = item.mass })
+    -- Crests earned by ascending permanently multiply the value of everything
+    -- you eat. This is what makes the second run shorter than the first.
+    local multiplier = Ascension.foodMultiplier(profile.crests or 0)
+    table.insert(goob.stomach, { id = itemId, mass = item.mass * multiplier })
     goob.contents[itemId] = (goob.contents[itemId] or 0) + 1
     profile.discovered[itemId] = true
     profile.stats.caught += 1
@@ -377,7 +385,7 @@ function GoobService.start()
                             end
                         end
                         profile.stats.bestMass = math.max(profile.stats.bestMass, goob.mass)
-                        refreshModel(player, goob)
+                        RollService.refresh(player, goob)
                     end
 
                     -- Earn

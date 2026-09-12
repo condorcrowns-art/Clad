@@ -192,6 +192,11 @@ env.Vector2 = { new = v2, zero = v2(0, 0), one = v2(1, 1) }
 local CFrame = {}
 CFrame.__index = function(t, k)
     if k == "Position" or k == "p" then return v3(rawget(t, "_x"), rawget(t, "_y"), rawget(t, "_z")) end
+    -- Fixed basis vectors: this stub carries no rotation, but controller code
+    -- legitimately reads them to build camera-relative movement.
+    if k == "LookVector" then return v3(0, 0, -1) end
+    if k == "RightVector" then return v3(1, 0, 0) end
+    if k == "UpVector" then return v3(0, 1, 0) end
     if k == "X" then return rawget(t, "_x") end
     if k == "Y" then return rawget(t, "_y") end
     if k == "Z" then return rawget(t, "_z") end
@@ -206,6 +211,8 @@ CFrame.__mul = function(a, b)
 end
 CFrame.__tostring = function(a) return ("CF(%0.1f,%0.1f,%0.1f)"):format(a._x, a._y, a._z) end
 env.CFrame = {
+    -- Also accepts CFrame.new(position, lookAt); the look target is discarded
+    -- since this stub is translation-only.
     new = function(a, b, c)
         if type(a) == "table" then return cf(a.X, a.Y, a.Z) end
         return cf(a, b, c)
@@ -231,6 +238,17 @@ env.UDim2 = {
     fromOffset = function(x, y) return env.UDim2.new(0, x, 0, y) end,
 }
 env.TweenInfo = { new = function(...) return { args = { ... } } end }
+env.RaycastParams = {
+    new = function()
+        return { FilterType = nil, FilterDescendantsInstances = {}, IgnoreWater = false }
+    end,
+}
+env.PhysicalProperties = {
+    new = function(d, f, e, fw, ew)
+        return { Density = d, Friction = f, Elasticity = e,
+                 FrictionWeight = fw, ElasticityWeight = ew }
+    end,
+}
 env.BrickColor = { new = function(n) return { Name = n } end }
 
 -- Random is a Roblox global, not a Luau one. Deterministic LCG so every run of
