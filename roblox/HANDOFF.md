@@ -1,0 +1,540 @@
+# GULP A GOOB — full project state
+
+**Read this first if you have no memory of this project.** It is written to be
+sufficient on its own: what the game is, what has been built, every bug found
+and why it mattered, the conventions, the traps, and what comes next.
+
+---
+
+## 0. Operational facts
+
+| | |
+|---|---|
+| Repo | `condorcrowns-art/Clad` |
+| Branch | `claude/ecstatic-keller-i06fpz` — **all work goes here** |
+| PR | [#8](https://github.com/condorcrowns-art/Clad/pull/8), open, **draft**, mergeable clean |
+| `main` | still just the initial commit; the whole GLITCHTOPIA 2D game + this ride on the branch |
+| CI | none configured — "all suites pass" means `roblox/tools/run_all.sh`, run locally |
+| Check-ins | an hourly self-wake re-checks PR #8; re-arm silently if nothing changed, stop when merged/closed |
+| Build | `cd roblox && python3 build_place.py` → `build/GulpAGoob.rbxlx` |
+| Test | `cd roblox/tools && ./run_all.sh` (13 suites) |
+
+**Deliver builds to the user with `SendUserFile`** — they open the `.rbxlx` in
+Studio directly. They are a solo dev testing in Studio, not reading the repo.
+
+**I cannot reach their Roblox Studio.** This is a cloud container; Studio's MCP
+server is local to their machine. "Drive Studio directly" needs Claude Code
+running on *their* computer — setup is in `README.md` Part 3.
+
+---
+
+## 1. What the game is
+
+> You are a see-through blob. You roll around shoving things into yourself until
+> you're enormous. Then you destroy yourself for a crown and do it again.
+
+Target audience: the *Grow a Garden* / *Steal a Brainrot* crowd. Roughly nine
+years old. Half of them on phones.
+
+### The one structural idea
+
+Every game in this genre has **infinite supply** — you can always grow another
+crop, always buy another unit — and their trading economies crater as a result.
+
+**Here, the only way to grow is to destroy.** Feeding one Goob to another
+(a *gulp*) deletes it permanently and transfers only **75%** of its mass. The
+other 25% is burned out of existence. With a fixed spawn rate, total mass in the
+world is self-limiting rather than exponential.
+
+Everything else defends that idea.
+
+### Supporting pillars
+
+1. **Your inventory is your body, visibly.** What a Goob ate is suspended inside
+   its translucent shell and tumbles with you. Two players with identical power
+   look completely different. A flex that needs zero UI.
+2. **Age is the rarity axis and cannot be farmed.** Real seconds since hatch,
+   travels with the Goob through trades, ×12 multiplier at a year. Un-bottable,
+   un-dupeable, un-buyable. The only stat with a supply curve physics enforces.
+3. **Rare items are collectibles, not power spikes**, and cannot be bought by
+   anyone for anything.
+
+### Mass is handling
+
+You do not stand next to your Goob — **you are it**. Mass is physics, not a HUD
+number:
+
+| | Fresh | 1T |
+|---|---|---|
+| Top speed | 34 | 80 |
+| 0→top | 0.36s | 4.0s |
+| **Stopping distance** | **8 studs** | **258 studs** |
+
+Jump is deliberately near-constant across the whole range so growing never locks
+a player out of a gap they could previously clear.
+
+**Dash**: 3 charges, ~8s refill, exactly one air dash per jump. Not flight — a
+correction. It is the only way into The Deep, which is what keeps it meaningful
+rather than a speed toy. Without a dash, every surface must be walkable, which
+is exactly why the original map was a flat plane.
+
+### The point of the game
+
+At **Colossal** (5e6 mass), roll to the altar and **Ascend**: the Goob is
+consumed — same rule as every other sink — for a **Crest** on your nameplate and
+a compounding **+18% to all food value**, permanently. Numbers get a terminus,
+the server sees who reached it, each run is shorter than the last.
+
+---
+
+## 2. Code map
+
+```
+roblox/
+  README.md            research answer + Studio setup (Rojo / .rbxlx / MCP / Open Cloud)
+  DESIGN.md            the design spine and the deliberate omissions
+  HOW_TO_TEST.md       what the user reads before playing
+  HANDOFF.md           this file
+  default.project.json Rojo mapping
+  build_place.py       dependency-free .rbxlx builder (pure Python 3)
+  build/GulpAGoob.rbxlx the shippable place file
+
+  src/shared/          → ReplicatedStorage.GoobShared
+    Config.luau        EVERY tunable number. No magic numbers live anywhere else.
+    GoobMath.luau      mass · size · age · power · income · the gulp
+    Movement.luau      the curves that make mass equal handling
+    Feedstock.luau     21 swallowable things, 7 rarities, + the balance note
+    Format.luau        31-suffix number ladder (see bug #12/#13)
+    Names.luau         silly name generator + sanitiser
+    Net.luau           one manifest of every remote
+    Tutorial.luau      the six-step first-run coach
+    Ascension.luau     crests, the food multiplier, the altar check
+    Cosmetics.luau     30 items across skin/trail/eyes/crown
+    Season.luau        50-tier pass, XP table, daily cap, claim logic
+    Pit.luau           Sumo Pit rules: ring curve, shove maths, stakes
+    Crew.luau          crews, weekly goals, tag/name sanitising
+    Monetisation.luau  what may be sold + the testable wall
+
+  src/server/          → ServerScriptService.GoobServer
+    init.server.luau   entry point, every remote handler, progression funnel
+    Data.luau          DataStore w/ retry, migration, never-overwrite-on-failure
+    CrewStore.luau     separate store, UpdateAsync only (shared across servers)
+    WorldBuilder.luau  the entire map, from code
+    RollService.luau   the rolling body, cosmetics, anti-cheat, teleport
+    GoobService.luau   digestion, income, gulping (delegates spawn to RollService)
+    CritterService.luau spawning + server-authoritative catching
+    TradeService.luau  the paranoid trade state machine
+    PitService.luau    lobby, match loop, shoves, eliminations, payout
+
+  src/client/          → StarterPlayer.StarterPlayerScripts.GoobClient
+    init.client.luau   input, proximity, feedback, dialogs, pit strip
+    Roll.luau          the controller (velocity-driven, derived spin)
+    Layout.luau        responsive: compact vs roomy, touch vs not
+    Hud.luau           HUD + tabbed drawer
+    Panels.luau        wardrobe / season / crew tab contents
+    TradeUi.luau       the trade window
+    Theme.luau         every colour and corner radius
+
+  tools/               the verification harness — see §4
+```
+
+---
+
+## 3. Design decisions and WHY
+
+Do not undo these without understanding the reason.
+
+| Decision | Why |
+|---|---|
+| Gulp transfers 75%, not 100% | The 25% burn IS the economy. Without it supply is conserved and values crater like every competitor. |
+| Secrets cannot be bought, ever | Simulation showed the shop reaching them made money buy the collectible layer, killing trading. `Feedstock.roll(rng, luck, allowSecret)` — the shop passes `false`. |
+| No single drop > ~5% of Colossal | One Pocket Singularity used to be 69–93% of a whole playthrough. |
+| Eggs are terrible for mass (309× worse than snacks) | They buy a *slot*, not power. Otherwise egg-spam becomes the strategy. |
+| Jump near-constant across mass | Falling jump height would lock strong players out of gaps they used to clear — progression punishing progression. |
+| Pit is staked in **Glob, never Goobs** | A Goob that can be taken by force is a Goob nobody will trade. And a nine-year-old who loses a week-old Goob to a stranger does not come back. |
+| Pit has **no rake** | Keeps it economy-neutral: moves Glob between players rather than printing or burning it. |
+| Crews have no ranks/bank/war | Guilds solve coordination. Only the Pit gave anything to coordinate; the rest answers problems this game doesn't have. |
+| Monetisation: cosmetics + convenience only | `Monetisation.violations()` fails the build if a purchasable item touches mass/age/luck/Secrets/trading. |
+| Nothing unconfigured is offered for sale | `assetId = 0` everywhere. An unconfigured purchase prompt fails silently and reads as a scam. |
+| World built from code, not the place file | A `.rbxl` is an opaque binary — not diffable, mergeable or reviewable. |
+| Input via `Humanoid.MoveDirection` / `Humanoid.Jumping` | Gets keyboard, gamepad, thumbstick AND the jump button on every platform free. Drawing our own jump button put an unreachable control on top of a real one. |
+| Client owns ball physics | Server ownership feels like mud at any ping. Cost is policed by the anti-cheat sampler. |
+| Trade confirm is a 3s **hold**, any offer change resets both | Kills the swap-at-the-last-moment scam. Audience is nine. |
+| No username entry anywhere | Username typing is where younger players get socially engineered. |
+
+---
+
+## 4. The verification harness (`roblox/tools/`)
+
+There is no Roblox runtime in CI, so the game is verified four ways.
+`./run_all.sh` runs **13 suites**.
+
+1. **Compiles** — `check.mjs` uses a real **Luau v733 compiler** via
+   `@luau-rs/luau` (WebAssembly, from npm).
+2. **APIs exist** — `apicheck.py` + `apicheck_tables.py` validate every enum,
+   class, service and property against **Roblox's published API dump**
+   (`MaximumADHD/Roblox-Client-Tracker` → `API-Dump.json`).
+3. **It runs** — `roblox_env/game/services/geometry.luau` implement ~900 lines of
+   stub engine (Instances, parenting, signals, virtual-clock scheduler, remotes,
+   DataStores, physics stand-ins) enough to boot the **real server and client**
+   headlessly. `integration.mjs` assembles the tree exactly as Rojo/build_place do.
+4. **Fits a phone** — `geometry.luau` resolves true AbsolutePosition/AbsoluteSize
+   so layout is asserted against five real device viewports.
+
+### Scenario files
+`integration.luau` (play it) · `client_test.luau` (UI) · `roll_test.luau`
+(rolling, world, ascension) · `tutorial_test.luau` · `mobile_test.luau` ·
+`live_test.luau` (cosmetics/season/pit/crews) · `adversarial.luau` (attack it) ·
+plus pure sims: `tests/move/fmt/season/pit/systems/snack/egg/balance.luau`.
+
+### HARNESS TRAPS — these cost real time, do not rediscover them
+- **`os.time()` fallback.** `GoobMath` falls back to `os.time()` when no `now`
+  is passed. A synthetic goob with `bornAt = 0` then reads as **54 years old**
+  (×12 power). Always pass an explicit `now` in sims.
+- **`svc.fireAs(remote, player, ...)`**, not `:FireServer`. Roblox prepends the
+  calling player to `OnServerEvent`; `FireServer` in the harness uses LocalPlayer.
+- **`_G.SHARED("Name")`** to require a game shared module from a scenario. A bare
+  `require("Pit")` hits the harness module table.
+- **Don't tick between moving a ball and firing an action** if the test depends on
+  the ball being far away — the anti-cheat sampler will snap it back.
+- **Visibility is inherited** in `geometry.luau`; a child of a hidden panel is not
+  on screen.
+
+### Mutation testing is the standard here
+A test that cannot fail is worth nothing. Every suite has had protections
+deliberately broken to confirm detection, then source restored and grepped for
+residue. **Do this for any new suite.**
+
+---
+
+## 5. Every bug found (20), and why each mattered
+
+### Balance (simulation)
+1. **Every Goob past 1M mass looked identical** — cube-root size hit its clamp
+   within hours. Killed the "you can see power" pitch. → logarithmic size.
+2. **Colossal was unreachable** — 400 days of play reached 0.1%. → repriced.
+3. **The game was a slot machine** — Secrets were 47.6% of all value; one drop
+   was 69–93% of a playthrough. Also broke trading. → no drop > ~5% of Colossal;
+   luck spread 5.1× → 1.2×.
+4. **Money could buy the collectibles** — a Banquet held 1-in-104 odds of a
+   Secret. → Secrets are wild-catch only.
+
+### Logic (audit)
+5. **The core mechanic was unreachable dead code** — `newGoob` ran exactly once,
+   at account creation, and trading is zero-sum, so nobody could ever hold two
+   Goobs and `gulp()` could never execute. → the Egg Stand.
+
+### Rendering / API (against the dump)
+6. **The eyes drifted off the Goob** — positioned once at build time while the
+   body tweened on every feed.
+7. **The anti-scam bar was invisible** — hold-to-confirm fill at `ZIndex = 0`
+   inside an opaque button renders *behind* it under Sibling ZIndexBehavior.
+8. **Three security-locked properties** (`Workspace.FilteringEnabled`,
+   `Lighting.Technology`) that scripts cannot write.
+
+### Mobile (measured)
+9. **`IgnoreGuiInset` was `true`** — the Roblox top bar covered the power
+   readout. Broken on *every* platform.
+10. **A closed drawer was parked off-screen but still `Visible`** — still rendering.
+11. **Every panel was fixed-pixel** — the HUD covered **233%** of an iPhone SE
+    screen, 25 elements overflowed, tap targets 28px, buttons under the thumbstick.
+
+### Numbers
+12. **`Format.short` ate significant digits** — `s:gsub("%.?0+$","")` runs even
+    with no decimal point: `100000` → `"1K"`, `340000000` → `"34M"`. Always
+    under-reporting, worst at round milestones. Every stat in the game.
+13. **Sub-1000 path floored instead of rounding** — `11.98` → `"11"`.
+
+### Systems
+14. **Two Lua scoping traps** — `local function` only enters scope from its
+    declaration down. The progression funnel and `syncCrew` sat above `notify`,
+    `push` and the remotes, so every call resolved to a **nil global**. Server
+    booted fine, died on first join.
+15. **The anti-cheat was fighting the game** — it cannot distinguish a client
+    teleporting itself from the server placing a fighter in the arena. Every Pit
+    match started, dropped both in, snapped them out, ended instantly with the
+    pot refunded. → `RollService.teleport()` tells the sampler.
+16. **The layout crashed on a not-yet-ready camera.** `ViewportSize` is `(0,0)`
+    for the first frames; every layout function subtracts button widths from it,
+    producing `math.clamp(x, 8, -76)` → "invalid argument #3 to clamp". A hard
+    error that aborted the whole layout pass and scattered the HUD. **It shipped
+    and the user hit it.** → `Layout.usable()` is floored, `Layout.fit()` cannot
+    throw, degenerate viewports are ignored and retried. Regression-tested at
+    0×0, 1×1, 40×900 and 900×40.
+17. **A giant "Label" floated in the sky.** `TextLabel.Text` defaults to the
+    literal string `"Label"`. The Goob's nameplate is a TextScaled BillboardGui
+    directly above the player's own camera subject, and its text was only set on
+    a later refresh — so metre-high "Label" sat across the middle of the screen.
+    `Theme.label()` had the same hole.
+18. **The world had no ground.** The zone rewrite replaced the old 1400×1400
+    plane with separate discs and never added a base, so the map was islands
+    floating in open sky. → one continuous plane; the only hole is the dash gap
+    to The Deep, which is deliberate.
+19. **A sound asset id was invalid** (`Asset type does not match requested
+    type`), spamming Output every play. Asset ids cannot be verified from this
+    environment, so they now live in `Config.SOUNDS`, default to empty, and an
+    unset id plays nothing rather than erroring.
+20. **`FireClient` never delivered.** The harness RECORDED server→client traffic
+    but never fired `OnClientEvent`, so every client-side handler had never run
+    in a test — client suites were only exercising what the UI does on its own.
+    Fixed; client tests are now genuinely end-to-end.
+17. **The season completed in 8 days** — a 50-tier track finishing in a week
+    leaves engaged players with nothing for five weeks. → ~40 days, asserted.
+
+### Tests caught passing for the WRONG reason (my errors, worth remembering)
+- "can't ascend away from the altar" — the anti-cheat snapped the cheater back
+  *into* range. The protection was rescuing the cheater.
+- "joining a missing crew is refused" — ran while the player was already in a
+  crew, so it tested the "leave first" guard; passed with the real check deleted.
+- An affordability check had an `or not affordable` escape hatch that passed even
+  if the server sold on credit.
+- The harness didn't move the welded ball when it moved a character, so every
+  catch failed a distance check for a reason the engine cannot produce.
+- `apicheck_tables.py` treated keys of **nested** lookup tables as properties of
+  the outer constructor — nine false findings. A checker that cries wolf stops
+  being read.
+
+---
+
+## 6. Where things stand
+
+**Built and passing all 12 suites:**
+✅ Economy (mass/age/power/income/offline digestion) ✅ rolling body with
+visible interior ✅ dash + air dash ✅ four zones + ramps + signage ✅ Ascension
+✅ 21 feedstock types, server-authoritative catching ✅ gulping ✅ full trade
+system with anti-scam ✅ DataStore persistence ✅ first-run coach ✅ responsive
+mobile ✅ 30 cosmetics ✅ 50-tier season pass ✅ Sumo Pit ✅ Crews ✅
+monetisation scaffolding ✅ global scarcity census + the Archive ✅ juice.
+
+**Never play-tested by a human beyond a first pass** — the user has played v3
+(pre-rolling). v4 (rolling) and v5 (systems) are unverified by human hands.
+The harness proves the code doesn't explode; it cannot prove the game is fun.
+
+## 7. Next up (in order)
+
+1. ✅ **Global scarcity census** — `CensusService` + the **Archive** monument at
+   the hub. ALIVE = CAUGHT − DESTROYED, worldwide. Ascension is the sink: a Goob
+   consumed at the altar takes its whole belly with it, so the prestige loop
+   feeds the scarcity loop and both are readable on one wall.
+2. ✅ **Juice** — `Juice.luau`: rarity-scaled particle bursts, camera shake,
+   catch/gulp/ascend/shove sounds, and critters that visibly flee when you close
+   on them.
+3. **Daily login streak** — retention scaffolding. Not built.
+4. **Real asset IDs** — user must supply them from the Creator Dashboard before
+   anything is purchasable. Everything is `assetId = 0` today.
+5. **Open Cloud auto-publish** — needs their API key as a repo secret.
+6. **Second-client play-test of the Pit** — the only system whose value cannot
+   be judged alone.
+
+## 8. Conventions
+
+- No magic numbers outside `Config.luau` (and the per-system shared modules).
+- Comments explain **why**, especially where a naive implementation was wrong.
+  Several comments record a specific bug so it cannot be reintroduced.
+- Commit messages are prose explaining the reasoning and every bug found,
+  including my own test errors. Attribution footer required.
+- Never report "tests pass" without having mutation-tested the assertions.
+- Tell the user plainly what is *not* proven.
+- **Palette rule:** nothing above ~46% saturation / ~88% value in the item and
+  cosmetic tables, and the UI palette stays low-chroma. A muted world was an
+  explicit request; a script in the commit history can re-apply it if it drifts.
+- **Never leave a `TextLabel` on its default `Text`** — it renders the literal
+  word "Label".
+- **Never `math.clamp` layout maths directly** — use `Layout.fit`.
+
+
+---
+
+# ADDENDUM — THE GOOP REWORK (agar.io pivot)
+
+Everything above this line describes the game BEFORE the rework. Where the two
+disagree, this section wins. `GOOP.md` is the design; this is the state.
+
+## What changed, in one paragraph
+
+The game is now an agar.io-shaped arena on ONE island. You are a blob. You eat
+pellets and smaller players. Past a grace mass you LEAK constantly, and what
+you leak becomes real food on the floor, so a big blob is a moving buffet
+everyone can see. To keep anything you must roll into the Vault at the centre
+and bank, which resets you to small. If something bigger reaches you first you
+pop: your mass scatters as pellets and your shell congeals into the island as
+terrain that lasts for the life of the server.
+
+## The two curves (this is the whole design)
+
+- `harvest(mass)` is LOGARITHMIC — derived physically: a blob sweeps a corridor
+  2*radius wide at its own top speed through pellets at a fixed density. Radius
+  grows logarithmically and speed FALLS with mass.
+- `leak(mass)` is SUPER-LINEAR — `LEAK_SCALE * (mass - 60) ^ 1.15`.
+
+They cross once, at a mass no skill passes. Measured at 80% harvest efficiency:
+ceiling 1.06K mass, 600 at 70s, 90% of ceiling at 180s, 99% at 349s.
+
+## New files
+
+| file | what |
+|---|---|
+| `src/shared/Blob.luau` | the arena core: radius, speed, harvest, leak, ceiling, eat, pop split, bank |
+| `src/shared/Powers.luau` | 8 powers, one carried, each costs your own mass |
+| `src/shared/Trinkets.luau` | 8 trinkets, 3 slots, duplicates no-op, per-axis caps |
+| `src/shared/Crates.luau` | 3 crates, hard pity, dupe refunds, Glob only |
+| `src/server/ArenaService.luau` | the live loop; pellets in a spatial hash |
+| `src/client/ArenaHud.luau` | the whole screen: stat card, dock, status strip, power button, one sheet |
+| `tools/arena.luau` | 29 assertions on the curves |
+| `tools/crates.luau` | 24 assertions on gacha and trinket balance |
+
+## Rewritten
+
+- `WorldBuilder.luau` — one 300-stud island. Rings VAULT / FLATS / SHALLOWS.
+  Biome patches slick / scrap / basin. One building (the Shack). Sea underneath
+  so nobody can fall out of the world.
+- `Hud.luau` — gave up the stat panel, age line and drawer button to ArenaHud
+  via `Hud.setArenaMode(true)`. Still owns toasts, the drawer and the coach.
+- `mobile_test.luau` / `geometry.luau` — see "traps" below.
+
+## Scale (changed)
+
+One island, **480 studs**, sized for 16-24 players. `Config.PELLET_TARGET` is
+DERIVED from `PELLET_DENSITY * pi * SHALLOWS_INNER^2` and must stay derived:
+harvest, and therefore the ceiling and the run length, are computed from that
+density. Resize the island without resizing the food supply and the realised
+density silently stops matching the model the curves were tuned against.
+`tools/arena.luau` asserts the two agree within 2%.
+
+Five biomes now (slick / scrap / basin / bloom / ash), built by LOOPING over
+`Config.BIOMES`. The old builder indexed [1] [2] [3] by hand, so a fourth entry
+in the config produced a signpost you could read and a patch you could never
+stand on. `integration.luau` checks built-vs-configured both ways.
+
+## Invariants that must not break
+
+1. **A blob may never re-eat its own drips.** Leak lands outside the body AND a
+   pellet is locked to its dropper for 4s. Without both, net melt is zero and
+   the entire game evaporates. `roll_test.luau` asserts it.
+2. **Exactly one system writes ball Size.** `RollService.sizeOwnedByArena` is
+   set true by `ArenaService.start`. Otherwise `RollService.refresh` respawns
+   the player's body every few seconds forever.
+3. **Nothing with a gameplay number is sold for Robux.** Crates cost Glob,
+   powers unlock on lifetime banked, trinkets come from crates and the season.
+4. **One panel at a time.** Every dock tab routes through `ArenaHud.openSheet`,
+   which closes whatever was open first.
+5. **The dock is one row of eight at the TOP on every platform.** Icons shrink
+   on compact rather than the dock colliding with the stat card.
+6. **The right-hand column is spoken for twice**: jump button at the bottom,
+   toast stack at the top. Anything centred must reserve whichever is wider.
+7. **Boards expose `Board -> Entries`** as a direct child. Burying it deeper is
+   a silent WaitForChild hang, not an error.
+
+## Powers (12) and mastery
+
+Twelve powers, ordered BY UNLOCK in `Powers.LIST` — `nextLocked()` walks the
+array and returns the first unaffordable entry, so an out-of-order entry points
+the player at a target that is not next. Four appended powers did exactly that
+until a test caught it.
+
+Mastery: using a power banks uses toward three tiers (25/100/300), worth 5%
+cooldown and 4% cost each. Trinket haste and mastery are clamped TOGETHER at
+45%, not separately.
+
+Daily streak pays GLOB only, capped at day 7. It is keyed on `streakDay`, so
+the failure mode to guard is a second claim on a rejoin — tested by adding a
+second Player with the same UserId.
+
+Standoff stakes come from `lifetimeBanked`, not a Goob's idle income (the old
+formula meant everybody staked the floor after the rework), and PitService
+levels every entrant to the LOWEST stake in the lobby.
+
+## Harness traps added this pass
+
+- `mobile_test` used to audit ONE ScreenGui by name. It walks all of them now.
+  If you add a third, it is covered automatically.
+- `geometry.luau` treated every UIListLayout as vertical. It reads
+  `FillDirection` now — and enums must be compared by `.Name`, because the stub
+  builds a fresh table on every `Enum.X.Y` access, so identity is always false.
+- Fully transparent containers do not count as visible UI; ScrollingFrame
+  content does not count as overflow.
+- The audit now measures the RESTING screen (everything closed) as well as the
+  open one. A mutation that stopped the sheet hiding went undetected until it did.
+- `ArenaSync` carries the run state; read it with an `arenaOf(player)` helper
+  over `_G.TRAFFIC` rather than inferring mass from ball radius. Radius is
+  logarithmic in mass and only redraws past a 2% threshold, so it is a terrible
+  proxy and it reported "no melt" while the blob shed ninety mass.
+
+## THE BIG ONE: suites must be fatal
+
+Nine of eleven sims used to PRINT their failures and exit zero, so
+`run_all.sh` reported "ALL SUITES PASSED" over the top of real failures. Every
+sim with assertions now calls `error()` when `fails > 0`, and this is verified:
+breaking one assertion makes `run_all.sh` exit 1.
+
+`snack.luau`, `egg.luau` and `balance.luau` are REPORTS, not tests — they
+assert nothing and say so at the top. Do not read a clean run as a verified one.
+
+## Sounds
+
+`Config.SOUNDS` points at `rbxasset://sounds/*` — files that ship INSIDE the
+Roblox client. Not catalog uploads, so no owner, no moderation queue, no
+licence question and nothing that can be taken down and silently break the
+game (which is what happened the first time this table held a catalog id).
+A missing path fails to load silently; `Juice` warns ONCE at boot listing any
+that did not load. The harness has no audio engine and cannot confirm a file
+exists — verify in Studio once.
+
+`Config.POWER_SOUND` maps each power to one of five families, not twelve
+distinct stings: twelve is noise on a phone speaker, and players read the
+SHAPE of a sound long before they learn which of twelve it was.
+
+## THE UI IS ONLY AS LIVE AS ITS FEED
+
+Two separate failures, both of which drew a perfect screen that did nothing:
+
+1. `snapshot()` did not include the arena fields.
+2. `ArenaHud.setProfile` was never called at all.
+
+Either one alone makes every crate, trinket, power, skin and Goob render
+locked or absent, with no error anywhere. `client_test.luau` now checks BOTH:
+a required-field list on the snapshot, and that every dock tab renders
+non-empty content with a real Glob and season readout. A geometry test cannot
+see this — an empty panel fits the screen beautifully.
+
+## THE SAFE ZONE IS ONE FUNCTION
+
+`protected(player, run, now)` in ArenaService is the single answer to "can this
+player be touched". It used to live inline inside the eating check only, so
+SIPHON, HOOK and SLAM all reached into the no-PvP Shallows and through the
+post-respawn grace. Every power that affects another player goes through it.
+
+## LUMPS MUST NOT BLOCK THE VAULT
+
+`congeal()` pushes any lump within `VAULT_RADIUS + 34 + radius` outward. Lumps
+are solid terrain lasting most of an hour and the island keeps up to 300, so
+one on the dish would wall off the only place mass can be made safe.
+
+## THE SNAPSHOT CONTRACT
+
+Every field the client UI reads off the profile must be in the table returned
+by `snapshot()` in `init.server.luau`. Three dock tabs were dead because the
+arena fields were never added: Powers read `lifetimeBanked` as nil, Trinkets
+read `trinketsOwned` as nil, and both rendered every entry permanently locked.
+NOTHING ERRORED — the UI drew perfectly and was simply always wrong, which is
+invisible to a geometry audit and to any test that only checks a panel builds.
+`client_test.luau` now holds a required-field list. Add a field to the UI, add
+it to that list.
+
+## Still outstanding
+
+- Real asset IDs (`Config.SOUNDS` is all empty strings by design; user supplies).
+- Open Cloud auto-publish.
+- Daily login streak.
+- All eight powers are complete. SLAM lands its shockwave at the bottom of the
+  arc and shatters lumps inside the blast (which is its real job: an island
+  that has silted up with an hour of congealed shells needs something that can
+  break it open, or the Vault walls itself in). HOOK reels — bigger drags
+  smaller, smaller drags itself toward bigger, same button. SPLIT is a
+  committed lunge that returns 55% of what it cost rather than a second body
+  you steer, because a second body needs a second controller and a camera that
+  can hold two things.
+- The tutorial teaches eat -> melt -> bank -> power. The melt step is COUNTED
+  (goal 40): the melt event fires every arena tick above the grace mass, so
+  without a goal it advanced on the next frame and the one lesson a child
+  cannot guess flashed past unread.
