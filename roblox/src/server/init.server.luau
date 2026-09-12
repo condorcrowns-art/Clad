@@ -167,6 +167,26 @@ local function snapshot(player: Player)
         moveTopSpeed = active and Movement.topSpeed(active.mass) or 0,
         moveStopDistance = active and Movement.stoppingDistance(active.mass) or 0,
         datastore = Data.isEnabled(),
+
+        -- ── Arena ──────────────────────────────────────────────────────────
+        -- These were missing, and their absence made THREE dock tabs dead.
+        -- The Powers tab reads lifetimeBanked to decide what is unlocked, the
+        -- Trinkets tab reads trinketsOwned, the Wardrobe reads loadout against
+        -- cosmeticsOwned — so with these unsent every power and every trinket
+        -- rendered permanently locked, the CARRY and EQUIP buttons never
+        -- appeared, and the crate pity counter always read full.
+        --
+        -- Nothing errored. The UI drew perfectly and was simply always wrong,
+        -- which is why the geometry audit could not see it and why the client
+        -- test, which only checks that panels build, did not either.
+        lifetimeBanked = profile.lifetimeBanked or 0,
+        bestBank = profile.bestBank or 0,
+        powerId = profile.powerId or Powers.DEFAULT,
+        powerUses = profile.powerUses or {},
+        trinketsOwned = profile.trinketsOwned or {},
+        trinketSlots = profile.trinketSlots or {},
+        cratePity = profile.cratePity or {},
+        streak = profile.streak or 0,
     }
 end
 

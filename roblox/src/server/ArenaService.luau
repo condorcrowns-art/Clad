@@ -65,7 +65,6 @@ export type Run = {
     lastPos: Vector3,
     startedAt: number,      -- for the run summary
     ateThisRun: number,
-    uses: { [string]: number },   -- mastery counter, mirrored from the profile
 }
 
 local runs: { [number]: Run } = {}
@@ -176,6 +175,17 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- How many times this player has used a power.
+--
+-- Read through deps every time rather than cached on the run. The cached copy
+-- was the SAME TABLE as profile.powerUses, so incrementing it here and calling
+-- notePowerUse counted every press TWICE: mastery accrued at double rate and
+-- the tier-up announcement compared a number that had already moved. One
+-- owner — the profile — and no alias to fall out of sync with it.
+local function usesOf(player: Player, id: string): number
+    return (deps.powerUses(player) or {})[id] or 0
+end
+
 -- ── Decoys ─────────────────────────────────────────────────────────────────
 -- A fake body at your current size, in your colour, that anyone may try to
 -- eat and that gives nothing when they do. It is the only power in the game
@@ -229,7 +239,6 @@ local function newRun(player: Player): Run
         lastPos = Vector3.zero,
         startedAt = os.clock(),
         ateThisRun = 0,
-        uses = deps.powerUses(player),
     }
 end
 
@@ -364,6 +373,14 @@ local function pop(player: Player, at: Vector3, killer: Player?)
             or "💥 Popped. Start again.", "bad")
     end
 
+    -- Clear anything mid-flight. A SLAM launched a moment before being eaten
+    -- would otherwise land its shockwave wherever the player respawned, and a
+    -- SPLIT owed to the old run would pay into the new one.
+    run.slamUntil = 0
+    run.splitOwed = 0
+    run.activeEffect = nil
+    run.powerUntil = 0
+
     run.mass = math.max(Config.STARTING_MASS, split.kept)
     run.startedAt = os.clock()
     run.ateThisRun = 0
@@ -388,6 +405,10 @@ local function bank(player: Player, run: Run)
         Format.short(run.mass), Format.short(glob)), "good")
     deps.effect(player, "runEnd", summary(run, "banked", glob))
     deps.teach(player, "bank")
+    run.slamUntil = 0
+    run.splitOwed = 0
+    run.activeEffect = nil
+    run.powerUntil = 0
     run.startedAt = os.clock()
     run.ateThisRun = 0
     run.bestMass = Config.BANK_RESET_MASS
@@ -411,7 +432,7 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if not power then
         return false, "No power equipped."
     end
-    local uses = run.uses[run.powerId] or 0
+    local uses = usesOf(player, run.powerId)
     local cost = Powers.massCost(run.powerId, run.mass, uses)
     if run.mass - cost < Config.STARTING_MASS * 0.5 then
         return false, "Too small to pay for that."
@@ -423,8 +444,16 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
 
     run.mass -= cost
     run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste, uses)
-    run.uses[run.powerId] = uses + 1
     deps.notePowerUse(player, run.powerId)
+    -- Settle any outstanding SPLIT first. activeEffect is overwritten below,
+    -- so without this the thrown half is orphaned the moment you press any
+    -- other power and its mass is silently deleted — you pay half of yourself
+    -- and get nothing back.
+    if run.splitOwed > 0 then
+        run.mass += run.splitOwed * SPLIT_RETURN
+        run.splitOwed = 0
+    end
+
     run.powerUntil = now + math.max(0.05, power.duration)
     run.activeEffect = run.powerId
 
@@ -527,6 +556,9 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
             deps.notify(target, ("🩸 %s siphoned %s off you.")
                 :format(player.DisplayName, Format.short(drained)), "bad")
             deps.effect(player, "siphon", { from = target.DisplayName, amount = drained })
+            -- The victim needs to see it too. Watching your number fall with
+            -- no visible cause reads as a bug, not as an attack.
+            deps.effect(target, "siphoned", { by = player.DisplayName, amount = drained })
         end
 
     elseif run.powerId == "magnet" or run.powerId == "beacon" then
@@ -806,8 +838,8 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         bankNeeds = Blob.bankSeconds(run.trinkets.bankHaste),
         powerId = run.powerId,
         powerCooldown = math.max(0, run.powerReadyAt - now),
-        powerCost = Powers.massCost(run.powerId, run.mass, run.uses[run.powerId]),
-        mastery = Powers.masteryTier(run.uses[run.powerId]),
+        powerCost = Powers.massCost(run.powerId, run.mass, usesOf(player, run.powerId)),
+        mastery = Powers.masteryTier(usesOf(player, run.powerId)),
         lit = run.activeEffect == "beacon" and now < run.powerUntil,
         safe = WorldBuilder.isSafe(pos) or now < run.safeUntil,
         ring = WorldBuilder.ringAt(pos),

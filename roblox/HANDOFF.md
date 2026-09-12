@@ -470,6 +470,31 @@ breaking one assertion makes `run_all.sh` exit 1.
 `snack.luau`, `egg.luau` and `balance.luau` are REPORTS, not tests — they
 assert nothing and say so at the top. Do not read a clean run as a verified one.
 
+## Sounds
+
+`Config.SOUNDS` points at `rbxasset://sounds/*` — files that ship INSIDE the
+Roblox client. Not catalog uploads, so no owner, no moderation queue, no
+licence question and nothing that can be taken down and silently break the
+game (which is what happened the first time this table held a catalog id).
+A missing path fails to load silently; `Juice` warns ONCE at boot listing any
+that did not load. The harness has no audio engine and cannot confirm a file
+exists — verify in Studio once.
+
+`Config.POWER_SOUND` maps each power to one of five families, not twelve
+distinct stings: twelve is noise on a phone speaker, and players read the
+SHAPE of a sound long before they learn which of twelve it was.
+
+## THE SNAPSHOT CONTRACT
+
+Every field the client UI reads off the profile must be in the table returned
+by `snapshot()` in `init.server.luau`. Three dock tabs were dead because the
+arena fields were never added: Powers read `lifetimeBanked` as nil, Trinkets
+read `trinketsOwned` as nil, and both rendered every entry permanently locked.
+NOTHING ERRORED — the UI drew perfectly and was simply always wrong, which is
+invisible to a geometry audit and to any test that only checks a panel builds.
+`client_test.luau` now holds a required-field list. Add a field to the UI, add
+it to that list.
+
 ## Still outstanding
 
 - Real asset IDs (`Config.SOUNDS` is all empty strings by design; user supplies).

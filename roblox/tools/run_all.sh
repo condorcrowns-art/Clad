@@ -36,7 +36,10 @@ node integration.mjs .. live_test.luau
 echo "── 10. census + juice: the Archive and the feel layer ──"
 node integration.mjs .. census_test.luau
 
-echo "── 11. adversarial: attack it ──"
+echo "── 11. powers: press all twelve, with a second player ──"
+node integration.mjs .. powers_test.luau
+
+echo "── 12. adversarial: attack it ──"
 node integration.mjs .. adversarial.luau
 
 echo "── 12. balance sweeps"

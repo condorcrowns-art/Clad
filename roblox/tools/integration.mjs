@@ -137,6 +137,14 @@ _G.SHARED = function(name)
   return require(sharedFolder:FindFirstChild(name))
 end
 
+-- And the SERVER modules, for scenarios that need to reach past the remotes.
+-- Used sparingly and on purpose: a test that pokes a profile directly is not
+-- testing the path a player takes. It is for reaching a state that would
+-- otherwise take an hour of simulated play to earn honestly.
+_G.SERVER = function(name)
+  return require(serverScript:FindFirstChild(name))
+end
+
 _G.BOOT_SERVER = function()
   local script = serverScript
   ${init.src.split('\n').join('\n  ')}

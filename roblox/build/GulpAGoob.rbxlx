@@ -368,11 +368,52 @@ Config.TRADE_MAX_SLOTS = 4
 --
 -- TO ADD SOUND: find ids on the Creator Store (Audio), paste them below, and
 -- make sure each is actually an Audio asset rather than a model containing one.
+-- WHY rbxasset:// AND NOT rbxassetid://
+--
+-- These are files that ship INSIDE the Roblox client. They are not catalog
+-- uploads, so there is no owner, no moderation queue, no licence question and
+-- no chance of one being taken down and silently breaking the game — which is
+-- exactly what happened the first time this table held a catalog id and the
+-- client threw "Asset type does not match requested type" on every pickup.
+--
+-- A path that does not exist in some future client version fails to load
+-- SILENTLY rather than erroring, which is the failure mode you want for audio.
+-- Juice checks them at boot and warns once per bad id rather than per play.
+--
+-- Every one of these has shipped with Roblox for years as a default Humanoid
+-- or Studio sound. They should be verified once in Studio all the same: the
+-- harness has no audio engine and cannot confirm a file exists.
+local BUILTIN = "rbxasset://sounds/"
+
 Config.SOUNDS = {
-    catch = "",   -- a short blip on picking something up
-    rare  = "",   -- a fanfare for Legendary and above
-    gulp  = "",   -- a heavy swallow
-    thud  = "",   -- a Sumo Pit collision
+    -- Pickups and progress
+    catch  = BUILTIN .. "electronicpingshort.wav",  -- a pellet
+    rare   = BUILTIN .. "bass.wav",                 -- Legendary and above
+    bank   = BUILTIN .. "bass.wav",                 -- mass becomes Glob
+    unlock = BUILTIN .. "electronicpingshort.wav",  -- a crate, a power
+
+    -- Bodies meeting bodies
+    gulp   = BUILTIN .. "uuhhh.mp3",                -- you ate somebody
+    pop    = BUILTIN .. "uuhhh.mp3",                -- somebody ate you
+    thud   = BUILTIN .. "hit.wav",                  -- a shove in the Standoff
+
+    -- Powers. One per feel, not one per power: twelve distinct stings is noise
+    -- on a phone speaker, and players read the SHAPE of a sound long before
+    -- they learn which of twelve it was.
+    whoosh = BUILTIN .. "action_falling.mp3",       -- dash, blink, split
+    slam   = BUILTIN .. "metal.ogg",                -- slam, hook
+    shield = BUILTIN .. "action_get_up.mp3",        -- bubble, spike, beacon
+    drip   = BUILTIN .. "impact_water.mp3",         -- slick, decoy, siphon
+    click  = BUILTIN .. "clickfast.wav",            -- UI
+}
+
+-- Which sound each power plays. A power with no entry falls back to "whoosh".
+Config.POWER_SOUND = {
+    dash = "whoosh", blink = "whoosh", split = "whoosh",
+    slam = "slam", hook = "slam",
+    bubble = "shield", spike = "shield", beacon = "shield",
+    slick = "drip", decoy = "drip", siphon = "drip",
+    magnet = "click",
 }
 
 -- ── Misc ───────────────────────────────────────────────────────────────────
@@ -2849,6 +2890,26 @@ local function snapshot(player: Player)
         moveTopSpeed = active and Movement.topSpeed(active.mass) or 0,
         moveStopDistance = active and Movement.stoppingDistance(active.mass) or 0,
         datastore = Data.isEnabled(),
+
+        -- ── Arena ──────────────────────────────────────────────────────────
+        -- These were missing, and their absence made THREE dock tabs dead.
+        -- The Powers tab reads lifetimeBanked to decide what is unlocked, the
+        -- Trinkets tab reads trinketsOwned, the Wardrobe reads loadout against
+        -- cosmeticsOwned — so with these unsent every power and every trinket
+        -- rendered permanently locked, the CARRY and EQUIP buttons never
+        -- appeared, and the crate pity counter always read full.
+        --
+        -- Nothing errored. The UI drew perfectly and was simply always wrong,
+        -- which is why the geometry audit could not see it and why the client
+        -- test, which only checks that panels build, did not either.
+        lifetimeBanked = profile.lifetimeBanked or 0,
+        bestBank = profile.bestBank or 0,
+        powerId = profile.powerId or Powers.DEFAULT,
+        powerUses = profile.powerUses or {},
+        trinketsOwned = profile.trinketsOwned or {},
+        trinketSlots = profile.trinketSlots or {},
+        cratePity = profile.cratePity or {},
+        streak = profile.streak or 0,
     }
 end
 
@@ -3840,7 +3901,6 @@ export type Run = {
     lastPos: Vector3,
     startedAt: number,      -- for the run summary
     ateThisRun: number,
-    uses: { [string]: number },   -- mastery counter, mirrored from the profile
 }
 
 local runs: { [number]: Run } = {}
@@ -3951,6 +4011,17 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- How many times this player has used a power.
+--
+-- Read through deps every time rather than cached on the run. The cached copy
+-- was the SAME TABLE as profile.powerUses, so incrementing it here and calling
+-- notePowerUse counted every press TWICE: mastery accrued at double rate and
+-- the tier-up announcement compared a number that had already moved. One
+-- owner — the profile — and no alias to fall out of sync with it.
+local function usesOf(player: Player, id: string): number
+    return (deps.powerUses(player) or {})[id] or 0
+end
+
 -- ── Decoys ─────────────────────────────────────────────────────────────────
 -- A fake body at your current size, in your colour, that anyone may try to
 -- eat and that gives nothing when they do. It is the only power in the game
@@ -4004,7 +4075,6 @@ local function newRun(player: Player): Run
         lastPos = Vector3.zero,
         startedAt = os.clock(),
         ateThisRun = 0,
-        uses = deps.powerUses(player),
     }
 end
 
@@ -4139,6 +4209,14 @@ local function pop(player: Player, at: Vector3, killer: Player?)
             or "💥 Popped. Start again.", "bad")
     end
 
+    -- Clear anything mid-flight. A SLAM launched a moment before being eaten
+    -- would otherwise land its shockwave wherever the player respawned, and a
+    -- SPLIT owed to the old run would pay into the new one.
+    run.slamUntil = 0
+    run.splitOwed = 0
+    run.activeEffect = nil
+    run.powerUntil = 0
+
     run.mass = math.max(Config.STARTING_MASS, split.kept)
     run.startedAt = os.clock()
     run.ateThisRun = 0
@@ -4163,6 +4241,10 @@ local function bank(player: Player, run: Run)
         Format.short(run.mass), Format.short(glob)), "good")
     deps.effect(player, "runEnd", summary(run, "banked", glob))
     deps.teach(player, "bank")
+    run.slamUntil = 0
+    run.splitOwed = 0
+    run.activeEffect = nil
+    run.powerUntil = 0
     run.startedAt = os.clock()
     run.ateThisRun = 0
     run.bestMass = Config.BANK_RESET_MASS
@@ -4186,7 +4268,7 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if not power then
         return false, "No power equipped."
     end
-    local uses = run.uses[run.powerId] or 0
+    local uses = usesOf(player, run.powerId)
     local cost = Powers.massCost(run.powerId, run.mass, uses)
     if run.mass - cost < Config.STARTING_MASS * 0.5 then
         return false, "Too small to pay for that."
@@ -4198,8 +4280,16 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
 
     run.mass -= cost
     run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste, uses)
-    run.uses[run.powerId] = uses + 1
     deps.notePowerUse(player, run.powerId)
+    -- Settle any outstanding SPLIT first. activeEffect is overwritten below,
+    -- so without this the thrown half is orphaned the moment you press any
+    -- other power and its mass is silently deleted — you pay half of yourself
+    -- and get nothing back.
+    if run.splitOwed > 0 then
+        run.mass += run.splitOwed * SPLIT_RETURN
+        run.splitOwed = 0
+    end
+
     run.powerUntil = now + math.max(0.05, power.duration)
     run.activeEffect = run.powerId
 
@@ -4302,6 +4392,9 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
             deps.notify(target, ("🩸 %s siphoned %s off you.")
                 :format(player.DisplayName, Format.short(drained)), "bad")
             deps.effect(player, "siphon", { from = target.DisplayName, amount = drained })
+            -- The victim needs to see it too. Watching your number fall with
+            -- no visible cause reads as a bug, not as an attack.
+            deps.effect(target, "siphoned", { by = player.DisplayName, amount = drained })
         end
 
     elseif run.powerId == "magnet" or run.powerId == "beacon" then
@@ -4581,8 +4674,8 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         bankNeeds = Blob.bankSeconds(run.trinkets.bankHaste),
         powerId = run.powerId,
         powerCooldown = math.max(0, run.powerReadyAt - now),
-        powerCost = Powers.massCost(run.powerId, run.mass, run.uses[run.powerId]),
-        mastery = Powers.masteryTier(run.uses[run.powerId]),
+        powerCost = Powers.massCost(run.powerId, run.mass, usesOf(player, run.powerId)),
+        mastery = Powers.masteryTier(usesOf(player, run.powerId)),
         lit = run.activeEffect == "beacon" and now < run.powerUntil,
         safe = WorldBuilder.isSafe(pos) or now < run.safeUntil,
         ring = WorldBuilder.ringAt(pos),
@@ -8135,8 +8228,13 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     elseif kind == "ascend" then Juice.onAscend()
     elseif kind == "shove" then Juice.onShove(a, b or 0.5)
     elseif kind == "runEnd" then ArenaHud.runEnded(a)
-    elseif kind == "pop" then Juice.onShove(nil, 1)
-    elseif kind == "power" then Juice.play("catch", 0.4) end
+    elseif kind == "pop" then Juice.onPop(a and a.mass)
+    elseif kind == "bank" then Juice.onBank(a and a.glob)
+    elseif kind == "power" then Juice.onPower(a and a.id, a)
+    elseif kind == "slam" then Juice.shakeCamera(1.4)
+    elseif kind == "hook" then Juice.play("slam", 0.3)
+    elseif kind == "siphon" then Juice.play("drip", 0.3)
+    elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount) end
 end)
 
 Roll.bindInput()
@@ -8319,7 +8417,10 @@ end)
 
 Net.get("CrateResult").OnClientEvent:Connect(function(result)
     ArenaHud.crateResult(result)
-    Juice.play("unlock")
+    -- A Legendary and a Common must not sound alike. The whole point of a
+    -- crate is the half-second before you know which you got.
+    local r = result and result.reward and result.reward.rarity
+    Juice.play((r == "Legendary" or r == "Mythic" or r == "Epic") and "rare" or "unlock")
 end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -10561,20 +10662,55 @@ Juice.burst = burst
 -- Ids live in Config and default to empty. An unset id creates no Sound at
 -- all, so a game with no audio configured is silent rather than noisy with
 -- load failures.
-local VOLUMES = { catch = 0.30, rare = 0.55, gulp = 0.60, thud = 0.45 }
+local VOLUMES = {
+    catch = 0.22, rare = 0.55, bank = 0.50, unlock = 0.45,
+    gulp = 0.55, pop = 0.60, thud = 0.45,
+    whoosh = 0.35, slam = 0.45, shield = 0.32, drip = 0.34, click = 0.25,
+}
+
+-- Driven off Config.SOUNDS, not off VOLUMES. Keying the loop on the volume
+-- table meant a sound added to the config with no volume entry was created
+-- nowhere and never played, silently — the config would look configured and
+-- the game would stay quiet.
+local DEFAULT_VOLUME = 0.35
 
 local sfx: { [string]: Sound } = {}
-for name, volume in pairs(VOLUMES) do
-    local id = (Config.SOUNDS or {})[name]
+local missingVolume: { string } = {}
+
+for name, id in pairs(Config.SOUNDS or {}) do
     if type(id) == "string" and id ~= "" then
         local s = Instance.new("Sound")
         s.Name = "Goob_" .. name
         s.SoundId = id
-        s.Volume = volume
+        s.Volume = VOLUMES[name] or DEFAULT_VOLUME
         s.Parent = SoundService
         sfx[name] = s
+        if not VOLUMES[name] then
+            table.insert(missingVolume, name)
+        end
     end
 end
+if #missingVolume > 0 then
+    warn("[Goob/Juice] no volume set for: " .. table.concat(missingVolume, ", "))
+end
+
+-- Report a dead sound id ONCE, at boot, rather than on every play. The harness
+-- has no audio engine and cannot tell whether a file exists, so this warning is
+-- the only thing that will ever say so — it needs to be findable in the output
+-- rather than buried under a thousand repeats.
+task.defer(function()
+    local dead = {}
+    for name, sound in pairs(sfx) do
+        if not sound.IsLoaded and sound.TimeLength == 0 then
+            table.insert(dead, name .. " (" .. sound.SoundId .. ")")
+        end
+    end
+    if #dead > 0 then
+        warn("[Goob/Juice] sounds that did not load: " .. table.concat(dead, ", "))
+    end
+end)
+
+Juice.sounds = sfx
 
 function Juice.play(name: string, pitchJitter: number?)
     local s = sfx[name]
@@ -10634,6 +10770,231 @@ function Juice.onShove(position: Vector3, force: number)
     burst(position, Color3.fromRGB(255, 200, 120), math.clamp(force * 20, 10, 60), 2)
     Juice.play("thud", 0.3)
     Juice.shakeCamera(math.clamp(force * 2, 0.3, 2.2))
+end
+
+-- ── Powers ─────────────────────────────────────────────────────────────────
+-- Every power gets a shape you can read in a quarter of a second, from across
+-- an arena, on a phone. That constraint rules out anything detailed: what
+-- survives is silhouette, colour and motion. A ring means area, a streak means
+-- direction, a shell means protection.
+
+local function ring(position: Vector3, colour: Color3, from: number, to: number, seconds: number)
+    local r = Instance.new("Part")
+    r.Name = "FX_Ring"
+    r.Shape = Enum.PartType.Cylinder
+    r.Anchored = true
+    r.CanCollide = false
+    r.CanQuery = false
+    r.CanTouch = false
+    r.Material = Enum.Material.Neon
+    r.Color = colour
+    r.Transparency = 0.25
+    -- Rotated onto its side so the cylinder reads as a flat disc on the ground.
+    r.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
+    r.Size = Vector3.new(1, from, from)
+    r.Parent = Workspace
+
+    TweenService:Create(r, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = Vector3.new(1, to, to),
+        Transparency = 1,
+    }):Play()
+    Debris:AddItem(r, seconds + 0.2)
+end
+
+local function streak(from: Vector3, to: Vector3, colour: Color3, thickness: number)
+    local delta = to - from
+    local len = delta.Magnitude
+    if len < 0.5 then return end
+    local p = Instance.new("Part")
+    p.Name = "FX_Streak"
+    p.Anchored = true
+    p.CanCollide = false
+    p.CanQuery = false
+    p.CanTouch = false
+    p.Material = Enum.Material.Neon
+    p.Color = colour
+    p.Transparency = 0.3
+    p.Size = Vector3.new(thickness, thickness, len)
+    p.CFrame = CFrame.new(from + delta / 2, to)
+    p.Parent = Workspace
+    TweenService:Create(p, TweenInfo.new(0.35), { Transparency = 1, Size = Vector3.new(0.1, 0.1, len) }):Play()
+    Debris:AddItem(p, 0.6)
+end
+
+local function shell(host: BasePart, colour: Color3, seconds: number)
+    local sh = Instance.new("Part")
+    sh.Name = "FX_Shell"
+    sh.Shape = Enum.PartType.Ball
+    sh.Anchored = false
+    sh.CanCollide = false
+    sh.CanQuery = false
+    sh.CanTouch = false
+    sh.Massless = true
+    sh.Material = Enum.Material.ForceField
+    sh.Color = colour
+    sh.Transparency = 0.35
+    sh.Size = host.Size * 1.25
+    sh.CFrame = host.CFrame
+    sh.Parent = Workspace
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0, weld.Part1 = host, sh
+    weld.Parent = sh
+    TweenService:Create(sh, TweenInfo.new(seconds), { Transparency = 1 }):Play()
+    Debris:AddItem(sh, seconds + 0.2)
+end
+
+-- A quick squash-and-stretch on the body itself. It is the cheapest possible
+-- "that did something" signal and it works even when everything else is off
+-- screen, because the thing it animates is the thing the camera is following.
+local function pulse(ball: BasePart, scale: number, seconds: number)
+    local base = ball.Size
+    local t = TweenService:Create(ball, TweenInfo.new(seconds * 0.4, Enum.EasingStyle.Back,
+        Enum.EasingDirection.Out), { Size = base * scale })
+    t:Play()
+    task.delay(seconds * 0.4, function()
+        if ball.Parent then
+            -- Tween back to whatever the size is NOW, not to the size we
+            -- captured: the arena resizes the body constantly, and snapping
+            -- back to a stale value would undo real growth.
+            TweenService:Create(ball, TweenInfo.new(seconds * 0.6), { Size = ball.Size / scale }):Play()
+        end
+    end)
+end
+
+local POWER_COLOUR = {
+    dash   = Color3.fromRGB(150, 205, 225), blink  = Color3.fromRGB(186, 170, 206),
+    split  = Color3.fromRGB(195, 165, 195), slam   = Color3.fromRGB(205, 170, 140),
+    hook   = Color3.fromRGB(190, 180, 145), bubble = Color3.fromRGB(175, 200, 200),
+    spike  = Color3.fromRGB(205, 150, 155), slick  = Color3.fromRGB(160, 175, 150),
+    decoy  = Color3.fromRGB(180, 176, 190), siphon = Color3.fromRGB(160, 190, 172),
+    magnet = Color3.fromRGB(170, 190, 215), beacon = Color3.fromRGB(206, 186, 132),
+}
+
+function Juice.onPower(id: string, data: any)
+    local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+    if not ball then return end
+    local pos = ball.Position
+    local colour = POWER_COLOUR[id] or Color3.fromRGB(190, 190, 190)
+    local r = ball.Size.X / 2
+
+    Juice.play((Config.POWER_SOUND or {})[id] or "whoosh", 0.25)
+
+    if id == "dash" then
+        pulse(ball, 0.82, 0.3)
+        burst(pos, colour, 14, 2)
+        Juice.shakeCamera(0.3)
+
+    elseif id == "blink" then
+        -- Both ends, joined. A teleport with no visible origin reads as a
+        -- rubber-band desync rather than as something you did on purpose.
+        burst(pos, colour, 30, 2.4)
+        task.delay(0.05, function()
+            local now = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+            if now then
+                streak(pos, now.Position, colour, math.max(2, r * 0.7))
+                burst(now.Position, colour, 30, 2.4)
+            end
+        end)
+        Juice.shakeCamera(0.5)
+
+    elseif id == "split" then
+        pulse(ball, 0.7, 0.45)
+        streak(pos, pos + ball.AssemblyLinearVelocity.Unit * (r * 6), colour, r * 0.8)
+        burst(pos, colour, 26, 3)
+        Juice.shakeCamera(0.6)
+
+    elseif id == "slam" then
+        pulse(ball, 1.18, 0.5)
+        -- The ring is fired on the WAY UP as a telegraph. Everyone nearby gets
+        -- most of a second to move, which is what makes dodging a slam a skill
+        -- rather than a coin flip.
+        ring(pos - Vector3.new(0, r, 0), colour, r * 2, 92, 0.85)
+        Juice.shakeCamera(0.8)
+
+    elseif id == "hook" then
+        burst(pos, colour, 16, 2)
+        Juice.shakeCamera(0.4)
+
+    elseif id == "bubble" then
+        shell(ball, colour, 3)
+        ring(pos - Vector3.new(0, r, 0), colour, r * 2, r * 5, 0.5)
+
+    elseif id == "spike" then
+        shell(ball, colour, 3)
+        burst(pos, colour, 34, 2.6)
+        Juice.shakeCamera(0.5)
+
+    elseif id == "beacon" then
+        shell(ball, colour, 8)
+        ring(pos - Vector3.new(0, r, 0), colour, r * 2, 120, 1.2)
+        -- A pillar, because BEACON's entire bargain is that the whole island
+        -- can see you. If it were subtle it would be a free damage buff.
+        local beam = Instance.new("Part")
+        beam.Name = "FX_Beacon"
+        beam.Anchored = false
+        beam.CanCollide = false
+        beam.CanQuery = false
+        beam.CanTouch = false
+        beam.Massless = true
+        beam.Material = Enum.Material.Neon
+        beam.Color = colour
+        beam.Transparency = 0.55
+        beam.Size = Vector3.new(r * 0.8, 200, r * 0.8)
+        beam.CFrame = ball.CFrame * CFrame.new(0, 100, 0)
+        beam.Parent = Workspace
+        local w = Instance.new("WeldConstraint")
+        w.Part0, w.Part1 = ball, beam
+        w.Parent = beam
+        TweenService:Create(beam, TweenInfo.new(8), { Transparency = 1 }):Play()
+        Debris:AddItem(beam, 8.2)
+
+    elseif id == "slick" then
+        ring(pos - Vector3.new(0, r, 0), colour, r, r * 4, 0.6)
+        burst(pos, colour, 12, 2)
+
+    elseif id == "decoy" then
+        pulse(ball, 1.1, 0.3)
+        burst(pos, colour, 18, 2.2)
+
+    elseif id == "siphon" then
+        burst(pos, colour, 22, 2)
+        Juice.shakeCamera(0.35)
+
+    elseif id == "magnet" then
+        ring(pos - Vector3.new(0, r, 0), colour, 80, r * 2, 0.7)
+    end
+end
+
+-- Somebody drained you. Fired on the victim, who otherwise just watches their
+-- number fall with no idea why.
+function Juice.onSiphoned(from: string?, amount: number?)
+    local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+    if ball then
+        burst(ball.Position, Color3.fromRGB(190, 120, 120), 26, 2.4)
+    end
+    Juice.play("drip", 0.3)
+    Juice.shakeCamera(0.8)
+end
+
+function Juice.onBank(glob: number?)
+    local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+    if ball then
+        local r = ball.Size.X / 2
+        ring(ball.Position - Vector3.new(0, r, 0), Color3.fromRGB(206, 184, 126), r * 2, 70, 0.9)
+        burst(ball.Position, Color3.fromRGB(206, 184, 126), 44, 3)
+    end
+    Juice.play("bank")
+    Juice.shakeCamera(0.6)
+end
+
+function Juice.onPop(mass: number?)
+    local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
+    if ball then
+        burst(ball.Position, Color3.fromRGB(190, 124, 112), 80, 3.4)
+        ring(ball.Position, Color3.fromRGB(190, 124, 112), 4, 80, 0.7)
+    end
+    Juice.play("pop")
+    Juice.shakeCamera(2.2)
 end
 
 -- ── Living world ───────────────────────────────────────────────────────────

@@ -144,11 +144,52 @@ Config.TRADE_MAX_SLOTS = 4
 --
 -- TO ADD SOUND: find ids on the Creator Store (Audio), paste them below, and
 -- make sure each is actually an Audio asset rather than a model containing one.
+-- WHY rbxasset:// AND NOT rbxassetid://
+--
+-- These are files that ship INSIDE the Roblox client. They are not catalog
+-- uploads, so there is no owner, no moderation queue, no licence question and
+-- no chance of one being taken down and silently breaking the game — which is
+-- exactly what happened the first time this table held a catalog id and the
+-- client threw "Asset type does not match requested type" on every pickup.
+--
+-- A path that does not exist in some future client version fails to load
+-- SILENTLY rather than erroring, which is the failure mode you want for audio.
+-- Juice checks them at boot and warns once per bad id rather than per play.
+--
+-- Every one of these has shipped with Roblox for years as a default Humanoid
+-- or Studio sound. They should be verified once in Studio all the same: the
+-- harness has no audio engine and cannot confirm a file exists.
+local BUILTIN = "rbxasset://sounds/"
+
 Config.SOUNDS = {
-    catch = "",   -- a short blip on picking something up
-    rare  = "",   -- a fanfare for Legendary and above
-    gulp  = "",   -- a heavy swallow
-    thud  = "",   -- a Sumo Pit collision
+    -- Pickups and progress
+    catch  = BUILTIN .. "electronicpingshort.wav",  -- a pellet
+    rare   = BUILTIN .. "bass.wav",                 -- Legendary and above
+    bank   = BUILTIN .. "bass.wav",                 -- mass becomes Glob
+    unlock = BUILTIN .. "electronicpingshort.wav",  -- a crate, a power
+
+    -- Bodies meeting bodies
+    gulp   = BUILTIN .. "uuhhh.mp3",                -- you ate somebody
+    pop    = BUILTIN .. "uuhhh.mp3",                -- somebody ate you
+    thud   = BUILTIN .. "hit.wav",                  -- a shove in the Standoff
+
+    -- Powers. One per feel, not one per power: twelve distinct stings is noise
+    -- on a phone speaker, and players read the SHAPE of a sound long before
+    -- they learn which of twelve it was.
+    whoosh = BUILTIN .. "action_falling.mp3",       -- dash, blink, split
+    slam   = BUILTIN .. "metal.ogg",                -- slam, hook
+    shield = BUILTIN .. "action_get_up.mp3",        -- bubble, spike, beacon
+    drip   = BUILTIN .. "impact_water.mp3",         -- slick, decoy, siphon
+    click  = BUILTIN .. "clickfast.wav",            -- UI
+}
+
+-- Which sound each power plays. A power with no entry falls back to "whoosh".
+Config.POWER_SOUND = {
+    dash = "whoosh", blink = "whoosh", split = "whoosh",
+    slam = "slam", hook = "slam",
+    bubble = "shield", spike = "shield", beacon = "shield",
+    slick = "drip", decoy = "drip", siphon = "drip",
+    magnet = "click",
 }
 
 -- ── Misc ───────────────────────────────────────────────────────────────────

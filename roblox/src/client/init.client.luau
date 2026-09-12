@@ -492,8 +492,13 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     elseif kind == "ascend" then Juice.onAscend()
     elseif kind == "shove" then Juice.onShove(a, b or 0.5)
     elseif kind == "runEnd" then ArenaHud.runEnded(a)
-    elseif kind == "pop" then Juice.onShove(nil, 1)
-    elseif kind == "power" then Juice.play("catch", 0.4) end
+    elseif kind == "pop" then Juice.onPop(a and a.mass)
+    elseif kind == "bank" then Juice.onBank(a and a.glob)
+    elseif kind == "power" then Juice.onPower(a and a.id, a)
+    elseif kind == "slam" then Juice.shakeCamera(1.4)
+    elseif kind == "hook" then Juice.play("slam", 0.3)
+    elseif kind == "siphon" then Juice.play("drip", 0.3)
+    elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount) end
 end)
 
 Roll.bindInput()
@@ -676,7 +681,10 @@ end)
 
 Net.get("CrateResult").OnClientEvent:Connect(function(result)
     ArenaHud.crateResult(result)
-    Juice.play("unlock")
+    -- A Legendary and a Common must not sound alike. The whole point of a
+    -- crate is the half-second before you know which you got.
+    local r = result and result.reward and result.reward.rarity
+    Juice.play((r == "Legendary" or r == "Mythic" or r == "Epic") and "rare" or "unlock")
 end)
 
 UserInputService.InputBegan:Connect(function(input, processed)

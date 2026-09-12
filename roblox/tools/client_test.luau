@@ -174,4 +174,33 @@ local ok, err = pcall(function() tick(300, 0.5) end)
 check("no runtime error over 5 minutes of RenderStepped", ok, tostring(err))
 
 emit("")
+emit("")
+emit("══ THE SNAPSHOT CONTRACT ══")
+-- EVERY field the client's UI reads off the profile must actually be sent.
+--
+-- Three dock tabs were dead for exactly this reason: the arena fields were
+-- never added to the snapshot, so Powers read lifetimeBanked as nil, Trinkets
+-- read trinketsOwned as nil, and both rendered every entry permanently locked.
+-- Nothing errored. The UI drew perfectly and was simply always wrong — which
+-- is invisible to a geometry audit and to any test that only checks a panel
+-- builds. A field list is the cheapest possible guard against it.
+local snap = nil
+for i = #_G.TRAFFIC, 1, -1 do
+    local t = _G.TRAFFIC[i]
+    if t.remote == "StateSync" and t.player ~= "ALL" then snap = t.args[1] break end
+end
+check("a profile snapshot reached the client", snap ~= nil)
+
+local REQUIRED = {
+    "glob", "goobs", "activeGoobId", "cosmeticsOwned", "loadout", "season",
+    "lifetimeBanked", "bestBank", "powerId", "powerUses",
+    "trinketsOwned", "trinketSlots", "cratePity", "streak",
+}
+local absent = {}
+for _, field in ipairs(REQUIRED) do
+    if snap == nil or snap[field] == nil then table.insert(absent, field) end
+end
+check("every field the UI reads is present in the snapshot",
+    #absent == 0, table.concat(absent, ", "))
+
 emit(("══ %s ══"):format(fails == 0 and "ALL CLIENT CHECKS PASSED" or (fails .. " FAILURE(S)")))
