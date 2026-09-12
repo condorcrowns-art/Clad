@@ -331,10 +331,25 @@ end
 local function renderPowers()
     local banked = (profile and profile.lifetimeBanked) or 0
     local current = (profile and profile.powerId) or Powers.DEFAULT
+    local uses = (profile and profile.powerUses) or {}
+
+    local nextPower, gap = Powers.nextLocked(banked)
+    local head = card(sheetBody, 0, 46)
+    local hl = Theme.label({
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 30),
+        Text = nextPower
+            and ("Next: %s at 💧%s  —  %s to go"):format(nextPower.name,
+                Format.short(nextPower.unlockBanked), Format.short(gap))
+            or "Every power unlocked. Carry whichever suits the run.",
+        TextSize = 15, TextColor3 = Theme.GOLD, TextWrapped = true,
+    })
+    hl.Parent = head
 
     for i, p in ipairs(Powers.LIST) do
         local unlocked = banked >= p.unlockBanked
-        local r = row(sheetBody, 72, i)
+        local mine = uses[p.id] or 0
+        local tier = Powers.masteryTier(mine)
+        local r = card(sheetBody, i, 86, unlocked and "Common" or nil)
         local name = Theme.label({
             Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -150, 0, 24),
             Text = unlocked and p.name or ("🔒 " .. p.name),
@@ -343,7 +358,7 @@ local function renderPowers()
         })
         name.Parent = r
         local blurb = Theme.label({
-            Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 32),
+            Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 30),
             Text = unlocked
                 and ("%s   ·   costs %d%% of you   ·   %ds"):format(p.blurb, p.cost * 100, p.cooldown)
                 or ("Unlocks at 💧%s banked  (you have 💧%s)")
@@ -351,6 +366,22 @@ local function renderPowers()
             TextSize = 13, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
         })
         blurb.Parent = r
+
+        if unlocked then
+            local nextTier, toGo = Powers.masteryNext(mine)
+            local stars = string.rep("★", tier) .. string.rep("☆", Powers.MASTERY_MAX_TIER - tier)
+            local mastery = Theme.label({
+                Position = UDim2.fromOffset(14, 62), Size = UDim2.new(1, -150, 0, 20),
+                Text = nextTier
+                    and ("%s  %d uses  ·  %d more for mastery %d"):format(stars, mine, toGo, nextTier)
+                    or ("%s  mastered — %d%% quicker, %d%% cheaper"):format(stars,
+                        Powers.MASTERY_MAX_TIER * Powers.MASTERY_COOLDOWN_PER_TIER * 100,
+                        Powers.MASTERY_MAX_TIER * Powers.MASTERY_COST_PER_TIER * 100),
+                TextSize = 12,
+                TextColor3 = tier > 0 and Theme.GOLD or Theme.TEXT_DIM,
+            })
+            mastery.Parent = r
+        end
 
         if unlocked and p.id ~= current then
             local btn = actionButton(r, "CARRY", Theme.ACCENT, 108)
@@ -884,6 +915,9 @@ end
 function ArenaHud.setArena(state: any)
     latest = state
     if not gui or not state then return end
+    -- The arena syncs twelve times a second, so without this guard the run
+    -- summary is overwritten roughly 83 milliseconds after it appears.
+    local showingSummary = (ArenaHud._summaryUntil or 0) > os.clock()
 
     massLabel.Text = Format.short(state.mass)
     worthLabel.Text = "worth 💧" .. Format.short(state.worth)
@@ -891,7 +925,13 @@ function ArenaHud.setArena(state: any)
     -- The melt readout is the game's one piece of teaching, and it has to say
     -- what is HAPPENING rather than what the number is. "-8/s" means nothing
     -- to a nine-year-old; "melting fast — bank it" is an instruction.
-    if state.leak <= 0 then
+    -- BEACON is the one power whose whole point is that everybody can see it,
+    -- so the HUD says so out loud rather than letting the player forget they
+    -- are lit up and wonder why three people are converging on them.
+    if state.lit then
+        meltLabel.Text = "LIT UP — food +45%, everyone sees you"
+        meltLabel.TextColor3 = Theme.GOLD
+    elseif state.leak <= 0 then
         meltLabel.Text = "not melting yet"
         meltLabel.TextColor3 = Theme.TEXT_DIM
     elseif state.leak < state.harvest * 0.5 then
@@ -904,7 +944,9 @@ function ArenaHud.setArena(state: any)
 
     local where = state.biome or (state.ring == "VAULT" and "the Vault"
         or state.ring == "SHALLOWS" and "the Shallows" or "the Flats")
-    if state.banking > 0 then
+    if showingSummary then
+        -- leave the summary up
+    elseif state.banking > 0 then
         statusLabel.Text = "BANKING — hold still"
         statusLabel.TextColor3 = Theme.GOLD
     elseif state.safe then
@@ -920,7 +962,8 @@ function ArenaHud.setArena(state: any)
         math.clamp(state.banking / math.max(0.01, state.bankNeeds), 0, 1), 1)
 
     local power = Powers.get(state.powerId)
-    powerBtn.Text = power and power.name or "—"
+    powerBtn.Text = (power and power.name or "—")
+        .. ((state.mastery or 0) > 0 and ("\n" .. string.rep("★", state.mastery)) or "")
     if state.powerCooldown > 0.05 then
         powerCost.Text = ("%.1fs"):format(state.powerCooldown)
         powerSweep.Size = UDim2.fromScale(1,
@@ -972,6 +1015,33 @@ function ArenaHud.setPit(state: any)
     if openTab == "standoff" then
         ArenaHud.refreshSheet()
     end
+end
+
+-- A run ended. A loop this short has to CLOSE, or a run simply stops and the
+-- player is left reconstructing what happened from a number that has already
+-- changed. Deliberately a banner on the status strip rather than a panel: it
+-- must not interrupt the next run, which starts the same second.
+function ArenaHud.runEnded(s: any)
+    if not gui or not s then return end
+    local banked = s.ended == "banked"
+    statusLabel.Text = banked
+        and ("BANKED 💧%s  ·  peak %s  ·  %ds"):format(
+            Format.short(s.payout), Format.short(s.peak), math.floor(s.seconds))
+        or ("POPPED  ·  peak %s  ·  %ds  ·  %d eaten"):format(
+            Format.short(s.peak), math.floor(s.seconds), s.ate or 0)
+    statusLabel.TextColor3 = banked and Theme.GOLD or Theme.BAD
+    ArenaHud._summaryUntil = os.clock() + 3.5
+
+    -- Hand the strip back to the live readout after a beat. Without this the
+    -- summary sticks and the player loses the safe/danger indicator, which is
+    -- the most urgent thing on the screen.
+    local token = (ArenaHud._summaryToken or 0) + 1
+    ArenaHud._summaryToken = token
+    task.delay(3.5, function()
+        if ArenaHud._summaryToken == token and latest then
+            ArenaHud.setArena(latest)
+        end
+    end)
 end
 
 function ArenaHud.isSheetOpen(): boolean

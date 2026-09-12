@@ -490,7 +490,10 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     if kind == "catch" then Juice.onCatch(a)
     elseif kind == "gulp" then Juice.onGulp()
     elseif kind == "ascend" then Juice.onAscend()
-    elseif kind == "shove" then Juice.onShove(a, b or 0.5) end
+    elseif kind == "shove" then Juice.onShove(a, b or 0.5)
+    elseif kind == "runEnd" then ArenaHud.runEnded(a)
+    elseif kind == "pop" then Juice.onShove(nil, 1)
+    elseif kind == "power" then Juice.play("catch", 0.4) end
 end)
 
 Roll.bindInput()

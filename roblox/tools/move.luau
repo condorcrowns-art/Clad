@@ -30,4 +30,10 @@ check("a small Goob at full tilt still beats a stationary whale",
 check("cheat ceiling clears a legitimate dash",
     Movement.maxPlausibleSpeed(10) > Movement.DASH_SPEED)
 emit("")
-emit(fails == 0 and "ALL MOVEMENT CHECKS PASSED" or (fails .. " FAILURE(S)"))
+-- A suite that PRINTS its failures and exits zero is invisible: run_all.sh
+-- reported "ALL SUITES PASSED" over the top of this one for as long as it
+-- has existed. Failing loudly is the entire job.
+if fails > 0 then
+    error(("%d FAILURE(S) in move.luau"):format(fails), 0)
+end
+emit("ALL MOVEMENT CHECKS PASSED")

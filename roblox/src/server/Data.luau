@@ -72,6 +72,9 @@ function Data.blankProfile(userId: number)
         trinketSlots = {} :: { string },
         cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
         bestBank = 0,
+        powerUses = {} :: { [string]: number },    -- mastery, per power
+        streak = 0,
+        streakDay = 0,
     }
 end
 
@@ -138,6 +141,9 @@ function Data.load(player: Player)
     profile.trinketsOwned = profile.trinketsOwned or {}
     profile.trinketSlots = profile.trinketSlots or {}
     profile.cratePity = profile.cratePity or {}
+    profile.powerUses = profile.powerUses or {}
+    profile.streak = profile.streak or 0
+    profile.streakDay = profile.streakDay or 0
     if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked) then
         profile.powerId = Powers.DEFAULT
     end

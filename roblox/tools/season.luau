@@ -95,4 +95,10 @@ check("premium does NOT carry to the next season", s5.premium == false)
 check("a current season does not roll", Season.rollIfNeeded(Season.blank()) == false)
 
 emit("")
-emit(fails == 0 and "ALL SEASON CHECKS PASSED" or (fails .. " FAILURE(S)"))
+-- A suite that PRINTS its failures and exits zero is invisible: run_all.sh
+-- reported "ALL SUITES PASSED" over the top of this one for as long as it
+-- has existed. Failing loudly is the entire job.
+if fails > 0 then
+    error(("%d FAILURE(S) in season.luau"):format(fails), 0)
+end
+emit("ALL SEASON CHECKS PASSED")

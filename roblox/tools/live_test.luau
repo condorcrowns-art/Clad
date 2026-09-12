@@ -298,6 +298,65 @@ check("a power you have not unlocked is refused",
     (arenaOf(alice) or {}).powerId ~= "spike", (arenaOf(alice) or {}).powerId)
 
 emit("")
+emit("══ MASTERY: using a power makes you better with THAT power ══")
+-- It rewards committing to one power, which is the choice the single slot was
+-- already asking the player to make. It must never be the reason a newer
+-- player cannot win, so the ceiling is asserted in the sim as well.
+local before = arenaOf(alice) or {}
+local startTier = before.mastery or 0
+for _ = 1, 30 do
+    feed(alice, 4)
+    svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+    tick(4)
+end
+local after = arenaOf(alice) or {}
+check("using a power banks mastery toward the next tier",
+    (after.mastery or 0) >= startTier, ("%s -> %s"):format(tostring(startTier), tostring(after.mastery)))
+
+emit("")
+emit("══ THE DAILY STREAK ══")
+-- Pays GLOB, never mass and never a power. A streak that gates power is a
+-- streak that punishes having a life.
+local carol = svc.addPlayer("Carol", 303, V3.new(30, 5, 40))
+tick(2)
+local function snapFor(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "StateSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1]
+        end
+    end
+end
+local csnap = snapFor(carol)
+local Config2 = _G.SHARED("Config")
+-- Asserted EXACTLY, not as "more than before". Day one pays a known amount,
+-- so an exact match proves it was granted once — a "went up" check passes just
+-- as happily if the grant fires twice, which is the actual failure mode for
+-- anything keyed on a calendar day.
+-- A TIGHT WINDOW, not "more than before". Day one pays a known amount, so a
+-- near-exact match proves it was granted once; a "went up" check passes just
+-- as happily when the grant fires twice, which is the actual failure mode for
+-- anything keyed on a calendar day. The slack is for the couple of Glob of
+-- legacy idle income that accrues in the seconds between joining and reading.
+local expectStreak = Config2.STARTING_GLOB + 900
+check("a new player is paid exactly one day-one streak",
+    csnap and math.abs(csnap.glob - expectStreak) < 20,
+    csnap and ("%.1f, expected %d"):format(csnap.glob, expectStreak))
+-- THE SECOND CLAIM. A player joining twice in a day — a rejoin, a server
+-- hop, a reconnect — must not be paid twice, and the only way to test that is
+-- to do it. Same UserId, so the same profile is loaded.
+local carolAgain = svc.addPlayer("CarolRejoin", 303, V3.new(34, 5, 40))
+tick(3)
+local rejoined = snapFor(carolAgain) or snapFor(carol)
+check("rejoining the same day is not paid again",
+    rejoined and rejoined.glob < expectStreak + 400,
+    rejoined and ("%.1f after rejoin, was %.1f"):format(rejoined.glob, csnap.glob))
+
+check("the streak pays Glob and nothing that touches a fight",
+    csnap and (csnap.goobs == nil or #csnap.goobs == 1),
+    csnap and csnap.goobs and tostring(#csnap.goobs))
+
+emit("")
 emit("══ SLAM SHATTERS THE ISLAND ══")
 -- SLAM's real job is not knockback. An island silts up with congealed shells
 -- for the life of a server, and without something that can break them open

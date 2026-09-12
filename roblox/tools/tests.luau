@@ -134,4 +134,10 @@ check("sanitize rejects symbols", Names.sanitize("Bob<script>"), nil)
 check("sanitize accepts normal", Names.sanitize("  Sir Gloop  "), "Sir Gloop")
 
 emit("")
-if fails == 0 then emit("ALL CHECKS PASSED") else emit(("%d CHECK(S) FAILED"):format(fails)) end
+-- Fatal, not decorative. A suite that prints its failures and exits zero is
+-- invisible to run_all.sh, which happily reported "ALL SUITES PASSED" over
+-- the top of printed failures for as long as this harness has existed.
+if fails > 0 then
+    error(("%d CHECK(S) FAILED in tests.luau"):format(fails), 0)
+end
+emit("ALL CHECKS PASSED")

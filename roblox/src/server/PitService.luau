@@ -92,7 +92,7 @@ function PitService.join(player: Player)
     local goob = PitService.getGoob(player)
     if not profile or not goob then return end
 
-    local stake = Pit.stakeFor(GoobMath.incomePerSecond(goob))
+    local stake = Pit.stakeFor(profile.lifetimeBanked or 0, profile.glob or 0)
     if profile.glob < stake then
         notify(player, ("You need 💧%s to enter."):format(Format.short(stake)), "warn")
         return
@@ -129,6 +129,26 @@ end
 local function startMatch()
     local entrants = {}
     local pot = 0
+
+    -- EVERYONE STAKES THE SAME, and it is the smallest stake in the lobby.
+    --
+    -- The ring already normalises both fighters to identical mass, because the
+    -- whole point is that the fight is steering and timing rather than whoever
+    -- arrived biggest. A pot where one side risked ten times what the other
+    -- did would put the unfairness straight back in through the wallet: the
+    -- rich player wins pocket change, the new player loses a session. Levelling
+    -- down rather than up means nobody is ever priced out of a match they
+    -- already queued for.
+    local level = math.huge
+    for _, e in ipairs(queue) do
+        level = math.min(level, e.stake)
+    end
+    if level < math.huge then
+        for _, e in ipairs(queue) do
+            e.stake = level
+        end
+    end
+
     for _, e in ipairs(queue) do
         local profile = PitService.getProfile(e.player)
         -- Re-check affordability: Glob may have been spent while queueing.

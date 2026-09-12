@@ -111,6 +111,20 @@ for _ = 1, 40 do
     if tut() and tut().id ~= "bank" then break end
 end
 check("banking advanced the tutorial", tut() and tut().id ~= "bank", tut() and tut().id)
+
+-- A loop this short has to CLOSE. Without a summary a run simply stops, and
+-- the player is left reconstructing what happened from a number that has
+-- already been reset to 25.
+local runEnd = nil
+for i = #_G.TRAFFIC, 1, -1 do
+    local t = _G.TRAFFIC[i]
+    if t.remote == "Effect" and t.args[1] == "runEnd" then runEnd = t.args[2] break end
+end
+check("the run reports back when it ends", runEnd ~= nil)
+check("and it says how it ended, what it peaked at and what it paid",
+    runEnd and runEnd.ended == "banked" and runEnd.peak > 0 and runEnd.payout > 0,
+    runEnd and ("%s peak=%s pay=%s"):format(tostring(runEnd.ended),
+        tostring(runEnd.peak), tostring(runEnd.payout)))
 check("and banking actually paid", ((snapOf(alice) or {}).glob or 0) > globBefore,
     ("%s -> %s"):format(tostring(globBefore), tostring((snapOf(alice) or {}).glob)))
 

@@ -56,4 +56,10 @@ emit(("  worst error %.3f%%  (%.1f rendered as %q)"):format(worst * 100, worstN,
 check("meets the stated guarantee", worst < 0.01, true)
 
 emit("")
-emit(fails == 0 and "ALL FORMAT CHECKS PASSED" or (fails .. " FAILURE(S)"))
+-- A suite that PRINTS its failures and exits zero is invisible: run_all.sh
+-- reported "ALL SUITES PASSED" over the top of this one for as long as it
+-- has existed. Failing loudly is the entire job.
+if fails > 0 then
+    error(("%d FAILURE(S) in fmt.luau"):format(fails), 0)
+end
+emit("ALL FORMAT CHECKS PASSED")

@@ -441,6 +441,28 @@ ArenaService.start({
 
     sync = function(player, state) ArenaSync:FireClient(player, state) end,
     teach = teach,
+
+    powerUses = function(player)
+        local profile = Data.get(player)
+        return (profile and profile.powerUses) or {}
+    end,
+
+    notePowerUse = function(player, id)
+        local profile = Data.get(player)
+        if not profile then return end
+        profile.powerUses = profile.powerUses or {}
+        local before = profile.powerUses[id] or 0
+        profile.powerUses[id] = before + 1
+        -- Announce a mastery tier the moment it lands. A stat that improves
+        -- silently is a stat the player never learns they have.
+        local was, now = Powers.masteryTier(before), Powers.masteryTier(before + 1)
+        if now > was then
+            local power = Powers.get(id)
+            notify(player, ("✨ %s mastery %d — quicker and cheaper.")
+                :format(power and power.name or id, now), "good")
+            push(player)
+        end
+    end,
 })
 
 -- One button. The client sends where it is aiming; the server decides
@@ -559,6 +581,39 @@ Net.get("OpenCrate").OnServerEvent:Connect(function(player, crateId)
     push(player)
 end)
 
+-- ── The daily streak ───────────────────────────────────────────────────────
+-- The smallest honest retention hook there is: come back tomorrow, get a
+-- little more than you got today. It pays GLOB, never mass and never a power,
+-- so missing a week costs you some spending money and nothing you can be
+-- beaten with. A streak that gates power is a streak that punishes having a
+-- life.
+local STREAK_BASE = 900
+local STREAK_STEP = 450
+local STREAK_CAP = 7
+
+local function claimDaily(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local today = math.floor(os.time() / 86400)
+    if profile.streakDay == today then
+        return                      -- already collected
+    end
+    -- Consecutive if yesterday; otherwise the streak restarts at one. Nothing
+    -- in between, and no grace period: a "you nearly kept it" message is worse
+    -- than a clean reset.
+    profile.streak = (profile.streakDay == today - 1) and (profile.streak + 1) or 1
+    profile.streakDay = today
+
+    local day = math.min(profile.streak, STREAK_CAP)
+    local reward = STREAK_BASE + STREAK_STEP * (day - 1)
+    profile.glob += reward
+
+    notify(player, ("📅 Day %d streak — 💧%s%s"):format(
+        profile.streak, Format.short(reward),
+        profile.streak >= STREAK_CAP and "  (max)" or ""), "good")
+    push(player)
+end
+
 -- ── Player lifecycle ───────────────────────────────────────────────────────
 
 local function onJoin(player: Player)
@@ -580,6 +635,7 @@ local function onJoin(player: Player)
 
     GoobService.spawnFor(player)
     ArenaService.enter(player)
+    claimDaily(player)
     RollService.applyCosmetics(player, profile.loadout)
     syncCrew(player)
     checkAchievements(player)

@@ -122,4 +122,10 @@ end
 check("no cosmetic has two sources", #dupes == 0, table.concat(dupes, ", "))
 
 emit("")
-emit(fails == 0 and "ALL SYSTEM CHECKS PASSED" or (fails .. " FAILURE(S)"))
+-- A suite that PRINTS its failures and exits zero is invisible: run_all.sh
+-- reported "ALL SUITES PASSED" over the top of this one for as long as it
+-- has existed. Failing loudly is the entire job.
+if fails > 0 then
+    error(("%d FAILURE(S) in systems.luau"):format(fails), 0)
+end
+emit("ALL SYSTEM CHECKS PASSED")

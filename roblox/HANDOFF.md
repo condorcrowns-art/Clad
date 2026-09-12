@@ -425,6 +425,25 @@ stand on. `integration.luau` checks built-vs-configured both ways.
 7. **Boards expose `Board -> Entries`** as a direct child. Burying it deeper is
    a silent WaitForChild hang, not an error.
 
+## Powers (12) and mastery
+
+Twelve powers, ordered BY UNLOCK in `Powers.LIST` — `nextLocked()` walks the
+array and returns the first unaffordable entry, so an out-of-order entry points
+the player at a target that is not next. Four appended powers did exactly that
+until a test caught it.
+
+Mastery: using a power banks uses toward three tiers (25/100/300), worth 5%
+cooldown and 4% cost each. Trinket haste and mastery are clamped TOGETHER at
+45%, not separately.
+
+Daily streak pays GLOB only, capped at day 7. It is keyed on `streakDay`, so
+the failure mode to guard is a second claim on a rejoin — tested by adding a
+second Player with the same UserId.
+
+Standoff stakes come from `lifetimeBanked`, not a Goob's idle income (the old
+formula meant everybody staked the floor after the rework), and PitService
+levels every entrant to the LOWEST stake in the lobby.
+
 ## Harness traps added this pass
 
 - `mobile_test` used to audit ONE ScreenGui by name. It walks all of them now.
@@ -440,6 +459,16 @@ stand on. `integration.luau` checks built-vs-configured both ways.
   over `_G.TRAFFIC` rather than inferring mass from ball radius. Radius is
   logarithmic in mass and only redraws past a 2% threshold, so it is a terrible
   proxy and it reported "no melt" while the blob shed ninety mass.
+
+## THE BIG ONE: suites must be fatal
+
+Nine of eleven sims used to PRINT their failures and exit zero, so
+`run_all.sh` reported "ALL SUITES PASSED" over the top of real failures. Every
+sim with assertions now calls `error()` when `fails > 0`, and this is verified:
+breaking one assertion makes `run_all.sh` exit 1.
+
+`snack.luau`, `egg.luau` and `balance.luau` are REPORTS, not tests — they
+assert nothing and say so at the top. Do not read a clean run as a verified one.
 
 ## Still outstanding
 

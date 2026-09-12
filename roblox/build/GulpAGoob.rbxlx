@@ -1916,8 +1916,26 @@ end
 
 Pit.SHOVE_IMPULSE = 140        -- studs/sec at a full-share exchange
 
-function Pit.stakeFor(incomePerSecond: number): number
-    return math.max(10, incomePerSecond * Pit.STAKE_SECONDS)
+-- Staked against what you have BANKED, not against a Goob's idle income.
+--
+-- The old formula was written when idling was the earner, and it survived the
+-- rework unnoticed: it meant a player who had never idled — which, after the
+-- rework, is everybody — staked the floor of 10 Glob no matter how rich they
+-- were, and the Standoff had no stakes at all. It is sub-linear so that a
+-- veteran and a newcomer can meet in the same ring without either of them
+-- risking something the other would find absurd.
+Pit.STAKE_EXPONENT = 0.55
+Pit.STAKE_SCALE = 0.8
+Pit.STAKE_MIN = 120
+Pit.STAKE_MAX_FRACTION = 0.15   -- never more than this share of your purse
+
+function Pit.stakeFor(lifetimeBanked: number, purse: number?): number
+    local want = math.max(Pit.STAKE_MIN,
+        math.max(0, lifetimeBanked) ^ Pit.STAKE_EXPONENT * Pit.STAKE_SCALE)
+    if purse then
+        want = math.min(want, math.max(Pit.STAKE_MIN, purse * Pit.STAKE_MAX_FRACTION))
+    end
+    return math.floor(want)
 end
 
 -- Winner takes the pot. With no rake, everything staked comes back out, which
@@ -1973,56 +1991,138 @@ Powers.LIST = {
         id = "magnet", name = "MAGNET",
         blurb = "Yank every loose pellet nearby straight into you.",
         cost = 0.05, cooldown = 12, duration = 4,
-        unlockBanked = 4000,
+        unlockBanked = 3000,
         color = Color3.fromRGB(170, 190, 215),
     },
     {
         id = "slick", name = "SLICK",
         blurb = "Drop a puddle. Whoever's chasing you loses the wheel.",
         cost = 0.06, cooldown = 10, duration = 2,
-        unlockBanked = 12000,
+        unlockBanked = 9000,
         color = Color3.fromRGB(160, 175, 150),
+    },
+    {
+        id = "decoy", name = "DECOY",
+        blurb = "Leave a fake you. Whoever bites it gets nothing.",
+        cost = 0.14, cooldown = 16, duration = 7,
+        unlockBanked = 20000,
+        color = Color3.fromRGB(180, 176, 190),
     },
     {
         id = "slam", name = "SLAM",
         blurb = "Jump and crash. Everyone nearby gets thrown, lumps shatter.",
         cost = 0.12, cooldown = 14, duration = 0,
-        unlockBanked = 30000,
+        unlockBanked = 34000,
         color = Color3.fromRGB(205, 170, 140),
+    },
+    {
+        id = "beacon", name = "BEACON",
+        blurb = "Light yourself up. Food is worth 45% more — and everyone can see you.",
+        cost = 0.06, cooldown = 22, duration = 8,
+        unlockBanked = 52000,
+        color = Color3.fromRGB(206, 186, 132),
     },
     {
         id = "hook", name = "HOOK",
         blurb = "Grab the nearest blob and reel. Bigger pulls, smaller gets pulled.",
         cost = 0.10, cooldown = 13, duration = 1.2,
-        unlockBanked = 60000,
+        unlockBanked = 74000,
         color = Color3.fromRGB(190, 180, 145),
+    },
+    {
+        id = "siphon", name = "SIPHON",
+        blurb = "Drain the nearest blob bigger than you.",
+        cost = 0.09, cooldown = 19, duration = 3,
+        unlockBanked = 100000,
+        color = Color3.fromRGB(160, 190, 172),
     },
     {
         id = "bubble", name = "BUBBLE",
         blurb = "Nothing can eat you. You can't eat either.",
         cost = 0.15, cooldown = 20, duration = 3,
-        unlockBanked = 110000,
+        unlockBanked = 132000,
         color = Color3.fromRGB(175, 200, 200),
     },
     {
         id = "split", name = "SPLIT",
         blurb = "Throw half of yourself at them. It comes back.",
         cost = 0.50, cooldown = 18, duration = 8,
-        unlockBanked = 190000,
+        unlockBanked = 170000,
         color = Color3.fromRGB(195, 165, 195),
+    },
+    {
+        id = "blink", name = "BLINK",
+        blurb = "Vanish and reappear ahead. Straight through anything.",
+        cost = 0.18, cooldown = 17, duration = 0,
+        unlockBanked = 215000,
+        color = Color3.fromRGB(186, 170, 206),
     },
     {
         id = "spike", name = "SPIKE",
         blurb = "For three seconds, anything that eats you pops instead.",
         cost = 0.20, cooldown = 24, duration = 3,
-        unlockBanked = 300000,
+        unlockBanked = 265000,
         color = Color3.fromRGB(205, 150, 155),
     },
 } :: { Power }
 
+-- THE UNLOCK LADDER is paced against banking, which is the only earner: a
+-- good run banks roughly 1.2K, and an active hour is somewhere near 25K. So
+-- the first four powers arrive inside an hour, the middle four over a week of
+-- casual play, and SPIKE sits at about eleven hours of it. The old ladder was
+-- written before banking existed and put half the list past any realistic
+-- session.
+--
 -- SPIKE is last and dearest on purpose. It is the tool that lets the smallest
 -- blob on the island delete the biggest, which is the single best story this
 -- game can produce — and a story stops being a story if it happens every lap.
+
+-- ── Mastery ────────────────────────────────────────────────────────────────
+-- Using a power makes you better with THAT power. Not with all of them — the
+-- point is to reward committing to one, which is the choice the single slot
+-- was already asking you to make. The numbers are deliberately small: three
+-- tiers, and a fully mastered power is about 15% quicker and 12% cheaper. It
+-- is a reason to keep carrying your favourite, never a reason a newer player
+-- cannot beat you.
+-- ORDERED BY UNLOCK, and it must stay that way: nextLocked() walks the array
+-- and returns the first thing the player cannot afford, so an out-of-order
+-- entry points them at a target that is not actually next. Four powers were
+-- appended to the end of this list when they were written and it did exactly
+-- that until a test caught it.
+Powers.MASTERY_TIERS = { 25, 100, 300 }
+Powers.MASTERY_COOLDOWN_PER_TIER = 0.05
+Powers.MASTERY_COST_PER_TIER = 0.04
+Powers.MASTERY_MAX_TIER = 3
+
+function Powers.masteryTier(uses: number?): number
+    local n = uses or 0
+    local tier = 0
+    for _, need in ipairs(-- ORDERED BY UNLOCK, and it must stay that way: nextLocked() walks the array
+-- and returns the first thing the player cannot afford, so an out-of-order
+-- entry points them at a target that is not actually next. Four powers were
+-- appended to the end of this list when they were written and it did exactly
+-- that until a test caught it.
+Powers.MASTERY_TIERS) do
+        if n >= need then tier += 1 end
+    end
+    return tier
+end
+
+-- Uses still to go before the next tier, and what that tier is. nil when the
+-- power is fully mastered — a progress bar that never fills is worse than no
+-- progress bar.
+function Powers.masteryNext(uses: number?): (number?, number?)
+    local n = uses or 0
+    for i, need in ipairs(-- ORDERED BY UNLOCK, and it must stay that way: nextLocked() walks the array
+-- and returns the first thing the player cannot afford, so an out-of-order
+-- entry points them at a target that is not actually next. Four powers were
+-- appended to the end of this list when they were written and it did exactly
+-- that until a test caught it.
+Powers.MASTERY_TIERS) do
+        if n < need then return i, need - n end
+    end
+    return nil, nil
+end
 
 local byId: { [string]: Power } = {}
 for _, p in ipairs(Powers.LIST) do
@@ -2052,22 +2152,30 @@ end
 
 -- What using it actually costs right now, in mass. Floored at a flat minimum
 -- so that a tiny blob cannot dash for free and kite the whole server.
-function Powers.massCost(id: string, mass: number): number
+function Powers.massCost(id: string, mass: number, uses: number?): number
     local p = byId[id]
     if not p then
         return 0
     end
-    return math.max(Powers.MIN_COST, mass * p.cost)
+    local relief = math.min(Powers.MASTERY_MAX_TIER, Powers.masteryTier(uses))
+        * Powers.MASTERY_COST_PER_TIER
+    return math.max(Powers.MIN_COST, mass * p.cost * (1 - relief))
 end
 
 Powers.MIN_COST = 3
 
-function Powers.cooldown(id: string, trinketHaste: number?): number
+function Powers.cooldown(id: string, trinketHaste: number?, uses: number?): number
     local p = byId[id]
     if not p then
         return 0
     end
-    return p.cooldown * (1 - math.clamp(trinketHaste or 0, 0, 0.5))
+    local mastery = math.min(Powers.MASTERY_MAX_TIER, Powers.masteryTier(uses))
+        * Powers.MASTERY_COOLDOWN_PER_TIER
+    -- Clamped TOGETHER, not separately. Trinket haste caps at 35% and mastery
+    -- at 15%; without a joint clamp a stacked player could reach half, and a
+    -- power on a half cooldown stops being a decision.
+    local total = math.clamp((trinketHaste or 0) + mastery, 0, 0.45)
+    return p.cooldown * (1 - total)
 end
 
 -- The next power a player is working towards, for the HUD's progress line.
@@ -3015,6 +3123,28 @@ ArenaService.start({
 
     sync = function(player, state) ArenaSync:FireClient(player, state) end,
     teach = teach,
+
+    powerUses = function(player)
+        local profile = Data.get(player)
+        return (profile and profile.powerUses) or {}
+    end,
+
+    notePowerUse = function(player, id)
+        local profile = Data.get(player)
+        if not profile then return end
+        profile.powerUses = profile.powerUses or {}
+        local before = profile.powerUses[id] or 0
+        profile.powerUses[id] = before + 1
+        -- Announce a mastery tier the moment it lands. A stat that improves
+        -- silently is a stat the player never learns they have.
+        local was, now = Powers.masteryTier(before), Powers.masteryTier(before + 1)
+        if now > was then
+            local power = Powers.get(id)
+            notify(player, ("✨ %s mastery %d — quicker and cheaper.")
+                :format(power and power.name or id, now), "good")
+            push(player)
+        end
+    end,
 })
 
 -- One button. The client sends where it is aiming; the server decides
@@ -3133,6 +3263,39 @@ Net.get("OpenCrate").OnServerEvent:Connect(function(player, crateId)
     push(player)
 end)
 
+-- ── The daily streak ───────────────────────────────────────────────────────
+-- The smallest honest retention hook there is: come back tomorrow, get a
+-- little more than you got today. It pays GLOB, never mass and never a power,
+-- so missing a week costs you some spending money and nothing you can be
+-- beaten with. A streak that gates power is a streak that punishes having a
+-- life.
+local STREAK_BASE = 900
+local STREAK_STEP = 450
+local STREAK_CAP = 7
+
+local function claimDaily(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local today = math.floor(os.time() / 86400)
+    if profile.streakDay == today then
+        return                      -- already collected
+    end
+    -- Consecutive if yesterday; otherwise the streak restarts at one. Nothing
+    -- in between, and no grace period: a "you nearly kept it" message is worse
+    -- than a clean reset.
+    profile.streak = (profile.streakDay == today - 1) and (profile.streak + 1) or 1
+    profile.streakDay = today
+
+    local day = math.min(profile.streak, STREAK_CAP)
+    local reward = STREAK_BASE + STREAK_STEP * (day - 1)
+    profile.glob += reward
+
+    notify(player, ("📅 Day %d streak — 💧%s%s"):format(
+        profile.streak, Format.short(reward),
+        profile.streak >= STREAK_CAP and "  (max)" or ""), "good")
+    push(player)
+end
+
 -- ── Player lifecycle ───────────────────────────────────────────────────────
 
 local function onJoin(player: Player)
@@ -3154,6 +3317,7 @@ local function onJoin(player: Player)
 
     GoobService.spawnFor(player)
     ArenaService.enter(player)
+    claimDaily(player)
     RollService.applyCosmetics(player, profile.loadout)
     syncCrew(player)
     checkAchievements(player)
@@ -3654,6 +3818,11 @@ local SLAM_IMPULSE = 120
 local HOOK_RANGE = 90
 local HOOK_PULL = 96
 local SPLIT_RETURN = 0.55        -- of the thrown half, how much comes back
+local BLINK_DISTANCE = 74
+local SIPHON_RANGE = 82
+local SIPHON_FRACTION = 0.10
+local BEACON_BONUS = 0.45
+local DECOY_LIFETIME = 7
 
 export type Run = {
     mass: number,
@@ -3669,6 +3838,9 @@ export type Run = {
     trinkets: Trinkets.Resolved,
     bestMass: number,
     lastPos: Vector3,
+    startedAt: number,      -- for the run summary
+    ateThisRun: number,
+    uses: { [string]: number },   -- mastery counter, mirrored from the profile
 }
 
 local runs: { [number]: Run } = {}
@@ -3699,6 +3871,8 @@ type Deps = {
     loadout: (player: Player) -> ({ string }, string),   -- trinket ids, power id
     sync: (player: Player, state: any) -> (),
     teach: (player: Player, event: string) -> (),
+    powerUses: (player: Player) -> { [string]: number },
+    notePowerUse: (player: Player, id: string) -> (),
 }
 local deps: Deps
 
@@ -3777,6 +3951,39 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- ── Decoys ─────────────────────────────────────────────────────────────────
+-- A fake body at your current size, in your colour, that anyone may try to
+-- eat and that gives nothing when they do. It is the only power in the game
+-- that costs the VICTIM something — the seconds they spend committing to a
+-- meal that was never there — which is a completely different kind of threat
+-- from every other power, all of which are about speed or mass.
+local function spawnDecoy(player: Player, run: Run, at: Vector3)
+    local folder = WorldBuilder.arenaFolder()
+    local real = RollService.ballFor(player)
+    if not folder or not real then
+        return
+    end
+    local fake = Instance.new("Part")
+    fake.Name = "Decoy"
+    fake.Shape = Enum.PartType.Ball
+    fake.Size = real.Size
+    fake.Anchored = true
+    fake.CanCollide = false
+    fake.CanTouch = false
+    fake.CanQuery = false
+    fake.Material = real.Material
+    fake.Color = real.Color
+    fake.Transparency = real.Transparency
+    fake.Position = at + Vector3.new(0, real.Size.X * 0.1, 0)
+    fake.Parent = folder
+    -- task.delay rather than Debris: one fewer service to reach for, and the
+    -- decoy has to disappear on the same clock everything else in the arena
+    -- runs on.
+    task.delay(DECOY_LIFETIME, function()
+        if fake.Parent then fake:Destroy() end
+    end)
+end
+
 -- ── Run state ──────────────────────────────────────────────────────────────
 
 local function newRun(player: Player): Run
@@ -3795,6 +4002,9 @@ local function newRun(player: Player): Run
         trinkets = Trinkets.resolve(ids),
         bestMass = Config.STARTING_MASS,
         lastPos = Vector3.zero,
+        startedAt = os.clock(),
+        ateThisRun = 0,
+        uses = deps.powerUses(player),
     }
 end
 
@@ -3874,6 +4084,28 @@ local function decayLumps(dt: number)
     end
 end
 
+-- What a run was. Sent on every bank and every pop, because a loop this short
+-- needs to close.
+--
+-- DECLARED HERE, ABOVE pop(), and that is not tidiness. A `local function`
+-- only enters scope from its declaration downward: with this defined next to
+-- bank() — which sits below pop() — the call inside pop() resolved to a nil
+-- GLOBAL, the server booted perfectly, and the whole arena loop died the first
+-- time anybody was eaten. The same trap has now taken down three builds of
+-- this game.
+--
+-- The original note said the loop needs to close: without it a run just stops, and the player is left to
+-- reconstruct what happened from a number that already changed.
+local function summary(run: Run, ended: string, payout: number?)
+    return {
+        ended = ended,
+        seconds = os.clock() - run.startedAt,
+        peak = run.bestMass,
+        ate = run.ateThisRun,
+        payout = payout or 0,
+    }
+end
+
 -- ── Popping ────────────────────────────────────────────────────────────────
 
 local function pop(player: Player, at: Vector3, killer: Player?)
@@ -3896,6 +4128,7 @@ local function pop(player: Player, at: Vector3, killer: Player?)
     congeal(at, split.congeal)
 
     if deps then
+        deps.effect(player, "runEnd", summary(run, "popped", 0))
         deps.effect(player, "pop", { mass = run.mass })
         if killer then
             deps.notify(killer, ("🫧 Popped %s. +%s mass.")
@@ -3907,6 +4140,9 @@ local function pop(player: Player, at: Vector3, killer: Player?)
     end
 
     run.mass = math.max(Config.STARTING_MASS, split.kept)
+    run.startedAt = os.clock()
+    run.ateThisRun = 0
+    run.bestMass = run.mass
     run.banking = 0
     run.leakBuffer = 0
     run.safeUntil = os.clock() + POP_INVULN
@@ -3925,7 +4161,11 @@ local function bank(player: Player, run: Run)
     deps.effect(player, "bank", { glob = glob, mass = run.mass })
     deps.notify(player, ("🏦 Banked %s mass → 💧%s"):format(
         Format.short(run.mass), Format.short(glob)), "good")
+    deps.effect(player, "runEnd", summary(run, "banked", glob))
     deps.teach(player, "bank")
+    run.startedAt = os.clock()
+    run.ateThisRun = 0
+    run.bestMass = Config.BANK_RESET_MASS
     run.mass = Config.BANK_RESET_MASS
     run.banking = 0
     run.leakBuffer = 0
@@ -3946,7 +4186,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if not power then
         return false, "No power equipped."
     end
-    local cost = Powers.massCost(run.powerId, run.mass)
+    local uses = run.uses[run.powerId] or 0
+    local cost = Powers.massCost(run.powerId, run.mass, uses)
     if run.mass - cost < Config.STARTING_MASS * 0.5 then
         return false, "Too small to pay for that."
     end
@@ -3956,7 +4197,9 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     end
 
     run.mass -= cost
-    run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste)
+    run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste, uses)
+    run.uses[run.powerId] = uses + 1
+    deps.notePowerUse(player, run.powerId)
     run.powerUntil = now + math.max(0.05, power.duration)
     run.activeEffect = run.powerId
 
@@ -4021,7 +4264,47 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 end
             end
         end
-    elseif run.powerId == "magnet" then
+    elseif run.powerId == "blink" then
+        -- A teleport, not a shove. It goes THROUGH blobs and lumps, which is
+        -- the only thing DASH cannot do, and is why it costs more than twice
+        -- as much. Routed through RollService.teleport so the anti-cheat is
+        -- told this one was the server's idea.
+        local to = ball.Position + dir * BLINK_DISTANCE
+        local flat = Vector3.new(to.X, 0, to.Z)
+        -- Never off the island. A power that can drop you in the sea is a
+        -- power nobody presses twice.
+        if flat.Magnitude > Config.ISLAND_RADIUS - 20 then
+            to = flat.Unit * (Config.ISLAND_RADIUS - 20) + Vector3.new(0, ball.Position.Y, 0)
+        end
+        RollService.teleport(player, to + Vector3.new(0, 4, 0))
+
+    elseif run.powerId == "decoy" then
+        spawnDecoy(player, run, ball.Position - dir * (radius * 2.2))
+
+    elseif run.powerId == "siphon" then
+        -- Drains the nearest blob BIGGER than you. The only power in the game
+        -- that works exclusively upward: it is the comeback tool, so it has to
+        -- be useless to whoever is already winning.
+        local target, best = nil, SIPHON_RANGE
+        for _, other in ipairs(Players:GetPlayers()) do
+            local orun = other ~= player and runs[other.UserId]
+            local ob = orun and RollService.ballFor(other)
+            if ob and ob.Parent and orun.mass > run.mass then
+                local d = (ob.Position - ball.Position).Magnitude
+                if d < best then target, best = other, d end
+            end
+        end
+        if target then
+            local trun = runs[target.UserId]
+            local drained = math.min(trun.mass * SIPHON_FRACTION, run.mass * 0.6)
+            trun.mass = math.max(Config.STARTING_MASS, trun.mass - drained)
+            run.mass += drained
+            deps.notify(target, ("🩸 %s siphoned %s off you.")
+                :format(player.DisplayName, Format.short(drained)), "bad")
+            deps.effect(player, "siphon", { from = target.DisplayName, amount = drained })
+        end
+
+    elseif run.powerId == "magnet" or run.powerId == "beacon" then
         -- handled in tick while powerUntil holds
     end
 
@@ -4075,7 +4358,12 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                         local mine = pellet.owner == player.UserId and now < pellet.ownerUntil
                         local d = (part.Position - pos)
                         if not mine and d.Magnitude <= reach then
-                            run.mass += pellet.value * run.trinkets.pelletMult
+                            local worth = pellet.value * run.trinkets.pelletMult
+                            if run.activeEffect == "beacon" and now < run.powerUntil then
+                                worth *= 1 + BEACON_BONUS
+                            end
+                            run.mass += worth
+                            run.ateThisRun += 1
                             removePellet(pellet)
                             deps.teach(player, "eat")
                         end
@@ -4293,7 +4581,9 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         bankNeeds = Blob.bankSeconds(run.trinkets.bankHaste),
         powerId = run.powerId,
         powerCooldown = math.max(0, run.powerReadyAt - now),
-        powerCost = Powers.massCost(run.powerId, run.mass),
+        powerCost = Powers.massCost(run.powerId, run.mass, run.uses[run.powerId]),
+        mastery = Powers.masteryTier(run.uses[run.powerId]),
+        lit = run.activeEffect == "beacon" and now < run.powerUntil,
         safe = WorldBuilder.isSafe(pos) or now < run.safeUntil,
         ring = WorldBuilder.ringAt(pos),
         biome = (WorldBuilder.biomeAt(pos) or {}).name,
@@ -4861,6 +5151,9 @@ function Data.blankProfile(userId: number)
         trinketSlots = {} :: { string },
         cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
         bestBank = 0,
+        powerUses = {} :: { [string]: number },    -- mastery, per power
+        streak = 0,
+        streakDay = 0,
     }
 end
 
@@ -4927,6 +5220,9 @@ function Data.load(player: Player)
     profile.trinketsOwned = profile.trinketsOwned or {}
     profile.trinketSlots = profile.trinketSlots or {}
     profile.cratePity = profile.cratePity or {}
+    profile.powerUses = profile.powerUses or {}
+    profile.streak = profile.streak or 0
+    profile.streakDay = profile.streakDay or 0
     if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked) then
         profile.powerId = Powers.DEFAULT
     end
@@ -5538,7 +5834,7 @@ function PitService.join(player: Player)
     local goob = PitService.getGoob(player)
     if not profile or not goob then return end
 
-    local stake = Pit.stakeFor(GoobMath.incomePerSecond(goob))
+    local stake = Pit.stakeFor(profile.lifetimeBanked or 0, profile.glob or 0)
     if profile.glob < stake then
         notify(player, ("You need 💧%s to enter."):format(Format.short(stake)), "warn")
         return
@@ -5575,6 +5871,26 @@ end
 local function startMatch()
     local entrants = {}
     local pot = 0
+
+    -- EVERYONE STAKES THE SAME, and it is the smallest stake in the lobby.
+    --
+    -- The ring already normalises both fighters to identical mass, because the
+    -- whole point is that the fight is steering and timing rather than whoever
+    -- arrived biggest. A pot where one side risked ten times what the other
+    -- did would put the unfairness straight back in through the wallet: the
+    -- rich player wins pocket change, the new player loses a session. Levelling
+    -- down rather than up means nobody is ever priced out of a match they
+    -- already queued for.
+    local level = math.huge
+    for _, e in ipairs(queue) do
+        level = math.min(level, e.stake)
+    end
+    if level < math.huge then
+        for _, e in ipairs(queue) do
+            e.stake = level
+        end
+    end
+
     for _, e in ipairs(queue) do
         local profile = PitService.getProfile(e.player)
         -- Re-check affordability: Glob may have been spent while queueing.
@@ -7817,7 +8133,10 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     if kind == "catch" then Juice.onCatch(a)
     elseif kind == "gulp" then Juice.onGulp()
     elseif kind == "ascend" then Juice.onAscend()
-    elseif kind == "shove" then Juice.onShove(a, b or 0.5) end
+    elseif kind == "shove" then Juice.onShove(a, b or 0.5)
+    elseif kind == "runEnd" then ArenaHud.runEnded(a)
+    elseif kind == "pop" then Juice.onShove(nil, 1)
+    elseif kind == "power" then Juice.play("catch", 0.4) end
 end)
 
 Roll.bindInput()
@@ -8544,10 +8863,25 @@ end
 local function renderPowers()
     local banked = (profile and profile.lifetimeBanked) or 0
     local current = (profile and profile.powerId) or Powers.DEFAULT
+    local uses = (profile and profile.powerUses) or {}
+
+    local nextPower, gap = Powers.nextLocked(banked)
+    local head = card(sheetBody, 0, 46)
+    local hl = Theme.label({
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 30),
+        Text = nextPower
+            and ("Next: %s at 💧%s  —  %s to go"):format(nextPower.name,
+                Format.short(nextPower.unlockBanked), Format.short(gap))
+            or "Every power unlocked. Carry whichever suits the run.",
+        TextSize = 15, TextColor3 = Theme.GOLD, TextWrapped = true,
+    })
+    hl.Parent = head
 
     for i, p in ipairs(Powers.LIST) do
         local unlocked = banked >= p.unlockBanked
-        local r = row(sheetBody, 72, i)
+        local mine = uses[p.id] or 0
+        local tier = Powers.masteryTier(mine)
+        local r = card(sheetBody, i, 86, unlocked and "Common" or nil)
         local name = Theme.label({
             Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -150, 0, 24),
             Text = unlocked and p.name or ("🔒 " .. p.name),
@@ -8556,7 +8890,7 @@ local function renderPowers()
         })
         name.Parent = r
         local blurb = Theme.label({
-            Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 32),
+            Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 30),
             Text = unlocked
                 and ("%s   ·   costs %d%% of you   ·   %ds"):format(p.blurb, p.cost * 100, p.cooldown)
                 or ("Unlocks at 💧%s banked  (you have 💧%s)")
@@ -8564,6 +8898,22 @@ local function renderPowers()
             TextSize = 13, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
         })
         blurb.Parent = r
+
+        if unlocked then
+            local nextTier, toGo = Powers.masteryNext(mine)
+            local stars = string.rep("★", tier) .. string.rep("☆", Powers.MASTERY_MAX_TIER - tier)
+            local mastery = Theme.label({
+                Position = UDim2.fromOffset(14, 62), Size = UDim2.new(1, -150, 0, 20),
+                Text = nextTier
+                    and ("%s  %d uses  ·  %d more for mastery %d"):format(stars, mine, toGo, nextTier)
+                    or ("%s  mastered — %d%% quicker, %d%% cheaper"):format(stars,
+                        Powers.MASTERY_MAX_TIER * Powers.MASTERY_COOLDOWN_PER_TIER * 100,
+                        Powers.MASTERY_MAX_TIER * Powers.MASTERY_COST_PER_TIER * 100),
+                TextSize = 12,
+                TextColor3 = tier > 0 and Theme.GOLD or Theme.TEXT_DIM,
+            })
+            mastery.Parent = r
+        end
 
         if unlocked and p.id ~= current then
             local btn = actionButton(r, "CARRY", Theme.ACCENT, 108)
@@ -9097,6 +9447,9 @@ end
 function ArenaHud.setArena(state: any)
     latest = state
     if not gui or not state then return end
+    -- The arena syncs twelve times a second, so without this guard the run
+    -- summary is overwritten roughly 83 milliseconds after it appears.
+    local showingSummary = (ArenaHud._summaryUntil or 0) > os.clock()
 
     massLabel.Text = Format.short(state.mass)
     worthLabel.Text = "worth 💧" .. Format.short(state.worth)
@@ -9104,7 +9457,13 @@ function ArenaHud.setArena(state: any)
     -- The melt readout is the game's one piece of teaching, and it has to say
     -- what is HAPPENING rather than what the number is. "-8/s" means nothing
     -- to a nine-year-old; "melting fast — bank it" is an instruction.
-    if state.leak <= 0 then
+    -- BEACON is the one power whose whole point is that everybody can see it,
+    -- so the HUD says so out loud rather than letting the player forget they
+    -- are lit up and wonder why three people are converging on them.
+    if state.lit then
+        meltLabel.Text = "LIT UP — food +45%, everyone sees you"
+        meltLabel.TextColor3 = Theme.GOLD
+    elseif state.leak <= 0 then
         meltLabel.Text = "not melting yet"
         meltLabel.TextColor3 = Theme.TEXT_DIM
     elseif state.leak < state.harvest * 0.5 then
@@ -9117,7 +9476,9 @@ function ArenaHud.setArena(state: any)
 
     local where = state.biome or (state.ring == "VAULT" and "the Vault"
         or state.ring == "SHALLOWS" and "the Shallows" or "the Flats")
-    if state.banking > 0 then
+    if showingSummary then
+        -- leave the summary up
+    elseif state.banking > 0 then
         statusLabel.Text = "BANKING — hold still"
         statusLabel.TextColor3 = Theme.GOLD
     elseif state.safe then
@@ -9133,7 +9494,8 @@ function ArenaHud.setArena(state: any)
         math.clamp(state.banking / math.max(0.01, state.bankNeeds), 0, 1), 1)
 
     local power = Powers.get(state.powerId)
-    powerBtn.Text = power and power.name or "—"
+    powerBtn.Text = (power and power.name or "—")
+        .. ((state.mastery or 0) > 0 and ("\n" .. string.rep("★", state.mastery)) or "")
     if state.powerCooldown > 0.05 then
         powerCost.Text = ("%.1fs"):format(state.powerCooldown)
         powerSweep.Size = UDim2.fromScale(1,
@@ -9185,6 +9547,33 @@ function ArenaHud.setPit(state: any)
     if openTab == "standoff" then
         ArenaHud.refreshSheet()
     end
+end
+
+-- A run ended. A loop this short has to CLOSE, or a run simply stops and the
+-- player is left reconstructing what happened from a number that has already
+-- changed. Deliberately a banner on the status strip rather than a panel: it
+-- must not interrupt the next run, which starts the same second.
+function ArenaHud.runEnded(s: any)
+    if not gui or not s then return end
+    local banked = s.ended == "banked"
+    statusLabel.Text = banked
+        and ("BANKED 💧%s  ·  peak %s  ·  %ds"):format(
+            Format.short(s.payout), Format.short(s.peak), math.floor(s.seconds))
+        or ("POPPED  ·  peak %s  ·  %ds  ·  %d eaten"):format(
+            Format.short(s.peak), math.floor(s.seconds), s.ate or 0)
+    statusLabel.TextColor3 = banked and Theme.GOLD or Theme.BAD
+    ArenaHud._summaryUntil = os.clock() + 3.5
+
+    -- Hand the strip back to the live readout after a beat. Without this the
+    -- summary sticks and the player loses the safe/danger indicator, which is
+    -- the most urgent thing on the screen.
+    local token = (ArenaHud._summaryToken or 0) + 1
+    ArenaHud._summaryToken = token
+    task.delay(3.5, function()
+        if ArenaHud._summaryToken == token and latest then
+            ArenaHud.setArena(latest)
+        end
+    end)
 end
 
 function ArenaHud.isSheetOpen(): boolean

@@ -62,8 +62,26 @@ end
 
 Pit.SHOVE_IMPULSE = 140        -- studs/sec at a full-share exchange
 
-function Pit.stakeFor(incomePerSecond: number): number
-    return math.max(10, incomePerSecond * Pit.STAKE_SECONDS)
+-- Staked against what you have BANKED, not against a Goob's idle income.
+--
+-- The old formula was written when idling was the earner, and it survived the
+-- rework unnoticed: it meant a player who had never idled — which, after the
+-- rework, is everybody — staked the floor of 10 Glob no matter how rich they
+-- were, and the Standoff had no stakes at all. It is sub-linear so that a
+-- veteran and a newcomer can meet in the same ring without either of them
+-- risking something the other would find absurd.
+Pit.STAKE_EXPONENT = 0.55
+Pit.STAKE_SCALE = 0.8
+Pit.STAKE_MIN = 120
+Pit.STAKE_MAX_FRACTION = 0.15   -- never more than this share of your purse
+
+function Pit.stakeFor(lifetimeBanked: number, purse: number?): number
+    local want = math.max(Pit.STAKE_MIN,
+        math.max(0, lifetimeBanked) ^ Pit.STAKE_EXPONENT * Pit.STAKE_SCALE)
+    if purse then
+        want = math.min(want, math.max(Pit.STAKE_MIN, purse * Pit.STAKE_MAX_FRACTION))
+    end
+    return math.floor(want)
 end
 
 -- Winner takes the pot. With no rake, everything staked comes back out, which

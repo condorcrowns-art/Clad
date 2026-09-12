@@ -1,4 +1,5 @@
 local Pit = require("Pit")
+local Format = require("Format")
 local Movement = require("Movement")
 local fails = 0
 local function check(l, c, d)
@@ -69,14 +70,33 @@ check("the Pit neither prints nor burns Glob", Pit.HOUSE_CUT == 0)
 
 emit("")
 emit("── Entry is affordable at every scale ──")
-for _, income in ipairs({ 1.4, 100, 22000, 5.5e6 }) do
-    emit(("  income %-10.1f/s -> stake %.0f (= %ds of income)")
-        :format(income, Pit.stakeFor(income), Pit.STAKE_SECONDS))
+emit("  lifetime banked   stake     share of a 50K purse")
+for _, banked in ipairs({ 0, 5e3, 5e4, 5e5, 5e6 }) do
+    emit(("  %-17s %-9s %.1f%%"):format(Format.short(banked),
+        Format.short(Pit.stakeFor(banked, 5e4)),
+        Pit.stakeFor(banked, 5e4) / 5e4 * 100))
 end
-check("a brand-new player can afford a match", Pit.stakeFor(1.4) <= 250,
-    Pit.stakeFor(1.4))
-check("the stake scales so it stays meaningful for whales",
-    Pit.stakeFor(5.5e6) > Pit.stakeFor(1.4) * 1000)
+-- Staked against LIFETIME BANKED now, not against a Goob's idle income. The
+-- old formula survived the arena rework unnoticed and meant every player
+-- staked the floor, because after the rework nobody idles at all.
+check("a brand-new player can afford a match",
+    Pit.stakeFor(0, 250) <= math.max(250, Pit.STAKE_MIN),
+    tostring(Pit.stakeFor(0, 250)))
+check("the stake scales so it stays meaningful for a veteran",
+    Pit.stakeFor(5e5, 1e9) > Pit.stakeFor(0, 1e9) * 5,
+    ("%d vs %d"):format(Pit.stakeFor(5e5, 1e9), Pit.stakeFor(0, 1e9)))
+check("but a veteran and a newcomer can still share a ring",
+    Pit.stakeFor(5e6, 1e9) < Pit.stakeFor(5e3, 1e9) * 45,
+    ("%d vs %d"):format(Pit.stakeFor(5e6, 1e9), Pit.stakeFor(5e3, 1e9)))
+check("and the stake is capped against the purse it comes out of",
+    Pit.stakeFor(1e9, 50000) <= 50000 * 0.18,
+    ("%d of 50000"):format(Pit.stakeFor(1e9, 50000)))
 
 emit("")
-emit(fails == 0 and "ALL PIT CHECKS PASSED" or (fails .. " FAILURE(S)"))
+-- A suite that PRINTS its failures and exits zero is invisible: run_all.sh
+-- reported "ALL SUITES PASSED" over the top of this one for as long as it
+-- has existed. Failing loudly is the entire job.
+if fails > 0 then
+    error(("%d FAILURE(S) in pit.luau"):format(fails), 0)
+end
+emit("ALL PIT CHECKS PASSED")

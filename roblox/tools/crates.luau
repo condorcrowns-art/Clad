@@ -239,5 +239,90 @@ check("no stack of trinkets can break a clamp",
     end)())
 
 emit("")
+emit("── Powers: the ladder and the mastery ceiling ──")
+local Powers = require("Powers")
+
+emit("  power        unlock at      cost    cd    mastered cd")
+for _, p in ipairs(Powers.LIST) do
+    emit(("  %-12s %-13s %4.0f%%  %4.1fs   %4.1fs"):format(
+        p.name, Format.short(p.unlockBanked), p.cost * 100, p.cooldown,
+        Powers.cooldown(p.id, 0, 999)))
+end
+
+-- Paced against banking, which is the only earner. A good run banks about
+-- 1.2K and an active hour is near 25K, so the ladder is read in hours.
+local last = -1
+local outOfOrder = {}
+for _, p in ipairs(Powers.LIST) do
+    if p.unlockBanked <= last then table.insert(outOfOrder, p.name) end
+    last = p.unlockBanked
+end
+check("the ladder is strictly ordered", #outOfOrder == 0, table.concat(outOfOrder, ", "))
+check("the first power is free", Powers.LIST[1].unlockBanked == 0)
+check("something new arrives inside the first hour",
+    Powers.LIST[2].unlockBanked < 25000, tostring(Powers.LIST[2].unlockBanked))
+check("but the last one is a long-term goal",
+    Powers.LIST[#Powers.LIST].unlockBanked > 200000,
+    tostring(Powers.LIST[#Powers.LIST].unlockBanked))
+
+-- MASTERY MUST STAY AN EDGE. It rewards committing to one power; it must
+-- never be the reason a newer player cannot win.
+check("mastery caps at three tiers",
+    Powers.masteryTier(1e9) == Powers.MASTERY_MAX_TIER, tostring(Powers.masteryTier(1e9)))
+check("a fresh power has no mastery", Powers.masteryTier(0) == 0)
+check("full mastery is worth under 20% of cooldown",
+    Powers.cooldown("dash", 0, 1e9) > Powers.cooldown("dash", 0, 0) * 0.8,
+    ("%.2f vs %.2f"):format(Powers.cooldown("dash", 0, 1e9), Powers.cooldown("dash", 0, 0)))
+check("and under 15% of cost",
+    Powers.massCost("split", 1000, 1e9) > Powers.massCost("split", 1000, 0) * 0.85)
+check("trinkets and mastery are clamped TOGETHER",
+    Powers.cooldown("dash", 0.35, 1e9) >= Powers.LIST[1].cooldown * 0.55,
+    tostring(Powers.cooldown("dash", 0.35, 1e9)))
+check("mastery progress always has a next target, until it does not",
+    (function()
+        local tier, togo = Powers.masteryNext(0)
+        if tier ~= 1 or togo ~= Powers.MASTERY_TIERS[1] then return false end
+        return Powers.masteryNext(1e9) == nil
+    end)())
+check("no power is free even at full mastery",
+    Powers.massCost("dash", 10, 1e9) >= Powers.MIN_COST * 0.9)
+
+-- Nothing here may be purchasable. The wall is the whole monetisation thesis.
+local Monetisation = require("Monetisation")
+check("no power or mastery is for sale", #Monetisation.violations() == 0,
+    table.concat(Monetisation.violations(), "; "))
+
+emit("")
+emit("── The Standoff stake ──")
+local Pit = require("Pit")
+emit("  banked        stake     share of a 50K purse")
+for _, banked in ipairs({ 0, 5e3, 5e4, 5e5, 5e6 }) do
+    emit(("  %-13s %-9s %.1f%%"):format(Format.short(banked),
+        Format.short(Pit.stakeFor(banked, 5e4)), Pit.stakeFor(banked, 5e4) / 5e4 * 100))
+end
+
+-- THE BUG THIS LOCKS DOWN: the stake used to be derived from a Goob's IDLE
+-- income, which after the rework is zero for everybody. Every player staked
+-- the floor, and the Standoff had no stakes at all.
+check("a rich player stakes meaningfully more than a new one",
+    Pit.stakeFor(5e5, 1e9) > Pit.stakeFor(0, 1e9) * 5,
+    ("%d vs %d"):format(Pit.stakeFor(5e5, 1e9), Pit.stakeFor(0, 1e9)))
+check("but not so much more that they cannot share a ring",
+    Pit.stakeFor(5e6, 1e9) < Pit.stakeFor(5e3, 1e9) * 45,
+    ("%d vs %d"):format(Pit.stakeFor(5e6, 1e9), Pit.stakeFor(5e3, 1e9)))
+-- An ABSOLUTE bound, not one read from the constant being tested. Asking
+-- STAKE_MAX_FRACTION what the cap should be means the check agrees with it no
+-- matter what it is set to — a mutation raising it to 150% of the purse went
+-- straight through.
+check("it never takes more than a sixth of your purse",
+    Pit.stakeFor(1e9, 50000) <= 50000 * 0.18,
+    ("%d of 50000"):format(Pit.stakeFor(1e9, 50000)))
+check("a brand new player can still afford to enter",
+    Pit.stakeFor(0, 250) <= 250 or Pit.stakeFor(0, 250) == Pit.STAKE_MIN,
+    tostring(Pit.stakeFor(0, 250)))
+check("the pot is still economy-neutral",
+    Pit.payout({ 500, 500, 500 }) == 1500, tostring(Pit.payout({ 500, 500, 500 })))
+
+emit("")
 if fails > 0 then error(fails .. " crate/trinket assertion(s) failed") end
 emit(("All %d crate and trinket assertions passed."):format(passes))

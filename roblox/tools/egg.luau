@@ -1,3 +1,7 @@
+-- NOTE: this file is a REPORT, not a test. It sweeps the egg price curve and the gulp sink
+-- and prints what it finds; it asserts nothing and cannot fail. Read its
+-- output, do not trust its exit code. The assertions that hold these
+-- numbers in place live in tests.luau and arena.luau.
 local Config   = require("Config")
 local Format   = require("Format")
 local GoobMath = require("GoobMath")

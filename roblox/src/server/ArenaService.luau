@@ -43,6 +43,11 @@ local SLAM_IMPULSE = 120
 local HOOK_RANGE = 90
 local HOOK_PULL = 96
 local SPLIT_RETURN = 0.55        -- of the thrown half, how much comes back
+local BLINK_DISTANCE = 74
+local SIPHON_RANGE = 82
+local SIPHON_FRACTION = 0.10
+local BEACON_BONUS = 0.45
+local DECOY_LIFETIME = 7
 
 export type Run = {
     mass: number,
@@ -58,6 +63,9 @@ export type Run = {
     trinkets: Trinkets.Resolved,
     bestMass: number,
     lastPos: Vector3,
+    startedAt: number,      -- for the run summary
+    ateThisRun: number,
+    uses: { [string]: number },   -- mastery counter, mirrored from the profile
 }
 
 local runs: { [number]: Run } = {}
@@ -88,6 +96,8 @@ type Deps = {
     loadout: (player: Player) -> ({ string }, string),   -- trinket ids, power id
     sync: (player: Player, state: any) -> (),
     teach: (player: Player, event: string) -> (),
+    powerUses: (player: Player) -> { [string]: number },
+    notePowerUse: (player: Player, id: string) -> (),
 }
 local deps: Deps
 
@@ -166,6 +176,39 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- ── Decoys ─────────────────────────────────────────────────────────────────
+-- A fake body at your current size, in your colour, that anyone may try to
+-- eat and that gives nothing when they do. It is the only power in the game
+-- that costs the VICTIM something — the seconds they spend committing to a
+-- meal that was never there — which is a completely different kind of threat
+-- from every other power, all of which are about speed or mass.
+local function spawnDecoy(player: Player, run: Run, at: Vector3)
+    local folder = WorldBuilder.arenaFolder()
+    local real = RollService.ballFor(player)
+    if not folder or not real then
+        return
+    end
+    local fake = Instance.new("Part")
+    fake.Name = "Decoy"
+    fake.Shape = Enum.PartType.Ball
+    fake.Size = real.Size
+    fake.Anchored = true
+    fake.CanCollide = false
+    fake.CanTouch = false
+    fake.CanQuery = false
+    fake.Material = real.Material
+    fake.Color = real.Color
+    fake.Transparency = real.Transparency
+    fake.Position = at + Vector3.new(0, real.Size.X * 0.1, 0)
+    fake.Parent = folder
+    -- task.delay rather than Debris: one fewer service to reach for, and the
+    -- decoy has to disappear on the same clock everything else in the arena
+    -- runs on.
+    task.delay(DECOY_LIFETIME, function()
+        if fake.Parent then fake:Destroy() end
+    end)
+end
+
 -- ── Run state ──────────────────────────────────────────────────────────────
 
 local function newRun(player: Player): Run
@@ -184,6 +227,9 @@ local function newRun(player: Player): Run
         trinkets = Trinkets.resolve(ids),
         bestMass = Config.STARTING_MASS,
         lastPos = Vector3.zero,
+        startedAt = os.clock(),
+        ateThisRun = 0,
+        uses = deps.powerUses(player),
     }
 end
 
@@ -263,6 +309,28 @@ local function decayLumps(dt: number)
     end
 end
 
+-- What a run was. Sent on every bank and every pop, because a loop this short
+-- needs to close.
+--
+-- DECLARED HERE, ABOVE pop(), and that is not tidiness. A `local function`
+-- only enters scope from its declaration downward: with this defined next to
+-- bank() — which sits below pop() — the call inside pop() resolved to a nil
+-- GLOBAL, the server booted perfectly, and the whole arena loop died the first
+-- time anybody was eaten. The same trap has now taken down three builds of
+-- this game.
+--
+-- The original note said the loop needs to close: without it a run just stops, and the player is left to
+-- reconstruct what happened from a number that already changed.
+local function summary(run: Run, ended: string, payout: number?)
+    return {
+        ended = ended,
+        seconds = os.clock() - run.startedAt,
+        peak = run.bestMass,
+        ate = run.ateThisRun,
+        payout = payout or 0,
+    }
+end
+
 -- ── Popping ────────────────────────────────────────────────────────────────
 
 local function pop(player: Player, at: Vector3, killer: Player?)
@@ -285,6 +353,7 @@ local function pop(player: Player, at: Vector3, killer: Player?)
     congeal(at, split.congeal)
 
     if deps then
+        deps.effect(player, "runEnd", summary(run, "popped", 0))
         deps.effect(player, "pop", { mass = run.mass })
         if killer then
             deps.notify(killer, ("🫧 Popped %s. +%s mass.")
@@ -296,6 +365,9 @@ local function pop(player: Player, at: Vector3, killer: Player?)
     end
 
     run.mass = math.max(Config.STARTING_MASS, split.kept)
+    run.startedAt = os.clock()
+    run.ateThisRun = 0
+    run.bestMass = run.mass
     run.banking = 0
     run.leakBuffer = 0
     run.safeUntil = os.clock() + POP_INVULN
@@ -314,7 +386,11 @@ local function bank(player: Player, run: Run)
     deps.effect(player, "bank", { glob = glob, mass = run.mass })
     deps.notify(player, ("🏦 Banked %s mass → 💧%s"):format(
         Format.short(run.mass), Format.short(glob)), "good")
+    deps.effect(player, "runEnd", summary(run, "banked", glob))
     deps.teach(player, "bank")
+    run.startedAt = os.clock()
+    run.ateThisRun = 0
+    run.bestMass = Config.BANK_RESET_MASS
     run.mass = Config.BANK_RESET_MASS
     run.banking = 0
     run.leakBuffer = 0
@@ -335,7 +411,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if not power then
         return false, "No power equipped."
     end
-    local cost = Powers.massCost(run.powerId, run.mass)
+    local uses = run.uses[run.powerId] or 0
+    local cost = Powers.massCost(run.powerId, run.mass, uses)
     if run.mass - cost < Config.STARTING_MASS * 0.5 then
         return false, "Too small to pay for that."
     end
@@ -345,7 +422,9 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     end
 
     run.mass -= cost
-    run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste)
+    run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste, uses)
+    run.uses[run.powerId] = uses + 1
+    deps.notePowerUse(player, run.powerId)
     run.powerUntil = now + math.max(0.05, power.duration)
     run.activeEffect = run.powerId
 
@@ -410,7 +489,47 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 end
             end
         end
-    elseif run.powerId == "magnet" then
+    elseif run.powerId == "blink" then
+        -- A teleport, not a shove. It goes THROUGH blobs and lumps, which is
+        -- the only thing DASH cannot do, and is why it costs more than twice
+        -- as much. Routed through RollService.teleport so the anti-cheat is
+        -- told this one was the server's idea.
+        local to = ball.Position + dir * BLINK_DISTANCE
+        local flat = Vector3.new(to.X, 0, to.Z)
+        -- Never off the island. A power that can drop you in the sea is a
+        -- power nobody presses twice.
+        if flat.Magnitude > Config.ISLAND_RADIUS - 20 then
+            to = flat.Unit * (Config.ISLAND_RADIUS - 20) + Vector3.new(0, ball.Position.Y, 0)
+        end
+        RollService.teleport(player, to + Vector3.new(0, 4, 0))
+
+    elseif run.powerId == "decoy" then
+        spawnDecoy(player, run, ball.Position - dir * (radius * 2.2))
+
+    elseif run.powerId == "siphon" then
+        -- Drains the nearest blob BIGGER than you. The only power in the game
+        -- that works exclusively upward: it is the comeback tool, so it has to
+        -- be useless to whoever is already winning.
+        local target, best = nil, SIPHON_RANGE
+        for _, other in ipairs(Players:GetPlayers()) do
+            local orun = other ~= player and runs[other.UserId]
+            local ob = orun and RollService.ballFor(other)
+            if ob and ob.Parent and orun.mass > run.mass then
+                local d = (ob.Position - ball.Position).Magnitude
+                if d < best then target, best = other, d end
+            end
+        end
+        if target then
+            local trun = runs[target.UserId]
+            local drained = math.min(trun.mass * SIPHON_FRACTION, run.mass * 0.6)
+            trun.mass = math.max(Config.STARTING_MASS, trun.mass - drained)
+            run.mass += drained
+            deps.notify(target, ("🩸 %s siphoned %s off you.")
+                :format(player.DisplayName, Format.short(drained)), "bad")
+            deps.effect(player, "siphon", { from = target.DisplayName, amount = drained })
+        end
+
+    elseif run.powerId == "magnet" or run.powerId == "beacon" then
         -- handled in tick while powerUntil holds
     end
 
@@ -464,7 +583,12 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                         local mine = pellet.owner == player.UserId and now < pellet.ownerUntil
                         local d = (part.Position - pos)
                         if not mine and d.Magnitude <= reach then
-                            run.mass += pellet.value * run.trinkets.pelletMult
+                            local worth = pellet.value * run.trinkets.pelletMult
+                            if run.activeEffect == "beacon" and now < run.powerUntil then
+                                worth *= 1 + BEACON_BONUS
+                            end
+                            run.mass += worth
+                            run.ateThisRun += 1
                             removePellet(pellet)
                             deps.teach(player, "eat")
                         end
@@ -682,7 +806,9 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         bankNeeds = Blob.bankSeconds(run.trinkets.bankHaste),
         powerId = run.powerId,
         powerCooldown = math.max(0, run.powerReadyAt - now),
-        powerCost = Powers.massCost(run.powerId, run.mass),
+        powerCost = Powers.massCost(run.powerId, run.mass, run.uses[run.powerId]),
+        mastery = Powers.masteryTier(run.uses[run.powerId]),
+        lit = run.activeEffect == "beacon" and now < run.powerUntil,
         safe = WorldBuilder.isSafe(pos) or now < run.safeUntil,
         ring = WorldBuilder.ringAt(pos),
         biome = (WorldBuilder.biomeAt(pos) or {}).name,
