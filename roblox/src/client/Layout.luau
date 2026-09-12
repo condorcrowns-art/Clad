@@ -57,7 +57,21 @@ end
 
 -- Usable height once the Roblox top bar is accounted for.
 function Layout.usable(): Vector2
-    return Vector2.new(current.viewport.X, current.viewport.Y - current.inset)
+    -- Floored well above zero. ViewportSize is (0, 0) for the first frames
+    -- before the camera initialises, and every layout function subtracts button
+    -- widths from it — which produced math.clamp(x, 8, -76), a hard error that
+    -- aborted the whole layout pass and left the HUD half-placed.
+    return Vector2.new(
+        math.max(320, current.viewport.X),
+        math.max(240, current.viewport.Y - current.inset))
+end
+
+-- A clamp that cannot throw. Roblox's math.clamp errors when max < min, which
+-- is correct for maths and useless for layout: a screen too narrow for a button
+-- is something to survive, not something to crash on.
+function Layout.fit(value: number, low: number, high: number): number
+    if high < low then return low end
+    return math.clamp(value, low, high)
 end
 
 -- Clamp a desired pixel size so it always fits with a margin. This is what
@@ -103,6 +117,9 @@ function Layout.recompute()
 
     -- Compact is about available room, not about being a phone: a small window
     -- on a desktop has exactly the same problem.
+    -- Ignore the degenerate viewport the camera reports before it is ready.
+    if vp.X < 64 or vp.Y < 64 then return end
+
     local compact = vp.X < 900 or vp.Y < 500
 
     local changed = compact ~= current.compact
@@ -121,6 +138,18 @@ end
 
 function Layout.start()
     Layout.recompute()
+    -- The camera can take several frames to report a real size. Keep asking
+    -- until it does, then stop.
+    task.spawn(function()
+        for _ = 1, 120 do
+            local cam = Workspace.CurrentCamera
+            if cam and cam.ViewportSize.X > 64 then
+                Layout.recompute()
+                break
+            end
+            task.wait(0.1)
+        end
+    end)
     local camera = Workspace.CurrentCamera
     if camera then
         camera:GetPropertyChangedSignal("ViewportSize"):Connect(Layout.recompute)

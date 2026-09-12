@@ -207,7 +207,7 @@ residue. **Do this for any new suite.**
 
 ---
 
-## 5. Every bug found (17), and why each mattered
+## 5. Every bug found (20), and why each mattered
 
 ### Balance (simulation)
 1. **Every Goob past 1M mass looked identical** — cube-root size hit its clamp
@@ -254,7 +254,27 @@ residue. **Do this for any new suite.**
     teleporting itself from the server placing a fighter in the arena. Every Pit
     match started, dropped both in, snapped them out, ended instantly with the
     pot refunded. → `RollService.teleport()` tells the sampler.
-16. **`FireClient` never delivered.** The harness RECORDED server→client traffic
+16. **The layout crashed on a not-yet-ready camera.** `ViewportSize` is `(0,0)`
+    for the first frames; every layout function subtracts button widths from it,
+    producing `math.clamp(x, 8, -76)` → "invalid argument #3 to clamp". A hard
+    error that aborted the whole layout pass and scattered the HUD. **It shipped
+    and the user hit it.** → `Layout.usable()` is floored, `Layout.fit()` cannot
+    throw, degenerate viewports are ignored and retried. Regression-tested at
+    0×0, 1×1, 40×900 and 900×40.
+17. **A giant "Label" floated in the sky.** `TextLabel.Text` defaults to the
+    literal string `"Label"`. The Goob's nameplate is a TextScaled BillboardGui
+    directly above the player's own camera subject, and its text was only set on
+    a later refresh — so metre-high "Label" sat across the middle of the screen.
+    `Theme.label()` had the same hole.
+18. **The world had no ground.** The zone rewrite replaced the old 1400×1400
+    plane with separate discs and never added a base, so the map was islands
+    floating in open sky. → one continuous plane; the only hole is the dash gap
+    to The Deep, which is deliberate.
+19. **A sound asset id was invalid** (`Asset type does not match requested
+    type`), spamming Output every play. Asset ids cannot be verified from this
+    environment, so they now live in `Config.SOUNDS`, default to empty, and an
+    unset id plays nothing rather than erroring.
+20. **`FireClient` never delivered.** The harness RECORDED server→client traffic
     but never fired `OnClientEvent`, so every client-side handler had never run
     in a test — client suites were only exercising what the UI does on its own.
     Fixed; client tests are now genuinely end-to-end.
@@ -315,3 +335,9 @@ The harness proves the code doesn't explode; it cannot prove the game is fun.
   including my own test errors. Attribution footer required.
 - Never report "tests pass" without having mutation-tested the assertions.
 - Tell the user plainly what is *not* proven.
+- **Palette rule:** nothing above ~46% saturation / ~88% value in the item and
+  cosmetic tables, and the UI palette stays low-chroma. A muted world was an
+  explicit request; a script in the commit history can re-apply it if it drifts.
+- **Never leave a `TextLabel` on its default `Text`** — it renders the literal
+  word "Label".
+- **Never `math.clamp` layout maths directly** — use `Layout.fit`.

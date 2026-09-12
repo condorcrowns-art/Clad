@@ -210,6 +210,7 @@ local function buildModel(player: Player, goob): Model
     text.TextScaled = true
     text.TextColor3 = Color3.new(1, 1, 1)
     text.TextStrokeTransparency = 0.25
+    text.Text = goob.nickname   -- never leave a TextLabel on its "Label" default
     text.Parent = plate
 
     layoutFeatures(model, radius, nil)

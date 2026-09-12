@@ -43,9 +43,13 @@ local function buildBall(player: Player, goob): BasePart
     ball.Shape = Enum.PartType.Ball
     ball.Size = Vector3.new(radius, radius, radius) * 2
     ball.Material = Enum.Material.Glass
-    ball.Transparency = 0.45
+    -- A fresh Goob is only 4 studs across. At 0.45 on Glass it was very nearly
+    -- invisible against the sky, which is a bad first impression when it is
+    -- also the thing you are supposed to be. Solid enough to read as a body,
+    -- transparent enough to show what is inside it.
+    ball.Transparency = 0.24
     ball.Color = Color3.fromHSV(goob.hue, 0.55, 1)
-    ball.Reflectance = 0.1
+    ball.Reflectance = 0.06
     ball.CanCollide = true
     ball.Anchored = false
     ball.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.35, 0.25, 1, 1)
@@ -143,7 +147,13 @@ local function buildBall(player: Player, goob): BasePart
     text.Font = Enum.Font.FredokaOne
     text.TextScaled = true
     text.TextColor3 = Color3.new(1, 1, 1)
-    text.TextStrokeTransparency = 0.25
+    text.TextStrokeTransparency = 0.35
+    -- MUST be set here. A TextLabel's default Text is the literal string
+    -- "Label", and this plate is a TextScaled BillboardGui floating directly
+    -- above the player's own camera subject — so leaving it for a later refresh
+    -- put the word "Label" across the middle of the screen in metre-high
+    -- letters until something happened to trigger one.
+    text.Text = goob.nickname
     text.Parent = plate
 
     return ball
@@ -251,6 +261,10 @@ function RollService.spawn(player: Player, goob, atPosition: Vector3?)
 
     lastSeen[player.UserId] = { pos = ball.Position, t = os.clock() }
     violations[player.UserId] = 0
+
+    -- Paint the real nameplate immediately rather than waiting for the first
+    -- mass change to trigger a refresh.
+    RollService.refresh(player, goob)
 end
 
 -- Move a ball somewhere the SERVER decided it should be.

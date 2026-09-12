@@ -19,6 +19,18 @@ local function tick(sec, dt)
 end
 
 -- Real device viewports Roblox actually reports, landscape.
+-- The first entries are DEGENERATE ON PURPOSE. Roblox reports ViewportSize as
+-- (0, 0) for the first frames before the camera initialises, and every layout
+-- function subtracts button widths from it. That produced
+-- math.clamp(x, 8, -76) -> "invalid argument #3 to clamp", a hard error that
+-- aborted the entire layout pass and left the HUD scattered. It shipped.
+local DEGENERATE = {
+    { name = "camera not ready", w = 0,  h = 0 },
+    { name = "one pixel",        w = 1,  h = 1 },
+    { name = "absurdly narrow",  w = 40, h = 900 },
+    { name = "absurdly short",   w = 900, h = 40 },
+}
+
 local DEVICES = {
     { name = "iPhone SE",        w = 568,  h = 320, touch = true  },
     { name = "iPhone 14",        w = 736,  h = 380, touch = true  },
@@ -62,6 +74,24 @@ local function openEverything()
     end
     tick(1)
 end
+
+emit("")
+emit("══ DEGENERATE VIEWPORTS MUST NOT CRASH THE LAYOUT ══")
+for _, dev in ipairs(DEGENERATE) do
+    for _, touch in ipairs({ true, false }) do
+        svc.setTouch(touch)
+        local ok, err = pcall(function()
+            svc.setViewport(dev.w, dev.h)
+            tick(1)
+            openEverything()
+        end)
+        check(("%s %dx%d (%s) survives"):format(dev.name, dev.w, dev.h,
+            touch and "touch" or "mouse"), ok, tostring(err))
+    end
+end
+-- Return to something sane before the real device sweep.
+svc.setViewport(1280, 720)
+tick(1)
 
 for _, dev in ipairs(DEVICES) do
     emit("")

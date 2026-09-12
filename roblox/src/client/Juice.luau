@@ -18,6 +18,7 @@ local SoundService = game:GetService("SoundService")
 
 local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
 local Feedstock = require(Shared.Feedstock)
+local Config = require(Shared.Config)
 
 local player = Players.LocalPlayer
 local Juice = {}
@@ -77,28 +78,31 @@ Juice.burst = burst
 
 -- ── Sounds ─────────────────────────────────────────────────────────────────
 
-local function sound(id: string, volume: number): Sound
-    local s = Instance.new("Sound")
-    s.SoundId = id
-    s.Volume = volume
-    s.Parent = SoundService
-    return s
-end
+-- Ids live in Config and default to empty. An unset id creates no Sound at
+-- all, so a game with no audio configured is silent rather than noisy with
+-- load failures.
+local VOLUMES = { catch = 0.30, rare = 0.55, gulp = 0.60, thud = 0.45 }
 
-local sfx = {
-    catch = sound("rbxassetid://6026984224", 0.30),
-    rare  = sound("rbxassetid://9125402735", 0.55),
-    gulp  = sound("rbxassetid://5852470908", 0.60),
-    thud  = sound("rbxassetid://9125600534", 0.45),
-}
+local sfx: { [string]: Sound } = {}
+for name, volume in pairs(VOLUMES) do
+    local id = (Config.SOUNDS or {})[name]
+    if type(id) == "string" and id ~= "" then
+        local s = Instance.new("Sound")
+        s.Name = "Goob_" .. name
+        s.SoundId = id
+        s.Volume = volume
+        s.Parent = SoundService
+        sfx[name] = s
+    end
+end
 
 function Juice.play(name: string, pitchJitter: number?)
     local s = sfx[name]
-    if not s then return end
+    if not s then return end   -- unconfigured: silent, never an error
     if pitchJitter then
         s.PlaybackSpeed = 1 + (math.random() - 0.5) * pitchJitter
     end
-    s:Play()
+    pcall(function() s:Play() end)
 end
 
 -- ── Public effects ─────────────────────────────────────────────────────────

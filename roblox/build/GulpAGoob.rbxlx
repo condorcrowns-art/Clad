@@ -183,6 +183,27 @@ Config.TRADE_RANGE = 24
 Config.TRADE_CONFIRM_LOCK = 3   -- seconds both sides must hold confirm (anti scam)
 Config.TRADE_MAX_SLOTS = 4
 
+-- ── Sound ─────────────────────────────────────────────────────────────────
+--
+-- EMPTY BY DEFAULT, ON PURPOSE. These were shipped as marketplace asset ids
+-- picked without being able to verify them, and at least one was wrong:
+--
+--   Failed to load sound rbxassetid://9125600534:
+--   Asset type does not match requested type
+--
+-- An id that cannot be verified from here should not be baked into the game —
+-- a broken one spams the Output window on every play and looks like the game
+-- is falling apart. An empty id plays nothing and says nothing.
+--
+-- TO ADD SOUND: find ids on the Creator Store (Audio), paste them below, and
+-- make sure each is actually an Audio asset rather than a model containing one.
+Config.SOUNDS = {
+    catch = "",   -- a short blip on picking something up
+    rare  = "",   -- a fanfare for Legendary and above
+    gulp  = "",   -- a heavy swallow
+    thud  = "",   -- a Sumo Pit collision
+}
+
 -- ── Misc ───────────────────────────────────────────────────────────────────
 Config.AUTOSAVE_INTERVAL = 90
 Config.PLOT_COUNT = 8
@@ -220,52 +241,54 @@ Cosmetics.KINDS = { "skin", "trail", "eyes", "crown" }
 
 Cosmetics.RARITY_COLOUR = {
     Common    = Color3.fromRGB(190, 195, 205),
-    Uncommon  = Color3.fromRGB(120, 225, 140),
-    Rare      = Color3.fromRGB(105, 175, 255),
-    Epic      = Color3.fromRGB(190, 130, 255),
-    Legendary = Color3.fromRGB(255, 190,  70),
-    Mythic    = Color3.fromRGB(255, 105, 140),
+    Uncommon  = Color3.fromRGB(121, 224, 141),
+    Rare      = Color3.fromRGB(121, 169, 224),
+    Epic      = Color3.fromRGB(171, 121, 224),
+    Legendary = Color3.fromRGB(224, 188, 121),
+    Mythic    = Color3.fromRGB(224, 121, 145),
 }
 
 local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
 
 Cosmetics.ITEMS = {
     -- ── Skins: the body itself ─────────────────────────────────────────────
+    -- No colour: the default skin keeps the Goob's own hue, which is its
+    -- identity. Transparency is set by RollService, not here.
     { id = "skin_default", name = "Classic Goo",   kind = "skin", rarity = "Common",
       source = "starter", material = Enum.Material.Glass },
     { id = "skin_jelly",   name = "Jelly",         kind = "skin", rarity = "Common",
-      source = "season", tier = 3, material = Enum.Material.Glass, colour = rgb(255, 140, 180) },
+      source = "season", tier = 3, material = Enum.Material.Glass, colour = rgb(224, 123, 158) },
     { id = "skin_bubble",  name = "Soap Bubble",   kind = "skin", rarity = "Uncommon",
       source = "season", tier = 8, material = Enum.Material.ForceField },
     { id = "skin_stone",   name = "Boulder",       kind = "skin", rarity = "Uncommon",
       source = "shop", material = Enum.Material.Slate, colour = rgb(130, 128, 122) },
     { id = "skin_chrome",  name = "Chrome",        kind = "skin", rarity = "Rare",
-      source = "season", tier = 18, material = Enum.Material.Metal, colour = rgb(220, 226, 236) },
+      source = "season", tier = 18, material = Enum.Material.Metal, colour = rgb(209, 215, 224) },
     { id = "skin_lava",    name = "Molten",        kind = "skin", rarity = "Epic",
-      source = "season", tier = 28, premium = true, material = Enum.Material.Neon, colour = rgb(255, 110, 40) },
+      source = "season", tier = 28, premium = true, material = Enum.Material.Neon, colour = rgb(224, 155, 121) },
     { id = "skin_void",    name = "Void",          kind = "skin", rarity = "Epic",
-      source = "shop", material = Enum.Material.Neon, colour = rgb(24, 18, 40) },
+      source = "shop", material = Enum.Material.Neon, colour = rgb( 27,  22,  41) },
     { id = "skin_prism",   name = "Prism",         kind = "skin", rarity = "Legendary",
-      source = "season", tier = 45, premium = true, material = Enum.Material.Glass, colour = rgb(180, 220, 255) },
+      source = "season", tier = 45, premium = true, material = Enum.Material.Glass, colour = rgb(158, 194, 224) },
     { id = "skin_ancient", name = "Ancient Amber", kind = "skin", rarity = "Legendary",
-      source = "ascend", material = Enum.Material.Glass, colour = rgb(255, 190, 90) },
+      source = "ascend", material = Enum.Material.Glass, colour = rgb(224, 184, 121) },
     { id = "skin_goldleaf",name = "Gold Leaf",     kind = "skin", rarity = "Mythic",
-      source = "achievement", material = Enum.Material.Foil, colour = rgb(255, 210, 90) },
+      source = "achievement", material = Enum.Material.Foil, colour = rgb(224, 196, 121) },
 
     -- ── Trails ─────────────────────────────────────────────────────────────
     { id = "trail_none",   name = "No Trail",      kind = "trail", rarity = "Common", source = "starter" },
     { id = "trail_dust",   name = "Dust Puff",     kind = "trail", rarity = "Common",
       source = "season", tier = 2, colour = rgb(220, 210, 190) },
     { id = "trail_spark",  name = "Sparks",        kind = "trail", rarity = "Uncommon",
-      source = "season", tier = 11, colour = rgb(255, 215, 120) },
+      source = "season", tier = 11, colour = rgb(224, 194, 121) },
     { id = "trail_frost",  name = "Frost",         kind = "trail", rarity = "Rare",
-      source = "shop", colour = rgb(160, 230, 255) },
+      source = "shop", colour = rgb(141, 202, 224) },
     { id = "trail_flame",  name = "Flame",         kind = "trail", rarity = "Epic",
-      source = "season", tier = 33, premium = true, colour = rgb(255, 120, 50) },
+      source = "season", tier = 33, premium = true, colour = rgb(224, 156, 121) },
     { id = "trail_rainbow",name = "Rainbow",       kind = "trail", rarity = "Legendary",
-      source = "season", tier = 50, premium = true, colour = rgb(255, 255, 255) },
+      source = "season", tier = 50, premium = true, colour = rgb(224, 224, 224) },
     { id = "trail_crest",  name = "Crest Wake",    kind = "trail", rarity = "Mythic",
-      source = "ascend", colour = rgb(255, 240, 170) },
+      source = "ascend", colour = rgb(224, 211, 150) },
 
     -- ── Eyes ───────────────────────────────────────────────────────────────
     { id = "eyes_default", name = "Googly",        kind = "eyes", rarity = "Common", source = "starter", emoji = "👀" },
@@ -496,6 +519,11 @@ export type Item = {
     scale: Vector3,
 }
 
+-- PALETTE RULE: nothing in this table goes above ~46% saturation or ~88%
+-- value. Thirty objects at full neon, suspended inside a translucent shell,
+-- read as visual noise rather than as a collection. Hues are unchanged, so a
+-- traffic cone is still orange and a rubber duck still yellow — they are just
+-- pulled back far enough to sit in a muted world.
 local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
 
 local Feedstock = {}
@@ -503,13 +531,13 @@ local Feedstock = {}
 Feedstock.RARITY_ORDER = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret" }
 
 Feedstock.RARITY_COLOR = {
-    Common    = rgb(190, 195, 205),
-    Uncommon  = rgb(120, 225, 140),
-    Rare      = rgb(105, 175, 255),
-    Epic      = rgb(190, 130, 255),
-    Legendary = rgb(255, 190,  70),
-    Mythic    = rgb(255, 105, 140),
-    Secret    = rgb(255, 255, 255),
+    Common    = rgb(176, 178, 178),
+    Uncommon  = rgb(140, 178, 138),
+    Rare      = rgb(132, 168, 206),
+    Epic      = rgb(162, 142, 190),
+    Legendary = rgb(206, 176, 114),
+    Mythic    = rgb(196, 130, 148),
+    Secret    = rgb(224, 221, 211),
 }
 
 -- BALANCE NOTE (measured, not guessed — see roblox/tools/balance.luau)
@@ -531,41 +559,41 @@ Feedstock.RARITY_COLOR = {
 -- nobody would ever part with one and the market would seize.
 Feedstock.ITEMS = {
     -- Common ────────────────────────────────────────────────────────────────
-    { id = "sock",     name = "Lost Sock",       mass = 1,     rarity = "Common",    weight = 100, color = rgb(235, 235, 240), shape = "Block",    scale = Vector3.new(0.5, 0.9, 0.3) },
+    { id = "sock",     name = "Lost Sock",       mass = 1,     rarity = "Common",    weight = 100, color = rgb(220, 220, 224), shape = "Block",    scale = Vector3.new(0.5, 0.9, 0.3) },
     { id = "pebble",   name = "Pebble",          mass = 1,     rarity = "Common",    weight = 100, color = rgb(150, 148, 140), shape = "Ball",     scale = Vector3.new(0.5, 0.5, 0.5) },
-    { id = "acorn",    name = "Acorn",           mass = 2,     rarity = "Common",    weight =  85, color = rgb(150, 105,  55), shape = "Ball",     scale = Vector3.new(0.45, 0.6, 0.45) },
+    { id = "acorn",    name = "Acorn",           mass = 2,     rarity = "Common",    weight =  85, color = rgb(150, 117,  81), shape = "Ball",     scale = Vector3.new(0.45, 0.6, 0.45) },
     { id = "can",      name = "Dented Can",      mass = 3,     rarity = "Common",    weight =  70, color = rgb(195, 200, 210), shape = "Cylinder", scale = Vector3.new(0.7, 0.55, 0.55) },
-    { id = "cone",     name = "Traffic Cone",    mass = 4,     rarity = "Common",    weight =  60, color = rgb(255, 110,  40), shape = "Wedge",    scale = Vector3.new(0.7, 0.9, 0.7) },
+    { id = "cone",     name = "Traffic Cone",    mass = 4,     rarity = "Common",    weight =  60, color = rgb(224, 155, 121), shape = "Wedge",    scale = Vector3.new(0.7, 0.9, 0.7) },
 
     -- Uncommon ──────────────────────────────────────────────────────────────
-    { id = "duck",     name = "Rubber Duck",     mass = 12,    rarity = "Uncommon",  weight = 42, color = rgb(255, 215,  60), shape = "Ball",     scale = Vector3.new(0.8, 0.7, 1.0) },
-    { id = "pizza",    name = "Cold Pizza",      mass = 15,    rarity = "Uncommon",  weight = 38, color = rgb(235, 165,  75), shape = "Wedge",    scale = Vector3.new(1.1, 0.2, 1.1) },
-    { id = "boot",     name = "Big Boot",        mass = 18,    rarity = "Uncommon",  weight = 32, color = rgb(105,  70,  50), shape = "Block",    scale = Vector3.new(0.7, 0.8, 1.2) },
-    { id = "toaster",  name = "Toaster",         mass = 24,    rarity = "Uncommon",  weight = 26, color = rgb(215, 220, 230), shape = "Block",    scale = Vector3.new(1.0, 0.8, 0.7) },
+    { id = "duck",     name = "Rubber Duck",     mass = 12,    rarity = "Uncommon",  weight = 42, color = rgb(224, 203, 121), shape = "Ball",     scale = Vector3.new(0.8, 0.7, 1.0) },
+    { id = "pizza",    name = "Cold Pizza",      mass = 15,    rarity = "Uncommon",  weight = 38, color = rgb(224, 179, 121), shape = "Wedge",    scale = Vector3.new(1.1, 0.2, 1.1) },
+    { id = "boot",     name = "Big Boot",        mass = 18,    rarity = "Uncommon",  weight = 32, color = rgb(105,  74,  57), shape = "Block",    scale = Vector3.new(0.7, 0.8, 1.2) },
+    { id = "toaster",  name = "Toaster",         mass = 24,    rarity = "Uncommon",  weight = 26, color = rgb(210, 215, 224), shape = "Block",    scale = Vector3.new(1.0, 0.8, 0.7) },
 
     -- Rare ──────────────────────────────────────────────────────────────────
     { id = "anvil",    name = "Anvil",           mass = 90,    rarity = "Rare",      weight = 17, color = rgb( 85,  88,  95), shape = "Block",    scale = Vector3.new(1.2, 0.8, 0.7) },
     { id = "piano",    name = "Tiny Piano",      mass = 120,   rarity = "Rare",      weight = 13, color = rgb( 40,  40,  46), shape = "Block",    scale = Vector3.new(1.4, 0.9, 1.0) },
-    { id = "globe",    name = "Globe",           mass = 150,   rarity = "Rare",      weight = 11, color = rgb( 80, 150, 210), shape = "Ball",     scale = Vector3.new(1.1, 1.1, 1.1) },
+    { id = "globe",    name = "Globe",           mass = 150,   rarity = "Rare",      weight = 11, color = rgb(113, 165, 210), shape = "Ball",     scale = Vector3.new(1.1, 1.1, 1.1) },
 
     -- Epic ──────────────────────────────────────────────────────────────────
-    { id = "meteor",   name = "Warm Meteor",     mass = 600,   rarity = "Epic",      weight = 6.0, color = rgb(120,  70,  55), shape = "Ball",     scale = Vector3.new(1.4, 1.4, 1.4) },
-    { id = "statue",   name = "Marble Statue",   mass = 820,   rarity = "Epic",      weight = 4.5, color = rgb(240, 238, 230), shape = "Block",    scale = Vector3.new(0.9, 2.0, 0.9) },
+    { id = "meteor",   name = "Warm Meteor",     mass = 600,   rarity = "Epic",      weight = 6.0, color = rgb(120,  78,  65), shape = "Ball",     scale = Vector3.new(1.4, 1.4, 1.4) },
+    { id = "statue",   name = "Marble Statue",   mass = 820,   rarity = "Epic",      weight = 4.5, color = rgb(224, 223, 215), shape = "Block",    scale = Vector3.new(0.9, 2.0, 0.9) },
     { id = "safe",     name = "Bank Safe",       mass = 1100,  rarity = "Epic",      weight = 3.2, color = rgb( 60,  75,  70), shape = "Block",    scale = Vector3.new(1.3, 1.5, 1.3) },
 
     -- Legendary ─────────────────────────────────────────────────────────────
-    { id = "car",      name = "Rusty Car",       mass = 4500,  rarity = "Legendary", weight = 1.4, color = rgb(190,  65,  60), shape = "Block",    scale = Vector3.new(1.2, 0.9, 2.6) },
-    { id = "bell",     name = "Cathedral Bell",  mass = 6200,  rarity = "Legendary", weight = 0.9, color = rgb(205, 165,  70), shape = "Cylinder", scale = Vector3.new(1.8, 1.8, 1.8) },
+    { id = "car",      name = "Rusty Car",       mass = 4500,  rarity = "Legendary", weight = 1.4, color = rgb(190, 106, 103), shape = "Block",    scale = Vector3.new(1.2, 0.9, 2.6) },
+    { id = "bell",     name = "Cathedral Bell",  mass = 6200,  rarity = "Legendary", weight = 0.9, color = rgb(205, 177, 111), shape = "Cylinder", scale = Vector3.new(1.8, 1.8, 1.8) },
 
     -- Mythic ────────────────────────────────────────────────────────────────
-    { id = "moon",     name = "Chunk of Moon",   mass = 20000, rarity = "Mythic",    weight = 0.22, color = rgb(225, 228, 240), shape = "Ball",    scale = Vector3.new(2.4, 2.4, 2.4) },
-    { id = "blackbox", name = "The Black Box",   mass = 30000, rarity = "Mythic",    weight = 0.14, color = rgb( 25,  25,  32), shape = "Block",   scale = Vector3.new(1.6, 1.6, 1.6) },
+    { id = "moon",     name = "Chunk of Moon",   mass = 20000, rarity = "Mythic",    weight = 0.22, color = rgb(210, 213, 224), shape = "Ball",    scale = Vector3.new(2.4, 2.4, 2.4) },
+    { id = "blackbox", name = "The Black Box",   mass = 30000, rarity = "Mythic",    weight = 0.14, color = rgb( 32,  32,  41), shape = "Block",   scale = Vector3.new(1.6, 1.6, 1.6) },
 
     -- Secret ────────────────────────────────────────────────────────────────
     -- Deliberately absurd odds. These exist to be screenshotted and traded,
     -- not to be farmed. ~1 in 40,000 catches.
-    { id = "goobfsl",  name = "Goob Fossil",     mass = 120000, rarity = "Secret", weight = 0.020, color = rgb(255, 250, 205), shape = "Ball",  scale = Vector3.new(2.0, 2.0, 2.0) },
-    { id = "singular", name = "Pocket Singularity", mass = 250000, rarity = "Secret", weight = 0.006, color = rgb( 10,  10,  14), shape = "Ball", scale = Vector3.new(1.5, 1.5, 1.5) },
+    { id = "goobfsl",  name = "Goob Fossil",     mass = 120000, rarity = "Secret", weight = 0.020, color = rgb(224, 220, 180), shape = "Ball",  scale = Vector3.new(2.0, 2.0, 2.0) },
+    { id = "singular", name = "Pocket Singularity", mass = 250000, rarity = "Secret", weight = 0.006, color = rgb( 29,  29,  41), shape = "Ball", scale = Vector3.new(1.5, 1.5, 1.5) },
 }
 
 local byId: { [string]: Item } = {}
@@ -3298,6 +3326,7 @@ local function buildModel(player: Player, goob): Model
     text.TextScaled = true
     text.TextColor3 = Color3.new(1, 1, 1)
     text.TextStrokeTransparency = 0.25
+    text.Text = goob.nickname   -- never leave a TextLabel on its "Label" default
     text.Parent = plate
 
     layoutFeatures(model, radius, nil)
@@ -3868,9 +3897,13 @@ local function buildBall(player: Player, goob): BasePart
     ball.Shape = Enum.PartType.Ball
     ball.Size = Vector3.new(radius, radius, radius) * 2
     ball.Material = Enum.Material.Glass
-    ball.Transparency = 0.45
+    -- A fresh Goob is only 4 studs across. At 0.45 on Glass it was very nearly
+    -- invisible against the sky, which is a bad first impression when it is
+    -- also the thing you are supposed to be. Solid enough to read as a body,
+    -- transparent enough to show what is inside it.
+    ball.Transparency = 0.24
     ball.Color = Color3.fromHSV(goob.hue, 0.55, 1)
-    ball.Reflectance = 0.1
+    ball.Reflectance = 0.06
     ball.CanCollide = true
     ball.Anchored = false
     ball.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.35, 0.25, 1, 1)
@@ -3968,7 +4001,13 @@ local function buildBall(player: Player, goob): BasePart
     text.Font = Enum.Font.FredokaOne
     text.TextScaled = true
     text.TextColor3 = Color3.new(1, 1, 1)
-    text.TextStrokeTransparency = 0.25
+    text.TextStrokeTransparency = 0.35
+    -- MUST be set here. A TextLabel's default Text is the literal string
+    -- "Label", and this plate is a TextScaled BillboardGui floating directly
+    -- above the player's own camera subject — so leaving it for a later refresh
+    -- put the word "Label" across the middle of the screen in metre-high
+    -- letters until something happened to trigger one.
+    text.Text = goob.nickname
     text.Parent = plate
 
     return ball
@@ -4076,6 +4115,10 @@ function RollService.spawn(player: Player, goob, atPosition: Vector3?)
 
     lastSeen[player.UserId] = { pos = ball.Position, t = os.clock() }
     violations[player.UserId] = 0
+
+    -- Paint the real nameplate immediately rather than waiting for the first
+    -- mass change to trigger a refresh.
+    RollService.refresh(player, goob)
 end
 
 -- Move a ball somewhere the SERVER decided it should be.
@@ -4508,7 +4551,11 @@ WorldBuilder.ZONES = {
     HUB        = { name = "The Hub",     centre = Vector3.new(0, 0, 0),      radius = 170 },
     SCRAPYARD  = { name = "Scrapyard",   centre = Vector3.new(520, 0, 0),    radius = 260 },
     SLICKFIELD = { name = "Slickfield",  centre = Vector3.new(-520, 0, 120), radius = 260 },
-    DEEP       = { name = "The Deep",    centre = Vector3.new(40, -46, -560),radius = 240 },
+    -- Sits below and beyond the southern lip of the ground plane. The gap
+    -- between the lip (z = -452) and the landing (z = -496) is ~44 studs: far
+    -- enough that walking off is a fall, close enough that a ramp plus one dash
+    -- clears it. This is the only place in the world you can fall out of.
+    DEEP       = { name = "The Deep",    centre = Vector3.new(40, -34, -710), radius = 240 },
 }
 
 local function part(props: { [string]: any }): BasePart
@@ -4561,15 +4608,15 @@ local function signpost(parent: Instance, position: Vector3, icon: string, title
 
     local frame = Instance.new("Frame")
     frame.Size = UDim2.fromScale(1, 1)
-    frame.BackgroundColor3 = Color3.fromRGB(26, 28, 44)
-    frame.BackgroundTransparency = 0.15
+    frame.BackgroundColor3 = Color3.fromRGB(44, 46, 50)
+    frame.BackgroundTransparency = 0.1
     frame.Parent = gui
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 18)
     corner.Parent = frame
     local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 4
-    stroke.Color = tint or Color3.fromRGB(255, 210, 90)
+    stroke.Thickness = 3
+    stroke.Color = tint or Color3.fromRGB(198, 174, 118)
     stroke.Parent = frame
 
     local iconLabel = Instance.new("TextLabel")
@@ -4586,7 +4633,7 @@ local function signpost(parent: Instance, position: Vector3, icon: string, title
     titleLabel.BackgroundTransparency = 1
     titleLabel.Font = Enum.Font.FredokaOne
     titleLabel.TextScaled = true
-    titleLabel.TextColor3 = tint or Color3.fromRGB(255, 210, 90)
+    titleLabel.TextColor3 = tint or Color3.fromRGB(198, 174, 118)
     titleLabel.Text = title
     titleLabel.Parent = frame
 
@@ -4597,7 +4644,7 @@ local function signpost(parent: Instance, position: Vector3, icon: string, title
         sub.BackgroundTransparency = 1
         sub.Font = Enum.Font.FredokaOne
         sub.TextScaled = true
-        sub.TextColor3 = Color3.fromRGB(190, 198, 220)
+        sub.TextColor3 = Color3.fromRGB(176, 178, 176)
         sub.Text = subtitle
         sub.Parent = frame
     end
@@ -4636,27 +4683,27 @@ end
 WorldBuilder.plots = {} :: { { index: number, center: Vector3, owner: Player? } }
 
 local function buildAmbience()
-    Lighting.Ambient = Color3.fromRGB(118, 120, 140)
-    Lighting.OutdoorAmbient = Color3.fromRGB(148, 152, 178)
-    Lighting.Brightness = 2.6
+    Lighting.Ambient = Color3.fromRGB(126, 126, 128)
+    Lighting.OutdoorAmbient = Color3.fromRGB(152, 152, 150)
+    Lighting.Brightness = 2.0
     Lighting.ClockTime = 15.2
     Lighting.GeographicLatitude = 14
     Lighting.FogEnd = 2200
-    Lighting.FogColor = Color3.fromRGB(186, 218, 244)
+    Lighting.FogColor = Color3.fromRGB(196, 202, 200)
     Lighting.EnvironmentDiffuseScale = 0.45
 
     local atmo = Instance.new("Atmosphere")
-    atmo.Density = 0.34
-    atmo.Haze = 1.6
-    atmo.Glare = 0.25
-    atmo.Color = Color3.fromRGB(214, 232, 255)
-    atmo.Decay = Color3.fromRGB(150, 184, 228)
+    atmo.Density = 0.28
+    atmo.Haze = 1.1
+    atmo.Glare = 0.05
+    atmo.Color = Color3.fromRGB(212, 214, 210)
+    atmo.Decay = Color3.fromRGB(158, 166, 168)
     atmo.Parent = Lighting
 
     local bloom = Instance.new("BloomEffect")
-    bloom.Intensity = 0.5
-    bloom.Threshold = 0.88
-    bloom.Size = 24
+    bloom.Intensity = 0.22
+    bloom.Threshold = 0.95
+    bloom.Size = 16
     bloom.Parent = Lighting
 
     local sky = Instance.new("Sky")
@@ -4664,9 +4711,9 @@ local function buildAmbience()
     sky.Parent = Lighting
 
     local clouds = Instance.new("Clouds")
-    clouds.Cover = 0.55
-    clouds.Density = 0.6
-    clouds.Color = Color3.fromRGB(255, 255, 255)
+    clouds.Cover = 0.36
+    clouds.Density = 0.42
+    clouds.Color = Color3.fromRGB(238, 238, 236)
     clouds.Parent = Workspace.Terrain
 end
 
@@ -4687,17 +4734,45 @@ function WorldBuilder.build()
             Name = "Road",
             Size = Vector3.new(width, 4, len),
             CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
-            Color = Color3.fromRGB(198, 186, 162),
+            Color = Color3.fromRGB(178, 172, 158),
             Material = Enum.Material.Concrete,
         })
         r.Parent = world
         return r
     end
 
+    -- ── THE GROUND ─────────────────────────────────────────────────────────
+    -- One continuous plane under everything reachable. The zone rewrite
+    -- replaced the old world plane with separate discs, which left the map as
+    -- islands floating in open sky — you could roll three steps off a pad and
+    -- fall out of the world.
+    --
+    -- The Deep is deliberately NOT on this plane: it sits lower and beyond the
+    -- southern edge, across a gap that must be dashed. That gap is the only
+    -- hole in the world, and it is there on purpose.
+    local ground = part({
+        Name = "Ground",
+        Size = Vector3.new(2400, 14, 1150),
+        Position = Vector3.new(0, -7, 120),
+        Color = Color3.fromRGB(138, 152, 124),
+        Material = Enum.Material.Grass,
+    })
+    ground.Parent = world
+
+    -- A soft lip so the southern edge reads as an edge before you go over it.
+    local lip = part({
+        Name = "SouthLip",
+        Size = Vector3.new(2400, 3, 6),
+        Position = Vector3.new(0, 1, -452),
+        Color = Color3.fromRGB(166, 154, 128),
+        Material = Enum.Material.Slate,
+    })
+    lip.Parent = world
+
     -- ── HUB ────────────────────────────────────────────────────────────────
     local hub = WorldBuilder.ZONES.HUB
     disc(world, hub.centre + Vector3.new(0, -1, 0), hub.radius, 6,
-        Color3.fromRGB(246, 238, 214), Enum.Material.Sand, "HubFloor")
+        Color3.fromRGB(206, 198, 180), Enum.Material.Sand, "HubFloor")
 
     -- Rim so the hub reads as a raised island rather than a paint patch.
     for i = 1, 40 do
@@ -4706,9 +4781,9 @@ function WorldBuilder.build()
             Name = "HubRim",
             Size = Vector3.new(3, 7, 3),
             Position = hub.centre + Vector3.new(math.cos(a) * hub.radius, 3, math.sin(a) * hub.radius),
-            Color = Color3.fromRGB(120, 196, 236),
-            Material = Enum.Material.Neon,
-            Transparency = 0.35,
+            Color = Color3.fromRGB(150, 162, 168),
+            Material = Enum.Material.SmoothPlastic,
+            Transparency = 0.25,
             CanCollide = false,
         })
         post.Parent = world
@@ -4719,26 +4794,26 @@ function WorldBuilder.build()
         Shape = Enum.PartType.Cylinder,
         Size = Vector3.new(1.6, Config.TRADE_RANGE * 2, Config.TRADE_RANGE * 2),
         CFrame = CFrame.new(hub.centre + Vector3.new(0, 2.4, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(255, 205, 90),
-        Material = Enum.Material.Neon,
-        Transparency = 0.3,
+        Color = Color3.fromRGB(198, 174, 118),
+        Material = Enum.Material.SmoothPlastic,
+        Transparency = 0.55,
         CanCollide = false,
     })
     booth.Parent = world
     signpost(world, hub.centre + Vector3.new(0, 3, -34), "🤝", "TRADE RING",
-        "roll in here with a friend", Color3.fromRGB(255, 205, 90))
+        "roll in here with a friend", Color3.fromRGB(198, 174, 118))
 
     signpost(world, hub.centre + Vector3.new(-64, 3, 20), "🍪", "SNACK STAND",
-        "spend 💧 on food", Color3.fromRGB(255, 170, 90))
+        "spend 💧 on food", Color3.fromRGB(190, 158, 120))
     signpost(world, hub.centre + Vector3.new(64, 3, 20), "🥚", "HATCHERY",
-        "new Goobs", Color3.fromRGB(160, 230, 255))
+        "new Goobs", Color3.fromRGB(150, 176, 190))
 
     -- Leaderboard pillar.
     local pillar = part({
         Name = "Leaderboard",
         Size = Vector3.new(18, 34, 4),
         Position = hub.centre + Vector3.new(0, 17, -96),
-        Color = Color3.fromRGB(42, 46, 68),
+        Color = Color3.fromRGB(58, 60, 64),
         Material = Enum.Material.Metal,
     })
     pillar.Parent = world
@@ -4767,19 +4842,19 @@ function WorldBuilder.build()
         Shape = Enum.PartType.Cylinder,
         Size = Vector3.new(4, 40, 40),
         CFrame = CFrame.new(hub.centre + Vector3.new(0, 3, 96)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(255, 246, 200),
-        Material = Enum.Material.Neon,
-        Transparency = 0.25,
+        Color = Color3.fromRGB(226, 216, 186),
+        Material = Enum.Material.SmoothPlastic,
+        Transparency = 0.45,
         CanCollide = false,
     })
     altar.Parent = world
     local altarLight = Instance.new("PointLight")
-    altarLight.Brightness = 5
+    altarLight.Brightness = 2
     altarLight.Range = 70
-    altarLight.Color = Color3.fromRGB(255, 240, 170)
+    altarLight.Color = Color3.fromRGB(224, 214, 184)
     altarLight.Parent = altar
     signpost(world, hub.centre + Vector3.new(0, 3, 124), "👑", "ASCEND",
-        "Colossal Goobs only", Color3.fromRGB(255, 246, 180))
+        "Colossal Goobs only", Color3.fromRGB(202, 190, 150))
 
     -- Home pads: where your OTHER Goobs sit on display now that the active one
     -- is your body.
@@ -4792,7 +4867,7 @@ function WorldBuilder.build()
             Shape = Enum.PartType.Cylinder,
             Size = Vector3.new(2, 40, 40),
             CFrame = CFrame.new(centre) * CFrame.Angles(0, 0, math.rad(90)),
-            Color = Color3.fromRGB(228, 216, 190),
+            Color = Color3.fromRGB(190, 182, 168),
             Material = Enum.Material.Slate,
         })
         pad.Parent = world
@@ -4823,29 +4898,29 @@ function WorldBuilder.build()
     -- ── SCRAPYARD: ramps, the learning zone ────────────────────────────────
     local sy = WorldBuilder.ZONES.SCRAPYARD
     disc(world, sy.centre + Vector3.new(0, -1, 0), sy.radius, 6,
-        Color3.fromRGB(138, 128, 112), Enum.Material.Ground, "ScrapyardFloor")
+        Color3.fromRGB(146, 138, 124), Enum.Material.Ground, "ScrapyardFloor")
     signpost(world, sy.centre + Vector3.new(-210, 3, 0), "🔧", "SCRAPYARD",
-        "ramps · common junk", Color3.fromRGB(255, 150, 90))
+        "ramps · common junk", Color3.fromRGB(180, 148, 116))
 
     for i = 1, 7 do
         local a = (i / 7) * math.pi * 2
         ramp(world, sy.centre + Vector3.new(math.cos(a) * 120, 7, math.sin(a) * 120),
-            Vector3.new(30, 14, 58), math.deg(a) + 90, Color3.fromRGB(168, 96, 72))
+            Vector3.new(30, 14, 58), math.deg(a) + 90, Color3.fromRGB(148, 116, 100))
     end
     -- A half-pipe to bounce between.
     for _, sx in ipairs({ -1, 1 }) do
         ramp(world, sy.centre + Vector3.new(sx * 56, 11, -40),
-            Vector3.new(70, 22, 40), sx > 0 and 90 or 270, Color3.fromRGB(120, 124, 132))
+            Vector3.new(70, 22, 40), sx > 0 and 90 or 270, Color3.fromRGB(128, 128, 128))
     end
 
     -- ── SLICKFIELD: low friction ───────────────────────────────────────────
     local sf = WorldBuilder.ZONES.SLICKFIELD
     local ice = disc(world, sf.centre + Vector3.new(0, -1, 0), sf.radius, 6,
-        Color3.fromRGB(196, 232, 250), Enum.Material.Ice, "SlickfieldFloor")
+        Color3.fromRGB(188, 202, 206), Enum.Material.Ice, "SlickfieldFloor")
     -- Almost no friction: this is the zone's entire identity.
     ice.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.02, 0.3, 1, 1)
     signpost(world, sf.centre + Vector3.new(210, 3, 0), "🧊", "SLICKFIELD",
-        "no grip · go fast", Color3.fromRGB(150, 220, 255))
+        "no grip · go fast", Color3.fromRGB(160, 180, 190))
 
     for i = 1, 5 do
         local a = (i / 5) * math.pi * 2
@@ -4853,7 +4928,7 @@ function WorldBuilder.build()
             Name = "IcePillar",
             Size = Vector3.new(16, 46, 16),
             Position = sf.centre + Vector3.new(math.cos(a) * 130, 22, math.sin(a) * 130),
-            Color = Color3.fromRGB(214, 240, 255),
+            Color = Color3.fromRGB(198, 208, 210),
             Material = Enum.Material.Ice,
             Transparency = 0.25,
         })
@@ -4863,13 +4938,13 @@ function WorldBuilder.build()
     -- ── THE DEEP: gated by a dash ──────────────────────────────────────────
     local dp = WorldBuilder.ZONES.DEEP
     disc(world, dp.centre + Vector3.new(0, -1, 0), dp.radius, 6,
-        Color3.fromRGB(58, 48, 78), Enum.Material.Slate, "DeepFloor")
+        Color3.fromRGB(74, 70, 82), Enum.Material.Slate, "DeepFloor")
     signpost(world, dp.centre + Vector3.new(0, 3, 190), "🌑", "THE DEEP",
-        "rarest spawns · dash to cross", Color3.fromRGB(200, 150, 255))
+        "rarest spawns · dash to cross", Color3.fromRGB(166, 154, 180))
 
     -- The launch ramp, then a gap. Crossing it needs a dash off the lip; that
     -- is the moment the dash meter stops being a toy and becomes a key.
-    ramp(world, Vector3.new(20, 9, -300), Vector3.new(70, 18, 80), 0, Color3.fromRGB(150, 120, 200))
+    ramp(world, Vector3.new(20, 7, -410), Vector3.new(70, 16, 76), 0, Color3.fromRGB(126, 116, 140))
     local landing = part({
         Name = "DeepLanding",
         Size = Vector3.new(110, 6, 80),
@@ -4886,21 +4961,21 @@ function WorldBuilder.build()
             Shape = Enum.PartType.Ball,
             Size = Vector3.new(9, 9, 9),
             Position = dp.centre + Vector3.new(math.cos(a) * 150, 14, math.sin(a) * 150),
-            Color = Color3.fromRGB(190, 140, 255),
+            Color = Color3.fromRGB(168, 152, 186),
             Material = Enum.Material.Neon,
             CanCollide = false,
         })
         glow.Parent = world
         local l = Instance.new("PointLight")
-        l.Brightness = 4
+        l.Brightness = 2
         l.Range = 46
-        l.Color = Color3.fromRGB(190, 140, 255)
+        l.Color = Color3.fromRGB(168, 152, 186)
         l.Parent = glow
     end
 
     road(hub.centre + Vector3.new(150, -1, 0), sy.centre + Vector3.new(-220, -1, 0), 60)
     road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
-    road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -290), 60)
+    road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -400), 60)
 
     -- ── THE ARCHIVE ────────────────────────────────────────────────────────
     -- A monument you roll up to and read. The whole design rests on genuine
@@ -4910,7 +4985,7 @@ function WorldBuilder.build()
         Name = "Archive",
         Size = Vector3.new(22, 30, 4),
         Position = hub.centre + Vector3.new(-86, 15, -70),
-        Color = Color3.fromRGB(38, 32, 56),
+        Color = Color3.fromRGB(62, 60, 66),
         Material = Enum.Material.Marble,
     })
     archive.Parent = world
@@ -4926,7 +5001,7 @@ function WorldBuilder.build()
     archiveText.Size = UDim2.fromScale(1, 1)
     archiveText.BackgroundTransparency = 1
     archiveText.Font = Enum.Font.FredokaOne
-    archiveText.TextColor3 = Color3.fromRGB(235, 225, 255)
+    archiveText.TextColor3 = Color3.fromRGB(226, 224, 218)
     archiveText.TextXAlignment = Enum.TextXAlignment.Left
     archiveText.TextYAlignment = Enum.TextYAlignment.Top
     archiveText.TextSize = 26
@@ -4934,13 +5009,13 @@ function WorldBuilder.build()
     archiveText.Parent = archiveGui
 
     local archiveLight = Instance.new("PointLight")
-    archiveLight.Brightness = 3
+    archiveLight.Brightness = 1.5
     archiveLight.Range = 50
-    archiveLight.Color = Color3.fromRGB(190, 160, 255)
+    archiveLight.Color = Color3.fromRGB(180, 172, 190)
     archiveLight.Parent = archive
 
     signpost(world, hub.centre + Vector3.new(-86, 3, -44), "📜", "THE ARCHIVE",
-        "how many still exist", Color3.fromRGB(200, 170, 255))
+        "how many still exist", Color3.fromRGB(168, 158, 182))
 
     -- ── THE SUMO PIT ───────────────────────────────────────────────────────
     -- Raised and open-sided on purpose: the danger has to be legible from
@@ -4955,9 +5030,9 @@ function WorldBuilder.build()
         Shape = Enum.PartType.Cylinder,
         Size = Vector3.new(1.5, Pit.START_RADIUS * 2, Pit.START_RADIUS * 2),
         CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, 0.6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(255, 90, 110),
+        Color = Color3.fromRGB(184, 118, 112),
         Material = Enum.Material.Neon,
-        Transparency = 0.45,
+        Transparency = 0.6,
         CanCollide = false,
     })
     ring.Parent = world
@@ -4977,7 +5052,7 @@ function WorldBuilder.build()
     end
 
     signpost(world, Pit.CENTRE + Vector3.new(0, -4, Pit.START_RADIUS + 60), "🥊", "SUMO PIT",
-        "stake 💧 · last one in wins", Color3.fromRGB(255, 110, 130))
+        "stake 💧 · last one in wins", Color3.fromRGB(184, 128, 122))
 
     -- The join pad. Rolling onto it enters the queue; nothing drags you here.
     local joinPad = part({
@@ -4986,9 +5061,9 @@ function WorldBuilder.build()
         Size = Vector3.new(2, 34, 34),
         CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, -3, Pit.START_RADIUS + 40))
             * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(120, 255, 160),
-        Material = Enum.Material.Neon,
-        Transparency = 0.35,
+        Color = Color3.fromRGB(146, 178, 140),
+        Material = Enum.Material.SmoothPlastic,
+        Transparency = 0.5,
         CanCollide = false,
     })
     joinPad.Parent = world
@@ -5002,8 +5077,8 @@ function WorldBuilder.build()
     spawn.Anchored = true
     spawn.CanCollide = false
     spawn.Color = Color3.fromRGB(255, 255, 255)
-    spawn.Material = Enum.Material.Neon
-    spawn.Transparency = 0.5
+    spawn.Material = Enum.Material.SmoothPlastic
+    spawn.Transparency = 0.7
     spawn.Neutral = true
     spawn.Parent = world
 
@@ -5087,30 +5162,10 @@ local player = Players.LocalPlayer
 local gui = Hud.build()
 TradeUi.build(gui)
 
--- ── Sound ──────────────────────────────────────────────────────────────────
--- Three sounds carry the entire game feel: a catch blip, a rare fanfare and a
--- gulp. They are generated from Roblox's built-in library so the place has no
--- external asset dependencies and works the moment you open it.
-
-local function sound(id: string, volume: number, pitch: number?): Sound
-    local s = Instance.new("Sound")
-    s.SoundId = id
-    s.Volume = volume
-    s.PlaybackSpeed = pitch or 1
-    s.Parent = SoundService
-    return s
-end
-
-local sfxCatch = sound("rbxassetid://6026984224", 0.35)
-local sfxRare  = sound("rbxassetid://9125402735", 0.5)
-local sfxGulp  = sound("rbxassetid://5852470908", 0.6)
-
-local function play(s: Sound, pitchJitter: number?)
-    if pitchJitter then
-        s.PlaybackSpeed = 1 + (math.random() - 0.5) * pitchJitter
-    end
-    s:Play()
-end
+-- Sound and every other feel effect now live in Juice, which reads its ids
+-- from Config and stays silent when they are unset. This file used to keep a
+-- second copy of the same asset ids, which meant fixing a bad one in one place
+-- left it broken in the other.
 
 -- ── Catching ───────────────────────────────────────────────────────────────
 -- Auto-collect on proximity. Requiring a click would be miserable on mobile,
@@ -5154,9 +5209,9 @@ end)
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
     Hud.toast(message, kind)
     if kind == "secret" then
-        play(sfxRare)
+        Juice.play("rare")
     elseif kind == "good" then
-        play(sfxCatch, 0.2)
+        Juice.play("catch", 0.2)
     end
 end)
 
@@ -5177,7 +5232,7 @@ end
 
 Hud.onBuySnack = function(tierId: string)
     Net.get("BuySnack"):FireServer(tierId)
-    play(sfxCatch, 0.25)
+    Juice.play("catch", 0.25)
 end
 
 Hud.onBuyEgg = function()
@@ -5225,7 +5280,7 @@ local function buildGulpConfirm()
         if pendingGulp and state then
             local activeId = state.activeGoobId
             Net.get("GulpGoob"):FireServer(activeId, pendingGulp)
-            play(sfxGulp)
+            Juice.play("gulp")
         end
         pendingGulp = nil
         confirmFrame.Visible = false
@@ -5630,13 +5685,13 @@ do
         local cx = (gapL + gapR) / 2
         if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
         dashBtn.Position = UDim2.fromOffset(
-            math.clamp(cx - size / 2, 8, u.X - size - 8),
+            Layout.fit(cx - size / 2, 8, u.X - size - 8),
             u.Y - size * 2 - 26)
 
         local pw, ph, gap = compact and 24 or 34, compact and 8 or 10, 5
         meter.Size = UDim2.fromOffset(Movement.DASH_CHARGES * (pw + gap), ph)
         meter.Position = UDim2.fromOffset(
-            touch and math.clamp(cx - meter.Size.X.Offset / 2, 8, u.X - meter.Size.X.Offset - 8)
+            touch and Layout.fit(cx - meter.Size.X.Offset / 2, 8, u.X - meter.Size.X.Offset - 8)
                   or math.floor((u.X - meter.Size.X.Offset) / 2),
             touch and (u.Y - size * 2 - 40) or (u.Y - 34))
         for i, pip in ipairs(pips) do
@@ -5698,7 +5753,7 @@ do
     strip.Visible = false
     strip.Parent = gui
     Theme.corner(strip, 14)
-    Theme.stroke(strip, Color3.fromRGB(255, 110, 130), 3)
+    Theme.stroke(strip, Color3.fromRGB(184, 128, 122), 3)
 
     local line = Theme.label({ Name = "Line", Text = "", TextSize = 15 })
     line.Parent = strip
@@ -6209,7 +6264,7 @@ function Hud.applyLayout()
             btn.Size = UDim2.fromOffset(tabW, tabH)
             btn.Position = UDim2.fromOffset(ti * (tabW + 6), 0)
             btn.BackgroundColor3 = (currentTab == id) and Theme.ACCENT or Theme.BG_SOFT
-            btn.TextColor3 = (currentTab == id) and Color3.fromRGB(20, 22, 34) or Theme.TEXT
+            btn.TextColor3 = (currentTab == id) and Color3.fromRGB(28, 30, 34) or Theme.TEXT
             ti += 1
         end
     end
@@ -6255,14 +6310,14 @@ function Hud.applyLayout()
         if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
         openButton.Size = UDim2.fromOffset(size, size)
         openButton.Position = UDim2.fromOffset(
-            math.clamp(cx - size / 2, 8, u.X - size - 8),
+            Layout.fit(cx - size / 2, 8, u.X - size - 8),
             u.Y - size - 10
         )
         openButton.Text = compact and "🫧" or "🫧 MY GOOBS"
         if not compact then
             openButton.Size = UDim2.fromOffset(190, math.max(size, 58))
             openButton.Position = UDim2.fromOffset(
-                math.clamp(cx - 95, 8, u.X - 198), u.Y - math.max(size, 58) - 10)
+                Layout.fit(cx - 95, 8, u.X - 198), u.Y - math.max(size, 58) - 10)
         end
         openButton.TextSize = compact and 28 or 22
     else
@@ -6597,7 +6652,7 @@ function Hud.update(snap: any)
             btn.Text = ("%s %s  ·  💧%s  ·  %d items")
                 :format(snack.emoji, snack.name, snack.priceText, snack.rolls)
             btn.BackgroundColor3 = snack.affordable and Theme.GOOD or Theme.BG_SOFT
-            btn.TextColor3 = snack.affordable and Color3.fromRGB(20, 22, 34) or Theme.TEXT_DIM
+            btn.TextColor3 = snack.affordable and Color3.fromRGB(28, 30, 34) or Theme.TEXT_DIM
         end
     end
 
@@ -6610,7 +6665,7 @@ function Hud.update(snap: any)
             eggButton.Text = ("🥚 HATCH A GOOB  ·  💧%s  (%d/%d)")
                 :format(snap.eggPriceText or "?", #snap.goobs, snap.maxGoobs or 8)
             eggButton.BackgroundColor3 = snap.eggAffordable and Theme.GOLD or Theme.BG_SOFT
-            eggButton.TextColor3 = snap.eggAffordable and Color3.fromRGB(20, 22, 34) or Theme.TEXT_DIM
+            eggButton.TextColor3 = snap.eggAffordable and Color3.fromRGB(28, 30, 34) or Theme.TEXT_DIM
         end
     end
 
@@ -6688,6 +6743,7 @@ local SoundService = game:GetService("SoundService")
 
 local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
 local Feedstock = require(Shared.Feedstock)
+local Config = require(Shared.Config)
 
 local player = Players.LocalPlayer
 local Juice = {}
@@ -6747,28 +6803,31 @@ Juice.burst = burst
 
 -- ── Sounds ─────────────────────────────────────────────────────────────────
 
-local function sound(id: string, volume: number): Sound
-    local s = Instance.new("Sound")
-    s.SoundId = id
-    s.Volume = volume
-    s.Parent = SoundService
-    return s
-end
+-- Ids live in Config and default to empty. An unset id creates no Sound at
+-- all, so a game with no audio configured is silent rather than noisy with
+-- load failures.
+local VOLUMES = { catch = 0.30, rare = 0.55, gulp = 0.60, thud = 0.45 }
 
-local sfx = {
-    catch = sound("rbxassetid://6026984224", 0.30),
-    rare  = sound("rbxassetid://9125402735", 0.55),
-    gulp  = sound("rbxassetid://5852470908", 0.60),
-    thud  = sound("rbxassetid://9125600534", 0.45),
-}
+local sfx: { [string]: Sound } = {}
+for name, volume in pairs(VOLUMES) do
+    local id = (Config.SOUNDS or {})[name]
+    if type(id) == "string" and id ~= "" then
+        local s = Instance.new("Sound")
+        s.Name = "Goob_" .. name
+        s.SoundId = id
+        s.Volume = volume
+        s.Parent = SoundService
+        sfx[name] = s
+    end
+end
 
 function Juice.play(name: string, pitchJitter: number?)
     local s = sfx[name]
-    if not s then return end
+    if not s then return end   -- unconfigured: silent, never an error
     if pitchJitter then
         s.PlaybackSpeed = 1 + (math.random() - 0.5) * pitchJitter
     end
-    s:Play()
+    pcall(function() s:Play() end)
 end
 
 -- ── Public effects ─────────────────────────────────────────────────────────
@@ -6925,7 +6984,21 @@ end
 
 -- Usable height once the Roblox top bar is accounted for.
 function Layout.usable(): Vector2
-    return Vector2.new(current.viewport.X, current.viewport.Y - current.inset)
+    -- Floored well above zero. ViewportSize is (0, 0) for the first frames
+    -- before the camera initialises, and every layout function subtracts button
+    -- widths from it — which produced math.clamp(x, 8, -76), a hard error that
+    -- aborted the whole layout pass and left the HUD half-placed.
+    return Vector2.new(
+        math.max(320, current.viewport.X),
+        math.max(240, current.viewport.Y - current.inset))
+end
+
+-- A clamp that cannot throw. Roblox's math.clamp errors when max < min, which
+-- is correct for maths and useless for layout: a screen too narrow for a button
+-- is something to survive, not something to crash on.
+function Layout.fit(value: number, low: number, high: number): number
+    if high < low then return low end
+    return math.clamp(value, low, high)
 end
 
 -- Clamp a desired pixel size so it always fits with a margin. This is what
@@ -6971,6 +7044,9 @@ function Layout.recompute()
 
     -- Compact is about available room, not about being a phone: a small window
     -- on a desktop has exactly the same problem.
+    -- Ignore the degenerate viewport the camera reports before it is ready.
+    if vp.X < 64 or vp.Y < 64 then return end
+
     local compact = vp.X < 900 or vp.Y < 500
 
     local changed = compact ~= current.compact
@@ -6989,6 +7065,18 @@ end
 
 function Layout.start()
     Layout.recompute()
+    -- The camera can take several frames to report a real size. Keep asking
+    -- until it does, then stop.
+    task.spawn(function()
+        for _ = 1, 120 do
+            local cam = Workspace.CurrentCamera
+            if cam and cam.ViewportSize.X > 64 then
+                Layout.recompute()
+                break
+            end
+            task.wait(0.1)
+        end
+    end)
     local camera = Workspace.CurrentCamera
     if camera then
         camera:GetPropertyChangedSignal("ViewportSize"):Connect(Layout.recompute)
@@ -7599,16 +7687,26 @@ return Roll
 local Theme = {}
 
 Theme.FONT = Enum.Font.FredokaOne
-Theme.BG        = Color3.fromRGB(28, 30, 48)
-Theme.BG_SOFT   = Color3.fromRGB(42, 46, 72)
-Theme.PANEL     = Color3.fromRGB(36, 39, 62)
-Theme.ACCENT    = Color3.fromRGB(120, 220, 255)
-Theme.GOOD      = Color3.fromRGB(110, 235, 150)
-Theme.WARN      = Color3.fromRGB(255, 185, 80)
-Theme.BAD       = Color3.fromRGB(255, 105, 120)
-Theme.GOLD      = Color3.fromRGB(255, 210, 90)
-Theme.TEXT      = Color3.fromRGB(255, 255, 255)
-Theme.TEXT_DIM  = Color3.fromRGB(178, 186, 215)
+-- PALETTE: muted and low-chroma on purpose.
+--
+-- The first pass was neon — electric cyan on near-black navy, saturated gold,
+-- pure-white text — and on screen it read as loud rather than lively. These are
+-- the same hues pulled well down in saturation and up in lightness, so panels
+-- sit back and only the numbers that matter carry colour.
+--
+-- Rule of thumb kept here: nothing above ~55% saturation, text is warm
+-- off-white rather than #FFFFFF, and "accent" is a desaturated slate-blue that
+-- can sit next to the sky without fighting it.
+Theme.BG        = Color3.fromRGB(38, 40, 46)   -- warm charcoal, not navy
+Theme.BG_SOFT   = Color3.fromRGB(54, 57, 65)
+Theme.PANEL     = Color3.fromRGB(46, 49, 56)
+Theme.ACCENT    = Color3.fromRGB(138, 172, 190) -- dusty slate blue
+Theme.GOOD      = Color3.fromRGB(142, 178, 134) -- sage
+Theme.WARN      = Color3.fromRGB(206, 168, 108) -- muted ochre
+Theme.BAD       = Color3.fromRGB(190, 124, 112) -- clay
+Theme.GOLD      = Color3.fromRGB(198, 174, 118) -- brass, not yellow
+Theme.TEXT      = Color3.fromRGB(232, 229, 222) -- warm off-white
+Theme.TEXT_DIM  = Color3.fromRGB(150, 154, 160)
 
 function Theme.corner(parent: Instance, radius: number?)
     local c = Instance.new("UICorner")
@@ -7619,8 +7717,8 @@ end
 
 function Theme.stroke(parent: Instance, color: Color3?, thickness: number?)
     local s = Instance.new("UIStroke")
-    s.Color = color or Color3.fromRGB(16, 18, 30)
-    s.Thickness = thickness or 3
+    s.Color = color or Color3.fromRGB(24, 26, 30)
+    s.Thickness = thickness or 2
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.Parent = parent
     return s
@@ -7644,6 +7742,7 @@ function Theme.label(props: { [string]: any }): TextLabel
     t.TextScaled = false
     t.TextSize = 18
     t.TextXAlignment = Enum.TextXAlignment.Left
+    t.Text = ""   -- a TextLabel defaults to the literal string "Label"
     for k, v in pairs(props) do (t :: any)[k] = v end
     return t
 end
@@ -7654,7 +7753,7 @@ function Theme.button(text: string, color: Color3, size: UDim2): TextButton
     b.Size = size
     b.BackgroundColor3 = color
     b.Font = Theme.FONT
-    b.TextColor3 = Color3.fromRGB(20, 22, 34)
+    b.TextColor3 = Color3.fromRGB(28, 30, 34)
     b.TextSize = 20
     b.AutoButtonColor = true
     Theme.corner(b, 12)

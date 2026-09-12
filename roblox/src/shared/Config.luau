@@ -130,6 +130,27 @@ Config.TRADE_RANGE = 24
 Config.TRADE_CONFIRM_LOCK = 3   -- seconds both sides must hold confirm (anti scam)
 Config.TRADE_MAX_SLOTS = 4
 
+-- ── Sound ─────────────────────────────────────────────────────────────────
+--
+-- EMPTY BY DEFAULT, ON PURPOSE. These were shipped as marketplace asset ids
+-- picked without being able to verify them, and at least one was wrong:
+--
+--   Failed to load sound rbxassetid://9125600534:
+--   Asset type does not match requested type
+--
+-- An id that cannot be verified from here should not be baked into the game —
+-- a broken one spams the Output window on every play and looks like the game
+-- is falling apart. An empty id plays nothing and says nothing.
+--
+-- TO ADD SOUND: find ids on the Creator Store (Audio), paste them below, and
+-- make sure each is actually an Audio asset rather than a model containing one.
+Config.SOUNDS = {
+    catch = "",   -- a short blip on picking something up
+    rare  = "",   -- a fanfare for Legendary and above
+    gulp  = "",   -- a heavy swallow
+    thud  = "",   -- a Sumo Pit collision
+}
+
 -- ── Misc ───────────────────────────────────────────────────────────────────
 Config.AUTOSAVE_INTERVAL = 90
 Config.PLOT_COUNT = 8

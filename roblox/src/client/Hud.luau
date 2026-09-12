@@ -350,7 +350,7 @@ function Hud.applyLayout()
             btn.Size = UDim2.fromOffset(tabW, tabH)
             btn.Position = UDim2.fromOffset(ti * (tabW + 6), 0)
             btn.BackgroundColor3 = (currentTab == id) and Theme.ACCENT or Theme.BG_SOFT
-            btn.TextColor3 = (currentTab == id) and Color3.fromRGB(20, 22, 34) or Theme.TEXT
+            btn.TextColor3 = (currentTab == id) and Color3.fromRGB(28, 30, 34) or Theme.TEXT
             ti += 1
         end
     end
@@ -396,14 +396,14 @@ function Hud.applyLayout()
         if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
         openButton.Size = UDim2.fromOffset(size, size)
         openButton.Position = UDim2.fromOffset(
-            math.clamp(cx - size / 2, 8, u.X - size - 8),
+            Layout.fit(cx - size / 2, 8, u.X - size - 8),
             u.Y - size - 10
         )
         openButton.Text = compact and "🫧" or "🫧 MY GOOBS"
         if not compact then
             openButton.Size = UDim2.fromOffset(190, math.max(size, 58))
             openButton.Position = UDim2.fromOffset(
-                math.clamp(cx - 95, 8, u.X - 198), u.Y - math.max(size, 58) - 10)
+                Layout.fit(cx - 95, 8, u.X - 198), u.Y - math.max(size, 58) - 10)
         end
         openButton.TextSize = compact and 28 or 22
     else
@@ -738,7 +738,7 @@ function Hud.update(snap: any)
             btn.Text = ("%s %s  ·  💧%s  ·  %d items")
                 :format(snack.emoji, snack.name, snack.priceText, snack.rolls)
             btn.BackgroundColor3 = snack.affordable and Theme.GOOD or Theme.BG_SOFT
-            btn.TextColor3 = snack.affordable and Color3.fromRGB(20, 22, 34) or Theme.TEXT_DIM
+            btn.TextColor3 = snack.affordable and Color3.fromRGB(28, 30, 34) or Theme.TEXT_DIM
         end
     end
 
@@ -751,7 +751,7 @@ function Hud.update(snap: any)
             eggButton.Text = ("🥚 HATCH A GOOB  ·  💧%s  (%d/%d)")
                 :format(snap.eggPriceText or "?", #snap.goobs, snap.maxGoobs or 8)
             eggButton.BackgroundColor3 = snap.eggAffordable and Theme.GOLD or Theme.BG_SOFT
-            eggButton.TextColor3 = snap.eggAffordable and Color3.fromRGB(20, 22, 34) or Theme.TEXT_DIM
+            eggButton.TextColor3 = snap.eggAffordable and Color3.fromRGB(28, 30, 34) or Theme.TEXT_DIM
         end
     end
 

@@ -18,6 +18,11 @@ export type Item = {
     scale: Vector3,
 }
 
+-- PALETTE RULE: nothing in this table goes above ~46% saturation or ~88%
+-- value. Thirty objects at full neon, suspended inside a translucent shell,
+-- read as visual noise rather than as a collection. Hues are unchanged, so a
+-- traffic cone is still orange and a rubber duck still yellow — they are just
+-- pulled back far enough to sit in a muted world.
 local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
 
 local Feedstock = {}
@@ -25,13 +30,13 @@ local Feedstock = {}
 Feedstock.RARITY_ORDER = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret" }
 
 Feedstock.RARITY_COLOR = {
-    Common    = rgb(190, 195, 205),
-    Uncommon  = rgb(120, 225, 140),
-    Rare      = rgb(105, 175, 255),
-    Epic      = rgb(190, 130, 255),
-    Legendary = rgb(255, 190,  70),
-    Mythic    = rgb(255, 105, 140),
-    Secret    = rgb(255, 255, 255),
+    Common    = rgb(176, 178, 178),
+    Uncommon  = rgb(140, 178, 138),
+    Rare      = rgb(132, 168, 206),
+    Epic      = rgb(162, 142, 190),
+    Legendary = rgb(206, 176, 114),
+    Mythic    = rgb(196, 130, 148),
+    Secret    = rgb(224, 221, 211),
 }
 
 -- BALANCE NOTE (measured, not guessed — see roblox/tools/balance.luau)
@@ -53,41 +58,41 @@ Feedstock.RARITY_COLOR = {
 -- nobody would ever part with one and the market would seize.
 Feedstock.ITEMS = {
     -- Common ────────────────────────────────────────────────────────────────
-    { id = "sock",     name = "Lost Sock",       mass = 1,     rarity = "Common",    weight = 100, color = rgb(235, 235, 240), shape = "Block",    scale = Vector3.new(0.5, 0.9, 0.3) },
+    { id = "sock",     name = "Lost Sock",       mass = 1,     rarity = "Common",    weight = 100, color = rgb(220, 220, 224), shape = "Block",    scale = Vector3.new(0.5, 0.9, 0.3) },
     { id = "pebble",   name = "Pebble",          mass = 1,     rarity = "Common",    weight = 100, color = rgb(150, 148, 140), shape = "Ball",     scale = Vector3.new(0.5, 0.5, 0.5) },
-    { id = "acorn",    name = "Acorn",           mass = 2,     rarity = "Common",    weight =  85, color = rgb(150, 105,  55), shape = "Ball",     scale = Vector3.new(0.45, 0.6, 0.45) },
+    { id = "acorn",    name = "Acorn",           mass = 2,     rarity = "Common",    weight =  85, color = rgb(150, 117,  81), shape = "Ball",     scale = Vector3.new(0.45, 0.6, 0.45) },
     { id = "can",      name = "Dented Can",      mass = 3,     rarity = "Common",    weight =  70, color = rgb(195, 200, 210), shape = "Cylinder", scale = Vector3.new(0.7, 0.55, 0.55) },
-    { id = "cone",     name = "Traffic Cone",    mass = 4,     rarity = "Common",    weight =  60, color = rgb(255, 110,  40), shape = "Wedge",    scale = Vector3.new(0.7, 0.9, 0.7) },
+    { id = "cone",     name = "Traffic Cone",    mass = 4,     rarity = "Common",    weight =  60, color = rgb(224, 155, 121), shape = "Wedge",    scale = Vector3.new(0.7, 0.9, 0.7) },
 
     -- Uncommon ──────────────────────────────────────────────────────────────
-    { id = "duck",     name = "Rubber Duck",     mass = 12,    rarity = "Uncommon",  weight = 42, color = rgb(255, 215,  60), shape = "Ball",     scale = Vector3.new(0.8, 0.7, 1.0) },
-    { id = "pizza",    name = "Cold Pizza",      mass = 15,    rarity = "Uncommon",  weight = 38, color = rgb(235, 165,  75), shape = "Wedge",    scale = Vector3.new(1.1, 0.2, 1.1) },
-    { id = "boot",     name = "Big Boot",        mass = 18,    rarity = "Uncommon",  weight = 32, color = rgb(105,  70,  50), shape = "Block",    scale = Vector3.new(0.7, 0.8, 1.2) },
-    { id = "toaster",  name = "Toaster",         mass = 24,    rarity = "Uncommon",  weight = 26, color = rgb(215, 220, 230), shape = "Block",    scale = Vector3.new(1.0, 0.8, 0.7) },
+    { id = "duck",     name = "Rubber Duck",     mass = 12,    rarity = "Uncommon",  weight = 42, color = rgb(224, 203, 121), shape = "Ball",     scale = Vector3.new(0.8, 0.7, 1.0) },
+    { id = "pizza",    name = "Cold Pizza",      mass = 15,    rarity = "Uncommon",  weight = 38, color = rgb(224, 179, 121), shape = "Wedge",    scale = Vector3.new(1.1, 0.2, 1.1) },
+    { id = "boot",     name = "Big Boot",        mass = 18,    rarity = "Uncommon",  weight = 32, color = rgb(105,  74,  57), shape = "Block",    scale = Vector3.new(0.7, 0.8, 1.2) },
+    { id = "toaster",  name = "Toaster",         mass = 24,    rarity = "Uncommon",  weight = 26, color = rgb(210, 215, 224), shape = "Block",    scale = Vector3.new(1.0, 0.8, 0.7) },
 
     -- Rare ──────────────────────────────────────────────────────────────────
     { id = "anvil",    name = "Anvil",           mass = 90,    rarity = "Rare",      weight = 17, color = rgb( 85,  88,  95), shape = "Block",    scale = Vector3.new(1.2, 0.8, 0.7) },
     { id = "piano",    name = "Tiny Piano",      mass = 120,   rarity = "Rare",      weight = 13, color = rgb( 40,  40,  46), shape = "Block",    scale = Vector3.new(1.4, 0.9, 1.0) },
-    { id = "globe",    name = "Globe",           mass = 150,   rarity = "Rare",      weight = 11, color = rgb( 80, 150, 210), shape = "Ball",     scale = Vector3.new(1.1, 1.1, 1.1) },
+    { id = "globe",    name = "Globe",           mass = 150,   rarity = "Rare",      weight = 11, color = rgb(113, 165, 210), shape = "Ball",     scale = Vector3.new(1.1, 1.1, 1.1) },
 
     -- Epic ──────────────────────────────────────────────────────────────────
-    { id = "meteor",   name = "Warm Meteor",     mass = 600,   rarity = "Epic",      weight = 6.0, color = rgb(120,  70,  55), shape = "Ball",     scale = Vector3.new(1.4, 1.4, 1.4) },
-    { id = "statue",   name = "Marble Statue",   mass = 820,   rarity = "Epic",      weight = 4.5, color = rgb(240, 238, 230), shape = "Block",    scale = Vector3.new(0.9, 2.0, 0.9) },
+    { id = "meteor",   name = "Warm Meteor",     mass = 600,   rarity = "Epic",      weight = 6.0, color = rgb(120,  78,  65), shape = "Ball",     scale = Vector3.new(1.4, 1.4, 1.4) },
+    { id = "statue",   name = "Marble Statue",   mass = 820,   rarity = "Epic",      weight = 4.5, color = rgb(224, 223, 215), shape = "Block",    scale = Vector3.new(0.9, 2.0, 0.9) },
     { id = "safe",     name = "Bank Safe",       mass = 1100,  rarity = "Epic",      weight = 3.2, color = rgb( 60,  75,  70), shape = "Block",    scale = Vector3.new(1.3, 1.5, 1.3) },
 
     -- Legendary ─────────────────────────────────────────────────────────────
-    { id = "car",      name = "Rusty Car",       mass = 4500,  rarity = "Legendary", weight = 1.4, color = rgb(190,  65,  60), shape = "Block",    scale = Vector3.new(1.2, 0.9, 2.6) },
-    { id = "bell",     name = "Cathedral Bell",  mass = 6200,  rarity = "Legendary", weight = 0.9, color = rgb(205, 165,  70), shape = "Cylinder", scale = Vector3.new(1.8, 1.8, 1.8) },
+    { id = "car",      name = "Rusty Car",       mass = 4500,  rarity = "Legendary", weight = 1.4, color = rgb(190, 106, 103), shape = "Block",    scale = Vector3.new(1.2, 0.9, 2.6) },
+    { id = "bell",     name = "Cathedral Bell",  mass = 6200,  rarity = "Legendary", weight = 0.9, color = rgb(205, 177, 111), shape = "Cylinder", scale = Vector3.new(1.8, 1.8, 1.8) },
 
     -- Mythic ────────────────────────────────────────────────────────────────
-    { id = "moon",     name = "Chunk of Moon",   mass = 20000, rarity = "Mythic",    weight = 0.22, color = rgb(225, 228, 240), shape = "Ball",    scale = Vector3.new(2.4, 2.4, 2.4) },
-    { id = "blackbox", name = "The Black Box",   mass = 30000, rarity = "Mythic",    weight = 0.14, color = rgb( 25,  25,  32), shape = "Block",   scale = Vector3.new(1.6, 1.6, 1.6) },
+    { id = "moon",     name = "Chunk of Moon",   mass = 20000, rarity = "Mythic",    weight = 0.22, color = rgb(210, 213, 224), shape = "Ball",    scale = Vector3.new(2.4, 2.4, 2.4) },
+    { id = "blackbox", name = "The Black Box",   mass = 30000, rarity = "Mythic",    weight = 0.14, color = rgb( 32,  32,  41), shape = "Block",   scale = Vector3.new(1.6, 1.6, 1.6) },
 
     -- Secret ────────────────────────────────────────────────────────────────
     -- Deliberately absurd odds. These exist to be screenshotted and traded,
     -- not to be farmed. ~1 in 40,000 catches.
-    { id = "goobfsl",  name = "Goob Fossil",     mass = 120000, rarity = "Secret", weight = 0.020, color = rgb(255, 250, 205), shape = "Ball",  scale = Vector3.new(2.0, 2.0, 2.0) },
-    { id = "singular", name = "Pocket Singularity", mass = 250000, rarity = "Secret", weight = 0.006, color = rgb( 10,  10,  14), shape = "Ball", scale = Vector3.new(1.5, 1.5, 1.5) },
+    { id = "goobfsl",  name = "Goob Fossil",     mass = 120000, rarity = "Secret", weight = 0.020, color = rgb(224, 220, 180), shape = "Ball",  scale = Vector3.new(2.0, 2.0, 2.0) },
+    { id = "singular", name = "Pocket Singularity", mass = 250000, rarity = "Secret", weight = 0.006, color = rgb( 29,  29,  41), shape = "Ball", scale = Vector3.new(1.5, 1.5, 1.5) },
 }
 
 local byId: { [string]: Item } = {}

@@ -35,30 +35,10 @@ local player = Players.LocalPlayer
 local gui = Hud.build()
 TradeUi.build(gui)
 
--- ── Sound ──────────────────────────────────────────────────────────────────
--- Three sounds carry the entire game feel: a catch blip, a rare fanfare and a
--- gulp. They are generated from Roblox's built-in library so the place has no
--- external asset dependencies and works the moment you open it.
-
-local function sound(id: string, volume: number, pitch: number?): Sound
-    local s = Instance.new("Sound")
-    s.SoundId = id
-    s.Volume = volume
-    s.PlaybackSpeed = pitch or 1
-    s.Parent = SoundService
-    return s
-end
-
-local sfxCatch = sound("rbxassetid://6026984224", 0.35)
-local sfxRare  = sound("rbxassetid://9125402735", 0.5)
-local sfxGulp  = sound("rbxassetid://5852470908", 0.6)
-
-local function play(s: Sound, pitchJitter: number?)
-    if pitchJitter then
-        s.PlaybackSpeed = 1 + (math.random() - 0.5) * pitchJitter
-    end
-    s:Play()
-end
+-- Sound and every other feel effect now live in Juice, which reads its ids
+-- from Config and stays silent when they are unset. This file used to keep a
+-- second copy of the same asset ids, which meant fixing a bad one in one place
+-- left it broken in the other.
 
 -- ── Catching ───────────────────────────────────────────────────────────────
 -- Auto-collect on proximity. Requiring a click would be miserable on mobile,
@@ -102,9 +82,9 @@ end)
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
     Hud.toast(message, kind)
     if kind == "secret" then
-        play(sfxRare)
+        Juice.play("rare")
     elseif kind == "good" then
-        play(sfxCatch, 0.2)
+        Juice.play("catch", 0.2)
     end
 end)
 
@@ -125,7 +105,7 @@ end
 
 Hud.onBuySnack = function(tierId: string)
     Net.get("BuySnack"):FireServer(tierId)
-    play(sfxCatch, 0.25)
+    Juice.play("catch", 0.25)
 end
 
 Hud.onBuyEgg = function()
@@ -173,7 +153,7 @@ local function buildGulpConfirm()
         if pendingGulp and state then
             local activeId = state.activeGoobId
             Net.get("GulpGoob"):FireServer(activeId, pendingGulp)
-            play(sfxGulp)
+            Juice.play("gulp")
         end
         pendingGulp = nil
         confirmFrame.Visible = false
@@ -578,13 +558,13 @@ do
         local cx = (gapL + gapR) / 2
         if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
         dashBtn.Position = UDim2.fromOffset(
-            math.clamp(cx - size / 2, 8, u.X - size - 8),
+            Layout.fit(cx - size / 2, 8, u.X - size - 8),
             u.Y - size * 2 - 26)
 
         local pw, ph, gap = compact and 24 or 34, compact and 8 or 10, 5
         meter.Size = UDim2.fromOffset(Movement.DASH_CHARGES * (pw + gap), ph)
         meter.Position = UDim2.fromOffset(
-            touch and math.clamp(cx - meter.Size.X.Offset / 2, 8, u.X - meter.Size.X.Offset - 8)
+            touch and Layout.fit(cx - meter.Size.X.Offset / 2, 8, u.X - meter.Size.X.Offset - 8)
                   or math.floor((u.X - meter.Size.X.Offset) / 2),
             touch and (u.Y - size * 2 - 40) or (u.Y - 34))
         for i, pip in ipairs(pips) do
@@ -646,7 +626,7 @@ do
     strip.Visible = false
     strip.Parent = gui
     Theme.corner(strip, 14)
-    Theme.stroke(strip, Color3.fromRGB(255, 110, 130), 3)
+    Theme.stroke(strip, Color3.fromRGB(184, 128, 122), 3)
 
     local line = Theme.label({ Name = "Line", Text = "", TextSize = 15 })
     line.Parent = strip
