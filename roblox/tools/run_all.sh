@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# run_all.sh — the whole verification suite. Run from roblox/tools.
+set -euo pipefail
+[ -d node_modules ] || npm install --silent @luau-rs/luau
+[ -f apidump.json ] || curl -sSo apidump.json \
+  https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json
+
+echo "── 1. compile every module ──"
+node check.mjs ../src/shared/*.luau ../src/server/*.luau ../src/client/*.luau
+
+echo "── 2. Roblox API validation ──"
+python3 apicheck.py ../src/shared/*.luau ../src/server/*.luau ../src/client/*.luau
+python3 apicheck_tables.py
+
+echo "── 3. economy correctness ──"
+node sim.mjs ../src/shared tests.luau
+
+echo "── 4. integration: boot the real server and play it ──"
+node integration.mjs .. integration.luau
+
+echo "── 5. adversarial: attack it ──"
+node integration.mjs .. adversarial.luau
+
+echo "── 6. balance sweeps ──"
+node sim.mjs ../src/shared snack.luau
+node sim.mjs ../src/shared egg.luau
+
+echo
+echo "ALL SUITES PASSED"
