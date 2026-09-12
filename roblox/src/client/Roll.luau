@@ -18,6 +18,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
 local Movement = require(Shared.Movement)
+local Stick = require(script.Parent.Stick)
 
 local player = Players.LocalPlayer
 local Roll = {}
@@ -60,28 +61,11 @@ function Roll.refillProgress(): number
     return math.clamp(dashRefillClock / Movement.DASH_REFILL, 0, 1)
 end
 
+-- Input comes entirely from Stick: keyboard, gamepad and our own thumbstick.
+-- Reading Humanoid.MoveDirection was the original approach and it did not work
+-- (see the note at the top of Stick.luau).
 local function moveInput(): Vector3
-    local char = player.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local dir = hum and hum.MoveDirection or Vector3.zero
-    if dir.Magnitude > 0.05 then
-        return Vector3.new(dir.X, 0, dir.Z).Unit
-    end
-
-    -- Fallback for the case where a zeroed WalkSpeed also zeroes MoveDirection.
-    -- Cheap insurance: without it a single engine behaviour change silently
-    -- removes the ability to move at all.
-    local camera = Workspace.CurrentCamera
-    if not camera then return Vector3.zero end
-    local fwd = camera.CFrame.LookVector
-    local right = camera.CFrame.RightVector
-    local v = Vector3.zero
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then v += fwd end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then v -= fwd end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then v += right end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then v -= right end
-    v = Vector3.new(v.X, 0, v.Z)
-    return v.Magnitude > 0.05 and v.Unit or Vector3.zero
+    return Stick.moveVector()
 end
 
 local function checkGrounded(b: BasePart): boolean
@@ -188,18 +172,8 @@ function Roll.step(dt: number)
 end
 
 function Roll.bindInput()
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
-        if input.KeyCode == Enum.KeyCode.Space then
-            Roll.jump()
-        elseif input.KeyCode == Enum.KeyCode.LeftShift
-            or input.KeyCode == Enum.KeyCode.Q
-            or input.KeyCode == Enum.KeyCode.ButtonR2 then
-            Roll.dash()
-        elseif input.KeyCode == Enum.KeyCode.ButtonA then
-            Roll.jump()
-        end
-    end)
+    Stick.onJump = Roll.jump
+    Stick.onDash = Roll.dash
 end
 
 return Roll

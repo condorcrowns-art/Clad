@@ -241,8 +241,15 @@ function RollService.spawn(player: Player, goob, atPosition: Vector3?)
         local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then
-            hum.WalkSpeed = 0
-            hum.JumpPower = 0
+            -- PlatformStand, NOT WalkSpeed = 0.
+            --
+            -- A Humanoid with WalkSpeed = 0 does not simply decline to move: it
+            -- actively brakes its assembly to zero velocity every physics step.
+            -- The ball is welded to that assembly, so the humanoid fought every
+            -- frame of movement the controller applied and the player could not
+            -- move at all. PlatformStand makes the humanoid stop controlling
+            -- physics entirely, which is what we actually wanted.
+            hum.PlatformStand = true
             hum.AutoRotate = false
         end
         if hrp then
