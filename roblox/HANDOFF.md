@@ -392,6 +392,20 @@ ceiling 1.06K mass, 600 at 70s, 90% of ceiling at 180s, 99% at 349s.
   via `Hud.setArenaMode(true)`. Still owns toasts, the drawer and the coach.
 - `mobile_test.luau` / `geometry.luau` — see "traps" below.
 
+## Scale (changed)
+
+One island, **480 studs**, sized for 16-24 players. `Config.PELLET_TARGET` is
+DERIVED from `PELLET_DENSITY * pi * SHALLOWS_INNER^2` and must stay derived:
+harvest, and therefore the ceiling and the run length, are computed from that
+density. Resize the island without resizing the food supply and the realised
+density silently stops matching the model the curves were tuned against.
+`tools/arena.luau` asserts the two agree within 2%.
+
+Five biomes now (slick / scrap / basin / bloom / ash), built by LOOPING over
+`Config.BIOMES`. The old builder indexed [1] [2] [3] by hand, so a fourth entry
+in the config produced a signpost you could read and a patch you could never
+stand on. `integration.luau` checks built-vs-configured both ways.
+
 ## Invariants that must not break
 
 1. **A blob may never re-eat its own drips.** Leak lands outside the body AND a
@@ -404,7 +418,11 @@ ceiling 1.06K mass, 600 at 70s, 90% of ceiling at 180s, 99% at 349s.
    powers unlock on lifetime banked, trinkets come from crates and the season.
 4. **One panel at a time.** Every dock tab routes through `ArenaHud.openSheet`,
    which closes whatever was open first.
-5. **Boards expose `Board -> Entries`** as a direct child. Burying it deeper is
+5. **The dock is one row of eight at the TOP on every platform.** Icons shrink
+   on compact rather than the dock colliding with the stat card.
+6. **The right-hand column is spoken for twice**: jump button at the bottom,
+   toast stack at the top. Anything centred must reserve whichever is wider.
+7. **Boards expose `Board -> Entries`** as a direct child. Burying it deeper is
    a silent WaitForChild hang, not an error.
 
 ## Harness traps added this pass

@@ -182,8 +182,19 @@ Config.BLOB_MIN_SPEED = 20
 -- pooled folder of unanchored-but-sleeping parts.
 Config.PELLET_DENSITY = 0.0022
 Config.PELLET_VALUE = 9
-Config.PELLET_TARGET = 430
-Config.PELLET_RESPAWN_PER_SEC = 14
+-- PELLET_TARGET IS DERIVED, NOT CHOSEN, and this is load-bearing.
+--
+-- Blob.harvestPerSecond models a blob sweeping a corridor through pellets at
+-- PELLET_DENSITY. That density is an input to the curve that decides the
+-- ceiling, the run length, and therefore the whole game. If the island is
+-- resized and the pellet COUNT stays put, the realised density silently stops
+-- matching the model the curves were tuned against — the ceiling moves, runs
+-- get longer or shorter, and nothing anywhere reports a problem.
+--
+-- So the count is computed from the area it has to cover. Resize the island
+-- and the food supply follows automatically. tools/arena.luau asserts the two
+-- agree to within a couple of percent.
+Config.PELLET_RESPAWN_PER_SEC = 36   -- sized for a full server, not one player
 Config.GOLDEN_CRUMB_MULT = 5
 
 -- ── Melting ────────────────────────────────────────────────────────────────
@@ -218,7 +229,9 @@ Config.LUMP_RADIUS_K = 1.15
 Config.LUMP_RADIUS_MIN = 4
 Config.LUMP_RADIUS_MAX = 26
 Config.LUMP_DECAY_PER_SEC = 1 / (60 * 45)  -- a lump half-lives in ~30 minutes
-Config.LUMP_MAX_COUNT = 140
+-- Scaled with the island: the cap exists so terrain cannot wall the Vault off,
+-- and a cap tuned for a 300-stud island leaves a 480-stud one looking empty.
+Config.LUMP_MAX_COUNT = 300
 
 -- ── Banking ────────────────────────────────────────────────────────────────
 -- Super-linear on purpose: one more dangerous lap should pay for itself. Safe
@@ -229,10 +242,18 @@ Config.BANK_SECONDS = 3.0     -- the most dangerous three seconds in the game
 Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
 
 -- ── The island ─────────────────────────────────────────────────────────────
-Config.ISLAND_RADIUS = 300
-Config.SHALLOWS_INNER = 235   -- outside this radius is no-PvP
-Config.VAULT_RADIUS = 34
-Config.SHACK_POSITION = Vector3.new(-168, 0, 150)
+-- ── Scale ──────────────────────────────────────────────────────────────────
+-- Sized for 16-24 players, not for 4.
+--
+-- At 480 studs the Flats hold about 490,000 square studs, which is roughly
+-- 24,000 each with a full server — a 155-stud square per player. Below about
+-- 400 a full lobby is a scrum where nobody can build a run; much above 560 and
+-- you stop being able to see anybody, which kills the thing the whole design
+-- rests on: always being able to see somebody bigger and somebody smaller.
+Config.ISLAND_RADIUS = 480
+Config.SHALLOWS_INNER = 395   -- outside this radius is no-PvP
+Config.VAULT_RADIUS = 48
+Config.SHACK_POSITION = Vector3.new(-286, 0, 246)
 
 -- ── Biomes ─────────────────────────────────────────────────────────────────
 -- The four old zones are gone as places, but not as ideas. Their characters
@@ -245,17 +266,32 @@ Config.SHACK_POSITION = Vector3.new(-168, 0, 150)
 --   SLICK   fast lines, no brakes           pellets x1.15
 --   SCRAP   ramps, cover, broken sightlines pellets x1.00, best for hiding
 --   BASIN   sunken, richest, one way out    pellets x1.55
+-- Five patches on the bigger island, spread so that no two are visible from
+-- the same standing spot. Each trades safety for yield, so where you feed is a
+-- decision rather than a detail.
 Config.BIOMES = {
-    { id = "slick", name = "The Slick",  centre = Vector3.new(150, 0, -120),
-      radius = 74, pelletMult = 1.15, friction = 0.03 },
-    { id = "scrap", name = "The Scrapyard", centre = Vector3.new(-120, 0, -150),
-      radius = 80, pelletMult = 1.00, friction = 0.45 },
-    { id = "basin", name = "The Basin",  centre = Vector3.new(105, -9, 145),
-      radius = 68, pelletMult = 1.55, friction = 0.35 },
+    { id = "slick",  name = "The Slick",     centre = Vector3.new(232, 0, -186),
+      radius = 118, pelletMult = 1.15, friction = 0.03 },
+    { id = "scrap",  name = "The Scrapyard", centre = Vector3.new(-196, 0, -238),
+      radius = 126, pelletMult = 1.00, friction = 0.45 },
+    { id = "basin",  name = "The Basin",     centre = Vector3.new(168, -11, 232),
+      radius = 110, pelletMult = 1.55, friction = 0.35 },
+    -- New with the bigger island. The Bloom is the safest good ground and the
+    -- Ashfield is the most dangerous: open, no cover, and the best pellets
+    -- outside the Basin.
+    { id = "bloom",  name = "The Bloom",     centre = Vector3.new(-268, 0, 96),
+      radius = 104, pelletMult = 1.08, friction = 0.55 },
+    { id = "ash",    name = "The Ashfield",  centre = Vector3.new(24, 0, -318),
+      radius = 122, pelletMult = 1.34, friction = 0.30 },
 }
 
 Config.VAULT_HEIGHT = 7
-Config.SPAWN_RING = 262        -- where a fresh blob appears, inside the Shallows
+Config.SPAWN_RING = 438        -- where a fresh blob appears, inside the Shallows
+Config.SPAWN_POINTS = 20       -- enough that a full server does not stack up
+
+-- Derived last, because it depends on the radius above.
+Config.PELLET_TARGET = math.floor(
+    Config.PELLET_DENSITY * math.pi * Config.SHALLOWS_INNER ^ 2)
 
 
 return Config

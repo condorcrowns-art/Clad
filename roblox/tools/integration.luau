@@ -79,11 +79,26 @@ check("the shack is built", world and world:FindFirstChild("Shack") ~= nil)
 check("the arena folder exists for runtime spawns",
     world and world:FindFirstChild("Arena") ~= nil)
 
-local biomes = 0
+-- Counted against the CONFIG, not against a hardcoded 3. The builder used to
+-- index Config.BIOMES by hand at [1], [2] and [3], so adding a fourth to the
+-- config built four signposts and three patches: a zone you could read about
+-- and never stand on. This is the check that would have caught that.
+local Config = _G.SHARED("Config")
+local tagged = {}
 for _, d in ipairs(world and world:GetDescendants() or {}) do
-    if d.Name == "BiomeId" then biomes += 1 end
+    if d.Name == "BiomeId" then tagged[d.Value] = true end
 end
-check("all three biome patches are tagged", biomes == 3, "got " .. tostring(biomes))
+local missing = {}
+for _, b in ipairs(Config.BIOMES) do
+    if not tagged[b.id] then table.insert(missing, b.id) end
+end
+check("every configured biome is actually built", #missing == 0,
+    table.concat(missing, ", "))
+
+local built = 0
+for _ in pairs(tagged) do built += 1 end
+check("and nothing is built that is not configured", built == #Config.BIOMES,
+    ("%d built, %d configured"):format(built, #Config.BIOMES))
 
 local spawns = 0
 for _, d in ipairs(world and world:GetChildren() or {}) do

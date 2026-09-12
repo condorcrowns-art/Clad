@@ -77,6 +77,44 @@ for _, m in ipairs({300, 900, 1500}) do
 end
 
 emit("")
+emit("── The island actually holds the density the curves assume ──")
+local flatsArea = math.pi * Config.SHALLOWS_INNER ^ 2
+local realised = Config.PELLET_TARGET / flatsArea
+emit(("  island %d studs · flats %s sq studs · %d pellets · density %.5f (model %.5f)")
+    :format(Config.ISLAND_RADIUS, Format.short(flatsArea),
+            Config.PELLET_TARGET, realised, Config.PELLET_DENSITY))
+emit(("  respawn %d/s refills the whole island in %.0fs")
+    :format(Config.PELLET_RESPAWN_PER_SEC,
+            Config.PELLET_TARGET / Config.PELLET_RESPAWN_PER_SEC))
+
+-- THE SILENT FAILURE THIS CATCHES: harvest, and therefore the ceiling and the
+-- run length, are computed from PELLET_DENSITY. Resize the island without
+-- resizing the food supply and the realised density stops matching the model
+-- the curves were tuned against. The ceiling moves and nothing reports it.
+check("the island's real pellet density matches the model",
+    math.abs(realised - Config.PELLET_DENSITY) / Config.PELLET_DENSITY < 0.02,
+    ("%.5f vs %.5f"):format(realised, Config.PELLET_DENSITY))
+
+-- Room to play. Below about 24k square studs each a full server is a scrum
+-- nobody can build a run in.
+local perPlayer = flatsArea / 24
+check("there is room for a full server", perPlayer > 18000,
+    ("%.0f sq studs each at 24 players"):format(perPlayer))
+
+-- And the island must not be so big that a leader is invisible. The whole
+-- design rests on always being able to see somebody bigger and somebody
+-- smaller; past roughly 560 studs you stop being able to.
+check("but not so big that nobody can see anybody",
+    Config.ISLAND_RADIUS <= 560, tostring(Config.ISLAND_RADIUS))
+
+-- A server must be able to replace what a full lobby eats. Twenty-four
+-- players harvesting at the top of the curve is the worst case.
+local fullServerDrain = 24 * Blob.harvestPerSecond(Blob.ceiling(0.8)) / Config.PELLET_VALUE
+check("respawn can feed a full server",
+    Config.PELLET_RESPAWN_PER_SEC > fullServerDrain * 0.7,
+    ("%d/s vs %.0f/s eaten"):format(Config.PELLET_RESPAWN_PER_SEC, fullServerDrain))
+
+emit("")
 emit("── Assertions ──")
 
 -- The ceiling must exist and be finite. If harvest ever outran leak the game

@@ -137,6 +137,22 @@ for _, dev in ipairs(DEVICES) do
     svc.setTouch(dev.touch)
     svc.setViewport(dev.w, dev.h)
     tick(2)
+
+    -- Fill the toast stack ON PURPOSE. The audit used to measure whatever the
+    -- HUD happened to be showing, which was a quiet one — so it never saw that
+    -- the stack had no limit and ran two hundred pixels off the bottom of a
+    -- 568x320 phone. A HUD has to survive its own noisiest moment, and this is
+    -- the only way to measure that moment.
+    local notify = svc.ReplicatedStorage:FindFirstChild("GoobNet")
+    notify = notify and notify:FindFirstChild("Notify")
+    if notify then
+        for i = 1, 8 do
+            notify:FireClient(alice,
+                ("Notice %d — a long one, because the worst case is a long one."):format(i),
+                "info")
+        end
+    end
+    tick(1)
     openEverything()
 
     local boxes = {}
@@ -176,8 +192,10 @@ for _, dev in ipairs(DEVICES) do
     local worst = bad[1]
     check("all visible UI fits on screen",
         #bad == 0,
-        worst and ("%d element(s) overflow; worst: %s %s by %dpx")
-            :format(#bad, worst.box.class, worst.box.name, math.floor(worst.over)) or "")
+        worst and ("%d element(s) overflow; worst: %s %s (in %s) by %dpx")
+            :format(#bad, worst.box.class, worst.box.name,
+                    worst.box.inst.Parent and worst.box.inst.Parent.Name or "?",
+                    math.floor(worst.over)) or "")
 
     -- 2. Persistent HUD controls must not sit under the touch controls.
     MODALS = {
@@ -268,10 +286,26 @@ for _, dev in ipairs(DEVICES) do
     -- still be drawn on top of one another. So check it directly — no two
     -- persistent, non-modal, top-level elements may overlap, across every HUD
     -- at once.
+    -- "Top level" has to mean VISUALLY top level, not depth == 0. A toast sits
+    -- inside a fully transparent holder, so by depth it is a child and by eye
+    -- it is floating on the screen — which is how a mutation that put the
+    -- toast stack back on top of the Glob balance went undetected. An element
+    -- counts if it paints and every ancestor up to the ScreenGui does not.
+    local function visuallyTop(b)
+        if not paints(b) then return false end
+        local n = b.inst.Parent
+        while n and n.ClassName ~= "ScreenGui" do
+            local bg = n.BackgroundTransparency
+            if bg ~= nil and bg < 0.95 then return false end
+            n = n.Parent
+        end
+        return true
+    end
+
     local persistent = {}
     for _, b in ipairs(boxes) do
-        if b.visible and b.depth == 0 and b.w > 4 and b.h > 4
-            and paints(b) and not insideModal(b.inst) then
+        if b.visible and b.w > 4 and b.h > 4
+            and visuallyTop(b) and not insideModal(b.inst) then
             table.insert(persistent, b)
         end
     end

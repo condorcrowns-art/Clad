@@ -61,8 +61,30 @@ local TOAST_COLOR = {
     trade = Theme.GOLD, secret = Color3.fromRGB(255, 255, 255),
 }
 
+-- How many toasts may be stacked at once.
+--
+-- The holder is a fixed-height column with a list layout, so nothing stopped
+-- the stack growing past the bottom of the screen — and on a 568x320 phone
+-- three toasts ran 200px off it. Nobody caught it because the geometry audit
+-- had never generated a toast; it measured a HUD that happened to be quiet.
+-- Oldest goes when a new one arrives, which is also the right behaviour: the
+-- newest message is the one you need.
+Hud.MAX_TOASTS = 3
+
 function Hud.toast(message: string, kind: string?)
     local color = TOAST_COLOR[kind or "info"] or Theme.ACCENT
+
+    if toastHolder then
+        local live = {}
+        for _, child in ipairs(toastHolder:GetChildren()) do
+            if child:IsA("Frame") then table.insert(live, child) end
+        end
+        local allowed = Layout.isCompact() and 2 or Hud.MAX_TOASTS
+        while #live >= allowed do
+            local oldest = table.remove(live, 1)
+            if oldest then oldest:Destroy() end
+        end
+    end
 
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, 0, 0, 46)
@@ -289,9 +311,17 @@ function Hud.applyLayout()
     ageLabel.TextSize = compact and 14 or 17
 
     -- Toasts, top-right. Narrower on a phone so they never meet the stat panel.
-    local toastW = compact and math.min(250, u.X * 0.40) or 340
-    toastHolder.Size = UDim2.fromOffset(toastW, math.min(400, u.Y - 20))
-    toastHolder.Position = UDim2.fromOffset(u.X - toastW - (compact and 10 or 16), compact and 8 or 16)
+    local toastW = compact and math.min(196, u.X * 0.34) or 300
+    -- Below the Glob and season readouts in arena mode. At y=8 the toast stack
+    -- started exactly on top of them, so every "+500" receipt covered the
+    -- balance it was reporting.
+    -- Below the dock AND the status strip, not merely below the balance. The
+    -- status strip is centred and the toast column is right-aligned, so on a
+    -- narrow screen the two met in the middle.
+    local toastTop = Hud.arenaMode and (compact and 108 or 134) or (compact and 8 or 16)
+    toastHolder.Position = UDim2.fromOffset(u.X - toastW - (compact and 10 or 16), toastTop)
+    toastHolder.Size = UDim2.fromOffset(toastW,
+        math.max(60, math.min(400, u.Y - toastTop - 12)))
 
     -- The drawer. Near-fullscreen on a phone, a side panel otherwise.
     local drawerW = compact and math.min(400, u.X - 20) or 430
@@ -438,7 +468,11 @@ function Hud.applyLayout()
         -- into "jump" — the single worst tap to get wrong.
         local x = math.floor((u.X - cw) / 2)
         if Hud.arenaMode then
-            x = Layout.fit(x, 8, math.max(8, u.X - Layout.JUMP_BUTTON.X - cw - 10))
+            -- The right-hand column is spoken for twice over: the jump button
+            -- at the bottom and the toast stack at the top. Reserve whichever
+            -- is wider, or the coach slides under one of them.
+            local reserved = math.max(Layout.JUMP_BUTTON.X, toastW + 20)
+            x = Layout.fit(x, 8, math.max(8, u.X - reserved - cw - 10))
         end
         coach.Position = UDim2.fromOffset(x, below)
         coachStep.Position = UDim2.fromOffset(14, 6)

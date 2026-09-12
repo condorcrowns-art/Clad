@@ -35,6 +35,20 @@ local Powers = require(Shared.Powers)
 local Trinkets = require(Shared.Trinkets)
 local Crates = require(Shared.Crates)
 local Cosmetics = require(Shared.Cosmetics)
+local GoobMath = require(Shared.GoobMath)
+
+-- Where a locked item comes from. A padlock with no explanation is the most
+-- annoying thing a wardrobe can show you.
+local SOURCE_TEXT = {
+    starter     = "Starter",
+    season      = "Beta Season reward",
+    shop        = "Shop",
+    ascend      = "Earned by ascending",
+    achievement = "Achievement",
+    crate_goop  = "Found in Goop Crates",
+    crate_deep  = "Found in Deep Crates",
+    beta        = "BETA SEASON ONLY — never printed again",
+}
 
 local Theme = require(script.Parent.Theme)
 local Layout = require(script.Parent.Layout)
@@ -51,7 +65,9 @@ ArenaHud.on = {
     setPower = function(_id: string) end,
     equipTrinket = function(_id: string?, _slot: number) end,
     openCrate = function(_id: string) end,
-    openLegacy = function(_which: string) end,   -- season / goobs / close
+    openLegacy = function(_which: string) end,   -- season / trade / close
+    equipCosmetic = function(_kind: string, _id: string) end,
+    setActiveGoob = function(_id: string) end,
     joinPit = function() end,
     leavePit = function() end,
 }
@@ -82,13 +98,60 @@ local profile: any = nil
 local pit: any = nil
 
 local TABS = {
-    { id = "crates",   icon = "🎁", name = "CRATES" },
-    { id = "trinkets", icon = "🔧", name = "TRINKETS" },
-    { id = "powers",   icon = "⚡", name = "POWERS" },
-    { id = "season",   icon = "⭐", name = "BETA SEASON" },
-    { id = "goobs",    icon = "🫧", name = "MY GOOBS" },
-    { id = "standoff", icon = "🥊", name = "THE STANDOFF" },
+    { id = "crates",    icon = "🎁", name = "CRATES" },
+    { id = "wear",      icon = "👕", name = "WARDROBE" },
+    { id = "trinkets",  icon = "🔧", name = "TRINKETS" },
+    { id = "powers",    icon = "⚡", name = "POWERS" },
+    { id = "inventory", icon = "🫧", name = "YOUR GOOBS" },
+    { id = "trade",     icon = "🤝", name = "TRADE" },
+    { id = "season",    icon = "⭐", name = "BETA SEASON" },
+    { id = "standoff",  icon = "🥊", name = "THE STANDOFF" },
 }
+
+-- One card shape for every ownable thing in the game — a skin, a trinket, a
+-- power, a Goob. Rarity is a stroke colour and nothing else, so the eye learns
+-- one rule instead of four. The previous UI drew Goobs, cosmetics and season
+-- rewards three different ways, which is most of why the screen felt like
+-- several games stapled together.
+local function card(parent: Instance, order: number, height: number, rarity: string?): Frame
+    local f = Instance.new("Frame")
+    f.Name = "Card"
+    f.Size = UDim2.new(1, 0, 0, height)
+    f.BackgroundColor3 = Theme.BG_SOFT
+    f.BackgroundTransparency = 0.2
+    f.BorderSizePixel = 0
+    f.LayoutOrder = order
+    f.Parent = parent
+    Theme.corner(f, 12)
+    if rarity then
+        Theme.stroke(f, Cosmetics.RARITY_COLOUR[rarity] or Theme.TEXT_DIM, 2)
+    end
+    return f
+end
+
+-- A skin is a material and a hue on a ball seen across an arena, so the
+-- preview is exactly that: a swatch in the item's own colour. Showing a name
+-- alone asks the player to buy something they cannot picture.
+local function swatch(parent: Instance, item: any, size: number)
+    local sw = Instance.new("Frame")
+    sw.Name = "Swatch"
+    sw.Size = UDim2.fromOffset(size, size)
+    sw.Position = UDim2.fromOffset(10, 10)
+    sw.BackgroundColor3 = item.colour or Color3.fromRGB(150, 160, 170)
+    sw.BorderSizePixel = 0
+    sw.Parent = parent
+    Theme.corner(sw, 999)
+    Theme.stroke(sw, Cosmetics.RARITY_COLOUR[item.rarity] or Theme.TEXT_DIM, 2)
+    if item.emoji and item.emoji ~= "" then
+        local e = Theme.label({
+            Size = UDim2.fromScale(1, 1), Text = item.emoji,
+            TextSize = math.floor(size * 0.6),
+            TextXAlignment = Enum.TextXAlignment.Center,
+        })
+        e.Parent = sw
+    end
+    return sw
+end
 
 -- ── Small builders ─────────────────────────────────────────────────────────
 
@@ -296,6 +359,181 @@ local function renderPowers()
     end
 end
 
+local KINDS = {
+    { id = "skin",  label = "BODY" },
+    { id = "trail", label = "TRAIL" },
+    { id = "eyes",  label = "EYES" },
+    { id = "crown", label = "HAT" },
+}
+local wearKind = "skin"
+
+local function renderWear()
+    local owned = (profile and profile.cosmeticsOwned) or {}
+    local worn = (profile and profile.loadout) or {}
+
+    -- Kind switcher. Four slots is too many to scroll past every time you want
+    -- a hat, and a tab strip is cheaper to read than four headings.
+    local strip = card(sheetBody, 0, 50)
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.Padding = UDim.new(0, 6)
+    layout.Parent = strip
+    for i, k in ipairs(KINDS) do
+        local b = Theme.button(k.label,
+            wearKind == k.id and Theme.ACCENT or Theme.BG,
+            UDim2.fromOffset(Layout.isCompact() and 66 or 92, Layout.MIN_TAP - 6))
+        b.Name = "Kind_" .. k.id
+        b.TextSize = Layout.isCompact() and 13 or 15
+        b.LayoutOrder = i
+        b.Parent = strip
+        b.Activated:Connect(function()
+            wearKind = k.id
+            ArenaHud.refreshSheet()
+        end)
+    end
+
+    local items = Cosmetics.ofKind(wearKind)
+    local ownedCount, order = 0, 1
+    for _, item in ipairs(items) do
+        local have = owned[item.id] == true
+        if have then ownedCount += 1 end
+        order += 1
+        local isWorn = worn[wearKind] == item.id
+        local c = card(sheetBody, order, 62, have and item.rarity or nil)
+        swatch(c, item, 42)
+
+        local name = Theme.label({
+            Position = UDim2.fromOffset(62, 8), Size = UDim2.new(1, -190, 0, 24),
+            Text = have and item.name or ("🔒 " .. item.name),
+            TextSize = 18,
+            TextColor3 = isWorn and Theme.GOOD
+                or (have and (Cosmetics.RARITY_COLOUR[item.rarity] or Theme.TEXT) or Theme.TEXT_DIM),
+        })
+        name.Parent = c
+
+        local sub = Theme.label({
+            Position = UDim2.fromOffset(62, 32), Size = UDim2.new(1, -190, 0, 20),
+            Text = have and (isWorn and ("WORN  ·  " .. item.rarity) or item.rarity)
+                or SOURCE_TEXT[item.source] or item.rarity,
+            TextSize = 13, TextColor3 = Theme.TEXT_DIM,
+        })
+        sub.Parent = c
+
+        if have and not isWorn then
+            local b = actionButton(c, "WEAR", Theme.ACCENT, 104)
+            b.Activated:Connect(function()
+                ArenaHud.on.equipCosmetic(wearKind, item.id)
+            end)
+        end
+    end
+
+    sheetTitle.Text = ("👕  WARDROBE   %d / %d"):format(ownedCount, #items)
+end
+
+local function renderInventory()
+    local goobs = (profile and profile.goobs) or {}
+    local activeId = profile and profile.activeGoobId
+
+    local header = card(sheetBody, 0, 54)
+    local sum = Theme.label({
+        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -24, 0, 42),
+        Text = ("%d Goob%s  ·  age never resets and cannot be farmed, which is the only reason it is worth anything")
+            :format(#goobs, #goobs == 1 and "" or "s"),
+        TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+    })
+    sum.Parent = header
+
+    for i, goob in ipairs(goobs) do
+        local tier = GoobMath.ageTier(goob)
+        local c = card(sheetBody, i, 74)
+        Theme.stroke(c, tier.color, 2)
+
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(44, 44)
+        dot.Position = UDim2.fromOffset(10, 14)
+        dot.BackgroundColor3 = Color3.fromHSV(goob.hue or 0.5, 0.42, 0.8)
+        dot.BorderSizePixel = 0
+        dot.Parent = c
+        Theme.corner(dot, 999)
+        Theme.stroke(dot, tier.color, 2)
+
+        local name = Theme.label({
+            Position = UDim2.fromOffset(64, 8), Size = UDim2.new(1, -190, 0, 24),
+            Text = (goob.id == activeId and "★ " or "") .. tostring(goob.nickname),
+            TextSize = 19,
+            TextColor3 = goob.id == activeId and Theme.GOOD or Theme.TEXT,
+        })
+        name.Parent = c
+
+        local stats = Theme.label({
+            Position = UDim2.fromOffset(64, 32), Size = UDim2.new(1, -190, 0, 20),
+            Text = ("%s %s  ·  ⚡%s  ·  x%.2f power"):format(
+                tier.emoji, tier.name, Format.short(GoobMath.power(goob)), tier.mult),
+            TextSize = 14, TextColor3 = tier.color,
+        })
+        stats.Parent = c
+
+        local age = Theme.label({
+            Position = UDim2.fromOffset(64, 52), Size = UDim2.new(1, -190, 0, 18),
+            Text = ("%s old  ·  gen %d"):format(
+                Format.duration(GoobMath.ageSeconds(goob)),
+                #(goob.lineage or {}) + 1),
+            TextSize = 12, TextColor3 = Theme.TEXT_DIM,
+        })
+        age.Parent = c
+
+        if goob.id ~= activeId then
+            local b = actionButton(c, "CARRY", Theme.ACCENT, 104)
+            b.Activated:Connect(function() ArenaHud.on.setActiveGoob(goob.id) end)
+        end
+    end
+
+    sheetTitle.Text = ("🫧  YOUR GOOBS   %d"):format(#goobs)
+end
+
+local function renderTrade()
+    local intro = card(sheetBody, 0, 118)
+    local text = Theme.label({
+        Position = UDim2.fromOffset(14, 10), Size = UDim2.new(1, -24, 0, 98),
+        Text = "Roll up to another player and a trade request appears for both of you.\n\n"
+            .. "Goobs are the only thing that can be traded, and the only way one ever "
+            .. "leaves the world is by being eaten. Nothing here is ever destroyed by "
+            .. "accident: if either side changes an offer after confirming, BOTH "
+            .. "confirmations reset.",
+        TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+    })
+    text.Parent = intro
+
+    local goobs = (profile and profile.goobs) or {}
+    local head = card(sheetBody, 1, 44)
+    local h = Theme.label({
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 28),
+        Text = ("You have %d Goob%s to offer"):format(#goobs, #goobs == 1 and "" or "s"),
+        TextSize = 17, TextColor3 = Theme.GOLD,
+    })
+    h.Parent = head
+
+    for i, goob in ipairs(goobs) do
+        local tier = GoobMath.ageTier(goob)
+        local c = card(sheetBody, i + 1, 56)
+        Theme.stroke(c, tier.color, 2)
+        local name = Theme.label({
+            Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 24),
+            Text = tostring(goob.nickname), TextSize = 18, TextColor3 = Theme.TEXT,
+        })
+        name.Parent = c
+        local sub = Theme.label({
+            Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 20),
+            Text = ("%s %s  ·  ⚡%s"):format(tier.emoji, tier.name,
+                Format.short(GoobMath.power(goob))),
+            TextSize = 13, TextColor3 = tier.color,
+        })
+        sub.Parent = c
+    end
+end
+
 function ArenaHud.closeSheet()
     openTab = nil
     sheet.Visible = false
@@ -307,7 +545,7 @@ end
 function ArenaHud.openSheet(tab: string)
     -- Delegated tabs still go through here, so opening one closes whatever
     -- else was up. That is the whole contract: one thing at a time.
-    if tab == "season" or tab == "goobs" then
+    if tab == "season" then
         ArenaHud.closeSheet()
         ArenaHud.on.openLegacy(tab)
         return
@@ -333,7 +571,10 @@ function ArenaHud.openSheet(tab: string)
     if tab == "crates" then renderCrates()
     elseif tab == "trinkets" then renderTrinkets()
     elseif tab == "powers" then renderPowers()
-    elseif tab == "standoff" then renderStandoff() end
+    elseif tab == "wear" then renderWear()
+    elseif tab == "inventory" then renderInventory()
+    elseif tab == "standoff" then renderStandoff()
+    elseif tab == "trade" then renderTrade() end
 
     sheet.Visible = true
     ArenaHud.applyLayout()
@@ -357,8 +598,12 @@ function ArenaHud.applyLayout()
     local pad = compact and 8 or 14
 
     -- Dock: top-centre, one row, on every platform.
-    local iconSize = compact and 44 or 54
-    local gap = compact and 5 or 8
+    -- Eight tabs now. On a 568-wide phone that is 8 icons plus gaps plus the
+    -- dock's own padding, and the stat card has to fit to the left of it — so
+    -- the icons shrink on compact rather than the dock running into the card.
+    -- 38 is still comfortably above the 34px minimum a thumb needs.
+    local iconSize = compact and 38 or 52
+    local gap = compact and 4 or 7
     local dockW = #TABS * iconSize + (#TABS - 1) * gap + pad * 2
     dock.Size = UDim2.fromOffset(dockW, iconSize + pad * 2)
     dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), 6)
@@ -371,10 +616,10 @@ function ArenaHud.applyLayout()
     end
 
     -- Stat card: top-left, and never wider than the space left of the dock.
-    local cardW = Layout.fit(compact and 124 or 210, 96, math.floor((u.X - dockW) / 2) - pad)
+    local cardW = Layout.fit(compact and 104 or 210, 88, math.floor((u.X - dockW) / 2) - pad)
     statCard.Size = UDim2.fromOffset(cardW, compact and 74 or 92)
     statCard.Position = UDim2.fromOffset(pad, 6)
-    massLabel.TextSize = compact and 24 or 32
+    massLabel.TextSize = compact and 22 or 32
     worthLabel.TextSize = compact and 14 or 18
     meltLabel.TextSize = compact and 11 or 14
 

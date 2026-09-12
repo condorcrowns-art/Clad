@@ -157,6 +157,64 @@ Cosmetics.ITEMS = {
       source = "beta", beta = true, emoji = "🏷️" },
     { id = "eyes_beta",    name = "Test Pattern",  kind = "eyes", rarity = "Rare",
       source = "beta", beta = true, emoji = "🎛️" },
+
+    -- ── The wider wardrobe ─────────────────────────────────────────────────
+    -- A skin is the only thing in this game a player can choose purely because
+    -- they like it, so the catalogue has to be wide enough that two people in
+    -- the same server rarely match. Every one of these reads at a distance:
+    -- the body is a 10-to-35-stud ball seen across an arena, so a skin is a
+    -- MATERIAL and a HUE, never a texture nobody will ever be close enough
+    -- to see.
+    { id = "skin_frost",   name = "Frostbite",     kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Ice, colour = rgb(186, 206, 214) },
+    { id = "skin_rust",    name = "Rustbucket",    kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.CorrodedMetal, colour = rgb(170, 124, 96) },
+    { id = "skin_bark",    name = "Old Bark",      kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Wood, colour = rgb(146, 122, 96) },
+    { id = "skin_tar",     name = "Tar",           kind = "skin", rarity = "Uncommon",
+      source = "crate_goop", material = Enum.Material.Glass, colour = rgb( 54,  52,  58) },
+    { id = "skin_sea",     name = "Seaglass",      kind = "skin", rarity = "Uncommon",
+      source = "crate_goop", material = Enum.Material.Glass, colour = rgb(136, 176, 168) },
+    { id = "skin_brass",   name = "Brasswork",     kind = "skin", rarity = "Rare",
+      source = "crate_deep", material = Enum.Material.Foil, colour = rgb(186, 158, 108) },
+    { id = "skin_slate",   name = "Slate",         kind = "skin", rarity = "Rare",
+      source = "crate_deep", material = Enum.Material.Slate, colour = rgb(118, 120, 124) },
+    { id = "skin_ember",   name = "Ember",         kind = "skin", rarity = "Epic",
+      source = "crate_deep", material = Enum.Material.Neon, colour = rgb(196, 138, 108) },
+    { id = "skin_aurora",  name = "Aurora",        kind = "skin", rarity = "Epic",
+      source = "season", tier = 38, premium = true, material = Enum.Material.ForceField,
+      colour = rgb(140, 178, 190) },
+    { id = "skin_obsidian",name = "Obsidian",      kind = "skin", rarity = "Legendary",
+      source = "season", tier = 41, material = Enum.Material.Glass, colour = rgb( 48,  44,  56) },
+    { id = "skin_bone",    name = "Bonework",      kind = "skin", rarity = "Rare",
+      source = "season", tier = 26, material = Enum.Material.Sand, colour = rgb(208, 198, 172) },
+    { id = "skin_copper",  name = "Verdigris",     kind = "skin", rarity = "Uncommon",
+      source = "season", tier = 12, material = Enum.Material.Metal, colour = rgb(132, 168, 152) },
+
+    { id = "trail_ash",    name = "Ash Cloud",     kind = "trail", rarity = "Uncommon",
+      source = "crate_goop", colour = rgb(158, 152, 148) },
+    { id = "trail_ink",    name = "Ink Wake",      kind = "trail", rarity = "Rare",
+      source = "crate_deep", colour = rgb( 78,  82,  96) },
+    { id = "trail_bloom",  name = "Pollen",        kind = "trail", rarity = "Uncommon",
+      source = "season", tier = 20, colour = rgb(196, 190, 138) },
+    { id = "trail_tide",   name = "Tidewash",      kind = "trail", rarity = "Epic",
+      source = "season", tier = 36, premium = true, colour = rgb(140, 174, 178) },
+
+    { id = "eyes_wide",    name = "Wide Awake",    kind = "eyes", rarity = "Common",
+      source = "crate_goop", emoji = "😳" },
+    { id = "eyes_smug",    name = "Smug",          kind = "eyes", rarity = "Uncommon",
+      source = "season", tier = 9, emoji = "😏" },
+    { id = "eyes_money",   name = "Payday",        kind = "eyes", rarity = "Rare",
+      source = "crate_deep", emoji = "🤑" },
+
+    { id = "crown_flower", name = "Flower Crown",  kind = "crown", rarity = "Common",
+      source = "crate_goop", emoji = "🌸" },
+    { id = "crown_chef",   name = "Chef's Hat",    kind = "crown", rarity = "Uncommon",
+      source = "crate_goop", emoji = "👨‍🍳" },
+    { id = "crown_top",    name = "Top Hat",       kind = "crown", rarity = "Rare",
+      source = "season", tier = 30, emoji = "🎩" },
+    { id = "crown_banker", name = "The Banker",    kind = "crown", rarity = "Legendary",
+      source = "achievement", emoji = "🏦" },
 }
 
 local byId: { [string]: Item } = {}

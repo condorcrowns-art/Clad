@@ -648,6 +648,15 @@ ArenaHud.on.openCrate = function(id) Net.get("OpenCrate"):FireServer(id) end
 
 -- The dock's three delegated tabs. They close the sheet before opening, and
 -- "close" shuts everything — so there is still never more than one panel up.
+ArenaHud.on.equipCosmetic = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
+ArenaHud.on.setActiveGoob = function(id) Net.get("SetActiveGoob"):FireServer(id) end
+
+-- One tab still delegates: the season track has its own renderer in Panels.
+-- The live trade WINDOW also stays as it is — rebuilding TradeUi would mean
+-- rebuilding the anti-scam confirmation reset, which is the most
+-- safety-critical UI in the game and is already proven. The dock's trade tab
+-- explains the rules and lists what you can offer; the window itself still
+-- opens when another player rolls up.
 ArenaHud.on.openLegacy = function(which)
     if which == "close" then
         Hud.setDrawerOpen(false)

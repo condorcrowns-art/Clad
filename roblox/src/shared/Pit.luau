@@ -17,7 +17,7 @@ local Movement = require(script.Parent.Movement)
 
 local Pit = {}
 
-Pit.CENTRE = Vector3.new(0, 6, 430)
+Pit.CENTRE = Vector3.new(0, 6, 660)
 Pit.START_RADIUS = 96
 Pit.MIN_RADIUS = 18
 Pit.FLOOR_Y = 6
