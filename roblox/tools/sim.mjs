@@ -1,5 +1,5 @@
 import { Lua } from '@luau-rs/luau';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const SRC = process.argv[2];
 const read = n => readFileSync(`${SRC}/${n}.luau`, 'utf8');
@@ -42,7 +42,11 @@ local function _stub(name) return setmetatable({__name=name}, {__index=function(
 script = { Parent = _stub("Parent") }
 `;
 
-const mods = ['Config','Format','Names','GoobMath','Feedstock'];
+// Auto-discover every shared module rather than listing them. A hardcoded
+// list silently breaks the moment a new module is added.
+const mods = readdirSync(SRC)
+  .filter(f => f.endsWith('.luau'))
+  .map(f => f.replace(/\.luau$/, ''));
 let code = prelude;
 for (const m of mods) {
   code += `\n_register("${m}", function()\n local script = {Parent = setmetatable({},{__index=function(_,k) return k end})}\n${read(m)}\nend)\n`;
