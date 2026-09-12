@@ -232,7 +232,30 @@ Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
 Config.ISLAND_RADIUS = 300
 Config.SHALLOWS_INNER = 235   -- outside this radius is no-PvP
 Config.VAULT_RADIUS = 34
-Config.SHACK_POSITION = Vector3.new(-170, 0, 150)
+Config.SHACK_POSITION = Vector3.new(-168, 0, 150)
+
+-- ── Biomes ─────────────────────────────────────────────────────────────────
+-- The four old zones are gone as places, but not as ideas. Their characters
+-- survive as patches ON the one island, which is the version of "keep it to
+-- one island" that loses nothing: you still get slick lines, ramp play and a
+-- rich dangerous basin, without four separate maps to build, populate, and
+-- split a server across.
+--
+-- Each patch trades safety for yield, so where you feed is a decision:
+--   SLICK   fast lines, no brakes           pellets x1.15
+--   SCRAP   ramps, cover, broken sightlines pellets x1.00, best for hiding
+--   BASIN   sunken, richest, one way out    pellets x1.55
+Config.BIOMES = {
+    { id = "slick", name = "The Slick",  centre = Vector3.new(150, 0, -120),
+      radius = 74, pelletMult = 1.15, friction = 0.03 },
+    { id = "scrap", name = "The Scrapyard", centre = Vector3.new(-120, 0, -150),
+      radius = 80, pelletMult = 1.00, friction = 0.45 },
+    { id = "basin", name = "The Basin",  centre = Vector3.new(105, -9, 145),
+      radius = 68, pelletMult = 1.55, friction = 0.35 },
+}
+
+Config.VAULT_HEIGHT = 7
+Config.SPAWN_RING = 262        -- where a fresh blob appears, inside the Shallows
 
 
 return Config

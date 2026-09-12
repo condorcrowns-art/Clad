@@ -41,6 +41,13 @@ Net.EVENTS = {
     "TradeCancel",    -- C->S
     "TradeSync",      -- S->C  live state of the open trade window
     "LeaderboardSync",-- S->C
+    -- ── Arena ──────────────────────────────────────────────────────────────
+    "ArenaSync",      -- S->C  live run state: mass, leak, bank progress, power
+    "UsePower",       -- C->S  press the one button
+    "SetPower",       -- C->S  choose which power you carry
+    "EquipTrinket",   -- C->S  slot a trinket
+    "OpenCrate",      -- C->S  spend Glob on a roll
+    "CrateResult",    -- S->C  what came out
 }
 
 Net.FUNCTIONS = {

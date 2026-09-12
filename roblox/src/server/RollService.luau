@@ -35,6 +35,17 @@ RollService.onShove = Instance.new("BindableEvent")
 
 local INTERIOR_MAX = 30
 
+-- Record where a welded child sits and how big it is, both expressed as a
+-- FRACTION of the ball's radius. The arena changes a blob's mass several times
+-- a second, so the body has to be rescalable in place; without these the only
+-- way to resize it is to rebuild the whole model, which would respawn the
+-- player's body out from under them mid-chase.
+local function markRelative(child: BasePart, ball: BasePart, radius: number)
+    local offset = child.Position - ball.Position
+    child:SetAttribute("RelOffset", offset / radius)
+    child:SetAttribute("RelSize", child.Size / radius)
+end
+
 local function buildBall(player: Player, goob): BasePart
     local radius = GoobMath.size(goob)
 
@@ -69,6 +80,7 @@ local function buildBall(player: Player, goob): BasePart
         eye.Massless = true
         eye.CFrame = ball.CFrame * CFrame.new(sx * radius, radius * 0.3, -radius * 0.9)
         eye.Parent = ball
+        markRelative(eye, ball, radius)
         local w = Instance.new("WeldConstraint")
         w.Part0, w.Part1 = ball, eye
         w.Parent = eye
@@ -84,6 +96,7 @@ local function buildBall(player: Player, goob): BasePart
         pupil.Massless = true
         pupil.CFrame = eye.CFrame * CFrame.new(0, 0, -eye.Size.X * 0.35)
         pupil.Parent = ball
+        markRelative(pupil, ball, radius)
         local w2 = Instance.new("WeldConstraint")
         w2.Part0, w2.Part1 = ball, pupil
         w2.Parent = pupil
@@ -127,6 +140,7 @@ local function buildBall(player: Player, goob): BasePart
         if dir.Magnitude < 0.001 then dir = Vector3.new(0, 1, 0) end
         p.CFrame = ball.CFrame * CFrame.new(dir.Unit * (radius * 0.7 * rng:NextNumber() ^ (1 / 3)))
         p.Parent = ball
+        markRelative(p, ball, radius)
         local w = Instance.new("WeldConstraint")
         w.Part0, w.Part1 = ball, p
         w.Parent = p
@@ -211,6 +225,58 @@ end
 
 function RollService.ballFor(player: Player): BasePart?
     return balls[player.UserId]
+end
+
+-- Resize a live blob in place.
+--
+-- A WeldConstraint captures its offset when it is created and will not let go,
+-- so growing the ball while the eyes stay welded buries them inside the body.
+-- Every welded child therefore gets its weld dropped, is moved and scaled by
+-- the stored fractions, and is welded again. That is more work than setting
+-- one Size, but it is still far cheaper than rebuilding the model, and it is
+-- the difference between a blob that grows and a blob that flickers.
+--
+-- Throttled by RESIZE_EPSILON: the arena calls this every tick, and a blob
+-- gaining 0.3% is not worth thirty instance writes.
+RollService.RESIZE_EPSILON = 0.02
+
+function RollService.setRadius(player: Player, radius: number): boolean
+    local ball = balls[player.UserId]
+    if not ball or not ball.Parent then
+        return false
+    end
+    radius = math.max(0.8, radius)
+    local current = ball.Size.X / 2
+    if math.abs(radius - current) <= current * RollService.RESIZE_EPSILON then
+        return false
+    end
+
+    ball.Size = Vector3.new(radius, radius, radius) * 2
+
+    for _, child in ipairs(ball:GetChildren()) do
+        if child:IsA("BasePart") then
+            local relOffset = child:GetAttribute("RelOffset")
+            local relSize = child:GetAttribute("RelSize")
+            if relOffset and relSize then
+                for _, w in ipairs(child:GetChildren()) do
+                    if w:IsA("WeldConstraint") then
+                        w:Destroy()
+                    end
+                end
+                child.Size = relSize * radius
+                child.CFrame = ball.CFrame * CFrame.new(relOffset * radius)
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0, weld.Part1 = ball, child
+                weld.Parent = child
+            end
+        end
+    end
+
+    local plate = ball:FindFirstChild("Plate")
+    if plate and plate:IsA("BillboardGui") then
+        plate.StudsOffsetWorldSpace = Vector3.new(0, radius + 5, 0)
+    end
+    return true
 end
 
 function RollService.spawn(player: Player, goob, atPosition: Vector3?)
@@ -318,14 +384,27 @@ function RollService.refreshPlate(player: Player)
     end
 end
 
+-- WHO OWNS THE BODY'S SIZE.
+--
+-- Once the arena is running, the answer is the arena: a run's mass changes
+-- several times a second and setRadius reshapes the body in place to match.
+-- RollService.refresh used to resize too, by respawning the whole model when
+-- the size drifted 25% from the stored Goob's mass — which, against a live
+-- arena, would have rebuilt the player's body out from under them every few
+-- seconds, forever. Exactly one system may write Size, and this flag says
+-- which. It is set by ArenaService.start.
+RollService.sizeOwnedByArena = false
+
 function RollService.refresh(player: Player, goob)
     local ball = balls[player.UserId]
     if not ball or not goob then return end
-    local radius = GoobMath.size(goob)
-    local want = Vector3.new(radius, radius, radius) * 2
-    if (ball.Size - want).Magnitude > radius * 0.25 then
-        RollService.spawn(player, goob, ball.Position + Vector3.new(0, 2, 0))
-        return
+    if not RollService.sizeOwnedByArena then
+        local radius = GoobMath.size(goob)
+        local want = Vector3.new(radius, radius, radius) * 2
+        if (ball.Size - want).Magnitude > radius * 0.25 then
+            RollService.spawn(player, goob, ball.Position + Vector3.new(0, 2, 0))
+            return
+        end
     end
 
     local plate = ball:FindFirstChild("Plate")

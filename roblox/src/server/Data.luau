@@ -14,6 +14,8 @@ local HttpService = game:GetService("HttpService")
 
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
+local Powers = require(game.ReplicatedStorage.GoobShared.Powers)
+local Trinkets = require(game.ReplicatedStorage.GoobShared.Trinkets)
 local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
 local Cosmetics = require(game.ReplicatedStorage.GoobShared.Cosmetics)
 local Season = require(game.ReplicatedStorage.GoobShared.Season)
@@ -62,6 +64,14 @@ function Data.blankProfile(userId: number)
         achievements = {} :: { [string]: boolean },
         crewId = nil :: string?,
         purchases = {} :: { [string]: boolean },
+
+        -- ── Arena ──────────────────────────────────────────────────────────
+        lifetimeBanked = 0,                        -- unlocks powers; never spent
+        powerId = Powers.DEFAULT,
+        trinketsOwned = {} :: { [string]: boolean },
+        trinketSlots = {} :: { string },
+        cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
+        bestBank = 0,
     }
 end
 
@@ -119,6 +129,30 @@ function Data.load(player: Player)
     profile.pitWins = profile.pitWins or 0
     profile.achievements = profile.achievements or {}
     profile.purchases = profile.purchases or {}
+
+    -- Arena fields. A profile written before the arena existed keeps every
+    -- Goob it had and simply starts the new progression at zero, which is the
+    -- only migration that is safe without asking the player anything.
+    profile.lifetimeBanked = profile.lifetimeBanked or 0
+    profile.bestBank = profile.bestBank or 0
+    profile.trinketsOwned = profile.trinketsOwned or {}
+    profile.trinketSlots = profile.trinketSlots or {}
+    profile.cratePity = profile.cratePity or {}
+    if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked) then
+        profile.powerId = Powers.DEFAULT
+    end
+    -- Drop equipped trinkets the player does not actually own. This runs on
+    -- every load on purpose: it is the one guard that survives a rollback, a
+    -- bad merge, or an exploiter writing a slot they never earned.
+    do
+        local kept = {}
+        for _, id in ipairs(profile.trinketSlots) do
+            if profile.trinketsOwned[id] and #kept < Trinkets.SLOTS then
+                table.insert(kept, id)
+            end
+        end
+        profile.trinketSlots = kept
+    end
 
     -- Cosmetics: always merge in the starters rather than replacing, so a
     -- profile written before a slot existed gains the new slot's default

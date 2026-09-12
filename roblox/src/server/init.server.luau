@@ -21,6 +21,10 @@ local Cosmetics = require(Shared.Cosmetics)
 local Season = require(Shared.Season)
 local Pit = require(Shared.Pit)
 local Crew = require(Shared.Crew)
+local Blob = require(Shared.Blob)
+local Powers = require(Shared.Powers)
+local Trinkets = require(Shared.Trinkets)
+local Crates = require(Shared.Crates)
 local Monetisation = require(Shared.Monetisation)
 
 local Data = require(script.Data)
@@ -32,6 +36,7 @@ local RollService = require(script.RollService)
 local PitService = require(script.PitService)
 local CrewStore = require(script.CrewStore)
 local CensusService = require(script.CensusService)
+local ArenaService = require(script.ArenaService)
 
 print(("[%s] booting…"):format(Config.GAME_NAME))
 
@@ -352,32 +357,205 @@ task.spawn(function()
     local pillar = Workspace:WaitForChild("GoobWorld"):WaitForChild("Leaderboard")
     local entries = pillar:WaitForChild("Board"):WaitForChild("Entries") :: TextLabel
     while true do
+        -- Ranked on LIFETIME BANKED, which is the answer to "what is the
+        -- point of this game". Ranking on current mass would reward whoever
+        -- happened to be mid-run when the board refreshed, and would tell a
+        -- new player that the goal is to hold mass — the exact instinct the
+        -- melt is designed to punish.
         local rows = {}
         for _, player in ipairs(Players:GetPlayers()) do
             local profile = Data.get(player)
-            local goob = profile and GoobService.activeGoob(profile)
-            if goob then
+            if profile then
                 table.insert(rows, {
                     name = player.DisplayName,
-                    power = GoobMath.power(goob),
-                    tier = GoobMath.ageTier(goob),
-                    goobName = goob.nickname,
+                    banked = profile.lifetimeBanked or 0,
+                    best = profile.bestBank or 0,
+                    holding = ArenaService.massOf(player),
                 })
             end
         end
-        table.sort(rows, function(x, y) return x.power > y.power end)
+        table.sort(rows, function(x, y) return x.banked > y.banked end)
 
-        local text = "🏆 BIGGEST GOOBS\n\n"
+        local text = "🏦 TOP BANKERS\n\n"
         for i = 1, math.min(10, #rows) do
             local r = rows[i]
-            text ..= string.format("%d. %s\n    %s %s · ⚡%s\n",
-                i, r.name, r.tier.emoji, r.goobName, Format.short(r.power))
+            text ..= string.format("%d. %s\n    💧%s banked · best run 💧%s · holding %s\n",
+                i, r.name, Format.short(r.banked), Format.short(r.best), Format.short(r.holding))
         end
         if #rows == 0 then text ..= "nobody yet — be the first!" end
         entries.Text = text
         LeaderboardSync:FireAllClients(rows)
         task.wait(4)
     end
+end)
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- THE ARENA
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ArenaService owns the run; this file owns the profile. The two are wired
+-- through an injected table rather than by requiring each other, so the arena
+-- never touches the datastore and there stays exactly one place where Glob is
+-- created.
+
+local ArenaSync = Net.get("ArenaSync")
+local CrateResult = Net.get("CrateResult")
+
+ArenaService.start({
+    award = function(player, glob, _xp, reason)
+        local profile = Data.get(player)
+        if not profile then return end
+        profile.glob += glob
+        if reason == "bank" then
+            profile.lifetimeBanked += glob
+            if glob > (profile.bestBank or 0) then
+                profile.bestBank = glob
+            end
+            progress(player, "bank")
+            -- A run taken past 60% of the ceiling is a real decision to stay
+            -- out while melting, and it gets paid for separately.
+            local run = ArenaService.runFor(player)
+            if run and run.bestMass > Blob.ceiling(0.8) * 0.6 then
+                progress(player, "bigBank")
+            end
+            -- Powers unlock on lifetime banked, so a bank can hand one over.
+            for _, power in ipairs(Powers.LIST) do
+                if power.unlockBanked > 0
+                    and profile.lifetimeBanked >= power.unlockBanked
+                    and profile.lifetimeBanked - glob < power.unlockBanked then
+                    notify(player, ("🔓 New power: %s — %s"):format(power.name, power.blurb), "good")
+                end
+            end
+        end
+        push(player)
+    end,
+
+    notify = notify,
+    effect = function(player, kind, data) Effect:FireClient(player, kind, data) end,
+
+    loadout = function(player)
+        local profile = Data.get(player)
+        if not profile then return {}, Powers.DEFAULT end
+        return profile.trinketSlots or {}, profile.powerId or Powers.DEFAULT
+    end,
+
+    sync = function(player, state) ArenaSync:FireClient(player, state) end,
+})
+
+-- One button. The client sends where it is aiming; the server decides
+-- everything else, including whether the player can afford the press.
+Net.get("UsePower").OnServerEvent:Connect(function(player, aim)
+    local dir = typeof(aim) == "Vector3" and aim or nil
+    -- Never trust a client vector's magnitude: a 10,000-stud "aim" is a
+    -- launch exploit, and normalising here costs nothing.
+    if dir and dir.Magnitude > 0.01 then
+        dir = dir.Unit
+    else
+        dir = nil
+    end
+    local ok, why = ArenaService.usePower(player, dir)
+    if not ok and why then
+        notify(player, "⏳ " .. why, "warn")
+    end
+end)
+
+Net.get("SetPower").OnServerEvent:Connect(function(player, id)
+    local profile = Data.get(player)
+    if not profile or typeof(id) ~= "string" then return end
+    if not Powers.isOwned(id, profile.lifetimeBanked or 0) then
+        local power = Powers.get(id)
+        notify(player, power
+            and ("🔒 %s unlocks at 💧%s banked."):format(power.name, Format.short(power.unlockBanked))
+            or "That power doesn't exist.", "warn")
+        return
+    end
+    profile.powerId = id
+    ArenaService.refreshLoadout(player)
+    local power = Powers.get(id)
+    notify(player, ("Carrying %s."):format(power and power.name or id), "good")
+    push(player)
+end)
+
+Net.get("EquipTrinket").OnServerEvent:Connect(function(player, id, slot)
+    local profile = Data.get(player)
+    if not profile or typeof(slot) ~= "number" then return end
+    slot = math.clamp(math.floor(slot), 1, Trinkets.SLOTS)
+    profile.trinketSlots = profile.trinketSlots or {}
+
+    if id == nil or id == "" then
+        table.remove(profile.trinketSlots, slot)
+    else
+        if typeof(id) ~= "string" or not Trinkets.get(id) then return end
+        if not (profile.trinketsOwned or {})[id] then
+            notify(player, "You don't own that trinket.", "warn")
+            return
+        end
+        -- Duplicates do nothing, so silently equipping one would read as a
+        -- bug. Refuse it and say why.
+        for i, existing in ipairs(profile.trinketSlots) do
+            if existing == id and i ~= slot then
+                notify(player, "That one's already equipped — duplicates do nothing.", "warn")
+                return
+            end
+        end
+        profile.trinketSlots[slot] = id
+    end
+
+    ArenaService.refreshLoadout(player)
+    push(player)
+end)
+
+Net.get("OpenCrate").OnServerEvent:Connect(function(player, crateId)
+    local profile = Data.get(player)
+    if not profile or typeof(crateId) ~= "string" then return end
+    local crate = Crates.get(crateId)
+    if not crate then return end
+
+    if crate.price <= 0 then
+        notify(player, "That crate isn't for sale — it comes from Beta Season.", "warn")
+        return
+    end
+    if profile.glob < crate.price then
+        notify(player, ("Need 💧%s for a %s."):format(Format.short(crate.price), crate.name), "warn")
+        return
+    end
+
+    profile.glob -= crate.price
+    profile.cratePity = profile.cratePity or {}
+    local pity = profile.cratePity[crateId] or 0
+    local reward, nextPity = Crates.roll(crateId, Random.new(os.clock() * 1e6 // 1 + player.UserId), pity)
+    profile.cratePity[crateId] = nextPity
+    if not reward then
+        profile.glob += crate.price   -- refund rather than eat the payment
+        notify(player, "That crate is empty right now. Refunded.", "warn")
+        push(player)
+        return
+    end
+
+    local duplicate = false
+    if reward.kind == "cosmetic" then
+        duplicate = Cosmetics.owns(profile.cosmeticsOwned, reward.id)
+        profile.cosmeticsOwned[reward.id] = true
+    else
+        profile.trinketsOwned = profile.trinketsOwned or {}
+        duplicate = profile.trinketsOwned[reward.id] == true
+        profile.trinketsOwned[reward.id] = true
+    end
+
+    local refund = 0
+    if duplicate then
+        refund = Crates.dupeValue(crateId, reward.rarity)
+        profile.glob += refund
+    end
+
+    CrateResult:FireClient(player, {
+        crate = crateId,
+        reward = reward,
+        duplicate = duplicate,
+        refund = refund,
+        pity = Crates.rollsUntilPity(crateId, nextPity),
+    })
+    push(player)
 end)
 
 -- ── Player lifecycle ───────────────────────────────────────────────────────
@@ -400,15 +578,17 @@ local function onJoin(player: Player)
     end)
 
     GoobService.spawnFor(player)
+    ArenaService.enter(player)
     RollService.applyCosmetics(player, profile.loadout)
     syncCrew(player)
     checkAchievements(player)
     push(player)
 
-    notify(player, "Welcome to " .. Config.GAME_NAME .. "! Chase the junk, feed your Goob. 🫧", "good")
+    notify(player, "Welcome! Eat. You melt as you grow — bank it at the Vault before you lose it. 🫧", "good")
 end
 
 local function onLeave(player: Player)
+    ArenaService.leave(player)
     PitService.cleanup(player)
     TradeService.cleanup(player)
     GoobService.despawnFor(player)
@@ -852,5 +1032,5 @@ CritterService.onSecret.Event:Connect(function(item)
         :format(item.name), "secret")
 end)
 
-print(("[%s] ready. %d plots, %d feedstock types.")
-    :format(Config.GAME_NAME, Config.PLOT_COUNT, #Feedstock.ITEMS))
+print(("[%s] ready. one island, %d pellets, %d powers, %d trinkets, %d crates.")
+    :format(Config.GAME_NAME, Config.PELLET_TARGET, #Powers.LIST, #Trinkets.LIST, #Crates.LIST))

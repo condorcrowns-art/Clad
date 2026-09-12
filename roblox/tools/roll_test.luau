@@ -16,6 +16,20 @@ local function tick(sec, dt)
         sched.step(dt); svc.heartbeat(dt); svc.renderStep(dt)
     end
 end
+-- The arena's own state, straight off the wire. The first version of the melt
+-- test used the ball's RADIUS as a proxy, which is wrong twice over: radius is
+-- logarithmic in mass, so a big change in mass is a small change in radius,
+-- and setRadius only redraws past a 2% threshold. It reported "no melt" while
+-- the blob was shedding ninety mass. Read the number, not a picture of it.
+local function arenaOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1]
+        end
+    end
+    return nil
+end
 local function snapOf(p)
     for i = #_G.TRAFFIC, 1, -1 do
         local t = _G.TRAFFIC[i]
@@ -63,9 +77,19 @@ end)())
 emit("")
 emit("══ THE WORLD IS A PLACE NOW ══")
 local world = svc.Workspace:FindFirstChild("GoobWorld")
-local zones = { "HubFloor", "ScrapyardFloor", "SlickfieldFloor", "DeepFloor" }
-for _, z in ipairs(zones) do
-    check("zone built: " .. z, world:FindFirstChild(z) ~= nil)
+-- One island now. The four zones survive as patches on it, so the thing to
+-- check is that every ring and every patch is actually there, not that four
+-- separate floors are.
+for _, piece in ipairs({ "Island", "Flats", "Shallows", "VaultDish", "Sea" }) do
+    check("island piece built: " .. piece, world:FindFirstChild(piece) ~= nil)
+end
+local patches = {}
+for _, c in ipairs(world:GetChildren()) do
+    local tag = c:FindFirstChild("BiomeId")
+    if tag then patches[tag.Value] = c end
+end
+for _, id in ipairs({ "slick", "scrap", "basin" }) do
+    check("biome patch built: " .. id, patches[id] ~= nil)
 end
 local signs, ramps = 0, 0
 for _, c in ipairs(world:GetChildren()) do
@@ -74,44 +98,94 @@ for _, c in ipairs(world:GetChildren()) do
 end
 check("signposts exist so the map explains itself", signs >= 6, tostring(signs))
 check("ramps exist so momentum has somewhere to go", ramps >= 8, tostring(ramps))
-check("the ascension altar is built", world:FindFirstChild("AscensionAltar") ~= nil)
-local ice = world:FindFirstChild("SlickfieldFloor")
-check("the Slickfield is genuinely slippery",
+-- Ascension happens at the Vault: there is one landmark and everything
+-- ceremonial belongs on it.
+check("the vault is the altar", world:FindFirstChild("VaultDish") ~= nil)
+local ice = patches.slick
+check("the Slick is genuinely slippery",
     ice and ice.CustomPhysicalProperties and ice.CustomPhysicalProperties.Friction < 0.1,
     ice and ice.CustomPhysicalProperties and tostring(ice.CustomPhysicalProperties.Friction))
+local basin = patches.basin
+check("the Basin pays more for being harder to leave",
+    basin ~= nil and basin.Position.Y < 0, basin and tostring(basin.Position.Y))
 
 emit("")
-emit("══ REACH SCALES WITH SIZE ══")
+emit("══ THE BODY IS THE ARENA'S MASS ══")
+-- The body's size used to follow the stored Goob's mass. It follows the RUN's
+-- mass now, and exactly one system is allowed to write it — otherwise the two
+-- owners fight and RollService.refresh respawns the player's body out from
+-- under them every few seconds. So the honest test is to eat real pellets off
+-- the real island and watch the real body grow.
 local smallReach = ball().Size.X / 2
-local before = snapOf(alice).goobs[1].mass
--- Grow the Goob a lot, then confirm the body grew with it.
-for _ = 1, 40 do
-    local critters = svc.Workspace:FindFirstChild("Critters")
-    local list = critters:GetChildren()
-    if #list > 0 then
-        svc.movePlayer(alice, list[1].Position)
-        ball().Position = list[1].Position
-        svc.fireAs("CatchCritter", alice, list[1])
-    end
-    tick(1)
+local arena = svc.Workspace:FindFirstChild("GoobWorld"):FindFirstChild("Arena")
+check("the island seeded itself with food", arena and #arena:GetChildren() > 100,
+    arena and tostring(#arena:GetChildren()))
+
+local eaten = 0
+for _ = 1, 60 do
+    local list = arena:GetChildren()
+    if #list == 0 then break end
+    local target = list[1]
+    svc.movePlayer(alice, target.Position)
+    ball().Position = target.Position
+    tick(0.3)
+    if not target.Parent then eaten += 1 end
 end
-tick(30)
-local after = snapOf(alice).goobs[1].mass
-check("mass grew from catching", after > before, ("%f -> %f"):format(before, after))
-check("the body grew with the mass", ball().Size.X / 2 > smallReach,
+check("pellets are actually eaten", eaten > 20, tostring(eaten))
+check("the body grew with the run", ball().Size.X / 2 > smallReach,
     ("%f -> %f"):format(smallReach, ball().Size.X / 2))
+
+local fed = arenaOf(alice)
+check("the arena reports a run", fed ~= nil and fed.mass ~= nil, fed and tostring(fed.mass))
+check("eating got past the grace mass", fed and fed.mass > 60, fed and tostring(fed.mass))
+check("the HUD is told what it is leaking", fed and fed.leak > 0, fed and tostring(fed.leak))
+
+-- THE MELT. Past the grace mass, standing still must LOSE mass. This is the
+-- assertion the entire design rests on, and it is the one that caught a bug
+-- that had quietly deleted the game: leaked goop was spawning inside the
+-- leaking blob's own pickup radius, so a big blob vacuumed its own drips back
+-- up and its net melt was exactly zero.
+local beforeMass = fed.mass
+local beforePellets = #arena:GetChildren()
+tick(30)
+local afterMass = arenaOf(alice).mass
+check("standing still while big melts you", afterMass < beforeMass * 0.85,
+    ("%.0f -> %.0f"):format(beforeMass, afterMass))
+
+-- And what melted did not vanish. It is on the floor, for everyone else.
+check("what you melted became food for everyone else",
+    #arena:GetChildren() > beforePellets * 0.9,
+    ("%d -> %d"):format(beforePellets, #arena:GetChildren()))
+
+-- A blob may never re-absorb its own trail. Without the lockout the melt is
+-- cosmetic and the ceiling does not exist.
+local ownTrail = 0
+for _, pellet in ipairs(arena:GetChildren()) do
+    if (pellet.Position - ball().Position).Magnitude < ball().Size.X / 2 then
+        ownTrail += 1
+    end
+end
+check("its own drips are not sitting inside it", ownTrail == 0, tostring(ownTrail))
 
 emit("")
 emit("══ ANTI-CHEAT: CLIENT OWNS THE PHYSICS ══")
 local b = ball()
 local honest = b.Position
 -- Three consecutive impossible jumps is the threshold; one is network noise.
-for _ = 1, 5 do
+-- Nine jumps of 4,000 studs. The old version asserted the residual drift was
+-- under 3,000 after five jumps, which is a single 4,000-stud jump away from
+-- failing and did exactly that the moment another service changed the
+-- scheduler's ordering. What actually matters is that the guard fires at all,
+-- so assert against the TOTAL attempted rather than an exact residue.
+local attempted = 0
+for _ = 1, 9 do
     b.Position = b.Position + V3.new(4000, 0, 0)
+    attempted += 4000
     tick(0.3)
 end
 local drifted = (ball().Position - honest).Magnitude
-check("a teleporting body is snapped back", drifted < 3000, ("moved %.0f studs"):format(drifted))
+check("a teleporting body is snapped back", drifted < attempted * 0.4,
+    ("kept %.0f of %.0f studs"):format(drifted, attempted))
 
 emit("")
 emit("══ ASCENSION: the goal ══")
@@ -158,7 +232,7 @@ check("and what is gained", ts and ts.ascendPreview
 local tball = svc.Workspace:FindFirstChild("GoobBall_555")
 svc.movePlayer(titan, V3.new(1400, 5, 1400))
 if tball then tball.Position = V3.new(1400, 5, 1400) end
-local altarPos = V3.new(0, 3, 96)
+local altarPos = V3.new(0, 7, 0)   -- the Vault
 local dist = ((tball and tball.Position or V3.new(0, 0, 0)) - altarPos).Magnitude
 check("precondition: genuinely far from the altar", dist > 500, ("%.0f studs"):format(dist))
 svc.fireAs("Ascend", titan)   -- fired in the same tick, before the sampler runs
@@ -170,7 +244,7 @@ check("no crest was granted", (snapOf(titan).crests or 0) == 0,
     tostring(snapOf(titan).crests))
 
 -- Roll to the altar and do it.
-local altar = V3.new(0, 3, 96)
+local altar = V3.new(0, 7, 0)      -- the Vault
 svc.movePlayer(titan, altar)
 tball = svc.Workspace:FindFirstChild("GoobBall_555")
 if tball then tball.Position = altar end

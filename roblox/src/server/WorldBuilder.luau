@@ -1,23 +1,30 @@
 --!strict
--- WorldBuilder.luau — the entire map, generated at runtime from code.
+-- WorldBuilder.luau — one island, generated at runtime from code.
 --
--- WHY FROM CODE: a .rbxl is an opaque binary. If the map lives in the place
--- file, nothing about the world is reviewable in a diff, mergeable between two
--- people, or restorable after a bad save. Built from code, the whole game —
--- world included — is plain text in git.
+-- WHY FROM CODE: a .rbxl is an opaque binary. Built from code, the whole game —
+-- world included — is plain text in git: reviewable in a diff, mergeable
+-- between two people, restorable after a bad save.
 --
--- WHY THIS SHAPE: the first version was a flat green plane with eight glowing
--- pads, and it read as unfinished because it WAS unfinished — there was nothing
--- to do in space, so space was decoration. With momentum movement, surface and
--- elevation become gameplay, so the map is now built around them:
+-- WHY ONE ISLAND: the previous map was four zones and a hub, and it was four
+-- times the surface area with a quarter of the players on each. An arena game
+-- needs density — the whole design rests on you constantly being able to see
+-- somebody bigger and somebody smaller — so everything is now on one 300-stud
+-- island and the four zones are gone as PLACES.
 --
---   HUB        flat, signposted, safe. Every service has a big readable icon.
---   SCRAPYARD  ramps and a half-pipe. The learning zone for dashing.
---   SLICKFIELD low friction. You slide. Fast lines, hard stops.
---   THE DEEP   sunken, rare spawns, only entered across a gap that needs a dash.
+-- They are not gone as IDEAS. Each one survives as a patch on the island:
 --
--- Every zone is reachable by rolling; only The Deep demands a dash, which is
--- what makes the dash meter mean something instead of being a speed toy.
+--   THE SLICK      near-frictionless. Fast lines, no brakes. Pellets x1.15.
+--   THE SCRAPYARD  ramps and cover. Broken sightlines, the place to hide.
+--   THE BASIN      sunken, richest pellets, one way in and out. x1.55.
+--
+-- That keeps every bit of terrain character the zones had, costs one map
+-- instead of four, and leaves the server undivided.
+--
+-- WHAT IS NOT BUILT HERE: most of the island's shape. Lumps — the congealed
+-- shells of popped blobs — are terrain, and they accumulate for the life of a
+-- server. Two hours in, the interesting geometry is all player-made. That is
+-- the design working as intended, not a gap.
+
 
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
@@ -27,15 +34,17 @@ local Pit = require(game.ReplicatedStorage.GoobShared.Pit)
 
 local WorldBuilder = {}
 
+-- Three rings, concentric, on one disc. Everything else is a patch on top.
+WorldBuilder.RINGS = {
+    VAULT    = { name = "The Vault",    inner = 0,   outer = Config.VAULT_RADIUS },
+    FLATS    = { name = "The Flats",    inner = Config.VAULT_RADIUS, outer = Config.SHALLOWS_INNER },
+    SHALLOWS = { name = "The Shallows", inner = Config.SHALLOWS_INNER, outer = Config.ISLAND_RADIUS },
+}
+
+-- Kept so that anything still asking "where is the middle of the world" gets a
+-- sensible answer. There is exactly one place now, so this is a constant.
 WorldBuilder.ZONES = {
-    HUB        = { name = "The Hub",     centre = Vector3.new(0, 0, 0),      radius = 170 },
-    SCRAPYARD  = { name = "Scrapyard",   centre = Vector3.new(520, 0, 0),    radius = 260 },
-    SLICKFIELD = { name = "Slickfield",  centre = Vector3.new(-520, 0, 120), radius = 260 },
-    -- Sits below and beyond the southern lip of the ground plane. The gap
-    -- between the lip (z = -452) and the landing (z = -496) is ~44 studs: far
-    -- enough that walking off is a fall, close enough that a ramp plus one dash
-    -- clears it. This is the only place in the world you can fall out of.
-    DEEP       = { name = "The Deep",    centre = Vector3.new(40, -34, -710), radius = 240 },
+    ISLAND = { name = "The Island", centre = Vector3.new(0, 0, 0), radius = Config.ISLAND_RADIUS },
 }
 
 local function part(props: { [string]: any }): BasePart
@@ -197,6 +206,160 @@ local function buildAmbience()
     clouds.Parent = Workspace.Terrain
 end
 
+
+-- ── Construction ───────────────────────────────────────────────────────────
+
+-- A patch of surface with its own friction, laid flush on the island so you
+-- roll onto it rather than over a lip. Friction is the whole point of a patch:
+-- The Slick is 0.03 and a heavy blob crossing it simply cannot turn.
+local function patch(parent: Instance, biome, tint: Color3, material: Enum.Material)
+    local d = disc(parent, biome.centre + Vector3.new(0, 0.35, 0), biome.radius, 1.2,
+        tint, material, "Biome_" .. biome.id)
+    d.CustomPhysicalProperties = PhysicalProperties.new(0.7, biome.friction, 0.35, 1, 1)
+    local tag = Instance.new("StringValue")
+    tag.Name = "BiomeId"
+    tag.Value = biome.id
+    tag.Parent = d
+    return d
+end
+
+-- The Shack. One building, holding every service in the game — and every one
+-- of them is ALSO a tap on the dock, from anywhere on the island. Walking here
+-- is a thing you may do, never a thing you must do. The previous map made you
+-- roll across a zone to press a button, which is how a signpost on a pole
+-- ended up being the interface.
+local function buildShack(world: Instance)
+    local base = Config.SHACK_POSITION
+    local shell = part({
+        Name = "Shack",
+        Size = Vector3.new(54, 26, 40),
+        Position = base + Vector3.new(0, 13, 0),
+        Color = Color3.fromRGB(122, 114, 104),
+        Material = Enum.Material.WoodPlanks,
+    })
+    shell.Parent = world
+
+    local roof = part({
+        Name = "ShackRoof",
+        Size = Vector3.new(60, 3, 46),
+        Position = base + Vector3.new(0, 27, 0),
+        Color = Color3.fromRGB(96, 88, 82),
+        Material = Enum.Material.Slate,
+    })
+    roof.Parent = world
+
+    -- An open front, so it reads as a shop rather than a crate.
+    local counter = part({
+        Name = "ShackCounter",
+        Size = Vector3.new(44, 5, 4),
+        Position = base + Vector3.new(0, 4, 22),
+        Color = Color3.fromRGB(146, 134, 118),
+        Material = Enum.Material.Wood,
+    })
+    counter.Parent = world
+
+    for i, entry in ipairs({
+        { icon = "🎁", label = "CRATES",   x = -17 },
+        { icon = "🔧", label = "TRINKETS", x =  -0 },
+        { icon = "🤝", label = "TRADE",    x =  17 },
+    }) do
+        local post = part({
+            Name = "ShackStall" .. i,
+            Size = Vector3.new(12, 12, 2),
+            Position = base + Vector3.new(entry.x, 12, 19),
+            Color = Color3.fromRGB(70, 72, 78),
+            Material = Enum.Material.SmoothPlastic,
+        })
+        post.Parent = world
+
+        local gui = Instance.new("BillboardGui")
+        gui.Size = UDim2.fromScale(9, 6)
+        gui.MaxDistance = 420
+        gui.StudsOffset = Vector3.new(0, 2, 2)
+        gui.Parent = post
+
+        local icon = Instance.new("TextLabel")
+        icon.Size = UDim2.fromScale(1, 0.62)
+        icon.BackgroundTransparency = 1
+        icon.Font = Enum.Font.FredokaOne
+        icon.TextScaled = true
+        icon.Text = entry.icon
+        icon.Parent = gui
+
+        local label = Instance.new("TextLabel")
+        label.Position = UDim2.fromScale(0, 0.62)
+        label.Size = UDim2.fromScale(1, 0.34)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.FredokaOne
+        label.TextScaled = true
+        label.TextColor3 = Color3.fromRGB(206, 190, 156)
+        label.Text = entry.label
+        label.Parent = gui
+    end
+
+    signpost(world, base + Vector3.new(0, 0, 30), "🏚️", "THE GOOP SHACK",
+        "or just tap the dock", Color3.fromRGB(198, 174, 118))
+end
+
+
+-- A readable standing board: a slab with a big text panel on the front. Every
+-- board in the world is one of these, so "where does information live" has a
+-- single answer instead of four bespoke props.
+local function board(parent: Instance, name: string, position: Vector3, facing: number,
+                    size: Vector2, tint: Color3)
+    local slab = part({
+        Name = name,
+        Size = Vector3.new(size.X, size.Y, 3),
+        CFrame = CFrame.new(position) * CFrame.Angles(0, math.rad(facing), 0),
+        Color = Color3.fromRGB(58, 58, 62),
+        Material = Enum.Material.Slate,
+    })
+    slab.Parent = parent
+
+    local gui = Instance.new("SurfaceGui")
+    gui.Name = "Board"
+    gui.Face = Enum.NormalId.Front
+    gui.CanvasSize = Vector2.new(size.X * 26, size.Y * 26)
+    gui.LightInfluence = 0
+    gui.Parent = slab
+
+    local pad = Instance.new("Frame")
+    pad.Size = UDim2.fromScale(1, 1)
+    pad.BackgroundColor3 = Color3.fromRGB(34, 35, 39)
+    pad.BorderSizePixel = 0
+    pad.ZIndex = 1
+    pad.Parent = gui
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 6
+    stroke.Color = tint
+    stroke.Parent = pad
+
+    local entries = Instance.new("TextLabel")
+    entries.Name = "Entries"
+    entries.Position = UDim2.fromScale(0.05, 0.05)
+    entries.Size = UDim2.fromScale(0.9, 0.9)
+    entries.BackgroundTransparency = 1
+    entries.Font = Enum.Font.FredokaOne
+    entries.TextScaled = false
+    entries.TextSize = 34
+    entries.TextWrapped = true
+    entries.TextXAlignment = Enum.TextXAlignment.Left
+    entries.TextYAlignment = Enum.TextYAlignment.Top
+    entries.TextColor3 = Color3.fromRGB(226, 224, 216)
+    -- Set here, not at first refresh: a TextLabel's default Text is the
+    -- literal string "Label", and an empty board reading "Label" in
+    -- half-metre letters is how that bug shipped last time.
+    entries.Text = name .. "\nloading…"
+    -- Parented to the SurfaceGui, NOT to the backing frame: every consumer
+    -- looks it up as Board -> Entries, and burying it one level deeper turns
+    -- that into a WaitForChild that never returns and a board that silently
+    -- says "loading…" forever.
+    entries.ZIndex = 2
+    entries.Parent = gui
+
+    return slab
+end
+
 function WorldBuilder.build()
     buildAmbience()
 
@@ -204,375 +367,279 @@ function WorldBuilder.build()
     world.Name = "GoobWorld"
     world.Parent = Workspace
 
-    -- Roads connect the zones, so travelling somewhere is a route rather than a
-    -- void. Declared early because the Pit uses it too.
-    local function road(from: Vector3, to: Vector3, width: number)
-        local mid = (from + to) / 2
-        local delta = to - from
-        local len = delta.Magnitude
-        local r = part({
-            Name = "Road",
-            Size = Vector3.new(width, 4, len),
-            CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
-            Color = Color3.fromRGB(178, 172, 158),
-            Material = Enum.Material.Concrete,
-        })
-        r.Parent = world
-        return r
+    -- ── THE SEA ────────────────────────────────────────────────────────────
+    -- Not decoration: it is the floor under everything, so that no bug, no
+    -- knockback and no Slam can ever drop a player out of the world. An arena
+    -- game with a hole in it loses players to the hole.
+    local sea = part({
+        Name = "Sea",
+        Size = Vector3.new(4000, 8, 4000),
+        Position = Vector3.new(0, -26, 0),
+        Color = Color3.fromRGB(108, 128, 132),
+        Material = Enum.Material.Glass,
+        Transparency = 0.35,
+    })
+    sea.Parent = world
+
+    -- ── THE ISLAND ─────────────────────────────────────────────────────────
+    local island = disc(world, Vector3.new(0, -3, 0), Config.ISLAND_RADIUS, 8,
+        Color3.fromRGB(138, 150, 126), Enum.Material.Grass, "Island")
+    island.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.35, 1, 1)
+
+    -- The Shallows read as a distinct rim rather than a line on a map, because
+    -- "am I safe right now" has to be answerable at a glance while being
+    -- chased. Sand, a shade lighter, very slightly lower.
+    local shallows = disc(world, Vector3.new(0, -2.2, 0), Config.ISLAND_RADIUS, 1.4,
+        Color3.fromRGB(196, 188, 162), Enum.Material.Sand, "Shallows")
+    shallows.CanCollide = false
+
+    local flats = disc(world, Vector3.new(0, -1.6, 0), Config.SHALLOWS_INNER, 1.4,
+        Color3.fromRGB(132, 148, 118), Enum.Material.Grass, "Flats")
+    flats.CanCollide = false
+
+    -- ── THE VAULT ──────────────────────────────────────────────────────────
+    -- Raised, central, and visible from the whole island on purpose: a player
+    -- must always be able to see where their mass is safe, and everyone else
+    -- must always be able to see who is running for it.
+    local vaultBase = disc(world, Vector3.new(0, Config.VAULT_HEIGHT / 2 - 1, 0),
+        Config.VAULT_RADIUS + 10, Config.VAULT_HEIGHT + 2,
+        Color3.fromRGB(118, 112, 104), Enum.Material.Concrete, "VaultBase")
+    vaultBase.Name = "VaultBase"
+
+    local dish = disc(world, Vector3.new(0, Config.VAULT_HEIGHT, 0), Config.VAULT_RADIUS, 1.6,
+        Color3.fromRGB(176, 158, 116), Enum.Material.Foil, "VaultDish")
+    local vaultTag = Instance.new("StringValue")
+    vaultTag.Name = "VaultMarker"
+    vaultTag.Parent = dish
+
+    -- Four ramps, one per approach. A heavy blob cannot climb a step, and the
+    -- Vault has to be reachable at exactly the moment you are heaviest.
+    for i = 0, 3 do
+        local a = math.rad(i * 90 + 45)
+        local dir = Vector3.new(math.cos(a), 0, math.sin(a))
+        ramp(world, dir * (Config.VAULT_RADIUS + 24) + Vector3.new(0, Config.VAULT_HEIGHT / 2 - 1, 0),
+            Vector3.new(34, Config.VAULT_HEIGHT + 2, 34), math.deg(a) + 90,
+            Color3.fromRGB(128, 122, 112))
     end
 
-    -- ── THE GROUND ─────────────────────────────────────────────────────────
-    -- One continuous plane under everything reachable. The zone rewrite
-    -- replaced the old world plane with separate discs, which left the map as
-    -- islands floating in open sky — you could roll three steps off a pad and
-    -- fall out of the world.
-    --
-    -- The Deep is deliberately NOT on this plane: it sits lower and beyond the
-    -- southern edge, across a gap that must be dashed. That gap is the only
-    -- hole in the world, and it is there on purpose.
-    local ground = part({
-        Name = "Ground",
-        Size = Vector3.new(2400, 14, 1150),
-        Position = Vector3.new(0, -7, 120),
-        Color = Color3.fromRGB(138, 152, 124),
-        Material = Enum.Material.Grass,
-    })
-    ground.Parent = world
+    signpost(world, Vector3.new(0, Config.VAULT_HEIGHT, -(Config.VAULT_RADIUS + 18)),
+        "🏦", "THE VAULT", "roll in to bank", Color3.fromRGB(198, 174, 118))
 
-    -- A soft lip so the southern edge reads as an edge before you go over it.
-    local lip = part({
-        Name = "SouthLip",
-        Size = Vector3.new(2400, 3, 6),
-        Position = Vector3.new(0, 1, -452),
-        Color = Color3.fromRGB(166, 154, 128),
-        Material = Enum.Material.Slate,
-    })
-    lip.Parent = world
+    -- ── THE PATCHES ────────────────────────────────────────────────────────
+    patch(world, Config.BIOMES[1], Color3.fromRGB(150, 168, 176), Enum.Material.Ice)
+    patch(world, Config.BIOMES[2], Color3.fromRGB(138, 126, 112), Enum.Material.CorrodedMetal)
 
-    -- ── HUB ────────────────────────────────────────────────────────────────
-    local hub = WorldBuilder.ZONES.HUB
-    disc(world, hub.centre + Vector3.new(0, -1, 0), hub.radius, 6,
-        Color3.fromRGB(206, 198, 180), Enum.Material.Sand, "HubFloor")
+    -- The Basin is the only patch with real elevation. It is sunken, so from
+    -- inside it you cannot see who is coming, and getting out while heavy is
+    -- genuinely slow. That is what the x1.55 pellets are paying for.
+    local basin = Config.BIOMES[3]
+    local bowl = disc(world, basin.centre, basin.radius, 1.6,
+        Color3.fromRGB(104, 118, 110), Enum.Material.Mud, "Biome_basin")
+    bowl.CustomPhysicalProperties = PhysicalProperties.new(0.7, basin.friction, 0.35, 1, 1)
+    local basinTag = Instance.new("StringValue")
+    basinTag.Name = "BiomeId"
+    basinTag.Value = basin.id
+    basinTag.Parent = bowl
 
-    -- Rim so the hub reads as a raised island rather than a paint patch.
-    for i = 1, 40 do
-        local a = (i / 40) * math.pi * 2
-        local post = part({
-            Name = "HubRim",
-            Size = Vector3.new(3, 7, 3),
-            Position = hub.centre + Vector3.new(math.cos(a) * hub.radius, 3, math.sin(a) * hub.radius),
-            Color = Color3.fromRGB(150, 162, 168),
-            Material = Enum.Material.SmoothPlastic,
-            Transparency = 0.25,
-            CanCollide = false,
-        })
-        post.Parent = world
+    for i = 0, 11 do
+        local a = math.rad(i * 30)
+        -- One gap in the wall, at the north side: a basin you cannot leave is
+        -- a trap, and a trap is not a risk-reward decision.
+        if i ~= 0 and i ~= 11 then
+            local w = part({
+                Name = "BasinWall",
+                Size = Vector3.new(24, 12, 8),
+                CFrame = CFrame.new(basin.centre + Vector3.new(
+                    math.cos(a) * (basin.radius + 2), 4.5, math.sin(a) * (basin.radius + 2)))
+                    * CFrame.Angles(0, -a, 0),
+                Color = Color3.fromRGB(114, 108, 96),
+                Material = Enum.Material.Rock,
+            })
+            w.Parent = world
+        end
+    end
+    ramp(world, basin.centre + Vector3.new(0, 0, -(basin.radius + 16)),
+        Vector3.new(36, 11, 34), 180, Color3.fromRGB(122, 116, 104))
+
+    for _, b in ipairs(Config.BIOMES) do
+        signpost(world, b.centre + Vector3.new(0, 0, b.radius + 12),
+            b.id == "slick" and "🧊" or b.id == "scrap" and "🔩" or "🕳️",
+            b.name, ("pellets x%.2f"):format(b.pelletMult),
+            Color3.fromRGB(158, 166, 172))
     end
 
-    local booth = part({
-        Name = "TradeBooth",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(1.6, Config.TRADE_RANGE * 2, Config.TRADE_RANGE * 2),
-        CFrame = CFrame.new(hub.centre + Vector3.new(0, 2.4, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(198, 174, 118),
-        Material = Enum.Material.SmoothPlastic,
-        Transparency = 0.55,
-        CanCollide = false,
-    })
-    booth.Parent = world
-    signpost(world, hub.centre + Vector3.new(0, 3, -34), "🤝", "TRADE RING",
-        "roll in here with a friend", Color3.fromRGB(198, 174, 118))
-
-    signpost(world, hub.centre + Vector3.new(-64, 3, 20), "🍪", "SNACK STAND",
-        "spend 💧 on food", Color3.fromRGB(190, 158, 120))
-    signpost(world, hub.centre + Vector3.new(64, 3, 20), "🥚", "HATCHERY",
-        "new Goobs", Color3.fromRGB(150, 176, 190))
-
-    -- Leaderboard pillar.
-    local pillar = part({
-        Name = "Leaderboard",
-        Size = Vector3.new(18, 34, 4),
-        Position = hub.centre + Vector3.new(0, 17, -96),
-        Color = Color3.fromRGB(58, 60, 64),
-        Material = Enum.Material.Metal,
-    })
-    pillar.Parent = world
-
-    local surface = Instance.new("SurfaceGui")
-    surface.Name = "Board"
-    surface.Face = Enum.NormalId.Front
-    surface.CanvasSize = Vector2.new(560, 1000)
-    surface.Parent = pillar
-
-    local list = Instance.new("TextLabel")
-    list.Name = "Entries"
-    list.Size = UDim2.fromScale(1, 1)
-    list.BackgroundTransparency = 1
-    list.Font = Enum.Font.FredokaOne
-    list.TextColor3 = Color3.new(1, 1, 1)
-    list.TextXAlignment = Enum.TextXAlignment.Left
-    list.TextYAlignment = Enum.TextYAlignment.Top
-    list.TextSize = 34
-    list.Text = "🏆 BIGGEST GOOBS\n\nloading…"
-    list.Parent = surface
-
-    -- Ascension altar: the terminus. Deliberately the tallest thing on the hub.
-    local altar = part({
-        Name = "AscensionAltar",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(4, 40, 40),
-        CFrame = CFrame.new(hub.centre + Vector3.new(0, 3, 96)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(226, 216, 186),
-        Material = Enum.Material.SmoothPlastic,
-        Transparency = 0.45,
-        CanCollide = false,
-    })
-    altar.Parent = world
-    local altarLight = Instance.new("PointLight")
-    altarLight.Brightness = 2
-    altarLight.Range = 70
-    altarLight.Color = Color3.fromRGB(224, 214, 184)
-    altarLight.Parent = altar
-    signpost(world, hub.centre + Vector3.new(0, 3, 124), "👑", "ASCEND",
-        "Colossal Goobs only", Color3.fromRGB(202, 190, 150))
-
-    -- Home pads: where your OTHER Goobs sit on display now that the active one
-    -- is your body.
-    local count = Config.PLOT_COUNT
-    for i = 1, count do
-        local angle = (i - 1) / count * math.pi * 2
-        local centre = hub.centre + Vector3.new(math.cos(angle) * 132, 1, math.sin(angle) * 132)
-        local pad = part({
-            Name = "Plot" .. i,
-            Shape = Enum.PartType.Cylinder,
-            Size = Vector3.new(2, 40, 40),
-            CFrame = CFrame.new(centre) * CFrame.Angles(0, 0, math.rad(90)),
-            Color = Color3.fromRGB(190, 182, 168),
-            Material = Enum.Material.Slate,
-        })
-        pad.Parent = world
-
-        local sign = part({
-            Name = "Sign", Size = Vector3.new(1, 1, 1),
-            Position = centre + Vector3.new(0, 9, 0), Transparency = 1, CanCollide = false,
-        })
-        sign.Parent = pad
-        local gui = Instance.new("BillboardGui")
-        gui.Name = "PlotLabel"
-        gui.Size = UDim2.fromScale(14, 3.4)
-        gui.MaxDistance = 300
-        gui.Parent = sign
-        local tl = Instance.new("TextLabel")
-        tl.Size = UDim2.fromScale(1, 1)
-        tl.BackgroundTransparency = 1
-        tl.Font = Enum.Font.FredokaOne
-        tl.TextScaled = true
-        tl.TextColor3 = Color3.new(1, 1, 1)
-        tl.TextStrokeTransparency = 0.3
-        tl.Text = "OPEN PAD"
-        tl.Parent = gui
-
-        table.insert(WorldBuilder.plots, { index = i, center = centre, owner = nil })
+    -- Scrapyard furniture: cover, ramps, and things to break line of sight.
+    -- Hiding has to be possible or the smallest blob on the island has no
+    -- play except running in a straight line.
+    local scrap = Config.BIOMES[2]
+    for i = 0, 7 do
+        local a = math.rad(i * 45 + 12)
+        local r = scrap.radius * (0.35 + (i % 3) * 0.2)
+        local pos = scrap.centre + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+        if i % 2 == 0 then
+            local block = part({
+                Name = "Scrap",
+                Size = Vector3.new(16 + i, 10 + (i % 3) * 6, 12 + (i % 4) * 4),
+                CFrame = CFrame.new(pos + Vector3.new(0, 5, 0)) * CFrame.Angles(0, a, 0),
+                Color = Color3.fromRGB(120, 112, 104),
+                Material = Enum.Material.CorrodedMetal,
+            })
+            block.Parent = world
+        else
+            ramp(world, pos + Vector3.new(0, 3, 0), Vector3.new(20, 7, 26),
+                math.deg(a), Color3.fromRGB(132, 124, 112))
+        end
     end
 
-    -- ── SCRAPYARD: ramps, the learning zone ────────────────────────────────
-    local sy = WorldBuilder.ZONES.SCRAPYARD
-    disc(world, sy.centre + Vector3.new(0, -1, 0), sy.radius, 6,
-        Color3.fromRGB(146, 138, 124), Enum.Material.Ground, "ScrapyardFloor")
-    signpost(world, sy.centre + Vector3.new(-210, 3, 0), "🔧", "SCRAPYARD",
-        "ramps · common junk", Color3.fromRGB(180, 148, 116))
+    -- ── THE SHACK ──────────────────────────────────────────────────────────
+    buildShack(world)
 
-    for i = 1, 7 do
-        local a = (i / 7) * math.pi * 2
-        ramp(world, sy.centre + Vector3.new(math.cos(a) * 120, 7, math.sin(a) * 120),
-            Vector3.new(30, 14, 58), math.deg(a) + 90, Color3.fromRGB(148, 116, 100))
-    end
-    -- A half-pipe to bounce between.
-    for _, sx in ipairs({ -1, 1 }) do
-        ramp(world, sy.centre + Vector3.new(sx * 56, 11, -40),
-            Vector3.new(70, 22, 40), sx > 0 and 90 or 270, Color3.fromRGB(128, 128, 128))
+    -- Display pads beside the Shack. These are what is left of the old plot
+    -- system: a place to show a Goob you are proud of, rather than eight pads
+    -- that were the entire game.
+    WorldBuilder.plots = {}
+    for i = 1, Config.PLOT_COUNT do
+        local a = math.rad(-90 + (i - 1) * (180 / math.max(1, Config.PLOT_COUNT - 1)))
+        local centre = Config.SHACK_POSITION + Vector3.new(math.cos(a) * 62, 1, math.sin(a) * 62)
+        local pad = disc(world, centre, 11, 2,
+            Color3.fromRGB(142, 136, 124), Enum.Material.Concrete, "Plot" .. i)
+        pad.Name = "Plot" .. i
+        table.insert(WorldBuilder.plots, { index = i, center = centre + Vector3.new(0, 1, 0), owner = nil })
     end
 
-    -- ── SLICKFIELD: low friction ───────────────────────────────────────────
-    local sf = WorldBuilder.ZONES.SLICKFIELD
-    local ice = disc(world, sf.centre + Vector3.new(0, -1, 0), sf.radius, 6,
-        Color3.fromRGB(188, 202, 206), Enum.Material.Ice, "SlickfieldFloor")
-    -- Almost no friction: this is the zone's entire identity.
-    ice.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.02, 0.3, 1, 1)
-    signpost(world, sf.centre + Vector3.new(210, 3, 0), "🧊", "SLICKFIELD",
-        "no grip · go fast", Color3.fromRGB(160, 180, 190))
+    -- ── THE STANDOFF RING ──────────────────────────────────────────────────
+    -- Off the island, across a causeway, and raised. A 1v1 that anyone can
+    -- roll into is not a 1v1.
+    local ringFloor = disc(world, Pit.CENTRE - Vector3.new(0, 4, 0), Pit.START_RADIUS + 10, 8,
+        Color3.fromRGB(126, 118, 108), Enum.Material.Concrete, "PitFloor")
+    ringFloor.Name = "PitFloor"
 
-    for i = 1, 5 do
-        local a = (i / 5) * math.pi * 2
-        local pillar2 = part({
-            Name = "IcePillar",
-            Size = Vector3.new(16, 46, 16),
-            Position = sf.centre + Vector3.new(math.cos(a) * 130, 22, math.sin(a) * 130),
-            Color = Color3.fromRGB(198, 208, 210),
-            Material = Enum.Material.Ice,
-            Transparency = 0.25,
-        })
-        pillar2.Parent = world
-    end
-
-    -- ── THE DEEP: gated by a dash ──────────────────────────────────────────
-    local dp = WorldBuilder.ZONES.DEEP
-    disc(world, dp.centre + Vector3.new(0, -1, 0), dp.radius, 6,
-        Color3.fromRGB(74, 70, 82), Enum.Material.Slate, "DeepFloor")
-    signpost(world, dp.centre + Vector3.new(0, 3, 190), "🌑", "THE DEEP",
-        "rarest spawns · dash to cross", Color3.fromRGB(166, 154, 180))
-
-    -- The launch ramp, then a gap. Crossing it needs a dash off the lip; that
-    -- is the moment the dash meter stops being a toy and becomes a key.
-    ramp(world, Vector3.new(20, 7, -410), Vector3.new(70, 16, 76), 0, Color3.fromRGB(126, 116, 140))
-    local landing = part({
-        Name = "DeepLanding",
-        Size = Vector3.new(110, 6, 80),
-        Position = dp.centre + Vector3.new(0, 2, 214),
-        Color = Color3.fromRGB(92, 74, 124),
-        Material = Enum.Material.Slate,
+    local causeway = part({
+        Name = "Causeway",
+        Size = Vector3.new(34, 4, 160),
+        Position = Vector3.new(
+            (Pit.CENTRE.X + 0) / 2,
+            Pit.CENTRE.Y - 6,
+            (Pit.CENTRE.Z + Config.ISLAND_RADIUS) / 2),
+        Color = Color3.fromRGB(142, 136, 124),
+        Material = Enum.Material.Concrete,
     })
-    landing.Parent = world
+    causeway.Parent = world
 
-    for i = 1, 6 do
-        local a = (i / 6) * math.pi * 2
-        local glow = part({
-            Name = "DeepGlow",
-            Shape = Enum.PartType.Ball,
-            Size = Vector3.new(9, 9, 9),
-            Position = dp.centre + Vector3.new(math.cos(a) * 150, 14, math.sin(a) * 150),
-            Color = Color3.fromRGB(168, 152, 186),
-            Material = Enum.Material.Neon,
-            CanCollide = false,
-        })
-        glow.Parent = world
-        local l = Instance.new("PointLight")
-        l.Brightness = 2
-        l.Range = 46
-        l.Color = Color3.fromRGB(168, 152, 186)
-        l.Parent = glow
+    -- The ring itself: a flat disc PitService shrinks during a match. Named
+    -- PitRing because that is the name PitService looks up; renaming the prop
+    -- without renaming the lookup is how the last map rewrite broke the Pit.
+    local ring = disc(world, Pit.CENTRE, Pit.START_RADIUS, 1.5,
+        Color3.fromRGB(178, 150, 150), Enum.Material.SmoothPlastic, "PitRing")
+    ring.Name = "PitRing"
+    ring.CanCollide = false
+
+    signpost(world, Pit.CENTRE + Vector3.new(0, -4, Pit.START_RADIUS + 24), "🥊",
+        "THE STANDOFF", "equal mass. pure steering.", Color3.fromRGB(190, 150, 150))
+
+    -- The join pad. Joining is a dock button now, so this is not the only way
+    -- in — but a physical thing you can roll onto is how a seven-year-old
+    -- discovers a mode exists, and a menu entry is not.
+    local joinPad = disc(world, Vector3.new(0, 1.4, Config.ISLAND_RADIUS - 26), 18, 2,
+        Color3.fromRGB(178, 150, 150), Enum.Material.Neon, "PitJoinPad")
+    joinPad.Name = "PitJoinPad"
+    joinPad.CanCollide = false
+
+    -- ── THE BOARDS ─────────────────────────────────────────────────────────
+    -- Both face the Vault, because the Vault is where everyone already is.
+    board(world, "Leaderboard",
+        Vector3.new(-64, 16, -(Config.VAULT_RADIUS + 30)), 12,
+        Vector2.new(48, 30), Color3.fromRGB(198, 174, 118))
+    board(world, "Archive",
+        Vector3.new(64, 16, -(Config.VAULT_RADIUS + 30)), -12,
+        Vector2.new(48, 30), Color3.fromRGB(150, 170, 186))
+
+    -- ── SPAWNS ─────────────────────────────────────────────────────────────
+    -- Spread around the Shallows ring, so a hundred players do not all appear
+    -- inside each other, and so nobody spawns in reach of a predator.
+    for i = 1, 12 do
+        local a = math.rad(i * 30)
+        local spawn = Instance.new("SpawnLocation")
+        spawn.Name = "Spawn" .. i
+        spawn.Anchored = true
+        spawn.CanCollide = false
+        spawn.Size = Vector3.new(14, 1, 14)
+        spawn.Position = Vector3.new(math.cos(a) * Config.SPAWN_RING, 1.4, math.sin(a) * Config.SPAWN_RING)
+        spawn.Color = Color3.fromRGB(186, 190, 176)
+        spawn.Material = Enum.Material.SmoothPlastic
+        spawn.Transparency = 0.75
+        spawn.Neutral = true
+        spawn.Parent = world
     end
 
-    road(hub.centre + Vector3.new(150, -1, 0), sy.centre + Vector3.new(-220, -1, 0), 60)
-    road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
-    road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -400), 60)
-
-    -- ── THE ARCHIVE ────────────────────────────────────────────────────────
-    -- A monument you roll up to and read. The whole design rests on genuine
-    -- scarcity, and until this existed a player was simply asked to take that
-    -- on faith. This is the number, worldwide, updated live.
-    local archive = part({
-        Name = "Archive",
-        Size = Vector3.new(22, 30, 4),
-        Position = hub.centre + Vector3.new(-86, 15, -70),
-        Color = Color3.fromRGB(62, 60, 66),
-        Material = Enum.Material.Marble,
-    })
-    archive.Parent = world
-
-    local archiveGui = Instance.new("SurfaceGui")
-    archiveGui.Name = "Board"
-    archiveGui.Face = Enum.NormalId.Front
-    archiveGui.CanvasSize = Vector2.new(660, 900)
-    archiveGui.Parent = archive
-
-    local archiveText = Instance.new("TextLabel")
-    archiveText.Name = "Entries"
-    archiveText.Size = UDim2.fromScale(1, 1)
-    archiveText.BackgroundTransparency = 1
-    archiveText.Font = Enum.Font.FredokaOne
-    archiveText.TextColor3 = Color3.fromRGB(226, 224, 218)
-    archiveText.TextXAlignment = Enum.TextXAlignment.Left
-    archiveText.TextYAlignment = Enum.TextYAlignment.Top
-    archiveText.TextSize = 26
-    archiveText.Text = "📜 THE ARCHIVE\n\ncounting…"
-    archiveText.Parent = archiveGui
-
-    local archiveLight = Instance.new("PointLight")
-    archiveLight.Brightness = 1.5
-    archiveLight.Range = 50
-    archiveLight.Color = Color3.fromRGB(180, 172, 190)
-    archiveLight.Parent = archive
-
-    signpost(world, hub.centre + Vector3.new(-86, 3, -44), "📜", "THE ARCHIVE",
-        "how many still exist", Color3.fromRGB(168, 158, 182))
-
-    -- ── THE SUMO PIT ───────────────────────────────────────────────────────
-    -- Raised and open-sided on purpose: the danger has to be legible from
-    -- outside, and you have to be able to SEE someone get knocked off.
-    local pitFloor = disc(world, Pit.CENTRE - Vector3.new(0, 4, 0), Pit.START_RADIUS + 8, 8,
-        Color3.fromRGB(74, 58, 58), Enum.Material.Slate, "PitFloor")
-    pitFloor.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.4, 1, 1)
-
-    -- The ring itself is resized live by PitService as the arena closes.
-    local ring = part({
-        Name = "PitRing",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(1.5, Pit.START_RADIUS * 2, Pit.START_RADIUS * 2),
-        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, 0.6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(184, 118, 112),
-        Material = Enum.Material.Neon,
-        Transparency = 0.6,
-        CanCollide = false,
-    })
-    ring.Parent = world
-
-    -- Stands, so a crowd has somewhere to watch from.
-    for i = 1, 24 do
-        local a = (i / 24) * math.pi * 2
-        local r = Pit.START_RADIUS + 34
-        local seat = part({
-            Name = "PitStand",
-            Size = Vector3.new(14, 10, 14),
-            Position = Pit.CENTRE + Vector3.new(math.cos(a) * r, -2, math.sin(a) * r),
-            Color = Color3.fromRGB(96, 74, 74),
-            Material = Enum.Material.WoodPlanks,
-        })
-        seat.Parent = world
-    end
-
-    signpost(world, Pit.CENTRE + Vector3.new(0, -4, Pit.START_RADIUS + 60), "🥊", "SUMO PIT",
-        "stake 💧 · last one in wins", Color3.fromRGB(184, 128, 122))
-
-    -- The join pad. Rolling onto it enters the queue; nothing drags you here.
-    local joinPad = part({
-        Name = "PitJoinPad",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(2, 34, 34),
-        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, -3, Pit.START_RADIUS + 40))
-            * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(146, 178, 140),
-        Material = Enum.Material.SmoothPlastic,
-        Transparency = 0.5,
-        CanCollide = false,
-    })
-    joinPad.Parent = world
-
-    road(hub.centre + Vector3.new(0, -1, 150), Pit.CENTRE + Vector3.new(0, -4, -Pit.START_RADIUS - 50), 60)
-
-    local spawn = Instance.new("SpawnLocation")
-    spawn.Name = "HubSpawn"
-    spawn.Size = Vector3.new(20, 1, 20)
-    spawn.Position = hub.centre + Vector3.new(0, 4, 40)
-    spawn.Anchored = true
-    spawn.CanCollide = false
-    spawn.Color = Color3.fromRGB(255, 255, 255)
-    spawn.Material = Enum.Material.SmoothPlastic
-    spawn.Transparency = 0.7
-    spawn.Neutral = true
-    spawn.Parent = world
+    -- A folder for everything the arena spawns at runtime, so pellets and
+    -- lumps never collide with the static map in a name lookup.
+    local live = Instance.new("Folder")
+    live.Name = "Arena"
+    live.Parent = world
 
     return world
+end
+
+-- ── Queries ────────────────────────────────────────────────────────────────
+
+function WorldBuilder.vaultPosition(): Vector3
+    return Vector3.new(0, Config.VAULT_HEIGHT, 0)
+end
+
+-- Which ring a point is in. Used by the arena to decide whether PvP applies,
+-- which is the single most important question on the island.
+function WorldBuilder.ringAt(position: Vector3): string
+    local r = Vector3.new(position.X, 0, position.Z).Magnitude
+    if r <= Config.VAULT_RADIUS then
+        return "VAULT"
+    elseif r <= Config.SHALLOWS_INNER then
+        return "FLATS"
+    end
+    return "SHALLOWS"
+end
+
+function WorldBuilder.isSafe(position: Vector3): boolean
+    return WorldBuilder.ringAt(position) == "SHALLOWS"
+end
+
+-- Which biome a point is over, or nil for open Flats. Returns the whole entry
+-- so callers read `.pelletMult` instead of re-deriving it from an id.
+function WorldBuilder.biomeAt(position: Vector3)
+    for _, b in ipairs(Config.BIOMES) do
+        local flat = Vector3.new(position.X - b.centre.X, 0, position.Z - b.centre.Z)
+        if flat.Magnitude <= b.radius then
+            return b
+        end
+    end
+    return nil
+end
+
+-- A point on the island suitable for dropping something loose. Uniform by
+-- AREA, not by radius: sampling radius uniformly piles everything into the
+-- middle, which would put most of the island's food inside the Vault.
+function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: number?): Vector3
+    local lo = innerR or (Config.VAULT_RADIUS + 14)
+    local hi = outerR or (Config.ISLAND_RADIUS - 10)
+    local r = math.sqrt(rng:NextNumber(lo * lo, hi * hi))
+    local a = rng:NextNumber(0, math.pi * 2)
+    local pos = Vector3.new(math.cos(a) * r, 2, math.sin(a) * r)
+    local b = WorldBuilder.biomeAt(pos)
+    if b then
+        pos = Vector3.new(pos.X, b.centre.Y + 2, pos.Z)
+    end
+    return pos
+end
+
+function WorldBuilder.arenaFolder(): Folder
+    local world = Workspace:FindFirstChild("GoobWorld")
+    return (world and world:FindFirstChild("Arena")) :: Folder
 end
 
 function WorldBuilder.claimPlot(player: Player)
     for _, plot in ipairs(WorldBuilder.plots) do
         if plot.owner == nil then
             plot.owner = player
-            local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
-            local sign = pad and pad:FindFirstChild("Sign")
-            local gui = sign and sign:FindFirstChild("PlotLabel")
-            if gui then (gui :: any).TextLabel.Text = player.DisplayName .. "'s PAD" end
             return plot
         end
     end
@@ -583,10 +650,6 @@ function WorldBuilder.releasePlot(player: Player)
     for _, plot in ipairs(WorldBuilder.plots) do
         if plot.owner == player then
             plot.owner = nil
-            local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
-            local sign = pad and pad:FindFirstChild("Sign")
-            local gui = sign and sign:FindFirstChild("PlotLabel")
-            if gui then (gui :: any).TextLabel.Text = "OPEN PAD" end
             return
         end
     end
@@ -599,9 +662,10 @@ function WorldBuilder.plotFor(player: Player)
     return nil
 end
 
--- Where the ascension altar is, for the proximity check.
+-- Ascension happens at the Vault now. There is one landmark in this game and
+-- everything ceremonial belongs on it.
 function WorldBuilder.altarPosition(): Vector3
-    return WorldBuilder.ZONES.HUB.centre + Vector3.new(0, 3, 96)
+    return WorldBuilder.vaultPosition()
 end
 
 return WorldBuilder

@@ -63,9 +63,41 @@ if world then
     end
 end
 check("8 plots built", plotCount == 8, "got " .. tostring(plotCount))
-check("trade booth exists", world and world:FindFirstChild("TradeBooth") ~= nil)
 check("leaderboard exists", world and world:FindFirstChild("Leaderboard") ~= nil)
-check("hub spawn exists", world and world:FindFirstChild("HubSpawn") ~= nil)
+check("archive exists", world and world:FindFirstChild("Archive") ~= nil)
+
+-- The island. Every one of these is something another file looks up by name,
+-- so a rename that is not matched everywhere shows up here rather than as a
+-- WaitForChild that hangs forever on a live server.
+check("the island exists", world and world:FindFirstChild("Island") ~= nil)
+check("there is a sea under it, so nobody falls out of the world",
+    world and world:FindFirstChild("Sea") ~= nil)
+check("the vault dish exists", world and world:FindFirstChild("VaultDish") ~= nil)
+check("the standoff ring is named what PitService looks up",
+    world and world:FindFirstChild("PitRing") ~= nil)
+check("the shack is built", world and world:FindFirstChild("Shack") ~= nil)
+check("the arena folder exists for runtime spawns",
+    world and world:FindFirstChild("Arena") ~= nil)
+
+local biomes = 0
+for _, d in ipairs(world and world:GetDescendants() or {}) do
+    if d.Name == "BiomeId" then biomes += 1 end
+end
+check("all three biome patches are tagged", biomes == 3, "got " .. tostring(biomes))
+
+local spawns = 0
+for _, d in ipairs(world and world:GetChildren() or {}) do
+    if d.ClassName == "SpawnLocation" then spawns += 1 end
+end
+check("spawns ring the shallows", spawns >= 8, "got " .. tostring(spawns))
+
+-- Every board must carry its text label at exactly Board -> Entries. Burying
+-- it one level deeper is a silent hang, not an error, so it gets its own check.
+for _, name in ipairs({ "Leaderboard", "Archive" }) do
+    local slab = world and world:FindFirstChild(name)
+    local b = slab and slab:FindFirstChild("Board")
+    check(name .. " exposes Board -> Entries", b and b:FindFirstChild("Entries") ~= nil)
+end
 
 emit("")
 emit("══ PLAYER JOINS ══")

@@ -112,7 +112,7 @@ local hoarder = svc.addPlayer("Hoarder", 909, V3.new(0, 5, 40))
 tick(4)
 local before = tostring(entries.Text)
 
-local altar = V3.new(0, 3, 96)
+local altar = V3.new(0, 7, 0)      -- the Vault: one landmark, everything ceremonial on it
 svc.movePlayer(hoarder, altar)
 local hball = svc.Workspace:FindFirstChild("GoobBall_909")
 if hball then hball.Position = altar end
