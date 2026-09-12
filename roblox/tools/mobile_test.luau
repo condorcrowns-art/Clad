@@ -350,6 +350,58 @@ for _, dev in ipairs(DEVICES) do
         badClosed[1] and ("%d overflow; worst: %s by %dpx")
             :format(#badClosed, badClosed[1].box.name, math.floor(badClosed[1].over)) or "")
 
+    -- 7. EVERY TAB, not just whichever one happened to be open last.
+    --
+    -- openEverything() clicks all eight dock buttons in order, and each one
+    -- closes the last — so the geometry that actually got measured above was
+    -- one tab's, and the other seven were built and thrown away unmeasured.
+    -- Any of them could have been the one that overflows.
+    local tabs = {}
+    for _, h in ipairs(huds) do
+        for _, d in ipairs(h:GetDescendants()) do
+            if d:IsA("TextButton") and tostring(d.Name):find("^Dock_") then
+                table.insert(tabs, d)
+            end
+        end
+    end
+    table.sort(tabs, function(x, y) return x.Name < y.Name end)
+
+    local tabTrouble = {}
+    for _, tab in ipairs(tabs) do
+        closeEverything()
+        tick(0.5)
+        tab.Activated:Fire()
+        tick(0.5)
+
+        local tb = {}
+        for _, h in ipairs(huds) do
+            for _, b in ipairs(G.resolve(h, dev.w, dev.h, svc.topInset)) do
+                table.insert(tb, b)
+            end
+        end
+
+        -- Overflow, ignoring scroller contents, which are meant to extend.
+        for _, entry in ipairs(G.offscreen(tb, dev.w, dev.h, true)) do
+            if not inScroller(entry.box.inst) then
+                table.insert(tabTrouble, ("%s: %s off by %d")
+                    :format(tab.Name, entry.box.name, math.floor(entry.over)))
+            end
+        end
+
+        -- Tap targets inside the panel have to be pressable too.
+        if dev.touch then
+            for _, b in ipairs(tb) do
+                if b.visible and b.class == "TextButton" and b.w > 0 and b.h > 0
+                    and (b.h < 34 or b.w < 34) then
+                    table.insert(tabTrouble, ("%s: %s is %dx%d")
+                        :format(tab.Name, b.name, math.floor(b.w), math.floor(b.h)))
+                end
+            end
+        end
+    end
+    check("every dock tab fits and stays tappable", #tabTrouble == 0,
+        table.concat(tabTrouble, " | "):sub(1, 200))
+
     -- Re-open for the next device, so the loop keeps testing the open state.
     openEverything()
 end

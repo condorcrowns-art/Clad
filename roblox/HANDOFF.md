@@ -484,6 +484,32 @@ exists — verify in Studio once.
 distinct stings: twelve is noise on a phone speaker, and players read the
 SHAPE of a sound long before they learn which of twelve it was.
 
+## THE UI IS ONLY AS LIVE AS ITS FEED
+
+Two separate failures, both of which drew a perfect screen that did nothing:
+
+1. `snapshot()` did not include the arena fields.
+2. `ArenaHud.setProfile` was never called at all.
+
+Either one alone makes every crate, trinket, power, skin and Goob render
+locked or absent, with no error anywhere. `client_test.luau` now checks BOTH:
+a required-field list on the snapshot, and that every dock tab renders
+non-empty content with a real Glob and season readout. A geometry test cannot
+see this — an empty panel fits the screen beautifully.
+
+## THE SAFE ZONE IS ONE FUNCTION
+
+`protected(player, run, now)` in ArenaService is the single answer to "can this
+player be touched". It used to live inline inside the eating check only, so
+SIPHON, HOOK and SLAM all reached into the no-PvP Shallows and through the
+post-respawn grace. Every power that affects another player goes through it.
+
+## LUMPS MUST NOT BLOCK THE VAULT
+
+`congeal()` pushes any lump within `VAULT_RADIUS + 34 + radius` outward. Lumps
+are solid terrain lasting most of an hour and the island keeps up to 300, so
+one on the dish would wall off the only place mass can be made safe.
+
 ## THE SNAPSHOT CONTRACT
 
 Every field the client UI reads off the profile must be in the table returned

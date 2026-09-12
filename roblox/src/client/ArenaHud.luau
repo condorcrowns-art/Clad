@@ -35,7 +35,17 @@ local Powers = require(Shared.Powers)
 local Trinkets = require(Shared.Trinkets)
 local Crates = require(Shared.Crates)
 local Cosmetics = require(Shared.Cosmetics)
-local GoobMath = require(Shared.GoobMath)
+
+-- NOTE: no GoobMath here, deliberately.
+--
+-- The client never sees a raw Goob. What arrives over StateSync is a
+-- SERIALISED one — nickname, mass, power, ageTier, ageText and so on, already
+-- computed server-side — and it carries no bornAt, no inheritedAge and no
+-- lineage table of the shape GoobMath expects. Calling GoobMath.ageSeconds()
+-- on it subtracts nil and takes the whole panel down with it, which is exactly
+-- what this file used to do. If a number is needed here, it is sent; if it is
+-- not sent, it gets added to the snapshot rather than recomputed from parts
+-- the client does not have.
 
 -- Where a locked item comes from. A padlock with no explanation is the most
 -- annoying thing a wardrobe can show you.
@@ -477,18 +487,19 @@ local function renderInventory()
     sum.Parent = header
 
     for i, goob in ipairs(goobs) do
-        local tier = GoobMath.ageTier(goob)
+        local tint = goob.ageColor or Theme.TEXT_DIM
         local c = card(sheetBody, i, 74)
-        Theme.stroke(c, tier.color, 2)
+        Theme.stroke(c, tint, 2)
 
         local dot = Instance.new("Frame")
+        dot.Name = "GoobDot"
         dot.Size = UDim2.fromOffset(44, 44)
         dot.Position = UDim2.fromOffset(10, 14)
         dot.BackgroundColor3 = Color3.fromHSV(goob.hue or 0.5, 0.42, 0.8)
         dot.BorderSizePixel = 0
         dot.Parent = c
         Theme.corner(dot, 999)
-        Theme.stroke(dot, tier.color, 2)
+        Theme.stroke(dot, tint, 2)
 
         local name = Theme.label({
             Position = UDim2.fromOffset(64, 8), Size = UDim2.new(1, -190, 0, 24),
@@ -501,16 +512,15 @@ local function renderInventory()
         local stats = Theme.label({
             Position = UDim2.fromOffset(64, 32), Size = UDim2.new(1, -190, 0, 20),
             Text = ("%s %s  ·  ⚡%s  ·  x%.2f power"):format(
-                tier.emoji, tier.name, Format.short(GoobMath.power(goob)), tier.mult),
-            TextSize = 14, TextColor3 = tier.color,
+                goob.ageEmoji or "", goob.ageTier or "?",
+                goob.powerText or "0", goob.ageMult or 1),
+            TextSize = 14, TextColor3 = tint,
         })
         stats.Parent = c
 
         local age = Theme.label({
             Position = UDim2.fromOffset(64, 52), Size = UDim2.new(1, -190, 0, 18),
-            Text = ("%s old  ·  gen %d"):format(
-                Format.duration(GoobMath.ageSeconds(goob)),
-                #(goob.lineage or {}) + 1),
+            Text = ("%s old  ·  gen %d"):format(goob.ageText or "new", goob.generation or 1),
             TextSize = 12, TextColor3 = Theme.TEXT_DIM,
         })
         age.Parent = c
@@ -547,9 +557,9 @@ local function renderTrade()
     h.Parent = head
 
     for i, goob in ipairs(goobs) do
-        local tier = GoobMath.ageTier(goob)
+        local tint = goob.ageColor or Theme.TEXT_DIM
         local c = card(sheetBody, i + 1, 56)
-        Theme.stroke(c, tier.color, 2)
+        Theme.stroke(c, tint, 2)
         local name = Theme.label({
             Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 24),
             Text = tostring(goob.nickname), TextSize = 18, TextColor3 = Theme.TEXT,
@@ -557,9 +567,9 @@ local function renderTrade()
         name.Parent = c
         local sub = Theme.label({
             Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 20),
-            Text = ("%s %s  ·  ⚡%s"):format(tier.emoji, tier.name,
-                Format.short(GoobMath.power(goob))),
-            TextSize = 13, TextColor3 = tier.color,
+            Text = ("%s %s  ·  ⚡%s"):format(goob.ageEmoji or "",
+                goob.ageTier or "?", goob.powerText or "0"),
+            TextSize = 13, TextColor3 = tint,
         })
         sub.Parent = c
     end
@@ -907,7 +917,7 @@ function ArenaHud.setProfile(snap: any)
     profile = snap
     if not gui then return end
     globLabel.Text = "💧" .. Format.short(snap.glob or 0)
-    local tier = snap.season and snap.season.tier or 0
+    local tier = (snap.season and snap.season.tier) or 0
     seasonLabel.Text = ("BETA SEASON · %d"):format(tier)
     ArenaHud.refreshSheet()
 end
@@ -1042,6 +1052,13 @@ function ArenaHud.runEnded(s: any)
             ArenaHud.setArena(latest)
         end
     end)
+end
+
+-- Handed to Hud so the tutorial coach can pulse it. The coach pointing at the
+-- button beats describing where it is, especially for a player who cannot read
+-- quickly yet — which is most of this game's audience.
+function ArenaHud.powerButton(): TextButton?
+    return powerBtn
 end
 
 function ArenaHud.isSheetOpen(): boolean

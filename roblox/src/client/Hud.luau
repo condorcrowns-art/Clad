@@ -823,12 +823,20 @@ function Hud.update(snap: any)
             -- Pulse whichever control the step is asking for. Pointing at the
             -- button beats describing where it is, especially for a player who
             -- cannot read quickly yet.
-            if tut.target == "snack" then
-                pulseTarget = snackButtons["snack"]
-            elseif tut.target == "drawer" then
-                pulseTarget = drawerOpen and eggButton or openButton
-            else
-                pulseTarget = nil
+            -- Resolved through a registry rather than a hardcoded if-chain.
+            -- The chain knew about exactly two controls, "snack" and
+            -- "drawer" — both of which the arena rework removed from the
+            -- screen — so the one step that genuinely needs a pointer, "press
+            -- your power button", had nothing to point at. A registry lets
+            -- ArenaHud hand over its own controls without Hud having to know
+            -- they exist.
+            pulseTarget = Hud.targets[tut.target or ""]
+            if not pulseTarget then
+                if tut.target == "snack" then
+                    pulseTarget = snackButtons["snack"]
+                elseif tut.target == "drawer" then
+                    pulseTarget = drawerOpen and eggButton or openButton
+                end
             end
         else
             coach.Visible = false
@@ -860,6 +868,13 @@ Hud.onSetActive = function(_: string) end
 -- toasts, the Goob drawer, the coach — and stops drawing a second stat panel
 -- on top of the first one. This is the single switch that turns "everything
 -- gets in the way of everything" into one screen with one owner per region.
+-- Controls other modules own, which the tutorial coach may point at.
+Hud.targets = {} :: { [string]: GuiObject }
+
+function Hud.registerTarget(name: string, control: GuiObject?)
+    Hud.targets[name] = control
+end
+
 Hud.arenaMode = false
 
 -- Opened and closed from the dock. Exposed rather than left to the old toggle

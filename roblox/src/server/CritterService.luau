@@ -24,7 +24,15 @@ local aliveCount = 0
 local rng = Random.new(os.clock() * 1e6)
 local folder: Folder
 
-local ROAM_RADIUS = 520
+-- DERIVED FROM THE ISLAND, not a number of its own.
+--
+-- This was a flat 520 while the island was 300 studs and then 480, so critters
+-- spawned out to 640 and up to a third of them landed in the sea — visible,
+-- glowing, permanently unreachable, and a standing invitation to roll off the
+-- edge chasing one. Tying it to the island means a future resize takes the
+-- critters with it instead of leaving them behind, which is the same mistake
+-- the pellet count used to make.
+local ROAM_RADIUS = Config.ISLAND_RADIUS - 60
 
 local function spawnCritter()
     if aliveCount >= Config.CRITTER_MAX_ALIVE then return end
@@ -44,7 +52,9 @@ local function spawnCritter()
     elseif item.shape == "Cylinder" then p.Shape = Enum.PartType.Cylinder end
 
     local angle = rng:NextNumber() * math.pi * 2
-    local dist = 120 + rng:NextNumber() * ROAM_RADIUS
+    -- Inside the shoreline, outside the Vault approach.
+    local dist = Config.VAULT_RADIUS + 40
+        + rng:NextNumber() * (ROAM_RADIUS - Config.VAULT_RADIUS - 40)
     p.Position = Vector3.new(math.cos(angle) * dist, 4 + rng:NextNumber() * 3, math.sin(angle) * dist)
 
     -- Rarer things are visibly special from a distance: a coloured glow and a
@@ -169,7 +179,7 @@ function CritterService.start()
                 despawn(p)
             else
                 local pos = p.Position + entry.vel * dt
-                if math.sqrt(pos.X ^ 2 + pos.Z ^ 2) > ROAM_RADIUS + 140 then
+                if math.sqrt(pos.X ^ 2 + pos.Z ^ 2) > Config.ISLAND_RADIUS - 10 then
                     entry.vel = -entry.vel
                     pos = p.Position + entry.vel * dt
                 end

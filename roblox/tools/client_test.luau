@@ -203,4 +203,63 @@ end
 check("every field the UI reads is present in the snapshot",
     #absent == 0, table.concat(absent, ", "))
 
+emit("")
+emit("══ EVERY DOCK TAB ACTUALLY HAS CONTENT ══")
+-- THE BUG THIS EXISTS FOR: ArenaHud.setProfile was never called, so the sheet
+-- rendered against a permanently nil profile. Nothing errored. Glob read 0,
+-- the season tier read 0, and every crate, trinket, power, skin and Goob came
+-- out locked or absent — a UI that draws perfectly and is entirely inert.
+--
+-- Geometry tests cannot see this: an empty panel fits the screen beautifully.
+-- The only thing that catches it is asking whether anything is IN there.
+local arenaGui = alice:FindFirstChild("PlayerGui"):FindFirstChild("ArenaHud")
+check("the arena HUD exists", arenaGui ~= nil)
+
+if arenaGui then
+    local sheet = arenaGui:FindFirstChild("Sheet")
+    local body = sheet and sheet:FindFirstChild("Body")
+    check("the sheet has a body to fill", body ~= nil)
+
+    local tabs = {}
+    for _, d in ipairs(arenaGui:GetDescendants()) do
+        if d:IsA("TextButton") and tostring(d.Name):find("^Dock_") then
+            table.insert(tabs, d)
+        end
+    end
+    table.sort(tabs, function(x, y) return x.Name < y.Name end)
+    check("the dock has every tab", #tabs == 8, tostring(#tabs))
+
+    local empty = {}
+    for _, tab in ipairs(tabs) do
+        tab.Activated:Fire()
+        tick(0.4)
+        local cards = 0
+        for _, child in ipairs(body and body:GetChildren() or {}) do
+            if child:IsA("Frame") then cards += 1 end
+        end
+        -- season and trade delegate elsewhere or are text-only; the rest must
+        -- list real, per-player content.
+        if cards == 0 and tab.Name ~= "Dock_season" then
+            table.insert(empty, tab.Name)
+        end
+        tab.Activated:Fire()   -- close again
+        tick(0.2)
+    end
+    check("no tab renders empty", #empty == 0, table.concat(empty, ", "))
+
+    -- And the readouts driven straight off the profile.
+    local glob, season
+    for _, d in ipairs(arenaGui:GetDescendants()) do
+        if d:IsA("TextLabel") then
+            local t = tostring(d.Text)
+            if t:find("💧") then glob = t end
+            if t:find("BETA SEASON") then season = t end
+        end
+    end
+    check("the Glob readout shows a real balance",
+        glob ~= nil and glob ~= "💧0", tostring(glob))
+    check("the season readout shows a real tier",
+        season ~= nil and season ~= "BETA SEASON · 0", tostring(season))
+end
+
 emit(("══ %s ══"):format(fails == 0 and "ALL CLIENT CHECKS PASSED" or (fails .. " FAILURE(S)")))

@@ -175,6 +175,14 @@ _G.BOOT_CLIENT = function()
   local script = clientScript
   ${cinit.src.split('\n').join('\n  ')}
 end
+
+-- The client's own modules, for assertions that cannot be made through the
+-- rendered GUI — a registry, a cache, a flag. Same caveat as _G.SERVER: this
+-- reaches past the path a player takes, so use it to check WIRING, never to
+-- stand in for behaviour.
+_G.CLIENT = function(name)
+  return require(clientScript:FindFirstChild(name))
+end
 `;
 
 // Wrap the scenario so a runtime error carries a Luau traceback.

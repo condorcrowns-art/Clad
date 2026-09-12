@@ -55,6 +55,27 @@ check("GoobNet folder created", net ~= nil)
 check("world folder created", svc.Workspace:FindFirstChild("GoobWorld") ~= nil)
 check("critter folder created", svc.Workspace:FindFirstChild("Critters") ~= nil)
 
+-- NOTHING MAY SPAWN IN THE SEA. Critters used to roam to a flat 520 studs,
+-- written when the island was 300 — so a third of them sat glowing over open
+-- water, unreachable, inviting players to roll off the edge after one.
+do
+    local Config = _G.SHARED("Config")
+    local critters = svc.Workspace:FindFirstChild("Critters")
+    local drowned, checked = 0, 0
+    for _ = 1, 40 do
+        for _, c in ipairs(critters:GetChildren()) do
+            local flat = math.sqrt(c.Position.X ^ 2 + c.Position.Z ^ 2)
+            checked += 1
+            if flat > Config.ISLAND_RADIUS then drowned += 1 end
+        end
+        tick(2)
+    end
+    check("no critter ever spawns off the island",
+        drowned == 0, ("%d of %d sightings in the sea"):format(drowned, checked))
+    check("and some actually spawned, so that meant something", checked > 20,
+        tostring(checked))
+end
+
 local world = svc.Workspace:FindFirstChild("GoobWorld")
 local plotCount = 0
 if world then

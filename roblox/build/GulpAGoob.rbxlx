@@ -2631,6 +2631,7 @@ Tutorial.STEPS = {
     },
     {
         id = "power",
+        target = "power",
         text = "Press your power button.",
         hint = "One button, and it costs a slice of you. That slice lands on the floor as food.",
     },
@@ -4011,6 +4012,29 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- CAN THIS PLAYER BE TOUCHED BY SOMEONE ELSE'S POWER?
+--
+-- This existed only inside the eating check, which meant SIPHON, HOOK and SLAM
+-- all reached straight into the no-PvP Shallows and into the two seconds of
+-- grace a player gets after respawning. A player could be drained, yanked and
+-- blasted while standing in the one place the game promises is safe — and the
+-- promise is load-bearing, because the Shallows is where new players spawn and
+-- where the tutorial runs.
+--
+-- Every power that affects another player goes through here. BUBBLE is not
+-- included: it is a self-buff against being EATEN specifically, and a shield
+-- that also blocked a shove would make it strictly better than everything.
+local function protected(player: Player, run: Run?, now: number): boolean
+    if not run then
+        return true
+    end
+    local ball = RollService.ballFor(player)
+    if not ball or not ball.Parent then
+        return true
+    end
+    return WorldBuilder.isSafe(ball.Position) or now < run.safeUntil
+end
+
 -- How many times this player has used a power.
 --
 -- Read through deps every time rather than cached on the run. The cached copy
@@ -4126,6 +4150,18 @@ local function congeal(at: Vector3, mass: number)
     end
 
     local radius = Blob.lumpRadius(mass)
+
+    -- NEVER ON THE VAULT. Lumps are solid terrain that lasts most of an hour,
+    -- and one congealed on the dish would physically wall off the only place
+    -- in the game where mass can be made safe. Pops near the centre are pushed
+    -- out past the ramps instead of being dropped where they happened.
+    local flat = Vector3.new(at.X, 0, at.Z)
+    local keepOut = Config.VAULT_RADIUS + 34 + radius
+    if flat.Magnitude < keepOut then
+        local dir = flat.Magnitude > 0.01 and flat.Unit or Vector3.new(0, 0, 1)
+        at = Vector3.new(dir.X * keepOut, at.Y, dir.Z * keepOut)
+    end
+
     local part = Instance.new("Part")
     part.Name = "Lump"
     part.Shape = Enum.PartType.Ball
@@ -4328,7 +4364,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         -- escape-the-open-ground tool for the hunted with the same button.
         local target, best = nil, HOOK_RANGE
         for _, other in ipairs(Players:GetPlayers()) do
-            if other ~= player and runs[other.UserId] then
+            local orun = runs[other.UserId]
+            if other ~= player and orun and not protected(other, orun, now) then
                 local ob = RollService.ballFor(other)
                 if ob and ob.Parent then
                     local d = (ob.Position - ball.Position).Magnitude
@@ -4379,7 +4416,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         for _, other in ipairs(Players:GetPlayers()) do
             local orun = other ~= player and runs[other.UserId]
             local ob = orun and RollService.ballFor(other)
-            if ob and ob.Parent and orun.mass > run.mass then
+            if ob and ob.Parent and orun.mass > run.mass
+                and not protected(other, orun, now) then
                 local d = (ob.Position - ball.Position).Magnitude
                 if d < best then target, best = other, d end
             end
@@ -4497,7 +4535,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
         for _, other in ipairs(Players:GetPlayers()) do
             local orun = runs[other.UserId]
             local ob = other ~= player and orun and RollService.ballFor(other)
-            if ob and ob.Parent then
+            if ob and ob.Parent and not protected(other, orun, now) then
                 local away = ob.Position - pos
                 local flat = Vector3.new(away.X, 0, away.Z)
                 if flat.Magnitude < SLAM_RADIUS and flat.Magnitude > 0.01 then
@@ -4551,9 +4589,9 @@ local function tickCombat(list: { Player }, now: number)
             local ra, rb = runs[a.UserId], runs[b.UserId]
             local ba, bb = RollService.ballFor(a), RollService.ballFor(b)
             if ra and rb and ba and bb and ba.Parent and bb.Parent then
-                local sa = WorldBuilder.isSafe(ba.Position) or now < ra.safeUntil
-                local sb = WorldBuilder.isSafe(bb.Position) or now < rb.safeUntil
-                if not sa and not sb then
+                -- Same helper every power uses, so there is one answer to
+                -- "can this player be touched" rather than two that drift.
+                if not protected(a, ra, now) and not protected(b, rb, now) then
                     local radA, radB = Blob.radius(ra.mass), Blob.radius(rb.mass)
                     local dist = (ba.Position - bb.Position).Magnitude
                     if dist < (radA + radB) - math.min(radA, radB) * EAT_OVERLAP then
@@ -5012,7 +5050,15 @@ local aliveCount = 0
 local rng = Random.new(os.clock() * 1e6)
 local folder: Folder
 
-local ROAM_RADIUS = 520
+-- DERIVED FROM THE ISLAND, not a number of its own.
+--
+-- This was a flat 520 while the island was 300 studs and then 480, so critters
+-- spawned out to 640 and up to a third of them landed in the sea — visible,
+-- glowing, permanently unreachable, and a standing invitation to roll off the
+-- edge chasing one. Tying it to the island means a future resize takes the
+-- critters with it instead of leaving them behind, which is the same mistake
+-- the pellet count used to make.
+local ROAM_RADIUS = Config.ISLAND_RADIUS - 60
 
 local function spawnCritter()
     if aliveCount >= Config.CRITTER_MAX_ALIVE then return end
@@ -5032,7 +5078,9 @@ local function spawnCritter()
     elseif item.shape == "Cylinder" then p.Shape = Enum.PartType.Cylinder end
 
     local angle = rng:NextNumber() * math.pi * 2
-    local dist = 120 + rng:NextNumber() * ROAM_RADIUS
+    -- Inside the shoreline, outside the Vault approach.
+    local dist = Config.VAULT_RADIUS + 40
+        + rng:NextNumber() * (ROAM_RADIUS - Config.VAULT_RADIUS - 40)
     p.Position = Vector3.new(math.cos(angle) * dist, 4 + rng:NextNumber() * 3, math.sin(angle) * dist)
 
     -- Rarer things are visibly special from a distance: a coloured glow and a
@@ -5157,7 +5205,7 @@ function CritterService.start()
                 despawn(p)
             else
                 local pos = p.Position + entry.vel * dt
-                if math.sqrt(pos.X ^ 2 + pos.Z ^ 2) > ROAM_RADIUS + 140 then
+                if math.sqrt(pos.X ^ 2 + pos.Z ^ 2) > Config.ISLAND_RADIUS - 10 then
                     entry.vel = -entry.vel
                     pos = p.Position + entry.vel * dt
                 end
@@ -7778,6 +7826,7 @@ TradeUi.build(gui)
 -- which is where most of the old overlap came from.
 ArenaHud.build()
 Hud.setArenaMode(true)
+Hud.registerTarget("power", ArenaHud.powerButton())
 
 -- Sound and every other feel effect now live in Juice, which reads its ids
 -- from Config and stays silent when they are unset. This file used to keep a
@@ -7821,6 +7870,12 @@ end)
 
 Net.get("StateSync").OnClientEvent:Connect(function(snap)
     Hud.update(snap)
+    -- ArenaHud has to be fed the same snapshot. Without this line its profile
+    -- stays nil forever, which is not a visible error — it is a UI that draws
+    -- perfectly and is entirely inert: Glob reads 0, the season tier reads 0,
+    -- and every crate, trinket, power, skin and Goob renders locked or absent
+    -- because the code behind each tab is reading fields off nothing.
+    ArenaHud.setProfile(snap)
 end)
 
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
@@ -8668,7 +8723,17 @@ local Powers = require(Shared.Powers)
 local Trinkets = require(Shared.Trinkets)
 local Crates = require(Shared.Crates)
 local Cosmetics = require(Shared.Cosmetics)
-local GoobMath = require(Shared.GoobMath)
+
+-- NOTE: no GoobMath here, deliberately.
+--
+-- The client never sees a raw Goob. What arrives over StateSync is a
+-- SERIALISED one — nickname, mass, power, ageTier, ageText and so on, already
+-- computed server-side — and it carries no bornAt, no inheritedAge and no
+-- lineage table of the shape GoobMath expects. Calling GoobMath.ageSeconds()
+-- on it subtracts nil and takes the whole panel down with it, which is exactly
+-- what this file used to do. If a number is needed here, it is sent; if it is
+-- not sent, it gets added to the snapshot rather than recomputed from parts
+-- the client does not have.
 
 -- Where a locked item comes from. A padlock with no explanation is the most
 -- annoying thing a wardrobe can show you.
@@ -9110,18 +9175,19 @@ local function renderInventory()
     sum.Parent = header
 
     for i, goob in ipairs(goobs) do
-        local tier = GoobMath.ageTier(goob)
+        local tint = goob.ageColor or Theme.TEXT_DIM
         local c = card(sheetBody, i, 74)
-        Theme.stroke(c, tier.color, 2)
+        Theme.stroke(c, tint, 2)
 
         local dot = Instance.new("Frame")
+        dot.Name = "GoobDot"
         dot.Size = UDim2.fromOffset(44, 44)
         dot.Position = UDim2.fromOffset(10, 14)
         dot.BackgroundColor3 = Color3.fromHSV(goob.hue or 0.5, 0.42, 0.8)
         dot.BorderSizePixel = 0
         dot.Parent = c
         Theme.corner(dot, 999)
-        Theme.stroke(dot, tier.color, 2)
+        Theme.stroke(dot, tint, 2)
 
         local name = Theme.label({
             Position = UDim2.fromOffset(64, 8), Size = UDim2.new(1, -190, 0, 24),
@@ -9134,16 +9200,15 @@ local function renderInventory()
         local stats = Theme.label({
             Position = UDim2.fromOffset(64, 32), Size = UDim2.new(1, -190, 0, 20),
             Text = ("%s %s  ·  ⚡%s  ·  x%.2f power"):format(
-                tier.emoji, tier.name, Format.short(GoobMath.power(goob)), tier.mult),
-            TextSize = 14, TextColor3 = tier.color,
+                goob.ageEmoji or "", goob.ageTier or "?",
+                goob.powerText or "0", goob.ageMult or 1),
+            TextSize = 14, TextColor3 = tint,
         })
         stats.Parent = c
 
         local age = Theme.label({
             Position = UDim2.fromOffset(64, 52), Size = UDim2.new(1, -190, 0, 18),
-            Text = ("%s old  ·  gen %d"):format(
-                Format.duration(GoobMath.ageSeconds(goob)),
-                #(goob.lineage or {}) + 1),
+            Text = ("%s old  ·  gen %d"):format(goob.ageText or "new", goob.generation or 1),
             TextSize = 12, TextColor3 = Theme.TEXT_DIM,
         })
         age.Parent = c
@@ -9180,9 +9245,9 @@ local function renderTrade()
     h.Parent = head
 
     for i, goob in ipairs(goobs) do
-        local tier = GoobMath.ageTier(goob)
+        local tint = goob.ageColor or Theme.TEXT_DIM
         local c = card(sheetBody, i + 1, 56)
-        Theme.stroke(c, tier.color, 2)
+        Theme.stroke(c, tint, 2)
         local name = Theme.label({
             Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 24),
             Text = tostring(goob.nickname), TextSize = 18, TextColor3 = Theme.TEXT,
@@ -9190,9 +9255,9 @@ local function renderTrade()
         name.Parent = c
         local sub = Theme.label({
             Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 20),
-            Text = ("%s %s  ·  ⚡%s"):format(tier.emoji, tier.name,
-                Format.short(GoobMath.power(goob))),
-            TextSize = 13, TextColor3 = tier.color,
+            Text = ("%s %s  ·  ⚡%s"):format(goob.ageEmoji or "",
+                goob.ageTier or "?", goob.powerText or "0"),
+            TextSize = 13, TextColor3 = tint,
         })
         sub.Parent = c
     end
@@ -9540,7 +9605,7 @@ function ArenaHud.setProfile(snap: any)
     profile = snap
     if not gui then return end
     globLabel.Text = "💧" .. Format.short(snap.glob or 0)
-    local tier = snap.season and snap.season.tier or 0
+    local tier = (snap.season and snap.season.tier) or 0
     seasonLabel.Text = ("BETA SEASON · %d"):format(tier)
     ArenaHud.refreshSheet()
 end
@@ -9675,6 +9740,13 @@ function ArenaHud.runEnded(s: any)
             ArenaHud.setArena(latest)
         end
     end)
+end
+
+-- Handed to Hud so the tutorial coach can pulse it. The coach pointing at the
+-- button beats describing where it is, especially for a player who cannot read
+-- quickly yet — which is most of this game's audience.
+function ArenaHud.powerButton(): TextButton?
+    return powerBtn
 end
 
 function ArenaHud.isSheetOpen(): boolean
@@ -10507,12 +10579,20 @@ function Hud.update(snap: any)
             -- Pulse whichever control the step is asking for. Pointing at the
             -- button beats describing where it is, especially for a player who
             -- cannot read quickly yet.
-            if tut.target == "snack" then
-                pulseTarget = snackButtons["snack"]
-            elseif tut.target == "drawer" then
-                pulseTarget = drawerOpen and eggButton or openButton
-            else
-                pulseTarget = nil
+            -- Resolved through a registry rather than a hardcoded if-chain.
+            -- The chain knew about exactly two controls, "snack" and
+            -- "drawer" — both of which the arena rework removed from the
+            -- screen — so the one step that genuinely needs a pointer, "press
+            -- your power button", had nothing to point at. A registry lets
+            -- ArenaHud hand over its own controls without Hud having to know
+            -- they exist.
+            pulseTarget = Hud.targets[tut.target or ""]
+            if not pulseTarget then
+                if tut.target == "snack" then
+                    pulseTarget = snackButtons["snack"]
+                elseif tut.target == "drawer" then
+                    pulseTarget = drawerOpen and eggButton or openButton
+                end
             end
         else
             coach.Visible = false
@@ -10544,6 +10624,13 @@ Hud.onSetActive = function(_: string) end
 -- toasts, the Goob drawer, the coach — and stops drawing a second stat panel
 -- on top of the first one. This is the single switch that turns "everything
 -- gets in the way of everything" into one screen with one owner per region.
+-- Controls other modules own, which the tutorial coach may point at.
+Hud.targets = {} :: { [string]: GuiObject }
+
+function Hud.registerTarget(name: string, control: GuiObject?)
+    Hud.targets[name] = control
+end
+
 Hud.arenaMode = false
 
 -- Opened and closed from the dock. Exposed rather than left to the old toggle

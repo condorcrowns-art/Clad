@@ -42,6 +42,7 @@ TradeUi.build(gui)
 -- which is where most of the old overlap came from.
 ArenaHud.build()
 Hud.setArenaMode(true)
+Hud.registerTarget("power", ArenaHud.powerButton())
 
 -- Sound and every other feel effect now live in Juice, which reads its ids
 -- from Config and stays silent when they are unset. This file used to keep a
@@ -85,6 +86,12 @@ end)
 
 Net.get("StateSync").OnClientEvent:Connect(function(snap)
     Hud.update(snap)
+    -- ArenaHud has to be fed the same snapshot. Without this line its profile
+    -- stays nil forever, which is not a visible error — it is a UI that draws
+    -- perfectly and is entirely inert: Glob reads 0, the season tier reads 0,
+    -- and every crate, trinket, power, skin and Goob renders locked or absent
+    -- because the code behind each tab is reading fields off nothing.
+    ArenaHud.setProfile(snap)
 end)
 
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)

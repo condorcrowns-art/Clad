@@ -131,6 +131,21 @@ check("and banking actually paid", ((snapOf(alice) or {}).glob or 0) > globBefor
 emit("")
 emit("══ STEP 4: THE POWER ══")
 check("it asks for the power button", tut() and tut().id == "power", tut() and tut().id)
+-- The coach must POINT at the button, not just describe it. The pointer was
+-- resolved through a hardcoded list of two controls the arena rework deleted,
+-- so this step had nothing to point at and the player was left hunting.
+check("the power step points at a real control",
+    tut() and tut().target == "power", tut() and tostring(tut().target))
+-- Asserted against the live registry, not against a global that does not
+-- exist. The first version of this read _G.CLIENT_HUD, which is nil, so the
+-- whole check collapsed to "true" and would have passed with nothing wired
+-- at all.
+check("and that control has been registered by the HUD that owns it",
+    (function()
+        local Hud = _G.CLIENT("Hud")
+        return Hud ~= nil and Hud.targets ~= nil and Hud.targets.power ~= nil
+    end)())
+
 check("it warns the power costs you something",
     tut() and (tut().hint or ""):lower():find("cost") ~= nil, tut() and tut().hint)
 

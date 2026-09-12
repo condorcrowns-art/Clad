@@ -54,6 +54,7 @@ Tutorial.STEPS = {
     },
     {
         id = "power",
+        target = "power",
         text = "Press your power button.",
         hint = "One button, and it costs a slice of you. That slice lands on the floor as food.",
     },

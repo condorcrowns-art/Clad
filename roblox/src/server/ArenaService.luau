@@ -175,6 +175,29 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- CAN THIS PLAYER BE TOUCHED BY SOMEONE ELSE'S POWER?
+--
+-- This existed only inside the eating check, which meant SIPHON, HOOK and SLAM
+-- all reached straight into the no-PvP Shallows and into the two seconds of
+-- grace a player gets after respawning. A player could be drained, yanked and
+-- blasted while standing in the one place the game promises is safe — and the
+-- promise is load-bearing, because the Shallows is where new players spawn and
+-- where the tutorial runs.
+--
+-- Every power that affects another player goes through here. BUBBLE is not
+-- included: it is a self-buff against being EATEN specifically, and a shield
+-- that also blocked a shove would make it strictly better than everything.
+local function protected(player: Player, run: Run?, now: number): boolean
+    if not run then
+        return true
+    end
+    local ball = RollService.ballFor(player)
+    if not ball or not ball.Parent then
+        return true
+    end
+    return WorldBuilder.isSafe(ball.Position) or now < run.safeUntil
+end
+
 -- How many times this player has used a power.
 --
 -- Read through deps every time rather than cached on the run. The cached copy
@@ -290,6 +313,18 @@ local function congeal(at: Vector3, mass: number)
     end
 
     local radius = Blob.lumpRadius(mass)
+
+    -- NEVER ON THE VAULT. Lumps are solid terrain that lasts most of an hour,
+    -- and one congealed on the dish would physically wall off the only place
+    -- in the game where mass can be made safe. Pops near the centre are pushed
+    -- out past the ramps instead of being dropped where they happened.
+    local flat = Vector3.new(at.X, 0, at.Z)
+    local keepOut = Config.VAULT_RADIUS + 34 + radius
+    if flat.Magnitude < keepOut then
+        local dir = flat.Magnitude > 0.01 and flat.Unit or Vector3.new(0, 0, 1)
+        at = Vector3.new(dir.X * keepOut, at.Y, dir.Z * keepOut)
+    end
+
     local part = Instance.new("Part")
     part.Name = "Lump"
     part.Shape = Enum.PartType.Ball
@@ -492,7 +527,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         -- escape-the-open-ground tool for the hunted with the same button.
         local target, best = nil, HOOK_RANGE
         for _, other in ipairs(Players:GetPlayers()) do
-            if other ~= player and runs[other.UserId] then
+            local orun = runs[other.UserId]
+            if other ~= player and orun and not protected(other, orun, now) then
                 local ob = RollService.ballFor(other)
                 if ob and ob.Parent then
                     local d = (ob.Position - ball.Position).Magnitude
@@ -543,7 +579,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         for _, other in ipairs(Players:GetPlayers()) do
             local orun = other ~= player and runs[other.UserId]
             local ob = orun and RollService.ballFor(other)
-            if ob and ob.Parent and orun.mass > run.mass then
+            if ob and ob.Parent and orun.mass > run.mass
+                and not protected(other, orun, now) then
                 local d = (ob.Position - ball.Position).Magnitude
                 if d < best then target, best = other, d end
             end
@@ -661,7 +698,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
         for _, other in ipairs(Players:GetPlayers()) do
             local orun = runs[other.UserId]
             local ob = other ~= player and orun and RollService.ballFor(other)
-            if ob and ob.Parent then
+            if ob and ob.Parent and not protected(other, orun, now) then
                 local away = ob.Position - pos
                 local flat = Vector3.new(away.X, 0, away.Z)
                 if flat.Magnitude < SLAM_RADIUS and flat.Magnitude > 0.01 then
@@ -715,9 +752,9 @@ local function tickCombat(list: { Player }, now: number)
             local ra, rb = runs[a.UserId], runs[b.UserId]
             local ba, bb = RollService.ballFor(a), RollService.ballFor(b)
             if ra and rb and ba and bb and ba.Parent and bb.Parent then
-                local sa = WorldBuilder.isSafe(ba.Position) or now < ra.safeUntil
-                local sb = WorldBuilder.isSafe(bb.Position) or now < rb.safeUntil
-                if not sa and not sb then
+                -- Same helper every power uses, so there is one answer to
+                -- "can this player be touched" rather than two that drift.
+                if not protected(a, ra, now) and not protected(b, rb, now) then
                     local radA, radB = Blob.radius(ra.mass), Blob.radius(rb.mass)
                     local dist = (ba.Position - bb.Position).Magnitude
                     if dist < (radA + radB) - math.min(radA, radB) * EAT_OVERLAP then
