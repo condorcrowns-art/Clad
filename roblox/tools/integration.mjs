@@ -21,7 +21,7 @@ const server = luaus('server');
 const client = luaus('client');
 
 // Harness modules are required by plain string; game modules by Instance.
-const harness = ['roblox_env', 'roblox_game', 'roblox_services']
+const harness = ['roblox_env', 'roblox_game', 'roblox_services', 'geometry']
   .map(n => ({ name: n, src: read(path.join(HERE, n + '.luau')) }));
 
 let code = `

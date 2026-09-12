@@ -15,6 +15,7 @@ local Net = require(Shared.Net)
 local Format = require(Shared.Format)
 
 local Theme = require(script.Parent.Theme)
+local Layout = require(script.Parent.Layout)
 
 local player = Players.LocalPlayer
 local TradeUi = {}
@@ -122,8 +123,6 @@ end
 function TradeUi.build(gui: ScreenGui)
     root = Instance.new("Frame")
     root.Name = "TradeWindow"
-    root.Size = UDim2.fromOffset(640, 480)
-    root.Position = UDim2.new(0.5, -320, 0.5, -240)
     root.BackgroundColor3 = Theme.BG
     root.Visible = false
     root.Parent = gui
@@ -154,7 +153,7 @@ function TradeUi.build(gui: ScreenGui)
     statusLabel.Parent = root
 
     confirmBtn = Theme.button("HOLD TO CONFIRM", Theme.GOOD, UDim2.fromOffset(300, 46))
-    confirmBtn.Position = UDim2.new(0.5, -160, 1, -58)
+    confirmBtn.Name = "HoldToConfirm"
     confirmBtn.TextSize = 20
     confirmBtn.Parent = root
 
@@ -184,6 +183,7 @@ function TradeUi.build(gui: ScreenGui)
     cancel.Position = UDim2.new(0.5, 152, 1, -58)
     cancel.TextSize = 17
     cancel.Parent = root
+    cancel.Name = "CancelTrade"
     cancel.Activated:Connect(function()
         Net.get("TradeCancel"):FireServer()
     end)
@@ -211,12 +211,68 @@ function TradeUi.build(gui: ScreenGui)
         end
     end)
 
+    TradeUi.applyLayout()
+    Layout.changed.Event:Connect(TradeUi.applyLayout)
+
     RunService.RenderStepped:Connect(function()
         if holding then
             local pct = math.clamp((os.clock() - holdStart) / lockSeconds, 0, 1)
             fillBar.Size = UDim2.fromScale(pct, 1)
         end
     end)
+end
+
+-- Resize and re-place the window for the current screen. The desktop layout
+-- puts the two offers side by side; a phone is too narrow for that, so the
+-- confirm/cancel row stacks and the columns get every pixel that is left.
+function TradeUi.applyLayout()
+    if not root then return end
+    local compact = Layout.isCompact()
+    local size = Layout.panel(640, 480)
+    root.Size = size
+    root.Position = Layout.centre(size)
+
+    local w, h = size.X.Offset, size.Y.Offset
+    local pad = compact and 10 or 14
+    local headerH = compact and 54 or 76
+    local footerH = compact and 96 or 84
+
+    partnerLabel.Position = UDim2.fromOffset(pad + 6, compact and 30 or 44)
+    partnerLabel.Size = UDim2.new(1, -(pad + 6) * 2, 0, 22)
+    partnerLabel.TextSize = compact and 14 or 17
+
+    for _, holder in ipairs({ myList.Parent, theirList.Parent }) do
+        if holder then
+            holder.Size = UDim2.new(0.5, -pad - 4, 1, -(headerH + footerH))
+        end
+    end
+    if myList.Parent then myList.Parent.Position = UDim2.fromOffset(pad, headerH) end
+    if theirList.Parent then theirList.Parent.Position = UDim2.new(0.5, 4, 0, headerH) end
+
+    statusLabel.Position = UDim2.fromOffset(pad, h - footerH + (compact and 2 or 6))
+    statusLabel.Size = UDim2.new(1, -pad * 2, 0, 20)
+    statusLabel.TextSize = compact and 13 or 15
+
+    -- Confirm is the important control, so it keeps full width on a phone and
+    -- Cancel drops onto its own row underneath rather than shrinking.
+    local btnH = compact and Layout.MIN_TAP or 46
+    local cancelBtn = root:FindFirstChild("CancelTrade")
+    if compact then
+        confirmBtn.Size = UDim2.new(1, -pad * 2, 0, btnH)
+        confirmBtn.Position = UDim2.fromOffset(pad, h - btnH * 2 - 12)
+        if cancelBtn then
+            cancelBtn.Size = UDim2.new(1, -pad * 2, 0, btnH - 8)
+            cancelBtn.Position = UDim2.fromOffset(pad, h - btnH + 2)
+        end
+    else
+        confirmBtn.Size = UDim2.fromOffset(300, btnH)
+        confirmBtn.Position = UDim2.fromOffset(math.floor(w / 2) - 160, h - btnH - 12)
+        if cancelBtn then
+            cancelBtn.Size = UDim2.fromOffset(120, btnH)
+            cancelBtn.Position = UDim2.fromOffset(math.floor(w / 2) + 152, h - btnH - 12)
+        end
+    end
+    confirmBtn.TextSize = compact and 17 or 20
 end
 
 function TradeUi.sync(stateIn: any)

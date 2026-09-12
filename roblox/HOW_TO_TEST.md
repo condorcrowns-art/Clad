@@ -82,8 +82,29 @@ confirmation bars must snap back to empty. That is the anti-scam rule.
   in memory — progress resets on stop. Studio → Game Settings → Security →
   *Enable Studio Access to API Services* to persist.
 
+## On a phone
+
+The UI now has two distinct layouts, not one that shrinks:
+
+- **Roomy** (desktop, iPad) — stat panel and snack stand down the left, wide
+  drawer button bottom-left.
+- **Compact** (phone, or any window under 900x500) — the left column would eat
+  the screen whole, so the snack stand moves *inside* the drawer and the whole
+  HUD collapses to one round 🫧 button.
+
+That button sits in the gap **between** the thumbstick and the jump button,
+because both bottom corners belong to Roblox's touch controls and anything
+drawn there is unreachable with a thumb.
+
+Verified at 568x320, 736x380, 640x360, 1024x768 and 1920x1080: nothing
+overflows the screen, no persistent button hides under the touch controls, and
+every tap target is at least 44px.
+
+**Worth testing anyway:** resize the Studio window while playing — the layout
+recomputes live. And check that text is actually *legible* at phone size, which
+no automated check can tell me.
+
 ## Not yet built
 
-Mobile layout is untested at phone widths. There is no tutorial, no daily
-login, and no global scarcity census yet — those are the roadmap in
-`roblox/README.md`.
+No tutorial, no daily login, no global scarcity census — those are the roadmap
+in `roblox/README.md`.

@@ -17,6 +17,7 @@ local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 
 local Theme = require(script.Parent.Theme)
+local Layout = require(script.Parent.Layout)
 
 local player = Players.LocalPlayer
 local Hud = {}
@@ -32,6 +33,12 @@ local toastHolder: Frame
 local drawerOpen = false
 local snackButtons: { [string]: TextButton } = {}
 local eggButton: TextButton
+local topFrame: Frame
+local standFrame: Frame
+local openButton: TextButton
+local standTitle: TextLabel
+local drawerTitle: TextLabel
+local drawerHint: TextLabel
 
 local state: any = nil
 local displayedGlob = 0
@@ -105,7 +112,7 @@ end
 local function buildCard(goob: any, index: number): Frame
     local card = Instance.new("Frame")
     card.Name = "Goob" .. index
-    card.Size = UDim2.new(1, 0, 0, 118)
+    card.Size = UDim2.new(1, 0, 0, Layout.isTouch() and 136 or 118)
     card.BackgroundColor3 = goob.isActive and Theme.BG_SOFT or Theme.PANEL
     Theme.corner(card)
     Theme.stroke(card, goob.isActive and Theme.ACCENT or Color3.fromRGB(16, 18, 30), goob.isActive and 3 or 2)
@@ -148,9 +155,10 @@ local function buildCard(goob: any, index: number): Frame
     })
     belly.Parent = card
 
+    local rowH = Layout.isTouch() and Layout.MIN_TAP or 28
     local row = Instance.new("Frame")
     row.Position = UDim2.fromOffset(90, 82)
-    row.Size = UDim2.new(1, -102, 0, 28)
+    row.Size = UDim2.new(1, -102, 0, rowH)
     row.BackgroundTransparency = 1
     row.Parent = card
 
@@ -160,21 +168,21 @@ local function buildCard(goob: any, index: number): Frame
     layout.Parent = row
 
     if not goob.isActive then
-        local show = Theme.button("👁 Display", Theme.ACCENT, UDim2.fromOffset(104, 28))
+        local show = Theme.button("👁 Display", Theme.ACCENT, UDim2.fromOffset(104, rowH))
         show.TextSize = 15
         show.Parent = row
         show.Activated:Connect(function()
             Hud.onSetActive(goob.id)
         end)
 
-        local gulp = Theme.button("😋 Gulp", Theme.BAD, UDim2.fromOffset(88, 28))
+        local gulp = Theme.button("😋 Gulp", Theme.BAD, UDim2.fromOffset(88, rowH))
         gulp.TextSize = 15
         gulp.Parent = row
         gulp.Activated:Connect(function()
             Hud.onGulp(goob.id)
         end)
     else
-        local rename = Theme.button("✏️ Rename", Theme.GOLD, UDim2.fromOffset(104, 28))
+        local rename = Theme.button("✏️ Rename", Theme.GOLD, UDim2.fromOffset(104, rowH))
         rename.TextSize = 15
         rename.Parent = row
         rename.Activated:Connect(function() Hud.onRename(goob.id) end)
@@ -184,7 +192,7 @@ local function buildCard(goob: any, index: number): Frame
     -- keeps the trade UI itself read-only, which means the list you are
     -- agreeing to and the list you are editing can never drift apart.
     if Hud.tradeOpen then
-        local offer = Theme.button("➕ Offer", Theme.GOOD, UDim2.fromOffset(90, 28))
+        local offer = Theme.button("➕ Offer", Theme.GOOD, UDim2.fromOffset(90, rowH))
         offer.TextSize = 15
         offer.Parent = row
         offer.Activated:Connect(function() Hud.onOffer(goob.id) end)
@@ -209,7 +217,150 @@ local function rebuildDrawer()
         card.LayoutOrder = i
         card.Parent = drawerList
     end
-    drawerList.CanvasSize = UDim2.new(0, 0, 0, #sorted * 126 + 8)
+    drawerList.CanvasSize = UDim2.new(0, 0, 0, #sorted * (Layout.isTouch() and 144 or 126) + 8)
+end
+
+
+-- ── Responsive layout ──────────────────────────────────────────────────────
+-- Every size and position in the HUD is decided here rather than at creation,
+-- so a viewport change is just a second call to this function.
+--
+-- Two distinct layouts, not one layout that shrinks:
+--
+--   ROOMY   — stat panel and snack stand stacked down the left, drawer button
+--             bottom-left, drawer slides in above it.
+--   COMPACT — the left column would eat a phone screen whole, and both bottom
+--             corners belong to the Roblox touch controls. So: one round
+--             button in the gap between thumbstick and jump button, and the
+--             snack stand moves INSIDE the drawer. One button, one panel.
+
+function Hud.drawerPosition(open: boolean): UDim2
+    local u = Layout.usable()
+    local size = drawer.Size
+    if not open then
+        return UDim2.fromOffset(-size.X.Offset - 30, drawer.Position.Y.Offset)
+    end
+    if Layout.isCompact() then
+        return UDim2.fromOffset(10, 8)
+    end
+    return UDim2.fromOffset(16, u.Y - size.Y.Offset - 84)
+end
+
+function Hud.applyLayout()
+    if not topFrame then return end
+    local compact = Layout.isCompact()
+    local touch = Layout.isTouch()
+    local u = Layout.usable()
+
+    -- Stat panel, top-left.
+    local statW = compact and math.min(210, u.X * 0.42) or 300
+    local statH = compact and 74 or 108
+    topFrame.Size = UDim2.fromOffset(statW, statH)
+    topFrame.Position = UDim2.fromOffset(compact and 10 or 16, compact and 8 or 16)
+
+    powerLabel.TextSize = compact and 26 or 34
+    powerLabel.Size = UDim2.new(1, -20, 0, compact and 30 or 40)
+    powerLabel.Position = UDim2.fromOffset(12, compact and 4 or 8)
+    globLabel.TextSize = compact and 18 or 22
+    globLabel.Size = UDim2.new(1, -20, 0, compact and 22 or 26)
+    globLabel.Position = UDim2.fromOffset(12, compact and 34 or 48)
+    incomeLabel.TextSize = compact and 13 or 15
+    incomeLabel.Size = UDim2.new(1, -20, 0, 20)
+    incomeLabel.Position = UDim2.fromOffset(12, compact and 54 or 74)
+
+    ageLabel.Position = UDim2.fromOffset(compact and 10 or 16, statH + (compact and 12 or 30))
+    ageLabel.Size = UDim2.fromOffset(statW + (compact and 40 or 0), compact and 20 or 24)
+    ageLabel.TextSize = compact and 14 or 17
+
+    -- Toasts, top-right. Narrower on a phone so they never meet the stat panel.
+    local toastW = compact and math.min(250, u.X * 0.40) or 340
+    toastHolder.Size = UDim2.fromOffset(toastW, math.min(400, u.Y - 20))
+    toastHolder.Position = UDim2.fromOffset(u.X - toastW - (compact and 10 or 16), compact and 8 or 16)
+
+    -- The drawer. Near-fullscreen on a phone, a side panel otherwise.
+    local drawerW = compact and math.min(400, u.X - 20) or 430
+    local drawerH = compact and (u.Y - 16) or math.min(460, u.Y - 100)
+    drawer.Size = UDim2.fromOffset(drawerW, drawerH)
+
+    drawerTitle.TextSize = compact and 22 or 26
+    drawerHint.Visible = not compact  -- the warning also lives on the confirm dialog
+
+    local headerH = compact and 42 or 64
+
+    -- Snack stand: its own panel when there is room, inside the drawer when
+    -- there is not. A phone screen cannot host both.
+    local standH = (compact and 3 * 48 + 34 or 132)
+    if compact then
+        standFrame.Parent = drawer
+        standFrame.Size = UDim2.fromOffset(drawerW - 20, standH)
+        standFrame.Position = UDim2.fromOffset(10, headerH)
+        standFrame.BackgroundTransparency = 1
+        standTitle.Visible = false
+    else
+        standFrame.Parent = gui
+        standFrame.Size = UDim2.fromOffset(300, standH)
+        standFrame.Position = UDim2.fromOffset(16, 158)
+        standFrame.BackgroundTransparency = 0.12
+        standTitle.Visible = true
+    end
+
+    local btnH = touch and Layout.MIN_TAP or 30
+    local btnGap = compact and 4 or 4
+    local standTop = compact and 4 or 30
+    local i = 0
+    for _, tier in ipairs(Config.SNACK_TIERS) do
+        local btn = snackButtons[tier.id]
+        if btn then
+            btn.Size = UDim2.new(1, -20, 0, btnH)
+            btn.Position = UDim2.fromOffset(10, standTop + i * (btnH + btnGap))
+            btn.TextSize = compact and 16 or 15
+            i += 1
+        end
+    end
+
+    -- Egg button sits under the snack stack inside the drawer on compact.
+    local eggY = compact and (headerH + standH + 6) or 64
+    if eggButton then
+        eggButton.Size = UDim2.new(1, -20, 0, touch and Layout.MIN_TAP or 34)
+        eggButton.Position = UDim2.fromOffset(10, eggY)
+        eggButton.TextSize = compact and 16 or 16
+    end
+
+    local listTop = eggY + (compact and 52 or 42)
+    drawerList.Position = UDim2.fromOffset(10, listTop)
+    drawerList.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - listTop - 10))
+
+    -- The one action button. On touch it goes in the gap between the
+    -- thumbstick and the jump button, which is the only reachable part of the
+    -- bottom edge; otherwise bottom-left as usual.
+    if touch then
+        local gapL, gapR = Layout.bottomGap()
+        local size = Layout.MIN_TAP + 16
+        local cx = (gapL + gapR) / 2
+        -- If the gap is too narrow to centre in, sit just right of the stick.
+        if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
+        openButton.Size = UDim2.fromOffset(size, size)
+        openButton.Position = UDim2.fromOffset(
+            math.clamp(cx - size / 2, 8, u.X - size - 8),
+            u.Y - size - 10
+        )
+        openButton.Text = compact and "🫧" or "🫧 MY GOOBS"
+        if not compact then
+            openButton.Size = UDim2.fromOffset(190, math.max(size, 58))
+            openButton.Position = UDim2.fromOffset(
+                math.clamp(cx - 95, 8, u.X - 198), u.Y - math.max(size, 58) - 10)
+        end
+        openButton.TextSize = compact and 28 or 22
+    else
+        openButton.Size = UDim2.fromOffset(190, 58)
+        openButton.Position = UDim2.fromOffset(16, u.Y - 74)
+        openButton.Text = "🫧 MY GOOBS"
+        openButton.TextSize = 24
+    end
+
+    drawer.Position = Hud.drawerPosition(drawerOpen)
+    drawer.Visible = drawerOpen
+    if drawerOpen then rebuildDrawer() end
 end
 
 -- ── Build ──────────────────────────────────────────────────────────────────
@@ -218,14 +369,20 @@ function Hud.build(): ScreenGui
     gui = Instance.new("ScreenGui")
     gui.Name = "GoobHud"
     gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
+    -- false, NOT true: with IgnoreGuiInset = true the ScreenGui draws from the
+    -- true top of the screen and the Roblox top bar covers the first ~36px —
+    -- which is exactly where the power readout was.
+    gui.IgnoreGuiInset = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    -- Above Roblox's own touch-control ScreenGui, so a dialog button placed
+    -- over the jump button receives the tap instead of the jump button.
+    gui.DisplayOrder = 10
     gui.Parent = player:WaitForChild("PlayerGui")
 
     -- Top-left: the two numbers that matter.
     local top = Instance.new("Frame")
-    top.Size = UDim2.fromOffset(300, 108)
-    top.Position = UDim2.fromOffset(16, 16)
+    topFrame = top
+    top.Name = "StatPanel"
     top.BackgroundColor3 = Theme.BG
     top.BackgroundTransparency = 0.12
     top.Parent = gui
@@ -258,14 +415,14 @@ function Hud.build(): ScreenGui
 
     -- Bottom-left: the one big button.
     local openBtn = Theme.button("🫧 MY GOOBS", Theme.ACCENT, UDim2.fromOffset(190, 58))
-    openBtn.Position = UDim2.new(0, 16, 1, -74)
+    openBtn.Name = "OpenDrawer"
     openBtn.TextSize = 24
     openBtn.Parent = gui
+    openButton = openBtn
 
     -- Drawer.
     drawer = Instance.new("Frame")
-    drawer.Size = UDim2.fromOffset(430, 460)
-    drawer.Position = UDim2.new(0, -450, 1, -544)
+    drawer.Name = "GoobDrawer"
     drawer.BackgroundColor3 = Theme.BG
     drawer.BackgroundTransparency = 0.06
     drawer.Parent = gui
@@ -277,6 +434,7 @@ function Hud.build(): ScreenGui
         Text = "🫧 MY GOOBS", TextSize = 26,
     })
     title.Parent = drawer
+    drawerTitle = title
 
     local hint = Theme.label({
         Position = UDim2.fromOffset(18, 42), Size = UDim2.new(1, -36, 0, 20),
@@ -284,6 +442,7 @@ function Hud.build(): ScreenGui
         TextSize = 14, TextColor3 = Theme.WARN, TextWrapped = true,
     })
     hint.Parent = drawer
+    drawerHint = hint
 
     -- Eggs are the ONLY source of new Goobs in the game, so the button lives
     -- at the top of the drawer rather than behind another menu.
@@ -309,25 +468,36 @@ function Hud.build(): ScreenGui
 
     openBtn.Activated:Connect(function()
         drawerOpen = not drawerOpen
-        TweenService:Create(drawer, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-            Position = drawerOpen and UDim2.new(0, 16, 1, -544) or UDim2.new(0, -450, 1, -544),
-        }):Play()
-        if drawerOpen then rebuildDrawer() end
+        if drawerOpen then
+            drawer.Visible = true
+            rebuildDrawer()
+        end
+        local tween = TweenService:Create(
+            drawer, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            { Position = Hud.drawerPosition(drawerOpen) })
+        -- Hide it once it has slid away. A panel parked off-screen still
+        -- renders and still costs layout, and it makes "is anything hanging
+        -- off the edge of the screen?" impossible to answer honestly.
+        if not drawerOpen then
+            tween.Completed:Connect(function()
+                if not drawerOpen then drawer.Visible = false end
+            end)
+        end
+        tween:Play()
     end)
 
     -- Snack Stand: three buttons under the HUD. This is where idle income
     -- turns back into progression, so it is always on screen, never in a menu.
     local stand = Instance.new("Frame")
     stand.Name = "SnackStand"
-    stand.Size = UDim2.fromOffset(300, 132)
-    stand.Position = UDim2.fromOffset(16, 158)
+    standFrame = stand
     stand.BackgroundColor3 = Theme.BG
     stand.BackgroundTransparency = 0.12
     stand.Parent = gui
     Theme.corner(stand, 16)
     Theme.stroke(stand, Color3.fromRGB(14, 16, 26), 3)
 
-    local standTitle = Theme.label({
+    standTitle = Theme.label({
         Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 0, 22),
         Text = "🍪 SNACK STAND", TextSize = 17, TextColor3 = Theme.GOLD,
     })
@@ -347,8 +517,7 @@ function Hud.build(): ScreenGui
 
     -- Toast column, top-right.
     toastHolder = Instance.new("Frame")
-    toastHolder.Size = UDim2.fromOffset(340, 400)
-    toastHolder.Position = UDim2.new(1, -356, 0, 16)
+    toastHolder.Name = "Toasts"
     toastHolder.BackgroundTransparency = 1
     toastHolder.Parent = gui
 
@@ -365,6 +534,10 @@ function Hud.build(): ScreenGui
         displayedGlob += state.income * dt
         globLabel.Text = "💧 " .. Format.short(displayedGlob)
     end)
+
+    Layout.start()
+    Hud.applyLayout()
+    Layout.changed.Event:Connect(Hud.applyLayout)
 
     return gui
 end

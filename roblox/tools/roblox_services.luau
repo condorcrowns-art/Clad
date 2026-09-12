@@ -101,6 +101,31 @@ function S.removePlayer(p)
     rawget(Players, "_signals").PlayerRemoving:Fire(p)
 end
 
+-- ── Camera / viewport ──────────────────────────────────────────────────────
+-- The whole mobile pass depends on being able to resize the screen and watch
+-- the UI respond, so ViewportSize is a real property with a change signal.
+local camera = newInstance("Camera")
+camera.Name = "Camera"
+camera.ViewportSize = env.Vector2.new(1280, 720)
+camera.Parent = Workspace
+rawget(Workspace, "_props").CurrentCamera = camera
+S.camera = camera
+
+function S.setViewport(w, h)
+    camera.ViewportSize = env.Vector2.new(w, h)
+    local sig = rawget(camera, "_signals")["PropChanged_ViewportSize"]
+    if sig then sig:Fire() end
+end
+
+-- ── GuiService ─────────────────────────────────────────────────────────────
+-- The Roblox top bar occupies the first ~36px of the screen. A ScreenGui with
+-- IgnoreGuiInset = true draws underneath it.
+local GuiService = service("GuiService")
+S.topInset = 36
+rawget(GuiService, "_props").GetGuiInset = function()
+    return env.Vector2.new(0, S.topInset), env.Vector2.new(0, 0)
+end
+
 -- ── UserInputService ───────────────────────────────────────────────────────
 local UserInputService = service("UserInputService")
 for _, n in ipairs({ "InputBegan", "InputEnded", "InputChanged", "TouchTap" }) do
@@ -108,10 +133,16 @@ for _, n in ipairs({ "InputBegan", "InputEnded", "InputChanged", "TouchTap" }) d
 end
 rawget(UserInputService, "_props").GetMouseLocation = function() return env.Vector2.new(0, 0) end
 rawget(UserInputService, "_props").TouchEnabled = false
+rawget(UserInputService, "_props").KeyboardEnabled = true
+rawget(UserInputService, "_props").MouseEnabled = true
 S.UserInputService = UserInputService
 
--- ── GuiService / ContextActionService (referenced but barely used) ──────────
-service("GuiService")
+function S.setTouch(on)
+    rawget(UserInputService, "_props").TouchEnabled = on
+    rawget(UserInputService, "_props").KeyboardEnabled = not on
+    rawget(UserInputService, "_props").MouseEnabled = not on
+end
+
 service("ContextActionService")
 
 -- ── TweenService ───────────────────────────────────────────────────────────

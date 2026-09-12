@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000018"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000019"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000020"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000007"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000019"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000020"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000021"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000007"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Config.luau — every tunable number in GULP A GOOB lives here.
 -- Design rule: no magic numbers anywhere else in the codebase. If you want to
 -- rebalance the game, you should only ever have to open this file.
@@ -607,7 +607,7 @@ function Net.get(name: string): any
 end
 
 return Net
-]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000021"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000013"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000022"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000013"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.server.luau — the single entry point. Wires every service together and
 -- owns all the RemoteEvent handlers, so there is exactly one file to read to
 -- understand what the client is allowed to ask the server to do.
@@ -2258,7 +2258,7 @@ function WorldBuilder.plotFor(player: Player)
 end
 
 return WorldBuilder
-]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000023"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000022"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000017"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000024"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000023"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000018"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.client.luau — client entry point.
 --
 -- Everything the client does falls into one of three jobs:
@@ -2282,6 +2282,7 @@ local Net = require(Shared.Net)
 local Format = require(Shared.Format)
 
 local Theme = require(script.Theme)
+local Layout = require(script.Layout)
 local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 
@@ -2390,11 +2391,11 @@ end
 -- consequence spelled out in words a child will actually read.
 local pendingGulp: string? = nil
 local confirmFrame: Frame
+local tradeStrip: Frame
 
 local function buildGulpConfirm()
     confirmFrame = Instance.new("Frame")
-    confirmFrame.Size = UDim2.fromOffset(420, 210)
-    confirmFrame.Position = UDim2.new(0.5, -210, 0.5, -105)
+    confirmFrame.Name = "GulpConfirm"
     confirmFrame.BackgroundColor3 = Theme.BG
     confirmFrame.Visible = false
     confirmFrame.Parent = gui
@@ -2416,7 +2417,7 @@ local function buildGulpConfirm()
     body.Parent = confirmFrame
 
     local yes = Theme.button("😋 GULP IT", Theme.BAD, UDim2.fromOffset(170, 44))
-    yes.Position = UDim2.fromOffset(20, 150)
+    yes.Name = "GulpYes"
     yes.Parent = confirmFrame
     yes.Activated:Connect(function()
         local state = Hud.getState()
@@ -2430,7 +2431,7 @@ local function buildGulpConfirm()
     end)
 
     local no = Theme.button("✖ KEEP IT", Theme.ACCENT, UDim2.fromOffset(170, 44))
-    no.Position = UDim2.new(1, -190, 0, 150)
+    no.Name = "GulpNo"
     no.Parent = confirmFrame
     no.Activated:Connect(function()
         pendingGulp = nil
@@ -2469,8 +2470,7 @@ local renameTarget: string? = nil
 
 do
     renameFrame = Instance.new("Frame")
-    renameFrame.Size = UDim2.fromOffset(400, 150)
-    renameFrame.Position = UDim2.new(0.5, -200, 0.5, -75)
+    renameFrame.Name = "RenameDialog"
     renameFrame.BackgroundColor3 = Theme.BG
     renameFrame.Visible = false
     renameFrame.Parent = gui
@@ -2497,7 +2497,7 @@ do
     Theme.corner(renameBox, 10)
 
     local ok = Theme.button("SAVE", Theme.GOOD, UDim2.fromOffset(160, 38))
-    ok.Position = UDim2.fromOffset(20, 102)
+    ok.Name = "RenameSave"
     ok.Parent = renameFrame
     ok.Activated:Connect(function()
         if renameTarget and #renameBox.Text >= 2 then
@@ -2508,7 +2508,7 @@ do
     end)
 
     local cancel = Theme.button("CANCEL", Theme.BAD, UDim2.fromOffset(160, 38))
-    cancel.Position = UDim2.new(1, -180, 0, 102)
+    cancel.Name = "RenameCancel"
     cancel.Parent = renameFrame
     cancel.Activated:Connect(function()
         renameFrame.Visible = false
@@ -2531,7 +2531,7 @@ end
 local tradePrompt: TextButton
 do
     tradePrompt = Theme.button("🤝 TRADE", Theme.GOLD, UDim2.fromOffset(220, 54))
-    tradePrompt.Position = UDim2.new(0.5, -110, 1, -140)
+    tradePrompt.Name = "TradePrompt"
     tradePrompt.TextSize = 22
     tradePrompt.Visible = false
     tradePrompt.Parent = gui
@@ -2584,8 +2584,7 @@ end)
 -- Incoming trade request: accept/decline strip.
 do
     local strip = Instance.new("Frame")
-    strip.Size = UDim2.fromOffset(360, 60)
-    strip.Position = UDim2.new(0.5, -180, 0, 90)
+    strip.Name = "TradeRequestStrip"
     strip.BackgroundColor3 = Theme.BG
     strip.Visible = false
     strip.Parent = gui
@@ -2593,11 +2592,12 @@ do
     Theme.stroke(strip, Theme.GOLD, 3)
 
     local accept = Theme.button("✅ ACCEPT", Theme.GOOD, UDim2.fromOffset(160, 42))
-    accept.Position = UDim2.fromOffset(12, 9)
+    accept.Name = "TradeAccept"
     accept.Parent = strip
     local decline = Theme.button("✖ NO", Theme.BAD, UDim2.fromOffset(160, 42))
-    decline.Position = UDim2.new(1, -172, 0, 9)
+    decline.Name = "TradeDecline"
     decline.Parent = strip
+    tradeStrip = strip
 
     accept.Activated:Connect(function()
         Net.get("TradeRespond"):FireServer(true)
@@ -2615,6 +2615,94 @@ do
         end
     end)
 end
+
+-- ── Responsive pass for the dialogs ────────────────────────────────────────
+-- Each of these was a hardcoded pixel box centred with a hardcoded half-offset,
+-- which put all four of them partly off a phone screen.
+
+local function layoutDialogs()
+    local compact = Layout.isCompact()
+    local u = Layout.usable()
+    local pad = compact and 12 or 20
+    local btnH = compact and Layout.MIN_TAP or 44
+
+    -- Gulp confirmation.
+    local cSize = Layout.panel(420, compact and 250 or 210)
+    confirmFrame.Size = cSize
+    confirmFrame.Position = Layout.centre(cSize)
+    local cw, ch = cSize.X.Offset, cSize.Y.Offset
+    local body = confirmFrame:FindFirstChild("Body") :: TextLabel?
+    if body then
+        body.Position = UDim2.fromOffset(pad, compact and 44 or 52)
+        body.Size = UDim2.new(1, -pad * 2, 0, ch - (compact and 44 or 52) - btnH - 20)
+        body.TextSize = compact and 15 or 17
+    end
+    local yes = confirmFrame:FindFirstChild("GulpYes") :: TextButton?
+    local no = confirmFrame:FindFirstChild("GulpNo") :: TextButton?
+    local halfW = math.floor((cw - pad * 3) / 2)
+    if yes then
+        yes.Size = UDim2.fromOffset(halfW, btnH)
+        yes.Position = UDim2.fromOffset(pad, ch - btnH - pad)
+    end
+    if no then
+        no.Size = UDim2.fromOffset(halfW, btnH)
+        no.Position = UDim2.fromOffset(pad * 2 + halfW, ch - btnH - pad)
+    end
+
+    -- Rename dialog.
+    local rSize = Layout.panel(400, compact and 180 or 150)
+    renameFrame.Size = rSize
+    renameFrame.Position = Layout.centre(rSize)
+    local rw, rh = rSize.X.Offset, rSize.Y.Offset
+    renameBox.Position = UDim2.fromOffset(pad, compact and 44 or 52)
+    renameBox.Size = UDim2.new(1, -pad * 2, 0, compact and btnH or 42)
+    local rsave = renameFrame:FindFirstChild("RenameSave") :: TextButton?
+    local rcancel = renameFrame:FindFirstChild("RenameCancel") :: TextButton?
+    local rHalf = math.floor((rw - pad * 3) / 2)
+    if rsave then
+        rsave.Size = UDim2.fromOffset(rHalf, btnH)
+        rsave.Position = UDim2.fromOffset(pad, rh - btnH - pad)
+    end
+    if rcancel then
+        rcancel.Size = UDim2.fromOffset(rHalf, btnH)
+        rcancel.Position = UDim2.fromOffset(pad * 2 + rHalf, rh - btnH - pad)
+    end
+
+    -- Incoming trade request strip, pinned under the top bar.
+    if tradeStrip then
+        local sSize = Layout.panel(360, compact and 56 or 60, compact and 40 or 24, 8)
+        tradeStrip.Size = sSize
+        tradeStrip.Position = UDim2.fromOffset(
+            math.floor((u.X - sSize.X.Offset) / 2), compact and 74 or 90)
+        local sw = sSize.X.Offset
+        local sHalf = math.floor((sw - 36) / 2)
+        local acc = tradeStrip:FindFirstChild("TradeAccept") :: TextButton?
+        local dec = tradeStrip:FindFirstChild("TradeDecline") :: TextButton?
+        local sh = sSize.Y.Offset
+        if acc then
+            acc.Size = UDim2.fromOffset(sHalf, sh - 16)
+            acc.Position = UDim2.fromOffset(12, 8)
+        end
+        if dec then
+            dec.Size = UDim2.fromOffset(sHalf, sh - 16)
+            dec.Position = UDim2.fromOffset(sw - sHalf - 12, 8)
+        end
+    end
+
+    -- The "trade with X" prompt has to clear the touch controls too, so it
+    -- rides just above the drawer button rather than at a fixed offset.
+    if tradePrompt then
+        local pw = compact and math.min(230, u.X - 40) or 220
+        local ph = compact and Layout.MIN_TAP or 54
+        tradePrompt.Size = UDim2.fromOffset(pw, ph)
+        local y = compact and (u.Y - ph - Layout.MIN_TAP - 26) or (u.Y - 140)
+        tradePrompt.Position = UDim2.fromOffset(math.floor((u.X - pw) / 2), y)
+        tradePrompt.TextSize = compact and 17 or 22
+    end
+end
+
+layoutDialogs()
+Layout.changed.Event:Connect(layoutDialogs)
 
 -- ── Boot ───────────────────────────────────────────────────────────────────
 
@@ -2643,6 +2731,7 @@ local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 
 local Theme = require(script.Parent.Theme)
+local Layout = require(script.Parent.Layout)
 
 local player = Players.LocalPlayer
 local Hud = {}
@@ -2658,6 +2747,12 @@ local toastHolder: Frame
 local drawerOpen = false
 local snackButtons: { [string]: TextButton } = {}
 local eggButton: TextButton
+local topFrame: Frame
+local standFrame: Frame
+local openButton: TextButton
+local standTitle: TextLabel
+local drawerTitle: TextLabel
+local drawerHint: TextLabel
 
 local state: any = nil
 local displayedGlob = 0
@@ -2731,7 +2826,7 @@ end
 local function buildCard(goob: any, index: number): Frame
     local card = Instance.new("Frame")
     card.Name = "Goob" .. index
-    card.Size = UDim2.new(1, 0, 0, 118)
+    card.Size = UDim2.new(1, 0, 0, Layout.isTouch() and 136 or 118)
     card.BackgroundColor3 = goob.isActive and Theme.BG_SOFT or Theme.PANEL
     Theme.corner(card)
     Theme.stroke(card, goob.isActive and Theme.ACCENT or Color3.fromRGB(16, 18, 30), goob.isActive and 3 or 2)
@@ -2774,9 +2869,10 @@ local function buildCard(goob: any, index: number): Frame
     })
     belly.Parent = card
 
+    local rowH = Layout.isTouch() and Layout.MIN_TAP or 28
     local row = Instance.new("Frame")
     row.Position = UDim2.fromOffset(90, 82)
-    row.Size = UDim2.new(1, -102, 0, 28)
+    row.Size = UDim2.new(1, -102, 0, rowH)
     row.BackgroundTransparency = 1
     row.Parent = card
 
@@ -2786,21 +2882,21 @@ local function buildCard(goob: any, index: number): Frame
     layout.Parent = row
 
     if not goob.isActive then
-        local show = Theme.button("👁 Display", Theme.ACCENT, UDim2.fromOffset(104, 28))
+        local show = Theme.button("👁 Display", Theme.ACCENT, UDim2.fromOffset(104, rowH))
         show.TextSize = 15
         show.Parent = row
         show.Activated:Connect(function()
             Hud.onSetActive(goob.id)
         end)
 
-        local gulp = Theme.button("😋 Gulp", Theme.BAD, UDim2.fromOffset(88, 28))
+        local gulp = Theme.button("😋 Gulp", Theme.BAD, UDim2.fromOffset(88, rowH))
         gulp.TextSize = 15
         gulp.Parent = row
         gulp.Activated:Connect(function()
             Hud.onGulp(goob.id)
         end)
     else
-        local rename = Theme.button("✏️ Rename", Theme.GOLD, UDim2.fromOffset(104, 28))
+        local rename = Theme.button("✏️ Rename", Theme.GOLD, UDim2.fromOffset(104, rowH))
         rename.TextSize = 15
         rename.Parent = row
         rename.Activated:Connect(function() Hud.onRename(goob.id) end)
@@ -2810,7 +2906,7 @@ local function buildCard(goob: any, index: number): Frame
     -- keeps the trade UI itself read-only, which means the list you are
     -- agreeing to and the list you are editing can never drift apart.
     if Hud.tradeOpen then
-        local offer = Theme.button("➕ Offer", Theme.GOOD, UDim2.fromOffset(90, 28))
+        local offer = Theme.button("➕ Offer", Theme.GOOD, UDim2.fromOffset(90, rowH))
         offer.TextSize = 15
         offer.Parent = row
         offer.Activated:Connect(function() Hud.onOffer(goob.id) end)
@@ -2835,7 +2931,150 @@ local function rebuildDrawer()
         card.LayoutOrder = i
         card.Parent = drawerList
     end
-    drawerList.CanvasSize = UDim2.new(0, 0, 0, #sorted * 126 + 8)
+    drawerList.CanvasSize = UDim2.new(0, 0, 0, #sorted * (Layout.isTouch() and 144 or 126) + 8)
+end
+
+
+-- ── Responsive layout ──────────────────────────────────────────────────────
+-- Every size and position in the HUD is decided here rather than at creation,
+-- so a viewport change is just a second call to this function.
+--
+-- Two distinct layouts, not one layout that shrinks:
+--
+--   ROOMY   — stat panel and snack stand stacked down the left, drawer button
+--             bottom-left, drawer slides in above it.
+--   COMPACT — the left column would eat a phone screen whole, and both bottom
+--             corners belong to the Roblox touch controls. So: one round
+--             button in the gap between thumbstick and jump button, and the
+--             snack stand moves INSIDE the drawer. One button, one panel.
+
+function Hud.drawerPosition(open: boolean): UDim2
+    local u = Layout.usable()
+    local size = drawer.Size
+    if not open then
+        return UDim2.fromOffset(-size.X.Offset - 30, drawer.Position.Y.Offset)
+    end
+    if Layout.isCompact() then
+        return UDim2.fromOffset(10, 8)
+    end
+    return UDim2.fromOffset(16, u.Y - size.Y.Offset - 84)
+end
+
+function Hud.applyLayout()
+    if not topFrame then return end
+    local compact = Layout.isCompact()
+    local touch = Layout.isTouch()
+    local u = Layout.usable()
+
+    -- Stat panel, top-left.
+    local statW = compact and math.min(210, u.X * 0.42) or 300
+    local statH = compact and 74 or 108
+    topFrame.Size = UDim2.fromOffset(statW, statH)
+    topFrame.Position = UDim2.fromOffset(compact and 10 or 16, compact and 8 or 16)
+
+    powerLabel.TextSize = compact and 26 or 34
+    powerLabel.Size = UDim2.new(1, -20, 0, compact and 30 or 40)
+    powerLabel.Position = UDim2.fromOffset(12, compact and 4 or 8)
+    globLabel.TextSize = compact and 18 or 22
+    globLabel.Size = UDim2.new(1, -20, 0, compact and 22 or 26)
+    globLabel.Position = UDim2.fromOffset(12, compact and 34 or 48)
+    incomeLabel.TextSize = compact and 13 or 15
+    incomeLabel.Size = UDim2.new(1, -20, 0, 20)
+    incomeLabel.Position = UDim2.fromOffset(12, compact and 54 or 74)
+
+    ageLabel.Position = UDim2.fromOffset(compact and 10 or 16, statH + (compact and 12 or 30))
+    ageLabel.Size = UDim2.fromOffset(statW + (compact and 40 or 0), compact and 20 or 24)
+    ageLabel.TextSize = compact and 14 or 17
+
+    -- Toasts, top-right. Narrower on a phone so they never meet the stat panel.
+    local toastW = compact and math.min(250, u.X * 0.40) or 340
+    toastHolder.Size = UDim2.fromOffset(toastW, math.min(400, u.Y - 20))
+    toastHolder.Position = UDim2.fromOffset(u.X - toastW - (compact and 10 or 16), compact and 8 or 16)
+
+    -- The drawer. Near-fullscreen on a phone, a side panel otherwise.
+    local drawerW = compact and math.min(400, u.X - 20) or 430
+    local drawerH = compact and (u.Y - 16) or math.min(460, u.Y - 100)
+    drawer.Size = UDim2.fromOffset(drawerW, drawerH)
+
+    drawerTitle.TextSize = compact and 22 or 26
+    drawerHint.Visible = not compact  -- the warning also lives on the confirm dialog
+
+    local headerH = compact and 42 or 64
+
+    -- Snack stand: its own panel when there is room, inside the drawer when
+    -- there is not. A phone screen cannot host both.
+    local standH = (compact and 3 * 48 + 34 or 132)
+    if compact then
+        standFrame.Parent = drawer
+        standFrame.Size = UDim2.fromOffset(drawerW - 20, standH)
+        standFrame.Position = UDim2.fromOffset(10, headerH)
+        standFrame.BackgroundTransparency = 1
+        standTitle.Visible = false
+    else
+        standFrame.Parent = gui
+        standFrame.Size = UDim2.fromOffset(300, standH)
+        standFrame.Position = UDim2.fromOffset(16, 158)
+        standFrame.BackgroundTransparency = 0.12
+        standTitle.Visible = true
+    end
+
+    local btnH = touch and Layout.MIN_TAP or 30
+    local btnGap = compact and 4 or 4
+    local standTop = compact and 4 or 30
+    local i = 0
+    for _, tier in ipairs(Config.SNACK_TIERS) do
+        local btn = snackButtons[tier.id]
+        if btn then
+            btn.Size = UDim2.new(1, -20, 0, btnH)
+            btn.Position = UDim2.fromOffset(10, standTop + i * (btnH + btnGap))
+            btn.TextSize = compact and 16 or 15
+            i += 1
+        end
+    end
+
+    -- Egg button sits under the snack stack inside the drawer on compact.
+    local eggY = compact and (headerH + standH + 6) or 64
+    if eggButton then
+        eggButton.Size = UDim2.new(1, -20, 0, touch and Layout.MIN_TAP or 34)
+        eggButton.Position = UDim2.fromOffset(10, eggY)
+        eggButton.TextSize = compact and 16 or 16
+    end
+
+    local listTop = eggY + (compact and 52 or 42)
+    drawerList.Position = UDim2.fromOffset(10, listTop)
+    drawerList.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - listTop - 10))
+
+    -- The one action button. On touch it goes in the gap between the
+    -- thumbstick and the jump button, which is the only reachable part of the
+    -- bottom edge; otherwise bottom-left as usual.
+    if touch then
+        local gapL, gapR = Layout.bottomGap()
+        local size = Layout.MIN_TAP + 16
+        local cx = (gapL + gapR) / 2
+        -- If the gap is too narrow to centre in, sit just right of the stick.
+        if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
+        openButton.Size = UDim2.fromOffset(size, size)
+        openButton.Position = UDim2.fromOffset(
+            math.clamp(cx - size / 2, 8, u.X - size - 8),
+            u.Y - size - 10
+        )
+        openButton.Text = compact and "🫧" or "🫧 MY GOOBS"
+        if not compact then
+            openButton.Size = UDim2.fromOffset(190, math.max(size, 58))
+            openButton.Position = UDim2.fromOffset(
+                math.clamp(cx - 95, 8, u.X - 198), u.Y - math.max(size, 58) - 10)
+        end
+        openButton.TextSize = compact and 28 or 22
+    else
+        openButton.Size = UDim2.fromOffset(190, 58)
+        openButton.Position = UDim2.fromOffset(16, u.Y - 74)
+        openButton.Text = "🫧 MY GOOBS"
+        openButton.TextSize = 24
+    end
+
+    drawer.Position = Hud.drawerPosition(drawerOpen)
+    drawer.Visible = drawerOpen
+    if drawerOpen then rebuildDrawer() end
 end
 
 -- ── Build ──────────────────────────────────────────────────────────────────
@@ -2844,14 +3083,20 @@ function Hud.build(): ScreenGui
     gui = Instance.new("ScreenGui")
     gui.Name = "GoobHud"
     gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
+    -- false, NOT true: with IgnoreGuiInset = true the ScreenGui draws from the
+    -- true top of the screen and the Roblox top bar covers the first ~36px —
+    -- which is exactly where the power readout was.
+    gui.IgnoreGuiInset = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    -- Above Roblox's own touch-control ScreenGui, so a dialog button placed
+    -- over the jump button receives the tap instead of the jump button.
+    gui.DisplayOrder = 10
     gui.Parent = player:WaitForChild("PlayerGui")
 
     -- Top-left: the two numbers that matter.
     local top = Instance.new("Frame")
-    top.Size = UDim2.fromOffset(300, 108)
-    top.Position = UDim2.fromOffset(16, 16)
+    topFrame = top
+    top.Name = "StatPanel"
     top.BackgroundColor3 = Theme.BG
     top.BackgroundTransparency = 0.12
     top.Parent = gui
@@ -2884,14 +3129,14 @@ function Hud.build(): ScreenGui
 
     -- Bottom-left: the one big button.
     local openBtn = Theme.button("🫧 MY GOOBS", Theme.ACCENT, UDim2.fromOffset(190, 58))
-    openBtn.Position = UDim2.new(0, 16, 1, -74)
+    openBtn.Name = "OpenDrawer"
     openBtn.TextSize = 24
     openBtn.Parent = gui
+    openButton = openBtn
 
     -- Drawer.
     drawer = Instance.new("Frame")
-    drawer.Size = UDim2.fromOffset(430, 460)
-    drawer.Position = UDim2.new(0, -450, 1, -544)
+    drawer.Name = "GoobDrawer"
     drawer.BackgroundColor3 = Theme.BG
     drawer.BackgroundTransparency = 0.06
     drawer.Parent = gui
@@ -2903,6 +3148,7 @@ function Hud.build(): ScreenGui
         Text = "🫧 MY GOOBS", TextSize = 26,
     })
     title.Parent = drawer
+    drawerTitle = title
 
     local hint = Theme.label({
         Position = UDim2.fromOffset(18, 42), Size = UDim2.new(1, -36, 0, 20),
@@ -2910,6 +3156,7 @@ function Hud.build(): ScreenGui
         TextSize = 14, TextColor3 = Theme.WARN, TextWrapped = true,
     })
     hint.Parent = drawer
+    drawerHint = hint
 
     -- Eggs are the ONLY source of new Goobs in the game, so the button lives
     -- at the top of the drawer rather than behind another menu.
@@ -2935,25 +3182,36 @@ function Hud.build(): ScreenGui
 
     openBtn.Activated:Connect(function()
         drawerOpen = not drawerOpen
-        TweenService:Create(drawer, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-            Position = drawerOpen and UDim2.new(0, 16, 1, -544) or UDim2.new(0, -450, 1, -544),
-        }):Play()
-        if drawerOpen then rebuildDrawer() end
+        if drawerOpen then
+            drawer.Visible = true
+            rebuildDrawer()
+        end
+        local tween = TweenService:Create(
+            drawer, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            { Position = Hud.drawerPosition(drawerOpen) })
+        -- Hide it once it has slid away. A panel parked off-screen still
+        -- renders and still costs layout, and it makes "is anything hanging
+        -- off the edge of the screen?" impossible to answer honestly.
+        if not drawerOpen then
+            tween.Completed:Connect(function()
+                if not drawerOpen then drawer.Visible = false end
+            end)
+        end
+        tween:Play()
     end)
 
     -- Snack Stand: three buttons under the HUD. This is where idle income
     -- turns back into progression, so it is always on screen, never in a menu.
     local stand = Instance.new("Frame")
     stand.Name = "SnackStand"
-    stand.Size = UDim2.fromOffset(300, 132)
-    stand.Position = UDim2.fromOffset(16, 158)
+    standFrame = stand
     stand.BackgroundColor3 = Theme.BG
     stand.BackgroundTransparency = 0.12
     stand.Parent = gui
     Theme.corner(stand, 16)
     Theme.stroke(stand, Color3.fromRGB(14, 16, 26), 3)
 
-    local standTitle = Theme.label({
+    standTitle = Theme.label({
         Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 0, 22),
         Text = "🍪 SNACK STAND", TextSize = 17, TextColor3 = Theme.GOLD,
     })
@@ -2973,8 +3231,7 @@ function Hud.build(): ScreenGui
 
     -- Toast column, top-right.
     toastHolder = Instance.new("Frame")
-    toastHolder.Size = UDim2.fromOffset(340, 400)
-    toastHolder.Position = UDim2.new(1, -356, 0, 16)
+    toastHolder.Name = "Toasts"
     toastHolder.BackgroundTransparency = 1
     toastHolder.Parent = gui
 
@@ -2991,6 +3248,10 @@ function Hud.build(): ScreenGui
         displayedGlob += state.income * dt
         globLabel.Text = "💧 " .. Format.short(displayedGlob)
     end)
+
+    Layout.start()
+    Hud.applyLayout()
+    Layout.changed.Event:Connect(Hud.applyLayout)
 
     return gui
 end
@@ -3056,7 +3317,144 @@ function Hud.setTradeOpen(open: boolean)
 end
 
 return Hud
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000015"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000015"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Layout.luau — one place that knows how big the screen is and what that means.
+--
+-- MEASURED, NOT GUESSED. Before this existed, at 568x320 (iPhone SE landscape)
+-- the HUD covered 233% of the screen, 25 elements hung off the edges, tap
+-- targets were 28px, and buttons sat underneath the thumbstick and jump button
+-- where a thumb can never reach them.
+--
+-- Roblox reserves real estate for touch controls that no API will tell you
+-- about: a movement thumbstick bottom-left and a jump button bottom-right.
+-- Anything drawn there is simply unreachable on a phone, so the compact layout
+-- puts its one action button in the gap between them.
+
+local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
+local Workspace = game:GetService("Workspace")
+
+local Layout = {}
+
+-- Reserved by the Roblox touch controls. Generous on purpose: being 20px too
+-- cautious costs nothing, being 20px too bold makes a button untappable.
+Layout.THUMBSTICK = Vector2.new(230, 190)
+Layout.JUMP_BUTTON = Vector2.new(160, 160)
+
+-- Apple's guidance is 44pt; 34 is the floor we enforce and 44 is what we aim
+-- for on anything a player presses repeatedly.
+Layout.MIN_TAP = 44
+
+Layout.changed = Instance.new("BindableEvent")
+
+local current = {
+    viewport = Vector2.new(1280, 720),
+    compact = false,
+    touch = false,
+    inset = 0,
+}
+
+function Layout.get()
+    return current
+end
+
+function Layout.isCompact(): boolean
+    return current.compact
+end
+
+-- Deliberately separate from isCompact. An iPad is touch but not small: it
+-- wants finger-sized tap targets and must keep the persistent HUD clear of the
+-- thumbstick, while still having room for the roomy two-column layout.
+-- Conflating the two left iPad with 28px buttons under the joystick.
+function Layout.isTouch(): boolean
+    return current.touch
+end
+
+function Layout.viewport(): Vector2
+    return current.viewport
+end
+
+-- Usable height once the Roblox top bar is accounted for.
+function Layout.usable(): Vector2
+    return Vector2.new(current.viewport.X, current.viewport.Y - current.inset)
+end
+
+-- Clamp a desired pixel size so it always fits with a margin. This is what
+-- stops a 640x480 trade window from being drawn on a 568x320 screen.
+function Layout.panel(wantW: number, wantH: number, marginX: number?, marginY: number?): UDim2
+    local u = Layout.usable()
+    local mx = marginX or (current.compact and 12 or 24)
+    local my = marginY or (current.compact and 12 or 24)
+    return UDim2.fromOffset(
+        math.min(wantW, u.X - mx * 2),
+        math.min(wantH, u.Y - my * 2)
+    )
+end
+
+-- Centre a panel of a given resolved size.
+function Layout.centre(size: UDim2): UDim2
+    local u = Layout.usable()
+    return UDim2.fromOffset(
+        math.floor((u.X - size.X.Offset) / 2),
+        math.floor((u.Y - size.Y.Offset) / 2)
+    )
+end
+
+-- The horizontal band between the thumbstick and the jump button — the only
+-- part of the bottom edge a phone player can actually press.
+function Layout.bottomGap(): (number, number)
+    local w = current.viewport.X
+    local left = Layout.THUMBSTICK.X
+    local right = w - Layout.JUMP_BUTTON.X
+    return left, right
+end
+
+function Layout.recompute()
+    local camera = Workspace.CurrentCamera
+    local vp = camera and camera.ViewportSize or Vector2.new(1280, 720)
+    local touch = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
+    local insetTop = 0
+    local ok, top = pcall(function()
+        return (GuiService:GetGuiInset())
+    end)
+    if ok and top then insetTop = top.Y end
+
+    -- Compact is about available room, not about being a phone: a small window
+    -- on a desktop has exactly the same problem.
+    local compact = vp.X < 900 or vp.Y < 500
+
+    local changed = compact ~= current.compact
+        or vp ~= current.viewport
+        or touch ~= current.touch
+
+    current.viewport = vp
+    current.compact = compact
+    current.touch = touch
+    current.inset = insetTop
+
+    if changed then
+        Layout.changed:Fire(current)
+    end
+end
+
+function Layout.start()
+    Layout.recompute()
+    local camera = Workspace.CurrentCamera
+    if camera then
+        camera:GetPropertyChangedSignal("ViewportSize"):Connect(Layout.recompute)
+    end
+    Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+        Layout.recompute()
+        local cam = Workspace.CurrentCamera
+        if cam then
+            cam:GetPropertyChangedSignal("ViewportSize"):Connect(Layout.recompute)
+        end
+    end)
+end
+
+return Layout
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Theme.luau — one place for every colour, corner radius and font in the UI.
 -- Chunky, high-contrast, oversized text: the target player is nine and may be
 -- on a phone, so nothing here is subtle.
@@ -3128,7 +3526,7 @@ function Theme.button(text: string, color: Color3, size: UDim2): TextButton
 end
 
 return Theme
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeUi.luau — the trade window.
 --
 -- The whole design goal is SCAM RESISTANCE made visible. A young player cannot
@@ -3145,6 +3543,7 @@ local Net = require(Shared.Net)
 local Format = require(Shared.Format)
 
 local Theme = require(script.Parent.Theme)
+local Layout = require(script.Parent.Layout)
 
 local player = Players.LocalPlayer
 local TradeUi = {}
@@ -3252,8 +3651,6 @@ end
 function TradeUi.build(gui: ScreenGui)
     root = Instance.new("Frame")
     root.Name = "TradeWindow"
-    root.Size = UDim2.fromOffset(640, 480)
-    root.Position = UDim2.new(0.5, -320, 0.5, -240)
     root.BackgroundColor3 = Theme.BG
     root.Visible = false
     root.Parent = gui
@@ -3284,7 +3681,7 @@ function TradeUi.build(gui: ScreenGui)
     statusLabel.Parent = root
 
     confirmBtn = Theme.button("HOLD TO CONFIRM", Theme.GOOD, UDim2.fromOffset(300, 46))
-    confirmBtn.Position = UDim2.new(0.5, -160, 1, -58)
+    confirmBtn.Name = "HoldToConfirm"
     confirmBtn.TextSize = 20
     confirmBtn.Parent = root
 
@@ -3314,6 +3711,7 @@ function TradeUi.build(gui: ScreenGui)
     cancel.Position = UDim2.new(0.5, 152, 1, -58)
     cancel.TextSize = 17
     cancel.Parent = root
+    cancel.Name = "CancelTrade"
     cancel.Activated:Connect(function()
         Net.get("TradeCancel"):FireServer()
     end)
@@ -3341,12 +3739,68 @@ function TradeUi.build(gui: ScreenGui)
         end
     end)
 
+    TradeUi.applyLayout()
+    Layout.changed.Event:Connect(TradeUi.applyLayout)
+
     RunService.RenderStepped:Connect(function()
         if holding then
             local pct = math.clamp((os.clock() - holdStart) / lockSeconds, 0, 1)
             fillBar.Size = UDim2.fromScale(pct, 1)
         end
     end)
+end
+
+-- Resize and re-place the window for the current screen. The desktop layout
+-- puts the two offers side by side; a phone is too narrow for that, so the
+-- confirm/cancel row stacks and the columns get every pixel that is left.
+function TradeUi.applyLayout()
+    if not root then return end
+    local compact = Layout.isCompact()
+    local size = Layout.panel(640, 480)
+    root.Size = size
+    root.Position = Layout.centre(size)
+
+    local w, h = size.X.Offset, size.Y.Offset
+    local pad = compact and 10 or 14
+    local headerH = compact and 54 or 76
+    local footerH = compact and 96 or 84
+
+    partnerLabel.Position = UDim2.fromOffset(pad + 6, compact and 30 or 44)
+    partnerLabel.Size = UDim2.new(1, -(pad + 6) * 2, 0, 22)
+    partnerLabel.TextSize = compact and 14 or 17
+
+    for _, holder in ipairs({ myList.Parent, theirList.Parent }) do
+        if holder then
+            holder.Size = UDim2.new(0.5, -pad - 4, 1, -(headerH + footerH))
+        end
+    end
+    if myList.Parent then myList.Parent.Position = UDim2.fromOffset(pad, headerH) end
+    if theirList.Parent then theirList.Parent.Position = UDim2.new(0.5, 4, 0, headerH) end
+
+    statusLabel.Position = UDim2.fromOffset(pad, h - footerH + (compact and 2 or 6))
+    statusLabel.Size = UDim2.new(1, -pad * 2, 0, 20)
+    statusLabel.TextSize = compact and 13 or 15
+
+    -- Confirm is the important control, so it keeps full width on a phone and
+    -- Cancel drops onto its own row underneath rather than shrinking.
+    local btnH = compact and Layout.MIN_TAP or 46
+    local cancelBtn = root:FindFirstChild("CancelTrade")
+    if compact then
+        confirmBtn.Size = UDim2.new(1, -pad * 2, 0, btnH)
+        confirmBtn.Position = UDim2.fromOffset(pad, h - btnH * 2 - 12)
+        if cancelBtn then
+            cancelBtn.Size = UDim2.new(1, -pad * 2, 0, btnH - 8)
+            cancelBtn.Position = UDim2.fromOffset(pad, h - btnH + 2)
+        end
+    else
+        confirmBtn.Size = UDim2.fromOffset(300, btnH)
+        confirmBtn.Position = UDim2.fromOffset(math.floor(w / 2) - 160, h - btnH - 12)
+        if cancelBtn then
+            cancelBtn.Size = UDim2.fromOffset(120, btnH)
+            cancelBtn.Position = UDim2.fromOffset(math.floor(w / 2) + 152, h - btnH - 12)
+        end
+    end
+    confirmBtn.TextSize = compact and 17 or 20
 end
 
 function TradeUi.sync(stateIn: any)

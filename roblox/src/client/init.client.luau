@@ -22,6 +22,7 @@ local Net = require(Shared.Net)
 local Format = require(Shared.Format)
 
 local Theme = require(script.Theme)
+local Layout = require(script.Layout)
 local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 
@@ -130,11 +131,11 @@ end
 -- consequence spelled out in words a child will actually read.
 local pendingGulp: string? = nil
 local confirmFrame: Frame
+local tradeStrip: Frame
 
 local function buildGulpConfirm()
     confirmFrame = Instance.new("Frame")
-    confirmFrame.Size = UDim2.fromOffset(420, 210)
-    confirmFrame.Position = UDim2.new(0.5, -210, 0.5, -105)
+    confirmFrame.Name = "GulpConfirm"
     confirmFrame.BackgroundColor3 = Theme.BG
     confirmFrame.Visible = false
     confirmFrame.Parent = gui
@@ -156,7 +157,7 @@ local function buildGulpConfirm()
     body.Parent = confirmFrame
 
     local yes = Theme.button("😋 GULP IT", Theme.BAD, UDim2.fromOffset(170, 44))
-    yes.Position = UDim2.fromOffset(20, 150)
+    yes.Name = "GulpYes"
     yes.Parent = confirmFrame
     yes.Activated:Connect(function()
         local state = Hud.getState()
@@ -170,7 +171,7 @@ local function buildGulpConfirm()
     end)
 
     local no = Theme.button("✖ KEEP IT", Theme.ACCENT, UDim2.fromOffset(170, 44))
-    no.Position = UDim2.new(1, -190, 0, 150)
+    no.Name = "GulpNo"
     no.Parent = confirmFrame
     no.Activated:Connect(function()
         pendingGulp = nil
@@ -209,8 +210,7 @@ local renameTarget: string? = nil
 
 do
     renameFrame = Instance.new("Frame")
-    renameFrame.Size = UDim2.fromOffset(400, 150)
-    renameFrame.Position = UDim2.new(0.5, -200, 0.5, -75)
+    renameFrame.Name = "RenameDialog"
     renameFrame.BackgroundColor3 = Theme.BG
     renameFrame.Visible = false
     renameFrame.Parent = gui
@@ -237,7 +237,7 @@ do
     Theme.corner(renameBox, 10)
 
     local ok = Theme.button("SAVE", Theme.GOOD, UDim2.fromOffset(160, 38))
-    ok.Position = UDim2.fromOffset(20, 102)
+    ok.Name = "RenameSave"
     ok.Parent = renameFrame
     ok.Activated:Connect(function()
         if renameTarget and #renameBox.Text >= 2 then
@@ -248,7 +248,7 @@ do
     end)
 
     local cancel = Theme.button("CANCEL", Theme.BAD, UDim2.fromOffset(160, 38))
-    cancel.Position = UDim2.new(1, -180, 0, 102)
+    cancel.Name = "RenameCancel"
     cancel.Parent = renameFrame
     cancel.Activated:Connect(function()
         renameFrame.Visible = false
@@ -271,7 +271,7 @@ end
 local tradePrompt: TextButton
 do
     tradePrompt = Theme.button("🤝 TRADE", Theme.GOLD, UDim2.fromOffset(220, 54))
-    tradePrompt.Position = UDim2.new(0.5, -110, 1, -140)
+    tradePrompt.Name = "TradePrompt"
     tradePrompt.TextSize = 22
     tradePrompt.Visible = false
     tradePrompt.Parent = gui
@@ -324,8 +324,7 @@ end)
 -- Incoming trade request: accept/decline strip.
 do
     local strip = Instance.new("Frame")
-    strip.Size = UDim2.fromOffset(360, 60)
-    strip.Position = UDim2.new(0.5, -180, 0, 90)
+    strip.Name = "TradeRequestStrip"
     strip.BackgroundColor3 = Theme.BG
     strip.Visible = false
     strip.Parent = gui
@@ -333,11 +332,12 @@ do
     Theme.stroke(strip, Theme.GOLD, 3)
 
     local accept = Theme.button("✅ ACCEPT", Theme.GOOD, UDim2.fromOffset(160, 42))
-    accept.Position = UDim2.fromOffset(12, 9)
+    accept.Name = "TradeAccept"
     accept.Parent = strip
     local decline = Theme.button("✖ NO", Theme.BAD, UDim2.fromOffset(160, 42))
-    decline.Position = UDim2.new(1, -172, 0, 9)
+    decline.Name = "TradeDecline"
     decline.Parent = strip
+    tradeStrip = strip
 
     accept.Activated:Connect(function()
         Net.get("TradeRespond"):FireServer(true)
@@ -355,6 +355,94 @@ do
         end
     end)
 end
+
+-- ── Responsive pass for the dialogs ────────────────────────────────────────
+-- Each of these was a hardcoded pixel box centred with a hardcoded half-offset,
+-- which put all four of them partly off a phone screen.
+
+local function layoutDialogs()
+    local compact = Layout.isCompact()
+    local u = Layout.usable()
+    local pad = compact and 12 or 20
+    local btnH = compact and Layout.MIN_TAP or 44
+
+    -- Gulp confirmation.
+    local cSize = Layout.panel(420, compact and 250 or 210)
+    confirmFrame.Size = cSize
+    confirmFrame.Position = Layout.centre(cSize)
+    local cw, ch = cSize.X.Offset, cSize.Y.Offset
+    local body = confirmFrame:FindFirstChild("Body") :: TextLabel?
+    if body then
+        body.Position = UDim2.fromOffset(pad, compact and 44 or 52)
+        body.Size = UDim2.new(1, -pad * 2, 0, ch - (compact and 44 or 52) - btnH - 20)
+        body.TextSize = compact and 15 or 17
+    end
+    local yes = confirmFrame:FindFirstChild("GulpYes") :: TextButton?
+    local no = confirmFrame:FindFirstChild("GulpNo") :: TextButton?
+    local halfW = math.floor((cw - pad * 3) / 2)
+    if yes then
+        yes.Size = UDim2.fromOffset(halfW, btnH)
+        yes.Position = UDim2.fromOffset(pad, ch - btnH - pad)
+    end
+    if no then
+        no.Size = UDim2.fromOffset(halfW, btnH)
+        no.Position = UDim2.fromOffset(pad * 2 + halfW, ch - btnH - pad)
+    end
+
+    -- Rename dialog.
+    local rSize = Layout.panel(400, compact and 180 or 150)
+    renameFrame.Size = rSize
+    renameFrame.Position = Layout.centre(rSize)
+    local rw, rh = rSize.X.Offset, rSize.Y.Offset
+    renameBox.Position = UDim2.fromOffset(pad, compact and 44 or 52)
+    renameBox.Size = UDim2.new(1, -pad * 2, 0, compact and btnH or 42)
+    local rsave = renameFrame:FindFirstChild("RenameSave") :: TextButton?
+    local rcancel = renameFrame:FindFirstChild("RenameCancel") :: TextButton?
+    local rHalf = math.floor((rw - pad * 3) / 2)
+    if rsave then
+        rsave.Size = UDim2.fromOffset(rHalf, btnH)
+        rsave.Position = UDim2.fromOffset(pad, rh - btnH - pad)
+    end
+    if rcancel then
+        rcancel.Size = UDim2.fromOffset(rHalf, btnH)
+        rcancel.Position = UDim2.fromOffset(pad * 2 + rHalf, rh - btnH - pad)
+    end
+
+    -- Incoming trade request strip, pinned under the top bar.
+    if tradeStrip then
+        local sSize = Layout.panel(360, compact and 56 or 60, compact and 40 or 24, 8)
+        tradeStrip.Size = sSize
+        tradeStrip.Position = UDim2.fromOffset(
+            math.floor((u.X - sSize.X.Offset) / 2), compact and 74 or 90)
+        local sw = sSize.X.Offset
+        local sHalf = math.floor((sw - 36) / 2)
+        local acc = tradeStrip:FindFirstChild("TradeAccept") :: TextButton?
+        local dec = tradeStrip:FindFirstChild("TradeDecline") :: TextButton?
+        local sh = sSize.Y.Offset
+        if acc then
+            acc.Size = UDim2.fromOffset(sHalf, sh - 16)
+            acc.Position = UDim2.fromOffset(12, 8)
+        end
+        if dec then
+            dec.Size = UDim2.fromOffset(sHalf, sh - 16)
+            dec.Position = UDim2.fromOffset(sw - sHalf - 12, 8)
+        end
+    end
+
+    -- The "trade with X" prompt has to clear the touch controls too, so it
+    -- rides just above the drawer button rather than at a fixed offset.
+    if tradePrompt then
+        local pw = compact and math.min(230, u.X - 40) or 220
+        local ph = compact and Layout.MIN_TAP or 54
+        tradePrompt.Size = UDim2.fromOffset(pw, ph)
+        local y = compact and (u.Y - ph - Layout.MIN_TAP - 26) or (u.Y - 140)
+        tradePrompt.Position = UDim2.fromOffset(math.floor((u.X - pw) / 2), y)
+        tradePrompt.TextSize = compact and 17 or 22
+    end
+end
+
+layoutDialogs()
+Layout.changed.Event:Connect(layoutDialogs)
 
 -- ── Boot ───────────────────────────────────────────────────────────────────
 
