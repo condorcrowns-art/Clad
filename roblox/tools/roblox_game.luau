@@ -45,10 +45,70 @@ local function isA(self, className)
     return false
 end
 
+-- Roblox instances are born with real default property values, and code reads
+-- them before ever writing them. TradeUi does `fillBar.ZIndex = btn.ZIndex + 1`
+-- on a button it just created — with a nil default that is an arithmetic error
+-- that never happens in the real engine. So the stub has to have defaults too.
+local function defaultsFor(className)
+    local d = { Name = className, Archivable = true }
+
+    local c = className
+    local isGui, isPart, isText = false, false, false
+    while c do
+        if c == "GuiObject" then isGui = true end
+        if c == "BasePart" then isPart = true end
+        c = SUPER[c]
+    end
+    isText = className == "TextLabel" or className == "TextButton" or className == "TextBox"
+
+    if isGui then
+        d.ZIndex = 1
+        d.Visible = true
+        d.Active = false
+        d.BackgroundTransparency = 0
+        d.BorderSizePixel = 1
+        d.Size = env.UDim2.new(0, 0, 0, 0)
+        d.Position = env.UDim2.new(0, 0, 0, 0)
+        d.AnchorPoint = env.Vector2.new(0, 0)
+        d.Rotation = 0
+        d.LayoutOrder = 0
+    end
+    if isText then
+        d.Text = ""
+        d.TextTransparency = 0
+        d.TextSize = 14
+        d.TextScaled = false
+        d.TextWrapped = false
+    end
+    if isPart then
+        d.Transparency = 0
+        d.Reflectance = 0
+        d.Anchored = false
+        d.CanCollide = true
+        d.CanQuery = true
+        d.CanTouch = true
+        d.Massless = false
+        d.Size = env.Vector3.new(4, 1, 2)
+        d.Position = env.Vector3.new(0, 0, 0)
+        d.CFrame = env.CFrame.new(0, 0, 0)
+    end
+    if className == "Sound" then
+        d.Volume = 0.5
+        d.PlaybackSpeed = 1
+        d.Playing = false
+        d.SoundId = ""
+    end
+    if className == "BillboardGui" or className == "SurfaceGui" or className == "ScreenGui" then
+        d.Enabled = true
+        d.ZIndex = 1
+    end
+    return d
+end
+
 local function newInstance(className)
     local self = {}
     rawset(self, "_class", className)
-    rawset(self, "_props", { Name = className, Archivable = true })
+    rawset(self, "_props", defaultsFor(className))
     rawset(self, "_children", {})
     rawset(self, "_parent", nil)
     rawset(self, "_destroyed", false)
@@ -170,12 +230,22 @@ local METHODS = {
         return sigs[key]
     end,
     SetPrimaryPartCFrame = function(self, c) rawget(self, "_props").PrimaryPartCFrame = c end,
+    CaptureFocus = function(self) rawget(self, "_props").Focused = true end,
+    ReleaseFocus = function(self) rawget(self, "_props").Focused = false end,
+    TweenSize = function() end,
+    TweenPosition = function() end,
     PivotTo = function(self, c) rawget(self, "_props").Pivot = c end,
 }
 
+-- GUI input signals are created on first access. Accessing one is how the
+-- client wires its buttons, so they must exist for every GuiObject.
 local LAZY_SIGNALS = {
     ChildAdded = true, ChildRemoved = true, Destroying = true,
     AncestryChanged = true, Touched = true, Changed = true,
+    Activated = true, MouseButton1Click = true, MouseButton1Down = true,
+    MouseButton1Up = true, MouseEnter = true, MouseLeave = true,
+    InputBegan = true, InputEnded = true, FocusLost = true, Focused = true,
+    TouchTap = true, Ended = true,
 }
 
 Instance_mt.__index = function(self, key)
@@ -234,6 +304,7 @@ M.newInstance = newInstance
 -- client, which is the only way to check the notify/HUD paths headlessly.
 
 M.clientTraffic = {}
+M.soundsPlayed = 0
 
 local function makeRemoteEvent(name)
     local r = newInstance("RemoteEvent")
@@ -251,10 +322,25 @@ local function makeRemoteEvent(name)
     rawget(r, "_props").FireAllClients = function(_, ...)
         table.insert(M.clientTraffic, { remote = label(), player = "ALL", args = table.pack(...) })
     end
+    -- Roblox prepends the calling player to every OnServerEvent handler. The
+    -- harness originally did not, and the server-side tests compensated by
+    -- passing a player manually — which hid the discrepancy until the REAL
+    -- client code ran and its handlers started receiving a tier id where they
+    -- expected a Player. Tests that need to act as a specific player use
+    -- fireAs() below instead.
     rawget(r, "_props").FireServer = function(_, ...)
-        rawget(r, "_signals").OnServerEvent:Fire(...)
+        rawget(r, "_signals").OnServerEvent:Fire(M.getLocalPlayer(), ...)
     end
     return r
+end
+
+-- Set by roblox_services once a LocalPlayer exists.
+M.getLocalPlayer = function() return nil end
+
+-- Test helper: fire a remote AS a given player, bypassing LocalPlayer. This is
+-- what scenario files use to drive several players from one process.
+function M.fireAs(remote, player, ...)
+    rawget(remote, "_signals").OnServerEvent:Fire(player, ...)
 end
 
 local function makeRemoteFunction(name)
@@ -262,11 +348,27 @@ local function makeRemoteFunction(name)
     r.Name = name
     rawget(r, "_props").InvokeServer = function(_, ...)
         local fn = rawget(r, "_props").OnServerInvoke
-        if not fn then error("no OnServerInvoke on " .. name, 0) end
-        return fn(...)
+        if not fn then error("no OnServerInvoke on " .. rawget(r, "_props").Name, 0) end
+        -- Roblox ALWAYS passes the calling player as the first argument to
+        -- OnServerInvoke. Omitting it made every handler receive nil where it
+        -- expected a Player, which is not a bug the real engine can produce.
+        return fn(M.getLocalPlayer(), ...)
     end
     return r
 end
+
+-- Sounds need Play/Stop; the client creates three at startup and plays them on
+-- catches, rare drops and gulps.
+local function makeSound()
+    local snd = newInstance("Sound")
+    rawget(snd, "_props").Play = function(self) M.soundsPlayed += 1 end
+    rawget(snd, "_props").Stop = function() end
+    rawget(snd, "_props").Destroy = METHODS.Destroy
+    rawget(snd, "_signals").Ended = Signal.new("Ended")
+    return snd
+end
+
+local function makeSound2() return makeSound() end
 
 local function makeBindableEvent()
     local b = newInstance("BindableEvent")
@@ -293,6 +395,7 @@ M.Instance = {
         if className == "RemoteEvent" then inst = makeRemoteEvent("RemoteEvent")
         elseif className == "RemoteFunction" then inst = makeRemoteFunction("RemoteFunction")
         elseif className == "BindableEvent" then inst = makeBindableEvent()
+        elseif className == "Sound" then inst = makeSound()
         elseif className == "BindableFunction" then inst = makeBindableFunction()
         else inst = newInstance(className) end
         if parent then setParent(inst, parent) end

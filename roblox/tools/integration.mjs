@@ -18,6 +18,7 @@ const luaus = dir => readdirSync(path.join(ROOT, 'src', dir))
 
 const shared = luaus('shared');
 const server = luaus('server');
+const client = luaus('client');
 
 // Harness modules are required by plain string; game modules by Instance.
 const harness = ['roblox_env', 'roblox_game', 'roblox_services']
@@ -124,6 +125,32 @@ code += `
 _G.BOOT_SERVER = function()
   local script = serverScript
   ${init.src.split('\n').join('\n  ')}
+end
+`;
+
+// Client: init.client.luau becomes the LocalScript "GoobClient" under
+// StarterPlayerScripts, with Theme/Hud/TradeUi as its children — exactly the
+// shape Rojo and build_place.py produce.
+const cinit = client.find(m => m.file === 'init.client.luau');
+const cothers = client.filter(m => m.file !== 'init.client.luau');
+code += `
+local starterPlayer = rgame.newInstance("StarterPlayer")
+starterPlayer.Name = "StarterPlayer"
+starterPlayer.Parent = game
+local sps = rgame.newInstance("StarterPlayerScripts")
+sps.Name = "StarterPlayerScripts"
+sps.Parent = starterPlayer
+local clientScript = rgame.newInstance("LocalScript")
+clientScript.Name = "GoobClient"
+clientScript.Parent = sps
+`;
+for (const m of cothers) {
+  code += `\ndo local m = moduleInstance("ModuleScript", "${m.name}", function(script)\n${m.src}\nend) m.Parent = clientScript end\n`;
+}
+code += `
+_G.BOOT_CLIENT = function()
+  local script = clientScript
+  ${cinit.src.split('\n').join('\n  ')}
 end
 `;
 

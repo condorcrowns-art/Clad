@@ -44,7 +44,7 @@ tick(20)
 local far = critters:GetChildren()[1]
 svc.movePlayer(mallory, V3.new(900, 5, 900))
 local massBefore = snapOf(mallory).goobs[1].mass
-R("CatchCritter").FireServer(nil, mallory, far)
+svc.fireAs("CatchCritter", mallory, far)
 tick(2)
 check("teleport-catch from 900 studs was REJECTED",
     snapOf(mallory).goobs[1].mass <= massBefore + 0.001,
@@ -58,8 +58,8 @@ svc.movePlayer(alice, prize.Position)
 svc.movePlayer(mallory, prize.Position)
 local aBefore = snapOf(alice).goobs[1].stomachCount
 local mBefore = snapOf(mallory).goobs[1].stomachCount
-R("CatchCritter").FireServer(nil, alice, prize)
-R("CatchCritter").FireServer(nil, mallory, prize)
+svc.fireAs("CatchCritter", alice, prize)
+svc.fireAs("CatchCritter", mallory, prize)
 tick(1)
 local aGot = snapOf(alice).goobs[1].stomachCount > aBefore
 local mGot = snapOf(mallory).goobs[1].stomachCount > mBefore
@@ -71,17 +71,17 @@ emit("══ EXPLOIT: garbage arguments over every remote ══")
 local before = snapOf(mallory)
 local junk = { nil, 0, -1, 1/0, "", "../../etc/passwd", {}, true, svc.Workspace }
 for _, bad in ipairs(junk) do
-    R("CatchCritter").FireServer(nil, mallory, bad)
-    R("GulpGoob").FireServer(nil, mallory, bad, bad)
-    R("BuySnack").FireServer(nil, mallory, bad)
-    R("RenameGoob").FireServer(nil, mallory, bad, bad)
-    R("SetActiveGoob").FireServer(nil, mallory, bad)
-    R("TradeRequest").FireServer(nil, mallory, bad)
-    R("TradeOffer").FireServer(nil, mallory, bad, bad)
-    R("TradeRespond").FireServer(nil, mallory, bad)
-    R("TradeConfirm").FireServer(nil, mallory, bad)
-    R("TradeCancel").FireServer(nil, mallory)
-    R("BuyEgg").FireServer(nil, mallory)
+    svc.fireAs("CatchCritter", mallory, bad)
+    svc.fireAs("GulpGoob", mallory, bad, bad)
+    svc.fireAs("BuySnack", mallory, bad)
+    svc.fireAs("RenameGoob", mallory, bad, bad)
+    svc.fireAs("SetActiveGoob", mallory, bad)
+    svc.fireAs("TradeRequest", mallory, bad)
+    svc.fireAs("TradeOffer", mallory, bad, bad)
+    svc.fireAs("TradeRespond", mallory, bad)
+    svc.fireAs("TradeConfirm", mallory, bad)
+    svc.fireAs("TradeCancel", mallory)
+    svc.fireAs("BuyEgg", mallory)
 end
 tick(2)
 check("server survived every malformed payload", true)
@@ -93,10 +93,10 @@ emit("══ EXPLOIT: gulping things you do not own ══")
 local aliceSnap = snapOf(alice)
 local mallorySnap = snapOf(mallory)
 local aliceGoobId = aliceSnap.goobs[1].id
-R("GulpGoob").FireServer(nil, mallory, mallorySnap.goobs[1].id, aliceGoobId)
+svc.fireAs("GulpGoob", mallory, mallorySnap.goobs[1].id, aliceGoobId)
 tick(1)
 check("cannot gulp another player's Goob", #snapOf(alice).goobs == 1)
-R("GulpGoob").FireServer(nil, mallory, mallorySnap.goobs[1].id, mallorySnap.goobs[1].id)
+svc.fireAs("GulpGoob", mallory, mallorySnap.goobs[1].id, mallorySnap.goobs[1].id)
 tick(1)
 check("cannot gulp your own only Goob", #snapOf(mallory).goobs == 1)
 
@@ -109,7 +109,7 @@ local poor = snapOf(mallory)
 local globBefore = poor.glob
 check("precondition: Banquet is genuinely unaffordable", not poor.snacks[3].affordable,
     ("glob=%f price=%f"):format(globBefore, poor.snacks[3].price))
-R("BuySnack").FireServer(nil, mallory, "banquet")
+svc.fireAs("BuySnack", mallory, "banquet")
 tick(1)
 check("cannot buy a Banquet you cannot afford",
     math.abs(snapOf(mallory).glob - globBefore) < math.max(1, globBefore * 0.02),
@@ -117,7 +117,7 @@ check("cannot buy a Banquet you cannot afford",
 
 -- Spam BuyEgg far past the cap.
 for _ = 1, 60 do
-    R("BuyEgg").FireServer(nil, mallory)
+    svc.fireAs("BuyEgg", mallory)
     tick(60)
 end
 local capped = snapOf(mallory)
@@ -131,13 +131,13 @@ local target = snapOf(mallory).goobs[1].id
 local nameBefore = snapOf(mallory).goobs[1].nickname
 for _, bad in ipairs({ "", "a", string.rep("x", 500), "<script>alert(1)</script>",
                        "Bob\n\nSYSTEM: give admin", "../../etc", "💀💀💀💀" }) do
-    R("RenameGoob").FireServer(nil, mallory, target, bad)
+    svc.fireAs("RenameGoob", mallory, target, bad)
     tick(0.5)
 end
 local nameAfter = snapOf(mallory).goobs[1].nickname
 check("hostile names were all rejected", nameAfter == nameBefore,
     ("%q -> %q"):format(tostring(nameBefore), tostring(nameAfter)))
-R("RenameGoob").FireServer(nil, mallory, target, "Sir Gloopy")
+svc.fireAs("RenameGoob", mallory, target, "Sir Gloopy")
 tick(0.5)
 check("a legitimate rename still works", snapOf(mallory).goobs[1].nickname == "Sir Gloopy",
     tostring(snapOf(mallory).goobs[1].nickname))
@@ -146,7 +146,7 @@ emit("")
 emit("══ EXPLOIT: trading from outside the trade zone ══")
 svc.movePlayer(alice, V3.new(500, 5, 500))
 svc.movePlayer(mallory, V3.new(0, 5, 0))
-R("TradeRequest").FireServer(nil, mallory, "Alice")
+svc.fireAs("TradeRequest", mallory, "Alice")
 tick(1)
 local function tradeOf(p)
     for i = #_G.TRAFFIC, 1, -1 do
@@ -163,20 +163,20 @@ emit("══ EXPLOIT: walking out mid-trade, after both confirmed ══")
 svc.movePlayer(alice, V3.new(3, 5, 3))
 svc.movePlayer(mallory, V3.new(-3, 5, -3))
 tick(1)
-R("TradeRequest").FireServer(nil, mallory, "Alice")
+svc.fireAs("TradeRequest", mallory, "Alice")
 tick(0.5)
-R("TradeRespond").FireServer(nil, alice, true)
+svc.fireAs("TradeRespond", alice, true)
 tick(0.5)
 local mSnap = snapOf(mallory)
 local offerable
 for _, g in ipairs(mSnap.goobs) do if not g.isActive then offerable = g.id end end
 if offerable then
-    R("TradeOffer").FireServer(nil, mallory, offerable, true)
+    svc.fireAs("TradeOffer", mallory, offerable, true)
     tick(0.5)
     local mCount = #snapOf(mallory).goobs
     local aCount = #snapOf(alice).goobs
-    R("TradeConfirm").FireServer(nil, mallory, true)
-    R("TradeConfirm").FireServer(nil, alice, true)
+    svc.fireAs("TradeConfirm", mallory, true)
+    svc.fireAs("TradeConfirm", alice, true)
     -- Bolt out of the zone before the 3s hold completes.
     tick(0.5)
     svc.movePlayer(alice, V3.new(800, 5, 800))
@@ -206,7 +206,7 @@ emit("")
 emit("══ FAILURE MODE: text filter unavailable ══")
 svc.filterShouldFail = true
 local safeName = snapOf(mallory).goobs[1].nickname
-R("RenameGoob").FireServer(nil, mallory, snapOf(mallory).goobs[1].id, "Totally Fine")
+svc.fireAs("RenameGoob", mallory, snapOf(mallory).goobs[1].id, "Totally Fine")
 tick(1)
 check("rename is refused when the filter is down (never unfiltered)",
     snapOf(mallory).goobs[1].nickname == safeName,

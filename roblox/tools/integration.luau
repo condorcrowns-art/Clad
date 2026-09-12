@@ -102,7 +102,7 @@ for _ = 1, 12 do
     if #list == 0 then break end
     local target = list[1]
     svc.movePlayer(alice, target.Position)
-    net:FindFirstChild("CatchCritter").FireServer(nil, alice, target)
+    svc.fireAs("CatchCritter", alice, target)
     tick(0.5)
     caught += 1
 end
@@ -127,7 +127,7 @@ check("snack prices are positive", snapA and snapA.snacks[1].price > 0)
 tick(600)
 local rich = snapshotFor(alice)
 local massBeforeSnack = rich.goobs[1].mass
-net:FindFirstChild("BuySnack").FireServer(nil, alice, "snack")
+svc.fireAs("BuySnack", alice, "snack")
 tick(30)
 local postSnack = snapshotFor(alice)
 check("buying a snack fed the Goob",
@@ -150,7 +150,7 @@ while tries < 40 do
 end
 check("egg became affordable through idle income", tries < 40, "tries=" .. tostring(tries))
 
-net:FindFirstChild("BuyEgg").FireServer(nil, alice)
+svc.fireAs("BuyEgg", alice)
 tick(2)
 local postEgg = snapshotFor(alice)
 check("Alice now has 2 Goobs", postEgg and #postEgg.goobs == 2,
@@ -168,7 +168,7 @@ if postEgg and #postEgg.goobs == 2 then
         if g.id == activeId then massBefore, genBefore = g.mass, g.generation end
     end
 
-    net:FindFirstChild("GulpGoob").FireServer(nil, alice, activeId, otherId)
+    svc.fireAs("GulpGoob", alice, activeId, otherId)
     tick(2)
     local postGulp = snapshotFor(alice)
     check("gulp consumed the other Goob", postGulp and #postGulp.goobs == 1,
@@ -198,7 +198,7 @@ for _ = 1, 40 do
     local s = snapshotFor(alice)
     if s and #s.goobs >= 2 then break end
     if s and s.eggAffordable then
-        net:FindFirstChild("BuyEgg").FireServer(nil, alice)
+        svc.fireAs("BuyEgg", alice)
     end
     tick(300)
 end
@@ -206,12 +206,12 @@ local pre = snapshotFor(alice)
 check("Alice has 2 Goobs to trade with", pre and #pre.goobs >= 2,
     pre and tostring(#pre.goobs))
 
-net:FindFirstChild("TradeRequest").FireServer(nil, alice, "Bob")
+svc.fireAs("TradeRequest", alice, "Bob")
 tick(1)
 check("Bob received a trade request", (lastNotify("Bob") or ""):find("trade") ~= nil,
     tostring(lastNotify("Bob")))
 
-net:FindFirstChild("TradeRespond").FireServer(nil, bob, true)
+svc.fireAs("TradeRespond", bob, true)
 tick(1)
 
 local function tradeState(p)
@@ -228,7 +228,7 @@ check("trade window opened for both", tradeState(alice) and tradeState(alice).op
 -- Alice offers her non-active Goob.
 local offerId
 for _, g in ipairs(pre.goobs) do if not g.isActive then offerId = g.id end end
-net:FindFirstChild("TradeOffer").FireServer(nil, alice, offerId, true)
+svc.fireAs("TradeOffer", alice, offerId, true)
 tick(1)
 local ts = tradeState(alice)
 check("offer appears in Alice's side", ts and #ts.myOffer == 1, ts and tostring(#ts.myOffer))
@@ -237,13 +237,13 @@ check("Bob sees Alice's offer", tsB and #tsB.theirOffer == 1, tsB and tostring(t
 
 emit("")
 emit("  -- ANTI-SCAM: confirming, then changing the offer --")
-net:FindFirstChild("TradeConfirm").FireServer(nil, alice, true)
-net:FindFirstChild("TradeConfirm").FireServer(nil, bob, true)
+svc.fireAs("TradeConfirm", alice, true)
+svc.fireAs("TradeConfirm", bob, true)
 tick(1)
 local mid = tradeState(alice)
 check("both sides show confirmed", mid and mid.myConfirmed and mid.theirConfirmed)
 
-net:FindFirstChild("TradeOffer").FireServer(nil, alice, offerId, false)
+svc.fireAs("TradeOffer", alice, offerId, false)
 tick(0.5)
 local reset = tradeState(alice)
 check("changing the offer RESET both confirmations",
@@ -252,12 +252,12 @@ check("changing the offer RESET both confirmations",
 
 emit("")
 emit("  -- completing the trade --")
-net:FindFirstChild("TradeOffer").FireServer(nil, alice, offerId, true)
+svc.fireAs("TradeOffer", alice, offerId, true)
 tick(0.5)
 local aliceBefore = #snapshotFor(alice).goobs
 local bobBefore = #snapshotFor(bob).goobs
-net:FindFirstChild("TradeConfirm").FireServer(nil, alice, true)
-net:FindFirstChild("TradeConfirm").FireServer(nil, bob, true)
+svc.fireAs("TradeConfirm", alice, true)
+svc.fireAs("TradeConfirm", bob, true)
 tick(8)
 local aliceAfter = snapshotFor(alice)
 local bobAfter = snapshotFor(bob)

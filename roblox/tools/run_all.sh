@@ -18,10 +18,13 @@ node sim.mjs ../src/shared tests.luau
 echo "── 4. integration: boot the real server and play it ──"
 node integration.mjs .. integration.luau
 
-echo "── 5. adversarial: attack it ──"
+echo "── 5. client: boot the real UI and click it ──"
+node integration.mjs .. client_test.luau
+
+echo "── 6. adversarial: attack it ──"
 node integration.mjs .. adversarial.luau
 
-echo "── 6. balance sweeps ──"
+echo "── 7. balance sweeps ──"
 node sim.mjs ../src/shared snack.luau
 node sim.mjs ../src/shared egg.luau
 

@@ -31,8 +31,10 @@ local RunService = service("RunService")
 rawget(RunService, "_signals").Heartbeat = Signal.new("Heartbeat")
 rawget(RunService, "_signals").Stepped = Signal.new("Stepped")
 rawget(RunService, "_signals").RenderStepped = Signal.new("RenderStepped")
-rawget(RunService, "_props").IsServer = function() return true end
-rawget(RunService, "_props").IsClient = function() return false end
+-- Flipped by S.enterClientMode() so the same DataModel can host both halves.
+S.clientMode = false
+rawget(RunService, "_props").IsServer = function() return not S.clientMode end
+rawget(RunService, "_props").IsClient = function() return S.clientMode end
 rawget(RunService, "_props").IsStudio = function() return S.studio end
 rawget(RunService, "_props").IsRunning = function() return true end
 S.studio = false
@@ -98,6 +100,19 @@ function S.removePlayer(p)
     for i, q in ipairs(roster) do if q == p then table.remove(roster, i) break end end
     rawget(Players, "_signals").PlayerRemoving:Fire(p)
 end
+
+-- ── UserInputService ───────────────────────────────────────────────────────
+local UserInputService = service("UserInputService")
+for _, n in ipairs({ "InputBegan", "InputEnded", "InputChanged", "TouchTap" }) do
+    rawget(UserInputService, "_signals")[n] = Signal.new(n)
+end
+rawget(UserInputService, "_props").GetMouseLocation = function() return env.Vector2.new(0, 0) end
+rawget(UserInputService, "_props").TouchEnabled = false
+S.UserInputService = UserInputService
+
+-- ── GuiService / ContextActionService (referenced but barely used) ──────────
+service("GuiService")
+service("ContextActionService")
 
 -- ── TweenService ───────────────────────────────────────────────────────────
 -- Tweens apply their target properties immediately. That is not animation, but
@@ -200,8 +215,33 @@ S.ServerScriptService = ServerScriptService
 S.RunService = RunService
 S.Lighting = Lighting
 
+-- Fire a named remote as a specific player. Scenario files use this instead of
+-- :FireServer so they can drive multiple players from one process.
+function S.fireAs(remoteName, player, ...)
+    local net = ReplicatedStorage:FindFirstChild("GoobNet")
+    local remote = net and net:FindFirstChild(remoteName)
+    if not remote then error("no remote named " .. tostring(remoteName), 0) end
+    game_.fireAs(remote, player, ...)
+end
+
 function S.heartbeat(dt)
     rawget(RunService, "_signals").Heartbeat:Fire(dt)
+end
+
+-- The client half runs on RenderStepped, so tests must pump both.
+function S.renderStep(dt)
+    rawget(RunService, "_signals").RenderStepped:Fire(dt)
+end
+
+-- Promote a player to LocalPlayer and switch RunService into client mode.
+function S.enterClientMode(player)
+    S.clientMode = true
+    rawget(Players, "_props").LocalPlayer = player
+    game_.getLocalPlayer = function() return player end
+end
+
+function S.exitClientMode()
+    S.clientMode = false
 end
 
 return S
