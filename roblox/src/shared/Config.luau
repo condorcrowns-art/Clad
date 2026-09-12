@@ -157,4 +157,82 @@ Config.PLOT_COUNT = 8
 Config.PLOT_SIZE = 90
 Config.PLOT_SPACING = 130
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ARENA — the agar.io layer. See GOOP.md.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── Body ───────────────────────────────────────────────────────────────────
+-- Arena masses live in the tens-to-low-thousands band, not the billions, so
+-- these constants are tuned for readability at that scale. A fresh blob is 5
+-- studs across and a blob at the ceiling is about 15 — a 3x visual difference,
+-- which is the largest range that still lets both fit on one screen during a
+-- chase. Any wider and the camera has to choose who to show.
+Config.BLOB_RADIUS_BASE = 5
+Config.BLOB_RADIUS_K = 2.2
+
+-- Bigger is slower, agar-style. A fresh blob (42) outruns a ceiling blob (~24)
+-- by 1.75x, which is enough for a chase to be losable but not hopeless.
+Config.BLOB_BASE_SPEED = 42
+Config.BLOB_SPEED_DECAY = 0.11
+Config.BLOB_MIN_SPEED = 20
+
+-- ── Pellets ────────────────────────────────────────────────────────────────
+-- Density is pellets per square stud on the Flats. With a 250-stud-radius ring
+-- that is about 430 live pellets, which Roblox streams comfortably as a single
+-- pooled folder of unanchored-but-sleeping parts.
+Config.PELLET_DENSITY = 0.0022
+Config.PELLET_VALUE = 9
+Config.PELLET_TARGET = 430
+Config.PELLET_RESPAWN_PER_SEC = 14
+Config.GOLDEN_CRUMB_MULT = 5
+
+-- ── Melting ────────────────────────────────────────────────────────────────
+-- leak = LEAK_SCALE * (mass - GRACE) ^ EXPONENT
+--
+-- The exponent is the single most important number in the game. Below 1.0 the
+-- curves never cross and the biggest blob wins forever. At 1.15 the crossing
+-- lands around 1.2K mass, which a good player reaches in roughly three
+-- minutes and a great one milks for about twenty percent more.
+--
+-- GRACE exists so that a newly-spawned blob never melts. A player's first
+-- thirty seconds must be pure, uncomplicated growth or the game reads as
+-- broken rather than tense.
+Config.LEAK_GRACE = 60
+Config.LEAK_SCALE = 0.00433
+Config.LEAK_EXPONENT = 1.15
+Config.LEAK_PELLET_MASS = 6   -- leaked goop lands in chunks of this size
+
+-- ── Eating ─────────────────────────────────────────────────────────────────
+Config.EAT_RATIO = 1.15       -- must be 15% bigger to swallow
+Config.EAT_TRANSFER = 0.80    -- and you only keep 80% of them
+
+-- ── Popping ────────────────────────────────────────────────────────────────
+-- Splits the dead blob: scatter as food, congeal as terrain, burn the rest.
+-- The burn is the same sink that keeps total world mass convergent.
+Config.POP_SCATTER = 0.55
+Config.POP_CONGEAL = 0.25
+Config.POP_KEEP_MAX = 0.25    -- ceiling on what any trinket can rescue
+
+-- ── Lumps (the island's memory) ────────────────────────────────────────────
+Config.LUMP_RADIUS_K = 1.15
+Config.LUMP_RADIUS_MIN = 4
+Config.LUMP_RADIUS_MAX = 26
+Config.LUMP_DECAY_PER_SEC = 1 / (60 * 45)  -- a lump half-lives in ~30 minutes
+Config.LUMP_MAX_COUNT = 140
+
+-- ── Banking ────────────────────────────────────────────────────────────────
+-- Super-linear on purpose: one more dangerous lap should pay for itself. Safe
+-- to be super-linear only because the ceiling caps its input.
+Config.BANK_EXPONENT = 1.12
+Config.BANK_SCALE = 0.9
+Config.BANK_SECONDS = 3.0     -- the most dangerous three seconds in the game
+Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
+
+-- ── The island ─────────────────────────────────────────────────────────────
+Config.ISLAND_RADIUS = 300
+Config.SHALLOWS_INNER = 235   -- outside this radius is no-PvP
+Config.VAULT_RADIUS = 34
+Config.SHACK_POSITION = Vector3.new(-170, 0, 150)
+
+
 return Config

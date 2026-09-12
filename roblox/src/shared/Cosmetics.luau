@@ -16,9 +16,11 @@ export type Item = {
     name: string,
     kind: string,        -- skin | trail | eyes | crown
     rarity: string,
-    source: string,      -- starter | season | shop | ascend | achievement | event
+    source: string,      -- starter | season | shop | ascend | achievement
+                         -- | crate_goop | crate_deep | beta
     tier: number?,       -- season tier that grants it
     premium: boolean?,   -- season premium track only
+    beta: boolean?,      -- BETA SEASON exclusive, retired when Season 0 closes
     colour: Color3?,
     material: Enum.Material?,
     emoji: string?,
@@ -104,6 +106,57 @@ Cosmetics.ITEMS = {
       source = "achievement", emoji = "🥇" },
     { id = "crown_gold",   name = "Ascendant",     kind = "crown", rarity = "Legendary",
       source = "ascend", emoji = "👑" },
+
+    -- ── Crate pools ────────────────────────────────────────────────────────
+    -- source "crate_goop" and "crate_deep" are bought with EARNED Glob. There
+    -- is deliberately no Robux path into either pool: the moment a crate you
+    -- can only buy with money holds something a crate you can earn does not,
+    -- the game has a wall in it, and this one does not have walls.
+    { id = "skin_moss",    name = "Mossback",      kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Grass, colour = rgb(132, 150, 118) },
+    { id = "skin_clay",    name = "Wet Clay",      kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Sand, colour = rgb(178, 150, 132) },
+    { id = "skin_ink",     name = "Ink Drop",      kind = "skin", rarity = "Uncommon",
+      source = "crate_goop", material = Enum.Material.Glass, colour = rgb( 62,  66,  82) },
+    { id = "trail_bubbles",name = "Bubble Wake",   kind = "trail", rarity = "Common",
+      source = "crate_goop", colour = rgb(186, 206, 214) },
+    { id = "trail_crumbs", name = "Crumb Trail",   kind = "trail", rarity = "Uncommon",
+      source = "crate_goop", colour = rgb(206, 186, 148) },
+    { id = "eyes_dizzy",   name = "Dizzy",         kind = "eyes", rarity = "Common",
+      source = "crate_goop", emoji = "😵" },
+    -- The cheap crate needs a real jackpot or it is a vending machine. This is
+    -- it: 1-in-250, and the only Legendary anybody can reach on day one.
+    { id = "skin_pearl",   name = "Pearl",         kind = "skin", rarity = "Legendary",
+      source = "crate_goop", material = Enum.Material.Marble, colour = rgb(214, 208, 196) },
+
+    { id = "skin_marble",  name = "Marble",        kind = "skin", rarity = "Rare",
+      source = "crate_deep", material = Enum.Material.Marble, colour = rgb(206, 202, 194) },
+    { id = "skin_tide",    name = "Tidepool",      kind = "skin", rarity = "Epic",
+      source = "crate_deep", material = Enum.Material.Glass, colour = rgb(118, 156, 162) },
+    { id = "skin_fossil",  name = "Fossilised",    kind = "skin", rarity = "Legendary",
+      source = "crate_deep", material = Enum.Material.Slate, colour = rgb(176, 162, 134) },
+    { id = "trail_static", name = "Static",        kind = "trail", rarity = "Rare",
+      source = "crate_deep", colour = rgb(176, 186, 206) },
+    { id = "crown_antenna",name = "Antenna",       kind = "crown", rarity = "Rare",
+      source = "crate_deep", emoji = "📡" },
+    { id = "eyes_shades",  name = "Shades",        kind = "eyes", rarity = "Epic",
+      source = "crate_deep", emoji = "😎" },
+    { id = "crown_deep",   name = "Deepcrown",     kind = "crown", rarity = "Mythic",
+      source = "crate_deep", emoji = "🐚" },
+
+    -- ── BETA SEASON exclusives ─────────────────────────────────────────────
+    -- Retired forever when Season 0 closes. This is the only scarcity claim
+    -- in the game and it costs nothing to honour, so it will be honoured.
+    { id = "skin_beta",    name = "Beta Goo",      kind = "skin", rarity = "Epic",
+      source = "beta", beta = true, material = Enum.Material.ForceField, colour = rgb(150, 186, 206) },
+    { id = "skin_blueprint",name = "Blueprint",    kind = "skin", rarity = "Legendary",
+      source = "beta", beta = true, material = Enum.Material.SmoothPlastic, colour = rgb(104, 132, 170) },
+    { id = "trail_beta",   name = "Build Number",  kind = "trail", rarity = "Rare",
+      source = "beta", beta = true, colour = rgb(158, 190, 206) },
+    { id = "crown_beta",   name = "Founder's Tag", kind = "crown", rarity = "Mythic",
+      source = "beta", beta = true, emoji = "🏷️" },
+    { id = "eyes_beta",    name = "Test Pattern",  kind = "eyes", rarity = "Rare",
+      source = "beta", beta = true, emoji = "🎛️" },
 }
 
 local byId: { [string]: Item } = {}

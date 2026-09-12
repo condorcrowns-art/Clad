@@ -42,7 +42,10 @@ node integration.mjs .. adversarial.luau
 echo "── 12. balance sweeps"
 node sim.mjs ../src/shared move.luau
 node sim.mjs ../src/shared fmt.luau
-echo "── 13. economy sweeps ──"
+echo "── 13. arena: the agar layer ──"
+node sim.mjs ../src/shared arena.luau
+node sim.mjs ../src/shared crates.luau
+echo "── 14. economy sweeps ──"
 node sim.mjs ../src/shared season.luau
 node sim.mjs ../src/shared pit.luau
 node sim.mjs ../src/shared systems.luau
