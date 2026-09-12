@@ -29,11 +29,19 @@ local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 local Roll = require(script.Roll)
 local Panels = require(script.Panels)
+local ArenaHud = require(script.ArenaHud)
+local Stick = require(script.Stick)
 local Juice = require(script.Juice)
 
 local player = Players.LocalPlayer
 local gui = Hud.build()
 TradeUi.build(gui)
+
+-- ArenaHud takes over the persistent chrome. Hud keeps toasts, the drawer and
+-- the coach; it stops drawing its own stat panel, age line and drawer button,
+-- which is where most of the old overlap came from.
+ArenaHud.build()
+Hud.setArenaMode(true)
 
 -- Sound and every other feel effect now live in Juice, which reads its ids
 -- from Config and stays silent when they are unset. This file used to keep a
@@ -522,16 +530,24 @@ end
 do
     local Layout = require(script.Layout)
 
-    local dashBtn = Theme.button("⚡", Theme.ACCENT, UDim2.fromOffset(64, 64))
+    -- No on-screen dash button. ArenaHud's power button sits in the same
+    -- thumb gap, and two round buttons fighting for the one reachable part of
+    -- a phone's bottom edge is the overlap problem in miniature. Dash is still
+    -- on the keyboard and the gamepad, and DASH is also a carryable power.
+    local dashBtn = Instance.new("TextButton")
     dashBtn.Name = "DashButton"
-    dashBtn.TextSize = 30
+    dashBtn.Visible = false
+    dashBtn.Text = ""
     dashBtn.Parent = gui
-    dashBtn.Activated:Connect(function() Roll.dash() end)
 
     -- A charge meter, because a dash you cannot count is a dash you cannot plan.
     local meter = Instance.new("Frame")
     meter.Name = "DashMeter"
     meter.BackgroundTransparency = 1
+    -- Hidden with the dash button it belonged to. The power button carries its
+    -- own cooldown sweep, and a second charge meter in the same corner is the
+    -- overlap complaint wearing a different hat.
+    meter.Visible = false
     meter.Parent = gui
     local pips = {}
     for i = 1, Movement.DASH_CHARGES do
@@ -550,7 +566,7 @@ do
         local u = Layout.usable()
         local size = touch and (Layout.MIN_TAP + 20) or 56
 
-        dashBtn.Visible = touch
+        dashBtn.Visible = false   -- superseded by ArenaHud's power button
         dashBtn.Size = UDim2.fromOffset(size, size)
 
         -- Sit directly above the drawer button, both inside the safe gap.
@@ -593,6 +609,73 @@ do
 end
 
 -- ── Panels: wardrobe, season, crew ─────────────────────────────────────────
+
+
+-- ── The arena ──────────────────────────────────────────────────────────────
+
+-- Where the power is pointed. Where you are STEERING beats where the camera
+-- happens to face: a player mid-turn is looking at where they want to go, and
+-- firing a dash at the camera instead would feel like the game ignoring them.
+local function aimVector(): Vector3?
+    local move = Stick.moveVector()
+    if move.Magnitude > 0.15 then
+        return move.Unit
+    end
+    local camera = Workspace.CurrentCamera
+    if not camera then return nil end
+    local look = camera.CFrame.LookVector
+    local flat = Vector3.new(look.X, 0, look.Z)
+    return flat.Magnitude > 0.01 and flat.Unit or nil
+end
+
+local UsePower = Net.get("UsePower")
+local lastPower = 0
+
+local function firePower()
+    -- Client-side rate limit. The server enforces the real cooldown; this only
+    -- stops a held key from filling the remote queue with requests the server
+    -- is going to refuse anyway.
+    local now = os.clock()
+    if now - lastPower < 0.15 then return end
+    lastPower = now
+    UsePower:FireServer(aimVector())
+end
+
+ArenaHud.on.usePower = function() firePower() end
+ArenaHud.on.setPower = function(id) Net.get("SetPower"):FireServer(id) end
+ArenaHud.on.equipTrinket = function(id, slot) Net.get("EquipTrinket"):FireServer(id, slot) end
+ArenaHud.on.openCrate = function(id) Net.get("OpenCrate"):FireServer(id) end
+
+-- The dock's three delegated tabs. They close the sheet before opening, and
+-- "close" shuts everything — so there is still never more than one panel up.
+ArenaHud.on.openLegacy = function(which)
+    if which == "close" then
+        Hud.setDrawerOpen(false)
+    else
+        Hud.openDrawerTab(which)
+    end
+end
+ArenaHud.on.joinPit = function() Net.get("PitJoin"):FireServer() end
+ArenaHud.on.leavePit = function() Net.get("PitLeave"):FireServer() end
+
+Net.get("ArenaSync").OnClientEvent:Connect(function(state)
+    ArenaHud.setArena(state)
+end)
+
+Net.get("CrateResult").OnClientEvent:Connect(function(result)
+    ArenaHud.crateResult(result)
+    Juice.play("unlock")
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.Q
+        or input.KeyCode == Enum.KeyCode.ButtonX then
+        firePower()
+    elseif input.KeyCode == Enum.KeyCode.Escape then
+        ArenaHud.closeSheet()
+    end
+end)
 
 Panels.onEquip = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
 Panels.onClaimSeason = function(tier, premium) Net.get("ClaimSeason"):FireServer(tier, premium) end
@@ -651,7 +734,9 @@ do
         local w = compact and math.min(300, u.X - 24) or 340
         local h = compact and 60 or 66
         strip.Size = UDim2.fromOffset(w, h)
-        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 90 or 108)
+        -- Below the dock AND below the status strip. At y=90 it sat directly
+        -- on top of both, which is the overlap this whole pass exists to end.
+        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 176 or 206)
         line.Position = UDim2.fromOffset(12, 6)
         line.Size = UDim2.new(1, -140, 0, 20)
         sub.Position = UDim2.fromOffset(12, 28)
@@ -669,11 +754,16 @@ do
         if not ball then strip.Visible = false return end
         local d = (ball.Position - Pit.CENTRE).Magnitude
         nearPit = d < Pit.START_RADIUS + 140
-        strip.Visible = nearPit
+        -- Compact screens get the dock's Standoff tab instead. On a 320px-tall
+        -- phone there is no row left for a third banner that does not land on
+        -- the coach or the power button, and a duplicate entry point is not
+        -- worth an overlap.
+        strip.Visible = nearPit and not Layout.isCompact()
     end)
 
     Net.get("PitSync").OnClientEvent:Connect(function(state)
         if not state then return end
+        ArenaHud.setPit(state)
         local mine = false
         for _, n in ipairs(state.alive or {}) do
             if n == player.DisplayName then mine = true end

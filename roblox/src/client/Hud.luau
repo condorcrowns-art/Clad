@@ -259,6 +259,11 @@ end
 
 function Hud.applyLayout()
     if not topFrame then return end
+    if Hud.arenaMode then
+        topFrame.Visible = false
+        if ageLabel then ageLabel.Visible = false end
+        if openButton then openButton.Visible = false end
+    end
     local compact = Layout.isCompact()
     local touch = Layout.isTouch()
     local u = Layout.usable()
@@ -301,7 +306,11 @@ function Hud.applyLayout()
     -- Snack stand: its own panel when there is room, inside the drawer when
     -- there is not. A phone screen cannot host both.
     local standH = (compact and 3 * 48 + 34 or 132)
-    if compact then
+    -- In arena mode it ALWAYS goes in the drawer, on every screen size. As a
+    -- free-floating panel it is persistent chrome, and persistent chrome is
+    -- what ArenaHud now owns; leaving it loose on a desktop put it straight
+    -- under the tutorial coach.
+    if compact or Hud.arenaMode then
         standFrame.Parent = drawer
         standFrame.Size = UDim2.fromOffset(drawerW - 20, standH)
         standFrame.Position = UDim2.fromOffset(10, headerH)
@@ -419,7 +428,19 @@ function Hud.applyLayout()
         local cw = compact and math.min(330, u.X - 24) or 460
         local ch = compact and 76 or 84
         coach.Size = UDim2.fromOffset(cw, ch)
-        coach.Position = UDim2.fromOffset(math.floor((u.X - cw) / 2), compact and 6 or 14)
+        -- Under the dock and the status strip, not on top of them. At y=6 the
+        -- coach sat exactly where ArenaHud's dock now lives, which put the
+        -- game's teaching text underneath the thing it is teaching you to use.
+        local below = Hud.arenaMode and (compact and 106 or 134) or (compact and 6 or 14)
+        -- Centred, but never far enough right to push its own skip button into
+        -- the jump-button zone. On a 568x320 phone the centred coach's top
+        -- right corner landed exactly on it, which makes "skip the tutorial"
+        -- into "jump" — the single worst tap to get wrong.
+        local x = math.floor((u.X - cw) / 2)
+        if Hud.arenaMode then
+            x = Layout.fit(x, 8, math.max(8, u.X - Layout.JUMP_BUTTON.X - cw - 10))
+        end
+        coach.Position = UDim2.fromOffset(x, below)
         coachStep.Position = UDim2.fromOffset(14, 6)
         coachStep.Size = UDim2.new(1, -50, 0, 16)
         coachText.Position = UDim2.fromOffset(14, 22)
@@ -799,6 +820,37 @@ Hud.onBuyEgg = function() end
 Hud.onDismissCoach = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
+
+-- ArenaHud owns the persistent chrome now: the stat card, the currency
+-- readout and the way into every panel. Hud keeps what it is still best at —
+-- toasts, the Goob drawer, the coach — and stops drawing a second stat panel
+-- on top of the first one. This is the single switch that turns "everything
+-- gets in the way of everything" into one screen with one owner per region.
+Hud.arenaMode = false
+
+-- Opened and closed from the dock. Exposed rather than left to the old toggle
+-- button, which ArenaHud has taken over.
+function Hud.setDrawerOpen(open: boolean)
+    drawerOpen = open
+    if drawer then
+        drawer.Visible = open
+        drawer.Position = Hud.drawerPosition(open)
+        if open then rebuildDrawer() end
+    end
+end
+
+function Hud.openDrawerTab(tab: string)
+    currentTab = tab
+    Hud.setDrawerOpen(true)
+    Hud.applyLayout()
+end
+
+function Hud.setArenaMode(on: boolean)
+    Hud.arenaMode = on
+    if topFrame then topFrame.Visible = not on end
+    if ageLabel then ageLabel.Visible = not on end
+    if openButton then openButton.Visible = not on end
+end
 
 function Hud.getState() return state end
 

@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000034"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000035"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000036"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000015"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000041"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000042"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000043"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000019"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Ascension.luau — the terminus.
 --
 -- Numbers that only ever rise have no end, so nothing is ever an achievement.
@@ -51,7 +51,178 @@ function Ascension.preview(goob: any, crests: number)
 end
 
 return Ascension
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000002"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000002"><Properties><string name="Name">Blob</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Blob.luau — the arena core. Eat, melt, bank, pop.
+--
+-- Two curves decide whether this game is fun, and they are the only two that
+-- matter:
+--
+--   harvest(mass)  how much mass a blob can pick up per second
+--   leak(mass)     how much mass a blob drips per second
+--
+-- harvest is LOGARITHMIC in mass. leak is SUPER-LINEAR in mass. They therefore
+-- cross, exactly once, at a mass no amount of skill can pass. That crossing is
+-- called the ceiling, and it is the entire design:
+--
+--   * nobody camps at the top, because the top is a net loss
+--   * runs end themselves in 1-3 minutes with no round timer anywhere
+--   * standing still is negative income, so AFK farming is impossible
+--   * a leader's drip is a real food supply for everyone smaller
+--
+-- harvest is logarithmic because it is derived physically rather than picked:
+-- a blob sweeps a corridor 2*radius wide at its own top speed, through pellets
+-- at a fixed density. radius is logarithmic in mass and speed FALLS with mass,
+-- so the corridor widens far slower than the body grows. That is agar.io's
+-- actual geometry, written down honestly instead of curve-fitted.
+
+local Config = require(script.Parent.Config)
+
+local Blob = {}
+
+-- ── Body ───────────────────────────────────────────────────────────────────
+
+-- Logarithmic, matching GoobMath.size's reasoning: constant visual growth per
+-- order of magnitude, so a 10x gain is always a visible step. Arena numbers
+-- are small (tens to low thousands) so the constant is tuned for that band.
+function Blob.radius(mass: number): number
+    local m = math.max(1, mass)
+    return Config.BLOB_RADIUS_BASE
+        + Config.BLOB_RADIUS_K * math.log(m / Config.STARTING_MASS + 1)
+end
+
+-- Bigger is SLOWER. This is the one place the arena deliberately contradicts
+-- Movement.luau, which keeps top speed near-flat so that progression never
+-- locks you out of terrain. In here there is no terrain to lock you out of —
+-- there is a predator — and a chase is only a chase if the fat one can be
+-- outrun. Movement's acceleration and braking curves still layer on top, so a
+-- heavy blob is slow AND clumsy, not merely slow.
+function Blob.speed(mass: number): number
+    local ratio = Config.STARTING_MASS / math.max(Config.STARTING_MASS, mass)
+    local v = Config.BLOB_BASE_SPEED * ratio ^ Config.BLOB_SPEED_DECAY
+    return math.max(Config.BLOB_MIN_SPEED, v)
+end
+
+-- ── The two curves ─────────────────────────────────────────────────────────
+
+function Blob.harvestPerSecond(mass: number): number
+    local corridor = 2 * Blob.radius(mass)
+    return Config.PELLET_DENSITY
+        * corridor
+        * Blob.speed(mass)
+        * Config.PELLET_VALUE
+end
+
+function Blob.leakPerSecond(mass: number): number
+    local over = mass - Config.LEAK_GRACE
+    if over <= 0 then
+        return 0
+    end
+    return Config.LEAK_SCALE * over ^ Config.LEAK_EXPONENT
+end
+
+-- Net growth for a player harvesting at `efficiency` of the theoretical rate.
+-- efficiency 1.0 is a player sweeping perfectly through dense pellets and
+-- never backtracking; real play sits nearer 0.6-0.8.
+function Blob.netPerSecond(mass: number, efficiency: number?): number
+    local eff = efficiency or 1
+    return Blob.harvestPerSecond(mass) * eff - Blob.leakPerSecond(mass)
+end
+
+-- The mass at which net growth hits zero. Found by bisection rather than
+-- algebra because the curves are allowed to be retuned independently, and a
+-- closed form would quietly become a lie the moment someone changed one.
+function Blob.ceiling(efficiency: number?): number
+    local lo, hi = Config.LEAK_GRACE, Config.LEAK_GRACE
+    -- expand until we bracket the crossing
+    for _ = 1, 60 do
+        hi *= 1.5
+        if Blob.netPerSecond(hi, efficiency) <= 0 then
+            break
+        end
+        lo = hi
+    end
+    for _ = 1, 80 do
+        local mid = (lo + hi) / 2
+        if Blob.netPerSecond(mid, efficiency) > 0 then
+            lo = mid
+        else
+            hi = mid
+        end
+    end
+    return (lo + hi) / 2
+end
+
+-- ── Eating ─────────────────────────────────────────────────────────────────
+
+-- You must be meaningfully bigger, not a rounding error bigger. Near-equal
+-- blobs bounce off each other, which is what turns a crowd into a standoff
+-- instead of a coin flip.
+function Blob.canEat(mine: number, theirs: number): boolean
+    return mine >= theirs * Config.EAT_RATIO
+end
+
+function Blob.eatGain(mine: number, theirs: number): number
+    return theirs * Config.EAT_TRANSFER
+end
+
+-- ── Popping ────────────────────────────────────────────────────────────────
+-- A pop splits the dead blob three ways:
+--   scatter  -> pellets on the floor, immediately edible by anyone
+--   congeal  -> a permanent lump of terrain, the island's memory
+--   burned   -> deleted from the world forever
+--
+-- The burn is not an accident. It is the same sink that has kept total mass in
+-- this game convergent since the first design pass: every transfer of value
+-- destroys some of it, so the world cannot inflate no matter how long a server
+-- runs or how many players farm it.
+export type PopSplit = { kept: number, scatter: number, congeal: number, burned: number }
+
+function Blob.popSplit(mass: number, keepFraction: number?): PopSplit
+    local kept = mass * math.clamp(keepFraction or 0, 0, Config.POP_KEEP_MAX)
+    local rest = mass - kept
+    local scatter = rest * Config.POP_SCATTER
+    local congeal = rest * Config.POP_CONGEAL
+    return {
+        kept = kept,
+        scatter = scatter,
+        congeal = congeal,
+        burned = rest - scatter - congeal,
+    }
+end
+
+-- ── Banking ────────────────────────────────────────────────────────────────
+-- Slightly super-linear, so a player who holds on for one more dangerous lap
+-- is paid for the risk. It is safe to be super-linear here precisely because
+-- mass itself is capped by the ceiling: the exponent cannot run away, because
+-- its input cannot.
+function Blob.bankValue(mass: number): number
+    if mass <= 0 then
+        return 0
+    end
+    return math.floor(mass ^ Config.BANK_EXPONENT * Config.BANK_SCALE)
+end
+
+function Blob.bankSeconds(trinketSpeed: number?): number
+    return Config.BANK_SECONDS / (1 + (trinketSpeed or 0))
+end
+
+-- ── Lumps ──────────────────────────────────────────────────────────────────
+-- Congealed shells are terrain, but not forever-terrain: they melt slowly, so
+-- an eight-hour server ends up interesting rather than solid.
+function Blob.lumpRadius(mass: number): number
+    return math.clamp(
+        Config.LUMP_RADIUS_K * mass ^ 0.4,
+        Config.LUMP_RADIUS_MIN,
+        Config.LUMP_RADIUS_MAX
+    )
+end
+
+function Blob.lumpDecay(mass: number, dt: number): number
+    return math.max(0, mass - mass * Config.LUMP_DECAY_PER_SEC * dt)
+end
+
+return Blob
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000003"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Config.luau — every tunable number in GULP A GOOB lives here.
 -- Design rule: no magic numbers anywhere else in the codebase. If you want to
 -- rebalance the game, you should only ever have to open this file.
@@ -210,8 +381,109 @@ Config.PLOT_COUNT = 8
 Config.PLOT_SIZE = 90
 Config.PLOT_SPACING = 130
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ARENA — the agar.io layer. See GOOP.md.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── Body ───────────────────────────────────────────────────────────────────
+-- Arena masses live in the tens-to-low-thousands band, not the billions, so
+-- these constants are tuned for readability at that scale. A fresh blob is 5
+-- studs across and a blob at the ceiling is about 15 — a 3x visual difference,
+-- which is the largest range that still lets both fit on one screen during a
+-- chase. Any wider and the camera has to choose who to show.
+Config.BLOB_RADIUS_BASE = 5
+Config.BLOB_RADIUS_K = 2.2
+
+-- Bigger is slower, agar-style. A fresh blob (42) outruns a ceiling blob (~24)
+-- by 1.75x, which is enough for a chase to be losable but not hopeless.
+Config.BLOB_BASE_SPEED = 42
+Config.BLOB_SPEED_DECAY = 0.11
+Config.BLOB_MIN_SPEED = 20
+
+-- ── Pellets ────────────────────────────────────────────────────────────────
+-- Density is pellets per square stud on the Flats. With a 250-stud-radius ring
+-- that is about 430 live pellets, which Roblox streams comfortably as a single
+-- pooled folder of unanchored-but-sleeping parts.
+Config.PELLET_DENSITY = 0.0022
+Config.PELLET_VALUE = 9
+Config.PELLET_TARGET = 430
+Config.PELLET_RESPAWN_PER_SEC = 14
+Config.GOLDEN_CRUMB_MULT = 5
+
+-- ── Melting ────────────────────────────────────────────────────────────────
+-- leak = LEAK_SCALE * (mass - GRACE) ^ EXPONENT
+--
+-- The exponent is the single most important number in the game. Below 1.0 the
+-- curves never cross and the biggest blob wins forever. At 1.15 the crossing
+-- lands around 1.2K mass, which a good player reaches in roughly three
+-- minutes and a great one milks for about twenty percent more.
+--
+-- GRACE exists so that a newly-spawned blob never melts. A player's first
+-- thirty seconds must be pure, uncomplicated growth or the game reads as
+-- broken rather than tense.
+Config.LEAK_GRACE = 60
+Config.LEAK_SCALE = 0.00433
+Config.LEAK_EXPONENT = 1.15
+Config.LEAK_PELLET_MASS = 6   -- leaked goop lands in chunks of this size
+
+-- ── Eating ─────────────────────────────────────────────────────────────────
+Config.EAT_RATIO = 1.15       -- must be 15% bigger to swallow
+Config.EAT_TRANSFER = 0.80    -- and you only keep 80% of them
+
+-- ── Popping ────────────────────────────────────────────────────────────────
+-- Splits the dead blob: scatter as food, congeal as terrain, burn the rest.
+-- The burn is the same sink that keeps total world mass convergent.
+Config.POP_SCATTER = 0.55
+Config.POP_CONGEAL = 0.25
+Config.POP_KEEP_MAX = 0.25    -- ceiling on what any trinket can rescue
+
+-- ── Lumps (the island's memory) ────────────────────────────────────────────
+Config.LUMP_RADIUS_K = 1.15
+Config.LUMP_RADIUS_MIN = 4
+Config.LUMP_RADIUS_MAX = 26
+Config.LUMP_DECAY_PER_SEC = 1 / (60 * 45)  -- a lump half-lives in ~30 minutes
+Config.LUMP_MAX_COUNT = 140
+
+-- ── Banking ────────────────────────────────────────────────────────────────
+-- Super-linear on purpose: one more dangerous lap should pay for itself. Safe
+-- to be super-linear only because the ceiling caps its input.
+Config.BANK_EXPONENT = 1.12
+Config.BANK_SCALE = 0.9
+Config.BANK_SECONDS = 3.0     -- the most dangerous three seconds in the game
+Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
+
+-- ── The island ─────────────────────────────────────────────────────────────
+Config.ISLAND_RADIUS = 300
+Config.SHALLOWS_INNER = 235   -- outside this radius is no-PvP
+Config.VAULT_RADIUS = 34
+Config.SHACK_POSITION = Vector3.new(-168, 0, 150)
+
+-- ── Biomes ─────────────────────────────────────────────────────────────────
+-- The four old zones are gone as places, but not as ideas. Their characters
+-- survive as patches ON the one island, which is the version of "keep it to
+-- one island" that loses nothing: you still get slick lines, ramp play and a
+-- rich dangerous basin, without four separate maps to build, populate, and
+-- split a server across.
+--
+-- Each patch trades safety for yield, so where you feed is a decision:
+--   SLICK   fast lines, no brakes           pellets x1.15
+--   SCRAP   ramps, cover, broken sightlines pellets x1.00, best for hiding
+--   BASIN   sunken, richest, one way out    pellets x1.55
+Config.BIOMES = {
+    { id = "slick", name = "The Slick",  centre = Vector3.new(150, 0, -120),
+      radius = 74, pelletMult = 1.15, friction = 0.03 },
+    { id = "scrap", name = "The Scrapyard", centre = Vector3.new(-120, 0, -150),
+      radius = 80, pelletMult = 1.00, friction = 0.45 },
+    { id = "basin", name = "The Basin",  centre = Vector3.new(105, -9, 145),
+      radius = 68, pelletMult = 1.55, friction = 0.35 },
+}
+
+Config.VAULT_HEIGHT = 7
+Config.SPAWN_RING = 262        -- where a fresh blob appears, inside the Shallows
+
+
 return Config
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000003"><Properties><string name="Name">Cosmetics</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000004"><Properties><string name="Name">Cosmetics</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Cosmetics.luau — what you wear, and where it can come from.
 --
 -- THE HARD RULE, enforced by the `source` field on every entry:
@@ -229,9 +501,11 @@ export type Item = {
     name: string,
     kind: string,        -- skin | trail | eyes | crown
     rarity: string,
-    source: string,      -- starter | season | shop | ascend | achievement | event
+    source: string,      -- starter | season | shop | ascend | achievement
+                         -- | crate_goop | crate_deep | beta
     tier: number?,       -- season tier that grants it
     premium: boolean?,   -- season premium track only
+    beta: boolean?,      -- BETA SEASON exclusive, retired when Season 0 closes
     colour: Color3?,
     material: Enum.Material?,
     emoji: string?,
@@ -317,6 +591,57 @@ Cosmetics.ITEMS = {
       source = "achievement", emoji = "🥇" },
     { id = "crown_gold",   name = "Ascendant",     kind = "crown", rarity = "Legendary",
       source = "ascend", emoji = "👑" },
+
+    -- ── Crate pools ────────────────────────────────────────────────────────
+    -- source "crate_goop" and "crate_deep" are bought with EARNED Glob. There
+    -- is deliberately no Robux path into either pool: the moment a crate you
+    -- can only buy with money holds something a crate you can earn does not,
+    -- the game has a wall in it, and this one does not have walls.
+    { id = "skin_moss",    name = "Mossback",      kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Grass, colour = rgb(132, 150, 118) },
+    { id = "skin_clay",    name = "Wet Clay",      kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Sand, colour = rgb(178, 150, 132) },
+    { id = "skin_ink",     name = "Ink Drop",      kind = "skin", rarity = "Uncommon",
+      source = "crate_goop", material = Enum.Material.Glass, colour = rgb( 62,  66,  82) },
+    { id = "trail_bubbles",name = "Bubble Wake",   kind = "trail", rarity = "Common",
+      source = "crate_goop", colour = rgb(186, 206, 214) },
+    { id = "trail_crumbs", name = "Crumb Trail",   kind = "trail", rarity = "Uncommon",
+      source = "crate_goop", colour = rgb(206, 186, 148) },
+    { id = "eyes_dizzy",   name = "Dizzy",         kind = "eyes", rarity = "Common",
+      source = "crate_goop", emoji = "😵" },
+    -- The cheap crate needs a real jackpot or it is a vending machine. This is
+    -- it: 1-in-250, and the only Legendary anybody can reach on day one.
+    { id = "skin_pearl",   name = "Pearl",         kind = "skin", rarity = "Legendary",
+      source = "crate_goop", material = Enum.Material.Marble, colour = rgb(214, 208, 196) },
+
+    { id = "skin_marble",  name = "Marble",        kind = "skin", rarity = "Rare",
+      source = "crate_deep", material = Enum.Material.Marble, colour = rgb(206, 202, 194) },
+    { id = "skin_tide",    name = "Tidepool",      kind = "skin", rarity = "Epic",
+      source = "crate_deep", material = Enum.Material.Glass, colour = rgb(118, 156, 162) },
+    { id = "skin_fossil",  name = "Fossilised",    kind = "skin", rarity = "Legendary",
+      source = "crate_deep", material = Enum.Material.Slate, colour = rgb(176, 162, 134) },
+    { id = "trail_static", name = "Static",        kind = "trail", rarity = "Rare",
+      source = "crate_deep", colour = rgb(176, 186, 206) },
+    { id = "crown_antenna",name = "Antenna",       kind = "crown", rarity = "Rare",
+      source = "crate_deep", emoji = "📡" },
+    { id = "eyes_shades",  name = "Shades",        kind = "eyes", rarity = "Epic",
+      source = "crate_deep", emoji = "😎" },
+    { id = "crown_deep",   name = "Deepcrown",     kind = "crown", rarity = "Mythic",
+      source = "crate_deep", emoji = "🐚" },
+
+    -- ── BETA SEASON exclusives ─────────────────────────────────────────────
+    -- Retired forever when Season 0 closes. This is the only scarcity claim
+    -- in the game and it costs nothing to honour, so it will be honoured.
+    { id = "skin_beta",    name = "Beta Goo",      kind = "skin", rarity = "Epic",
+      source = "beta", beta = true, material = Enum.Material.ForceField, colour = rgb(150, 186, 206) },
+    { id = "skin_blueprint",name = "Blueprint",    kind = "skin", rarity = "Legendary",
+      source = "beta", beta = true, material = Enum.Material.SmoothPlastic, colour = rgb(104, 132, 170) },
+    { id = "trail_beta",   name = "Build Number",  kind = "trail", rarity = "Rare",
+      source = "beta", beta = true, colour = rgb(158, 190, 206) },
+    { id = "crown_beta",   name = "Founder's Tag", kind = "crown", rarity = "Mythic",
+      source = "beta", beta = true, emoji = "🏷️" },
+    { id = "eyes_beta",    name = "Test Pattern",  kind = "eyes", rarity = "Rare",
+      source = "beta", beta = true, emoji = "🎛️" },
 }
 
 local byId: { [string]: Item } = {}
@@ -384,7 +709,217 @@ Cosmetics.ACHIEVEMENTS = {
 }
 
 return Cosmetics
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000004"><Properties><string name="Name">Crew</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000005"><Properties><string name="Name">Crates</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Crates.luau — the gacha, with the two things gacha usually gets wrong
+-- deliberately fixed.
+--
+-- WRONG THING 1: paid crates holding what free crates do not.
+-- Every crate in this game is bought with Glob, which is earned by banking.
+-- Robux buys the Beta Pass and skins off the shop shelf directly; it does not
+-- buy a roll, and it does not buy a better table. A kid with no money and an
+-- hour has the same access as a kid with fifty dollars and ten minutes.
+--
+-- WRONG THING 2: the invisible cliff.
+-- Every crate has hard pity. The counter is shown on the button. A player can
+-- always answer "how far am I from the good one", which is the difference
+-- between anticipation and being farmed.
+
+local Cosmetics = require(script.Parent.Cosmetics)
+local Trinkets = require(script.Parent.Trinkets)
+
+local Crates = {}
+
+export type Reward = {
+    kind: string,      -- cosmetic | trinket | glob
+    id: string,
+    name: string,
+    rarity: string,
+    amount: number?,   -- for glob
+}
+
+export type Crate = {
+    id: string,
+    name: string,
+    blurb: string,
+    price: number,         -- in Glob. There is no other currency here.
+    sources: { string },   -- Cosmetics.source values this crate draws from
+    trinkets: boolean,     -- may it roll trinkets
+    weights: { [string]: number },
+    pity: number,          -- rolls until a guaranteed Rare-or-better
+    pityFloor: string,
+    dupeGlob: { [string]: number },
+}
+
+-- Weights are per-rarity, not per-item: adding a new Epic skin later must not
+-- silently make Epics more common. The roll picks a rarity first, then picks
+-- uniformly inside it.
+Crates.LIST = {
+    {
+        id = "goop", name = "Goop Crate",
+        blurb = "The everyday one. Mostly skins and trails.",
+        price = 1000,
+        sources = { "crate_goop" },
+        trinkets = true,
+        weights = { Common = 62, Uncommon = 26, Rare = 9, Epic = 2.6, Legendary = 0.4 },
+        pity = 12, pityFloor = "Rare",
+        dupeGlob = { Common = 120, Uncommon = 300, Rare = 900, Epic = 2600, Legendary = 7000, Mythic = 15000 },
+    },
+    {
+        id = "deep", name = "Deep Crate",
+        blurb = "Costs a real session. Holds the trinkets.",
+        price = 9000,
+        sources = { "crate_deep", "crate_goop" },
+        trinkets = true,
+        weights = { Common = 18, Uncommon = 34, Rare = 31, Epic = 13, Legendary = 3.4, Mythic = 0.6 },
+        pity = 8, pityFloor = "Epic",
+        dupeGlob = { Common = 400, Uncommon = 900, Rare = 2200, Epic = 5500, Legendary = 14000, Mythic = 30000 },
+    },
+    {
+        id = "beta", name = "Beta Crate",
+        blurb = "Season 0 only. Never printed again.",
+        price = 0,   -- earned from Beta Season tiers, not sold
+        sources = { "beta" },
+        trinkets = false,
+        weights = { Rare = 52, Epic = 33, Legendary = 12, Mythic = 3 },
+        pity = 4, pityFloor = "Epic",
+        dupeGlob = { Rare = 3000, Epic = 7000, Legendary = 18000, Mythic = 40000 },
+    },
+} :: { Crate }
+
+local byId: { [string]: Crate } = {}
+for _, c in ipairs(Crates.LIST) do
+    byId[c.id] = c
+end
+
+function Crates.get(id: string): Crate?
+    return byId[id]
+end
+
+-- Everything a crate can possibly produce, grouped by rarity. Built lazily and
+-- cached, because it is read on every roll and the catalogue never changes at
+-- runtime.
+local poolCache: { [string]: { [string]: { Reward } } } = {}
+
+local function pool(crate: Crate): { [string]: { Reward } }
+    local cached = poolCache[crate.id]
+    if cached then
+        return cached
+    end
+    local byRarity: { [string]: { Reward } } = {}
+    local function add(r: Reward)
+        local bucket = byRarity[r.rarity]
+        if not bucket then
+            bucket = {}
+            byRarity[r.rarity] = bucket
+        end
+        bucket[#bucket + 1] = r
+    end
+    for _, item in ipairs(Cosmetics.ITEMS) do
+        for _, src in ipairs(crate.sources) do
+            if item.source == src then
+                add({ kind = "cosmetic", id = item.id, name = item.name, rarity = item.rarity })
+                break
+            end
+        end
+    end
+    if crate.trinkets then
+        for _, t in ipairs(Trinkets.LIST) do
+            add({ kind = "trinket", id = t.id, name = t.name, rarity = t.rarity })
+        end
+    end
+    poolCache[crate.id] = byRarity
+    return byRarity
+end
+
+Crates.RARITY_ORDER = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" }
+
+local rank: { [string]: number } = {}
+for i, r in ipairs(Crates.RARITY_ORDER) do
+    rank[r] = i
+end
+
+function Crates.atLeast(rarity: string, floor: string): boolean
+    return (rank[rarity] or 0) >= (rank[floor] or 99)
+end
+
+-- Roll one crate.
+--
+-- `sinceGood` is how many rolls the player has made on this crate without
+-- hitting the pity floor. When it reaches the pity count the rarity roll is
+-- restricted to the floor and above — which is why the counter can be shown
+-- honestly on the button instead of hinted at.
+--
+-- Returns the reward and the new sinceGood.
+function Crates.roll(crateId: string, rng: Random, sinceGood: number): (Reward?, number)
+    local crate = byId[crateId]
+    if not crate then
+        return nil, sinceGood
+    end
+    local byRarity = pool(crate)
+    local forced = sinceGood + 1 >= crate.pity
+
+    local total, acc = 0, {}
+    for rarity, weight in pairs(crate.weights) do
+        local bucket = byRarity[rarity]
+        if bucket and #bucket > 0 then
+            if not forced or Crates.atLeast(rarity, crate.pityFloor) then
+                total += weight
+                acc[#acc + 1] = { rarity = rarity, acc = total }
+            end
+        end
+    end
+    if total <= 0 then
+        return nil, sinceGood
+    end
+    -- Sort for determinism: pairs() order over a hash table is not stable, and
+    -- a gacha whose outcome depends on table iteration order is a gacha that
+    -- cannot be tested or audited.
+    table.sort(acc, function(a, b)
+        return (rank[a.rarity] or 0) < (rank[b.rarity] or 0)
+    end)
+    local running = 0
+    for _, e in ipairs(acc) do
+        running += crate.weights[e.rarity]
+        e.acc = running
+    end
+
+    local pick = rng:NextNumber() * total
+    local chosen = acc[#acc].rarity
+    for _, e in ipairs(acc) do
+        if pick <= e.acc then
+            chosen = e.rarity
+            break
+        end
+    end
+
+    local bucket = byRarity[chosen]
+    local reward = bucket[rng:NextInteger(1, #bucket)]
+
+    local nextSince = if Crates.atLeast(chosen, crate.pityFloor) then 0 else sinceGood + 1
+    return reward, nextSince
+end
+
+-- Duplicates convert to Glob rather than vanishing. A duplicate that gives
+-- nothing is the single fastest way to teach a player that opening crates is
+-- a waste of time.
+function Crates.dupeValue(crateId: string, rarity: string): number
+    local crate = byId[crateId]
+    if not crate then
+        return 0
+    end
+    return crate.dupeGlob[rarity] or 0
+end
+
+function Crates.rollsUntilPity(crateId: string, sinceGood: number): number
+    local crate = byId[crateId]
+    if not crate then
+        return 0
+    end
+    return math.max(0, crate.pity - sinceGood)
+end
+
+return Crates
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000006"><Properties><string name="Name">Crew</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Crew.luau — lightweight crews.
 --
 -- I argued against this in DESIGN.md and the argument was: guilds solve
@@ -499,7 +1034,7 @@ function Crew.markClaimed(crew: any, userId: number)
 end
 
 return Crew
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000005"><Properties><string name="Name">Feedstock</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000007"><Properties><string name="Name">Feedstock</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Feedstock.luau — the catalogue of everything a Goob can swallow.
 --
 -- DESIGN NOTE: the contents of a Goob are VISIBLE through its translucent
@@ -671,7 +1206,7 @@ function Feedstock.roll(rng: Random, luck: number?, allowSecret: boolean?): Item
 end
 
 return Feedstock
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000006"><Properties><string name="Name">Format</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000008"><Properties><string name="Name">Format</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Format.luau — number formatting for a genuinely huge power scale.
 -- Goob mass is expected to reach 1e30+. Roblox's default tostring() gives you
 -- "1e+30" which means nothing to a nine-year-old, so we ladder suffixes.
@@ -767,7 +1302,7 @@ function Format.duration(sec: number): string
 end
 
 return Format
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000007"><Properties><string name="Name">GoobMath</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000009"><Properties><string name="Name">GoobMath</string><ProtectedString name="Source"><![CDATA[--!strict
 -- GoobMath.luau — the single source of truth for how a Goob's numbers work.
 -- Shared between server (authority) and client (prediction/display) so the HUD
 -- never disagrees with the server about how big your Goob is.
@@ -906,7 +1441,7 @@ function GoobMath.generation(goob: Goob): number
 end
 
 return GoobMath
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000008"><Properties><string name="Name">Monetisation</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000010"><Properties><string name="Name">Monetisation</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Monetisation.luau — what may be sold, and the wall around the economy.
 --
 -- THE WALL: Robux may buy expression and convenience. It may never buy mass,
@@ -1003,7 +1538,7 @@ function Monetisation.violations(): { string }
 end
 
 return Monetisation
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000009"><Properties><string name="Name">Movement</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000011"><Properties><string name="Name">Movement</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Movement.luau — mass IS handling.
 --
 -- THE WHOLE POINT: in Grow a Garden your number is a label on a crop. Here your
@@ -1094,7 +1629,7 @@ function Movement.maxPlausibleSpeed(mass: number): number
 end
 
 return Movement
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000010"><Properties><string name="Name">Names</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000012"><Properties><string name="Name">Names</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Names.luau — every Goob is auto-named at hatch. Names are silly, readable,
 -- and pronounceable by a seven-year-old, because the name is what gets shouted
 -- across a trading server.
@@ -1138,7 +1673,7 @@ function Names.sanitize(raw: string): string?
 end
 
 return Names
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000011"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000013"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Net.luau — one manifest of every RemoteEvent/RemoteFunction in the game.
 -- The server creates them; the client waits for them. Neither side hardcodes a
 -- string anywhere else, so a typo becomes a Luau error instead of a silent
@@ -1181,6 +1716,13 @@ Net.EVENTS = {
     "TradeCancel",    -- C->S
     "TradeSync",      -- S->C  live state of the open trade window
     "LeaderboardSync",-- S->C
+    -- ── Arena ──────────────────────────────────────────────────────────────
+    "ArenaSync",      -- S->C  live run state: mass, leak, bank progress, power
+    "UsePower",       -- C->S  press the one button
+    "SetPower",       -- C->S  choose which power you carry
+    "EquipTrinket",   -- C->S  slot a trinket
+    "OpenCrate",      -- C->S  spend Glob on a roll
+    "CrateResult",    -- S->C  what came out
 }
 
 Net.FUNCTIONS = {
@@ -1216,7 +1758,7 @@ function Net.get(name: string): any
 end
 
 return Net
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000012"><Properties><string name="Name">Pit</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000014"><Properties><string name="Name">Pit</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Pit.luau — rules for the Sumo Pit.
 --
 -- TWO RULES THAT ARE NOT NEGOTIABLE, and the reason PvP exists at all here:
@@ -1235,7 +1777,7 @@ local Movement = require(script.Parent.Movement)
 
 local Pit = {}
 
-Pit.CENTRE = Vector3.new(-40, 6, 430)
+Pit.CENTRE = Vector3.new(0, 6, 430)
 Pit.START_RADIUS = 96
 Pit.MIN_RADIUS = 18
 Pit.FLOOR_Y = 6
@@ -1294,7 +1836,160 @@ function Pit.payout(stakes: { number }): number
 end
 
 return Pit
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000013"><Properties><string name="Name">Season</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000015"><Properties><string name="Name">Powers</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Powers.luau — one button, one big decision.
+--
+-- Every blob carries exactly ONE power. Not a bar of six, not a combo: one.
+-- A nine-year-old on a phone has one thumb free, and the difference between
+-- a good player and a bad one should be WHEN they press it, not whether they
+-- memorised a rotation.
+--
+-- Every power costs a slice of your own mass. That is the whole balance model:
+-- there is no cooldown-only power, because a cooldown-only power is free, and
+-- a free power gets spammed until it is wallpaper. Paying in the same currency
+-- you are trying to protect makes every press a real question.
+--
+-- NOTHING HERE IS FOR SALE. Powers are earned by playing. Monetisation.violations()
+-- treats a paid item carrying a power id as a build failure.
+
+local Powers = {}
+
+export type Power = {
+    id: string,
+    name: string,
+    blurb: string,       -- what a kid reads on the button
+    cost: number,        -- fraction of current mass, spent on use
+    cooldown: number,    -- seconds
+    duration: number,    -- seconds of effect, 0 for instant
+    unlockBanked: number,-- lifetime banked glob needed to own it
+    color: Color3,
+}
+
+-- Ordered by unlock, which is also roughly ordered by how much thinking each
+-- one asks for. DASH first because it is legible in a quarter of a second.
+Powers.LIST = {
+    {
+        id = "dash", name = "DASH",
+        blurb = "Shove yourself forward, fast.",
+        cost = 0.08, cooldown = 3.5, duration = 0.22,
+        unlockBanked = 0,
+        color = Color3.fromRGB(150, 205, 225),
+    },
+    {
+        id = "magnet", name = "MAGNET",
+        blurb = "Yank every loose pellet nearby straight into you.",
+        cost = 0.05, cooldown = 12, duration = 4,
+        unlockBanked = 4000,
+        color = Color3.fromRGB(170, 190, 215),
+    },
+    {
+        id = "slick", name = "SLICK",
+        blurb = "Drop a puddle. Whoever's chasing you loses the wheel.",
+        cost = 0.06, cooldown = 10, duration = 2,
+        unlockBanked = 12000,
+        color = Color3.fromRGB(160, 175, 150),
+    },
+    {
+        id = "slam", name = "SLAM",
+        blurb = "Jump and crash. Everyone nearby gets thrown, lumps shatter.",
+        cost = 0.12, cooldown = 14, duration = 0,
+        unlockBanked = 30000,
+        color = Color3.fromRGB(205, 170, 140),
+    },
+    {
+        id = "hook", name = "HOOK",
+        blurb = "Grab the nearest blob and reel. Bigger pulls, smaller gets pulled.",
+        cost = 0.10, cooldown = 13, duration = 1.2,
+        unlockBanked = 60000,
+        color = Color3.fromRGB(190, 180, 145),
+    },
+    {
+        id = "bubble", name = "BUBBLE",
+        blurb = "Nothing can eat you. You can't eat either.",
+        cost = 0.15, cooldown = 20, duration = 3,
+        unlockBanked = 110000,
+        color = Color3.fromRGB(175, 200, 200),
+    },
+    {
+        id = "split", name = "SPLIT",
+        blurb = "Throw half of yourself at them. It comes back.",
+        cost = 0.50, cooldown = 18, duration = 8,
+        unlockBanked = 190000,
+        color = Color3.fromRGB(195, 165, 195),
+    },
+    {
+        id = "spike", name = "SPIKE",
+        blurb = "For three seconds, anything that eats you pops instead.",
+        cost = 0.20, cooldown = 24, duration = 3,
+        unlockBanked = 300000,
+        color = Color3.fromRGB(205, 150, 155),
+    },
+} :: { Power }
+
+-- SPIKE is last and dearest on purpose. It is the tool that lets the smallest
+-- blob on the island delete the biggest, which is the single best story this
+-- game can produce — and a story stops being a story if it happens every lap.
+
+local byId: { [string]: Power } = {}
+for _, p in ipairs(Powers.LIST) do
+    byId[p.id] = p
+end
+
+Powers.DEFAULT = "dash"
+
+function Powers.get(id: string): Power?
+    return byId[id]
+end
+
+function Powers.owned(lifetimeBanked: number): { Power }
+    local out = {}
+    for _, p in ipairs(Powers.LIST) do
+        if lifetimeBanked >= p.unlockBanked then
+            out[#out + 1] = p
+        end
+    end
+    return out
+end
+
+function Powers.isOwned(id: string, lifetimeBanked: number): boolean
+    local p = byId[id]
+    return p ~= nil and lifetimeBanked >= p.unlockBanked
+end
+
+-- What using it actually costs right now, in mass. Floored at a flat minimum
+-- so that a tiny blob cannot dash for free and kite the whole server.
+function Powers.massCost(id: string, mass: number): number
+    local p = byId[id]
+    if not p then
+        return 0
+    end
+    return math.max(Powers.MIN_COST, mass * p.cost)
+end
+
+Powers.MIN_COST = 3
+
+function Powers.cooldown(id: string, trinketHaste: number?): number
+    local p = byId[id]
+    if not p then
+        return 0
+    end
+    return p.cooldown * (1 - math.clamp(trinketHaste or 0, 0, 0.5))
+end
+
+-- The next power a player is working towards, for the HUD's progress line.
+-- Returning the goal AND the gap is what makes a locked item feel like a
+-- target rather than a wall.
+function Powers.nextLocked(lifetimeBanked: number): (Power?, number)
+    for _, p in ipairs(Powers.LIST) do
+        if lifetimeBanked < p.unlockBanked then
+            return p, p.unlockBanked - lifetimeBanked
+        end
+    end
+    return nil, 0
+end
+
+return Powers
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">Season</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Season.luau — the retention track.
 --
 -- XP comes from PLAYING, never from paying. The premium track unlocks a second
@@ -1333,6 +2028,12 @@ Season.XP = {
     pitEnter   = 30,
     pitWin     = 300,
     crewGoal   = 1100,
+    -- Banking is the arena's core loop, so it is the arena's core XP source.
+    -- 55 a bank and a ~90-second bank puts the daily cap about three hours
+    -- out, which is the same shape the rest of the track was paced to.
+    bank       = 55,
+    bigBank    = 260,   -- a run taken past 60% of the ceiling before cashing
+    pop        = 15,    -- you get something for dying; it is still play
 }
 
 -- Daily cap on grindable XP, so the track takes a season rather than a weekend
@@ -1456,7 +2157,182 @@ function Season.rollIfNeeded(state: any): boolean
 end
 
 return Season
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000014"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">Trinkets</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Trinkets.luau — three slots, small numbers, real choices.
+--
+-- The design rule, and the reason this file has a test that enforces it:
+-- a fully-kitted player must be roughly 20% better than a bare one, never
+-- 200%. Trinkets are meant to say something about HOW you play, not to
+-- decide WHETHER you can play.
+--
+-- They also pull against each other. Wax Coat wants a long greedy run;
+-- Featherweight only works while you are small and therefore wants short
+-- aggressive ones. You cannot build for both, so a loadout is a statement.
+--
+-- Earned only. Deep Crates cost earned Glob, season tiers cost play. There is
+-- no Robux path to any number in this file, and Monetisation.violations()
+-- fails the build if one appears.
+
+local Trinkets = {}
+
+export type Effect =
+    "leakMult"        -- multiplies leak per second
+    | "bankHaste"     -- fraction faster to bank
+    | "pelletMult"    -- multiplies pellet value
+    | "knockbackMult" -- multiplies knockback taken
+    | "powerHaste"    -- fraction off power cooldowns
+    | "crumbChance"   -- chance a pellet becomes a Golden Crumb
+    | "smallSpeed"    -- top speed bonus while under SMALL_THRESHOLD
+    | "popKeep"       -- fraction of mass kept through a pop
+
+export type Trinket = {
+    id: string,
+    name: string,
+    blurb: string,
+    effect: Effect,
+    value: number,
+    rarity: string,
+}
+
+Trinkets.SLOTS = 3
+Trinkets.SMALL_THRESHOLD = 500
+
+Trinkets.LIST = {
+    { id = "waxcoat",   name = "Wax Coat",      blurb = "You melt 12% slower.",
+      effect = "leakMult",      value = 0.88, rarity = "Common" },
+    { id = "snorkel",   name = "Snorkel",       blurb = "Bank 30% faster.",
+      effect = "bankHaste",     value = 0.30, rarity = "Common" },
+    { id = "tongue",    name = "Greedy Tongue", blurb = "Pellets are worth 10% more.",
+      effect = "pelletMult",    value = 1.10, rarity = "Common" },
+    { id = "ballast",   name = "Ballast",       blurb = "Take 15% less knockback.",
+      effect = "knockbackMult", value = 0.85, rarity = "Uncommon" },
+    { id = "trigger",   name = "Hair Trigger",  blurb = "Powers recharge 18% sooner.",
+      effect = "powerHaste",    value = 0.18, rarity = "Uncommon" },
+    { id = "crumb",     name = "Lucky Crumb",   blurb = "1 pellet in 20 is golden.",
+      effect = "crumbChance",   value = 0.05, rarity = "Rare" },
+    { id = "feather",   name = "Featherweight", blurb = "+10% speed while you're small.",
+      effect = "smallSpeed",    value = 0.10, rarity = "Rare" },
+    { id = "secondskin",name = "Second Skin",   blurb = "Keep 15% of yourself when you pop.",
+      effect = "popKeep",       value = 0.15, rarity = "Epic" },
+} :: { Trinket }
+
+local byId: { [string]: Trinket } = {}
+for _, t in ipairs(Trinkets.LIST) do
+    byId[t.id] = t
+end
+
+function Trinkets.get(id: string): Trinket?
+    return byId[id]
+end
+
+-- Resolve an equipped loadout into a flat table of effects.
+--
+-- Multiplicative effects (leak, pellets, knockback) start at 1 and multiply;
+-- additive ones (haste, chance, keep) start at 0 and add.
+--
+-- DUPLICATES DO NOT STACK, and this is load-bearing rather than tidy. When
+-- they did, the strongest loadout in the game was three Wax Coats — a 47%
+-- edge, and no decision at all, because the answer was always "three of
+-- whichever is best". Requiring three DIFFERENT trinkets is what turns the
+-- slots into a build. It also caps the damage any one trinket can do to the
+-- balance at exactly its own number.
+export type Resolved = {
+    leakMult: number, bankHaste: number, pelletMult: number,
+    knockbackMult: number, powerHaste: number, crumbChance: number,
+    smallSpeed: number, popKeep: number,
+}
+
+function Trinkets.resolve(equipped: { string }): Resolved
+    local r: Resolved = {
+        leakMult = 1, bankHaste = 0, pelletMult = 1, knockbackMult = 1,
+        powerHaste = 0, crumbChance = 0, smallSpeed = 0, popKeep = 0,
+    }
+    local used = 0
+    local already: { [string]: boolean } = {}
+    for _, id in ipairs(equipped) do
+        if used >= Trinkets.SLOTS then
+            break
+        end
+        local t = byId[id]
+        if t and not already[id] then
+            already[id] = true
+            used += 1
+            if t.effect == "leakMult" then r.leakMult *= t.value
+            elseif t.effect == "pelletMult" then r.pelletMult *= t.value
+            elseif t.effect == "knockbackMult" then r.knockbackMult *= t.value
+            elseif t.effect == "bankHaste" then r.bankHaste += t.value
+            elseif t.effect == "powerHaste" then r.powerHaste += t.value
+            elseif t.effect == "crumbChance" then r.crumbChance += t.value
+            elseif t.effect == "smallSpeed" then r.smallSpeed += t.value
+            elseif t.effect == "popKeep" then r.popKeep += t.value
+            end
+        end
+    end
+    -- Hard clamps. These are not expected to bind with three slots; they are
+    -- here so that a future trinket, or a future slot, cannot quietly turn
+    -- this file into a pay-to-win surface by arithmetic.
+    r.leakMult = math.max(0.6, r.leakMult)
+    r.pelletMult = math.min(1.5, r.pelletMult)
+    r.knockbackMult = math.max(0.5, r.knockbackMult)
+    r.bankHaste = math.min(0.75, r.bankHaste)
+    r.powerHaste = math.min(0.35, r.powerHaste)
+    r.crumbChance = math.min(0.25, r.crumbChance)
+    r.smallSpeed = math.min(0.20, r.smallSpeed)
+    r.popKeep = math.min(0.25, r.popKeep)
+    return r
+end
+
+-- A rough relative-power index, used by the balance test to prove no trinket
+-- is dead weight and no loadout runs away from the field.
+--
+-- READ THIS BEFORE TRUSTING THE NUMBER. The absolute value it returns means
+-- nothing — the weights below are judgement calls, not measurements, and the
+-- first version of this function happily reported that the strongest build in
+-- the game was "three Wax Coats" because duplicates stacked. Only the SPREAD
+-- between loadouts is meaningful, which is why the test asserts on ratios and
+-- never on a magnitude.
+--
+-- The weights say what each axis is worth in a fight:
+--   bankHaste  0.40  the bank window is where runs actually die
+--   powerHaste 0.45  the power is the skill layer; more presses is more skill
+--   crumbChance 2.0  a Golden Crumb is 5x, so a 5% chance is a 20% food swing
+--   popKeep    0.80  surviving a pop with a quarter of yourself is most of a
+--                    free restart, which is worth far more than it looks
+Trinkets.WEIGHTS = {
+    bankHaste = 0.40, powerHaste = 0.45, crumbChance = 2.0, popKeep = 0.80,
+}
+
+function Trinkets.advantage(r: Resolved): number
+    local w = Trinkets.WEIGHTS
+    return (1 / r.leakMult - 1)
+        + (r.pelletMult - 1)
+        + (1 / r.knockbackMult - 1) * 0.5
+        + r.smallSpeed
+        + r.bankHaste * w.bankHaste
+        + r.powerHaste * w.powerHaste
+        + r.crumbChance * w.crumbChance
+        + r.popKeep * w.popKeep
+end
+
+-- The ground truth the proxy above cannot give: how far any single trinket
+-- moves its OWN axis, in that axis's own units. These are the numbers a
+-- reviewer should argue about, and the test holds each to its own cap.
+Trinkets.AXIS_CAP = {
+    leakMult = 0.15, pelletMult = 0.15, knockbackMult = 0.15, smallSpeed = 0.12,
+    bankHaste = 0.35, powerHaste = 0.20, crumbChance = 0.06, popKeep = 0.15,
+}
+
+function Trinkets.axisMagnitude(t: Trinket): number
+    if t.effect == "leakMult" or t.effect == "knockbackMult" then
+        return 1 - t.value
+    elseif t.effect == "pelletMult" then
+        return t.value - 1
+    end
+    return t.value
+end
+
+return Trinkets
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Tutorial.luau — the first-run guided loop.
 --
 -- WHY THIS IS NOT OPTIONAL. A new player spawns next to a blob with some junk
@@ -1593,7 +2469,7 @@ function Tutorial.display(state: any)
 end
 
 return Tutorial
-]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000037"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000025"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000044"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000030"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.server.luau — the single entry point. Wires every service together and
 -- owns all the RemoteEvent handlers, so there is exactly one file to read to
 -- understand what the client is allowed to ask the server to do.
@@ -1616,6 +2492,10 @@ local Cosmetics = require(Shared.Cosmetics)
 local Season = require(Shared.Season)
 local Pit = require(Shared.Pit)
 local Crew = require(Shared.Crew)
+local Blob = require(Shared.Blob)
+local Powers = require(Shared.Powers)
+local Trinkets = require(Shared.Trinkets)
+local Crates = require(Shared.Crates)
 local Monetisation = require(Shared.Monetisation)
 
 local Data = require(script.Data)
@@ -1627,6 +2507,7 @@ local RollService = require(script.RollService)
 local PitService = require(script.PitService)
 local CrewStore = require(script.CrewStore)
 local CensusService = require(script.CensusService)
+local ArenaService = require(script.ArenaService)
 
 print(("[%s] booting…"):format(Config.GAME_NAME))
 
@@ -1947,32 +2828,205 @@ task.spawn(function()
     local pillar = Workspace:WaitForChild("GoobWorld"):WaitForChild("Leaderboard")
     local entries = pillar:WaitForChild("Board"):WaitForChild("Entries") :: TextLabel
     while true do
+        -- Ranked on LIFETIME BANKED, which is the answer to "what is the
+        -- point of this game". Ranking on current mass would reward whoever
+        -- happened to be mid-run when the board refreshed, and would tell a
+        -- new player that the goal is to hold mass — the exact instinct the
+        -- melt is designed to punish.
         local rows = {}
         for _, player in ipairs(Players:GetPlayers()) do
             local profile = Data.get(player)
-            local goob = profile and GoobService.activeGoob(profile)
-            if goob then
+            if profile then
                 table.insert(rows, {
                     name = player.DisplayName,
-                    power = GoobMath.power(goob),
-                    tier = GoobMath.ageTier(goob),
-                    goobName = goob.nickname,
+                    banked = profile.lifetimeBanked or 0,
+                    best = profile.bestBank or 0,
+                    holding = ArenaService.massOf(player),
                 })
             end
         end
-        table.sort(rows, function(x, y) return x.power > y.power end)
+        table.sort(rows, function(x, y) return x.banked > y.banked end)
 
-        local text = "🏆 BIGGEST GOOBS\n\n"
+        local text = "🏦 TOP BANKERS\n\n"
         for i = 1, math.min(10, #rows) do
             local r = rows[i]
-            text ..= string.format("%d. %s\n    %s %s · ⚡%s\n",
-                i, r.name, r.tier.emoji, r.goobName, Format.short(r.power))
+            text ..= string.format("%d. %s\n    💧%s banked · best run 💧%s · holding %s\n",
+                i, r.name, Format.short(r.banked), Format.short(r.best), Format.short(r.holding))
         end
         if #rows == 0 then text ..= "nobody yet — be the first!" end
         entries.Text = text
         LeaderboardSync:FireAllClients(rows)
         task.wait(4)
     end
+end)
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- THE ARENA
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ArenaService owns the run; this file owns the profile. The two are wired
+-- through an injected table rather than by requiring each other, so the arena
+-- never touches the datastore and there stays exactly one place where Glob is
+-- created.
+
+local ArenaSync = Net.get("ArenaSync")
+local CrateResult = Net.get("CrateResult")
+
+ArenaService.start({
+    award = function(player, glob, _xp, reason)
+        local profile = Data.get(player)
+        if not profile then return end
+        profile.glob += glob
+        if reason == "bank" then
+            profile.lifetimeBanked += glob
+            if glob > (profile.bestBank or 0) then
+                profile.bestBank = glob
+            end
+            progress(player, "bank")
+            -- A run taken past 60% of the ceiling is a real decision to stay
+            -- out while melting, and it gets paid for separately.
+            local run = ArenaService.runFor(player)
+            if run and run.bestMass > Blob.ceiling(0.8) * 0.6 then
+                progress(player, "bigBank")
+            end
+            -- Powers unlock on lifetime banked, so a bank can hand one over.
+            for _, power in ipairs(Powers.LIST) do
+                if power.unlockBanked > 0
+                    and profile.lifetimeBanked >= power.unlockBanked
+                    and profile.lifetimeBanked - glob < power.unlockBanked then
+                    notify(player, ("🔓 New power: %s — %s"):format(power.name, power.blurb), "good")
+                end
+            end
+        end
+        push(player)
+    end,
+
+    notify = notify,
+    effect = function(player, kind, data) Effect:FireClient(player, kind, data) end,
+
+    loadout = function(player)
+        local profile = Data.get(player)
+        if not profile then return {}, Powers.DEFAULT end
+        return profile.trinketSlots or {}, profile.powerId or Powers.DEFAULT
+    end,
+
+    sync = function(player, state) ArenaSync:FireClient(player, state) end,
+})
+
+-- One button. The client sends where it is aiming; the server decides
+-- everything else, including whether the player can afford the press.
+Net.get("UsePower").OnServerEvent:Connect(function(player, aim)
+    local dir = typeof(aim) == "Vector3" and aim or nil
+    -- Never trust a client vector's magnitude: a 10,000-stud "aim" is a
+    -- launch exploit, and normalising here costs nothing.
+    if dir and dir.Magnitude > 0.01 then
+        dir = dir.Unit
+    else
+        dir = nil
+    end
+    local ok, why = ArenaService.usePower(player, dir)
+    if not ok and why then
+        notify(player, "⏳ " .. why, "warn")
+    end
+end)
+
+Net.get("SetPower").OnServerEvent:Connect(function(player, id)
+    local profile = Data.get(player)
+    if not profile or typeof(id) ~= "string" then return end
+    if not Powers.isOwned(id, profile.lifetimeBanked or 0) then
+        local power = Powers.get(id)
+        notify(player, power
+            and ("🔒 %s unlocks at 💧%s banked."):format(power.name, Format.short(power.unlockBanked))
+            or "That power doesn't exist.", "warn")
+        return
+    end
+    profile.powerId = id
+    ArenaService.refreshLoadout(player)
+    local power = Powers.get(id)
+    notify(player, ("Carrying %s."):format(power and power.name or id), "good")
+    push(player)
+end)
+
+Net.get("EquipTrinket").OnServerEvent:Connect(function(player, id, slot)
+    local profile = Data.get(player)
+    if not profile or typeof(slot) ~= "number" then return end
+    slot = math.clamp(math.floor(slot), 1, Trinkets.SLOTS)
+    profile.trinketSlots = profile.trinketSlots or {}
+
+    if id == nil or id == "" then
+        table.remove(profile.trinketSlots, slot)
+    else
+        if typeof(id) ~= "string" or not Trinkets.get(id) then return end
+        if not (profile.trinketsOwned or {})[id] then
+            notify(player, "You don't own that trinket.", "warn")
+            return
+        end
+        -- Duplicates do nothing, so silently equipping one would read as a
+        -- bug. Refuse it and say why.
+        for i, existing in ipairs(profile.trinketSlots) do
+            if existing == id and i ~= slot then
+                notify(player, "That one's already equipped — duplicates do nothing.", "warn")
+                return
+            end
+        end
+        profile.trinketSlots[slot] = id
+    end
+
+    ArenaService.refreshLoadout(player)
+    push(player)
+end)
+
+Net.get("OpenCrate").OnServerEvent:Connect(function(player, crateId)
+    local profile = Data.get(player)
+    if not profile or typeof(crateId) ~= "string" then return end
+    local crate = Crates.get(crateId)
+    if not crate then return end
+
+    if crate.price <= 0 then
+        notify(player, "That crate isn't for sale — it comes from Beta Season.", "warn")
+        return
+    end
+    if profile.glob < crate.price then
+        notify(player, ("Need 💧%s for a %s."):format(Format.short(crate.price), crate.name), "warn")
+        return
+    end
+
+    profile.glob -= crate.price
+    profile.cratePity = profile.cratePity or {}
+    local pity = profile.cratePity[crateId] or 0
+    local reward, nextPity = Crates.roll(crateId, Random.new(os.clock() * 1e6 // 1 + player.UserId), pity)
+    profile.cratePity[crateId] = nextPity
+    if not reward then
+        profile.glob += crate.price   -- refund rather than eat the payment
+        notify(player, "That crate is empty right now. Refunded.", "warn")
+        push(player)
+        return
+    end
+
+    local duplicate = false
+    if reward.kind == "cosmetic" then
+        duplicate = Cosmetics.owns(profile.cosmeticsOwned, reward.id)
+        profile.cosmeticsOwned[reward.id] = true
+    else
+        profile.trinketsOwned = profile.trinketsOwned or {}
+        duplicate = profile.trinketsOwned[reward.id] == true
+        profile.trinketsOwned[reward.id] = true
+    end
+
+    local refund = 0
+    if duplicate then
+        refund = Crates.dupeValue(crateId, reward.rarity)
+        profile.glob += refund
+    end
+
+    CrateResult:FireClient(player, {
+        crate = crateId,
+        reward = reward,
+        duplicate = duplicate,
+        refund = refund,
+        pity = Crates.rollsUntilPity(crateId, nextPity),
+    })
+    push(player)
 end)
 
 -- ── Player lifecycle ───────────────────────────────────────────────────────
@@ -1995,15 +3049,17 @@ local function onJoin(player: Player)
     end)
 
     GoobService.spawnFor(player)
+    ArenaService.enter(player)
     RollService.applyCosmetics(player, profile.loadout)
     syncCrew(player)
     checkAchievements(player)
     push(player)
 
-    notify(player, "Welcome to " .. Config.GAME_NAME .. "! Chase the junk, feed your Goob. 🫧", "good")
+    notify(player, "Welcome! Eat. You melt as you grow — bank it at the Vault before you lose it. 🫧", "good")
 end
 
 local function onLeave(player: Player)
+    ArenaService.leave(player)
     PitService.cleanup(player)
     TradeService.cleanup(player)
     GoobService.despawnFor(player)
@@ -2447,9 +3503,608 @@ CritterService.onSecret.Event:Connect(function(item)
         :format(item.name), "secret")
 end)
 
-print(("[%s] ready. %d plots, %d feedstock types.")
-    :format(Config.GAME_NAME, Config.PLOT_COUNT, #Feedstock.ITEMS))
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">CensusService</string><ProtectedString name="Source"><![CDATA[--!strict
+print(("[%s] ready. one island, %d pellets, %d powers, %d trinkets, %d crates.")
+    :format(Config.GAME_NAME, Config.PELLET_TARGET, #Powers.LIST, #Trinkets.LIST, #Crates.LIST))
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">ArenaService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- ArenaService.luau — the island, running.
+--
+-- Everything the player feels happens in one fixed-step loop: eat, melt, bank,
+-- pop. The curves it drives are in Blob.luau and are separately simulated; this
+-- file is the part that has to be FAST, because it runs over every player and
+-- every pellet several times a second on a Roblox server that is also doing
+-- physics for thirty rolling balls.
+--
+-- THE ONE PERFORMANCE DECISION THAT MATTERS: pellets live in a spatial hash,
+-- not a list. The naive version checks every player against every pellet —
+-- 30 x 430 = 12,900 distance tests per tick, 190,000 a second, which is enough
+-- Luau to visibly cost frames. The grid turns that into "look in the nine
+-- cells around me", which is a couple of dozen tests regardless of how many
+-- pellets the island is holding.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local Blob = require(Shared.Blob)
+local Powers = require(Shared.Powers)
+local Trinkets = require(Shared.Trinkets)
+local Format = require(Shared.Format)
+
+local RollService = require(script.Parent.RollService)
+local WorldBuilder = require(script.Parent.WorldBuilder)
+
+local ArenaService = {}
+
+-- ── Tuning that belongs to the loop, not the design ────────────────────────
+local TICK = 1 / 12              -- the arena's own step, independent of render
+local CELL = 40                  -- stud size of one spatial-hash cell
+local PICKUP_SLACK = 1.6         -- studs of forgiveness on a pellet grab
+local EAT_OVERLAP = 0.55         -- how far in you must be to swallow someone
+local BANK_MAX_SPEED = 14        -- you must actually stop to bank
+local POP_INVULN = 2.0           -- seconds of grace after respawning
+
+export type Run = {
+    mass: number,
+    powerId: string,
+    powerReadyAt: number,
+    powerUntil: number,
+    activeEffect: string?,
+    banking: number,
+    leakBuffer: number,
+    safeUntil: number,
+    trinkets: Trinkets.Resolved,
+    bestMass: number,
+    lastPos: Vector3,
+}
+
+local runs: { [number]: Run } = {}
+local rng = Random.new(os.clock() * 1e6 // 1)
+
+-- `owner` and `ownerUntil` exist because of a bug that silently deleted the
+-- entire game. Leaked goop was spawned inside the leaking blob's own pickup
+-- radius, so a big blob vacuumed its own drips straight back up and its net
+-- melt was ZERO — the ceiling vanished, AFK became viable again, and the food
+-- a big player is supposed to be feeding the island never reached the floor.
+-- A dropped pellet is now untouchable BY ITS DROPPER for a few seconds, and
+-- lands outside their body as well. Belt and braces, because this one is not
+-- allowed to come back.
+type Pellet = { part: BasePart, value: number, key: string, owner: number?, ownerUntil: number }
+local pellets: { [BasePart]: Pellet } = {}
+local grid: { [string]: { [BasePart]: Pellet } } = {}
+local pelletCount = 0
+
+type Lump = { part: BasePart, mass: number }
+local lumps: { Lump } = {}
+
+-- Injected by init.server so this file never reaches into the profile store.
+-- It keeps the arena testable in isolation and keeps one owner for Glob.
+type Deps = {
+    award: (player: Player, glob: number, xp: number, reason: string) -> (),
+    notify: (player: Player, text: string, kind: string?) -> (),
+    effect: (player: Player, kind: string, data: any?) -> (),
+    loadout: (player: Player) -> ({ string }, string),   -- trinket ids, power id
+    sync: (player: Player, state: any) -> (),
+}
+local deps: Deps
+
+-- ── Spatial hash ───────────────────────────────────────────────────────────
+
+local function cellKey(x: number, z: number): string
+    return (math.floor(x / CELL)) .. ":" .. (math.floor(z / CELL))
+end
+
+local function gridAdd(p: Pellet)
+    local bucket = grid[p.key]
+    if not bucket then
+        bucket = {}
+        grid[p.key] = bucket
+    end
+    bucket[p.part] = p
+end
+
+local function gridRemove(p: Pellet)
+    local bucket = grid[p.key]
+    if bucket then
+        bucket[p.part] = nil
+    end
+end
+
+-- ── Pellets ────────────────────────────────────────────────────────────────
+
+-- Seconds a dropper cannot re-eat what it just shed.
+local OWNER_LOCKOUT = 4
+
+local function spawnPellet(at: Vector3?, value: number?, golden: boolean?, owner: number?)
+    if pelletCount >= Config.PELLET_TARGET + 260 then
+        return -- the floor is already carpeted; dropping more helps nobody
+    end
+    local folder = WorldBuilder.arenaFolder()
+    if not folder then
+        return
+    end
+    local pos = at or WorldBuilder.randomSurfacePoint(rng)
+    local biome = WorldBuilder.biomeAt(pos)
+    local worth = (value or Config.PELLET_VALUE) * (biome and biome.pelletMult or 1)
+    if golden then
+        worth *= Config.GOLDEN_CRUMB_MULT
+    end
+
+    local part = Instance.new("Part")
+    part.Name = golden and "Crumb" or "Pellet"
+    part.Shape = Enum.PartType.Ball
+    part.Size = Vector3.new(1, 1, 1) * (golden and 3.4 or 2.2)
+    part.Anchored = true
+    part.CanCollide = false
+    part.CanTouch = false
+    part.CanQuery = false
+    part.Material = golden and Enum.Material.Foil or Enum.Material.SmoothPlastic
+    part.Color = golden and Color3.fromRGB(206, 180, 118)
+        or Color3.fromHSV(rng:NextNumber(0.18, 0.55), 0.34, 0.86)
+    part.Position = pos + Vector3.new(0, 1.6, 0)
+    part.Parent = folder
+
+    local p: Pellet = {
+        part = part,
+        value = worth,
+        key = cellKey(pos.X, pos.Z),
+        owner = owner,
+        ownerUntil = owner and (os.clock() + OWNER_LOCKOUT) or 0,
+    }
+    pellets[part] = p
+    gridAdd(p)
+    pelletCount += 1
+end
+
+local function removePellet(p: Pellet)
+    gridRemove(p)
+    pellets[p.part] = nil
+    pelletCount -= 1
+    p.part:Destroy()
+end
+
+-- ── Run state ──────────────────────────────────────────────────────────────
+
+local function newRun(player: Player): Run
+    local ids, powerId = deps.loadout(player)
+    return {
+        mass = Config.STARTING_MASS,
+        powerId = Powers.get(powerId) and powerId or Powers.DEFAULT,
+        powerReadyAt = 0,
+        powerUntil = 0,
+        activeEffect = nil,
+        banking = 0,
+        leakBuffer = 0,
+        safeUntil = os.clock() + POP_INVULN,
+        trinkets = Trinkets.resolve(ids),
+        bestMass = Config.STARTING_MASS,
+        lastPos = Vector3.zero,
+    }
+end
+
+function ArenaService.runFor(player: Player): Run?
+    return runs[player.UserId]
+end
+
+function ArenaService.massOf(player: Player): number
+    local r = runs[player.UserId]
+    return r and r.mass or 0
+end
+
+-- Re-read a player's equipped trinkets and power without disturbing their run.
+function ArenaService.refreshLoadout(player: Player)
+    local r = runs[player.UserId]
+    if not r then
+        return
+    end
+    local ids, powerId = deps.loadout(player)
+    r.trinkets = Trinkets.resolve(ids)
+    if Powers.get(powerId) then
+        r.powerId = powerId
+    end
+end
+
+function ArenaService.enter(player: Player)
+    runs[player.UserId] = newRun(player)
+end
+
+function ArenaService.leave(player: Player)
+    runs[player.UserId] = nil
+end
+
+-- ── Lumps: the island's memory ─────────────────────────────────────────────
+
+local function congeal(at: Vector3, mass: number)
+    local folder = WorldBuilder.arenaFolder()
+    if not folder or mass <= 0 then
+        return
+    end
+    -- Oldest lump goes first when the island is full. A cap exists because
+    -- terrain that only ever grows eventually walls the Vault off, and the
+    -- Vault being reachable is not negotiable.
+    if #lumps >= Config.LUMP_MAX_COUNT then
+        local oldest = table.remove(lumps, 1)
+        if oldest then
+            oldest.part:Destroy()
+        end
+    end
+
+    local radius = Blob.lumpRadius(mass)
+    local part = Instance.new("Part")
+    part.Name = "Lump"
+    part.Shape = Enum.PartType.Ball
+    part.Size = Vector3.new(radius, radius * 0.7, radius) * 2
+    part.Anchored = true
+    part.CanCollide = true
+    part.Material = Enum.Material.Sand
+    part.Color = Color3.fromRGB(128, 122, 108)
+    part.Position = Vector3.new(at.X, at.Y - radius * 0.45, at.Z)
+    part.Parent = folder
+
+    table.insert(lumps, { part = part, mass = mass })
+end
+
+local function decayLumps(dt: number)
+    for i = #lumps, 1, -1 do
+        local lump = lumps[i]
+        lump.mass = Blob.lumpDecay(lump.mass, dt)
+        if lump.mass < 12 then
+            lump.part:Destroy()
+            table.remove(lumps, i)
+        else
+            local radius = Blob.lumpRadius(lump.mass)
+            lump.part.Size = Vector3.new(radius, radius * 0.7, radius) * 2
+        end
+    end
+end
+
+-- ── Popping ────────────────────────────────────────────────────────────────
+
+local function pop(player: Player, at: Vector3, killer: Player?)
+    local run = runs[player.UserId]
+    if not run then
+        return
+    end
+    local split = Blob.popSplit(run.mass, run.trinkets.popKeep)
+
+    -- Scatter. One pellet per LEAK_PELLET_MASS of scattered goop, thrown in a
+    -- ring so the kill site is visibly a meal rather than a puff of dust.
+    local n = math.clamp(math.floor(split.scatter / Config.LEAK_PELLET_MASS), 1, 40)
+    for i = 1, n do
+        local a = math.rad((360 / n) * i + rng:NextNumber(-14, 14))
+        local d = rng:NextNumber(4, 16)
+        spawnPellet(at + Vector3.new(math.cos(a) * d, 0, math.sin(a) * d),
+            split.scatter / n, false)
+    end
+
+    congeal(at, split.congeal)
+
+    if deps then
+        deps.effect(player, "pop", { mass = run.mass })
+        if killer then
+            deps.notify(killer, ("🫧 Popped %s. +%s mass.")
+                :format(player.DisplayName, Format.short(Blob.eatGain(0, run.mass))), "good")
+        end
+        deps.notify(player, split.kept > 0
+            and ("💥 Popped — but you kept %s."):format(Format.short(split.kept))
+            or "💥 Popped. Start again.", "bad")
+    end
+
+    run.mass = math.max(Config.STARTING_MASS, split.kept)
+    run.banking = 0
+    run.leakBuffer = 0
+    run.safeUntil = os.clock() + POP_INVULN
+
+    local a = rng:NextNumber(0, math.pi * 2)
+    RollService.teleport(player, Vector3.new(
+        math.cos(a) * Config.SPAWN_RING, 8, math.sin(a) * Config.SPAWN_RING))
+end
+
+-- ── Banking ────────────────────────────────────────────────────────────────
+
+local function bank(player: Player, run: Run)
+    local glob = Blob.bankValue(run.mass)
+    local xp = math.floor(run.mass * 0.9)
+    deps.award(player, glob, xp, "bank")
+    deps.effect(player, "bank", { glob = glob, mass = run.mass })
+    deps.notify(player, ("🏦 Banked %s mass → 💧%s"):format(
+        Format.short(run.mass), Format.short(glob)), "good")
+    run.mass = Config.BANK_RESET_MASS
+    run.banking = 0
+    run.leakBuffer = 0
+end
+
+-- ── Powers ─────────────────────────────────────────────────────────────────
+
+function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?)
+    local run = runs[player.UserId]
+    if not run then
+        return false, "You're not in the arena."
+    end
+    local now = os.clock()
+    if now < run.powerReadyAt then
+        return false, ("%.1fs"):format(run.powerReadyAt - now)
+    end
+    local power = Powers.get(run.powerId)
+    if not power then
+        return false, "No power equipped."
+    end
+    local cost = Powers.massCost(run.powerId, run.mass)
+    if run.mass - cost < Config.STARTING_MASS * 0.5 then
+        return false, "Too small to pay for that."
+    end
+    local ball = RollService.ballFor(player)
+    if not ball then
+        return false, "No body."
+    end
+
+    run.mass -= cost
+    run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste)
+    run.powerUntil = now + math.max(0.05, power.duration)
+    run.activeEffect = run.powerId
+
+    -- The mass you spend is not deleted: it lands on the floor as food. Powers
+    -- feeding the island is what stops a lobby full of dashing from starving
+    -- the pellet supply, and it makes a spammed power visibly generous.
+    local radius = Blob.radius(run.mass)
+    local away = (aim or ball.CFrame.LookVector)
+    away = Vector3.new(away.X, 0, away.Z)
+    away = away.Magnitude > 0.01 and away.Unit or Vector3.new(0, 0, 1)
+    local behind = ball.Position - away * (radius * 1.9 + 4)
+    local drops = math.clamp(math.floor(cost / Config.LEAK_PELLET_MASS), 1, 8)
+    for i = 1, drops do
+        spawnPellet(behind + Vector3.new(rng:NextNumber(-6, 6), 0, rng:NextNumber(-6, 6)),
+            cost / drops, false, player.UserId)
+    end
+
+    local dir = (aim or ball.CFrame.LookVector)
+    dir = Vector3.new(dir.X, 0, dir.Z)
+    dir = dir.Magnitude > 0.01 and dir.Unit or Vector3.new(0, 0, 1)
+
+    if run.powerId == "dash" then
+        ball.AssemblyLinearVelocity = dir * 110 + Vector3.new(0, 8, 0)
+    elseif run.powerId == "slam" then
+        ball.AssemblyLinearVelocity = Vector3.new(0, 74, 0) + dir * 24
+        -- The shockwave lands on the way down, handled in the tick by watching
+        -- for the descent to finish. Shattering nearby lumps is the point:
+        -- SLAM is how a stuck island gets un-stuck.
+    elseif run.powerId == "split" then
+        ball.AssemblyLinearVelocity = dir * 128
+    elseif run.powerId == "magnet" then
+        -- handled in tick while powerUntil holds
+    end
+
+    deps.effect(player, "power", { id = run.powerId, cost = cost })
+    return true, nil
+end
+
+-- ── The loop ───────────────────────────────────────────────────────────────
+
+local function tickPlayer(player: Player, run: Run, dt: number, now: number)
+    local ball = RollService.ballFor(player)
+    if not ball or not ball.Parent then
+        return
+    end
+    local pos = ball.Position
+    local radius = Blob.radius(run.mass)
+
+    -- MELT. The one mechanic the whole game is built on: everything above the
+    -- grace mass drips, and what drips becomes real food on the floor rather
+    -- than a number going down. A big blob is a moving buffet, and everyone
+    -- can see the trail.
+    local leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult * dt
+    if leak > 0 then
+        run.mass = math.max(Config.STARTING_MASS, run.mass - leak)
+        run.leakBuffer += leak
+        while run.leakBuffer >= Config.LEAK_PELLET_MASS do
+            run.leakBuffer -= Config.LEAK_PELLET_MASS
+            -- Outside the body, in a ring, so it reads as a trail rather than
+            -- a puddle you are standing in.
+            local a = rng:NextNumber(0, math.pi * 2)
+            local d = radius * 1.9 + rng:NextNumber(2, 9)
+            spawnPellet(
+                Vector3.new(pos.X + math.cos(a) * d, pos.Y - radius * 0.5, pos.Z + math.sin(a) * d),
+                Config.LEAK_PELLET_MASS, false, player.UserId)
+        end
+    end
+
+    -- EAT. Only the nine cells around the blob are considered.
+    local magnetising = run.activeEffect == "magnet" and now < run.powerUntil
+    local reach = radius + PICKUP_SLACK + (magnetising and 40 or 0)
+    local cx, cz = math.floor(pos.X / CELL), math.floor(pos.Z / CELL)
+    local span = magnetising and 2 or 1
+    for gx = cx - span, cx + span do
+        for gz = cz - span, cz + span do
+            local bucket = grid[gx .. ":" .. gz]
+            if bucket then
+                for part, pellet in pairs(bucket) do
+                    if part.Parent then
+                        local mine = pellet.owner == player.UserId and now < pellet.ownerUntil
+                        local d = (part.Position - pos)
+                        if not mine and d.Magnitude <= reach then
+                            run.mass += pellet.value * run.trinkets.pelletMult
+                            removePellet(pellet)
+                        end
+                    else
+                        removePellet(pellet)
+                    end
+                end
+            end
+        end
+    end
+
+    -- BANK. You have to actually stop, inside the dish, for the full count.
+    -- Standing still in the most visible place on the island for three seconds
+    -- while holding everything you own is the best moment the game has.
+    local inVault = WorldBuilder.ringAt(pos) == "VAULT"
+        and math.abs(pos.Y - Config.VAULT_HEIGHT) < 26
+    local slow = ball.AssemblyLinearVelocity.Magnitude < BANK_MAX_SPEED
+    if inVault and slow and run.mass > Config.BANK_RESET_MASS then
+        run.banking += dt
+        if run.banking >= Blob.bankSeconds(run.trinkets.bankHaste) then
+            bank(player, run)
+        end
+    elseif run.banking > 0 then
+        run.banking = math.max(0, run.banking - dt * 2)
+    end
+
+    if run.mass > run.bestMass then
+        run.bestMass = run.mass
+    end
+
+    RollService.setRadius(player, radius)
+    run.lastPos = pos
+end
+
+-- Blob versus blob. N^2 over players only, which is at most ~1,600 tests for a
+-- full Roblox server and costs nothing next to the pellet pass.
+local function tickCombat(list: { Player }, now: number)
+    for i = 1, #list do
+        for j = i + 1, #list do
+            local a, b = list[i], list[j]
+            local ra, rb = runs[a.UserId], runs[b.UserId]
+            local ba, bb = RollService.ballFor(a), RollService.ballFor(b)
+            if ra and rb and ba and bb and ba.Parent and bb.Parent then
+                local sa = WorldBuilder.isSafe(ba.Position) or now < ra.safeUntil
+                local sb = WorldBuilder.isSafe(bb.Position) or now < rb.safeUntil
+                if not sa and not sb then
+                    local radA, radB = Blob.radius(ra.mass), Blob.radius(rb.mass)
+                    local dist = (ba.Position - bb.Position).Magnitude
+                    if dist < (radA + radB) - math.min(radA, radB) * EAT_OVERLAP then
+                        -- BUBBLE refuses the exchange in both directions: you
+                        -- cannot be eaten and you cannot eat. A shield that let
+                        -- you keep hunting would just be a better SPIKE.
+                        local aBubbled = ra.activeEffect == "bubble" and now < ra.powerUntil
+                        local bBubbled = rb.activeEffect == "bubble" and now < rb.powerUntil
+                        if not aBubbled and not bBubbled then
+                            local aSpiked = ra.activeEffect == "spike" and now < ra.powerUntil
+                            local bSpiked = rb.activeEffect == "spike" and now < rb.powerUntil
+                            local eater, prey
+                            if Blob.canEat(ra.mass, rb.mass) then
+                                eater, prey = a, b
+                            elseif Blob.canEat(rb.mass, ra.mass) then
+                                eater, prey = b, a
+                            end
+                            -- SPIKE inverts it. This is the only way the
+                            -- smallest blob on the island deletes the biggest,
+                            -- and it costs a fifth of yourself to try.
+                            if eater and prey then
+                                local preySpiked = (prey == a and aSpiked) or (prey == b and bSpiked)
+                                if preySpiked then
+                                    eater, prey = prey, eater
+                                end
+                                local re = runs[eater.UserId]
+                                local rp = runs[prey.UserId]
+                                local bp = RollService.ballFor(prey)
+                                if re and rp and bp then
+                                    re.mass += Blob.eatGain(re.mass, rp.mass)
+                                    pop(prey, bp.Position, eater)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function topUpPellets(dt: number)
+    local deficit = Config.PELLET_TARGET - pelletCount
+    if deficit <= 0 then
+        return
+    end
+    local budget = Config.PELLET_RESPAWN_PER_SEC * dt
+    -- Fractional budget accumulates rather than rounding to zero every tick,
+    -- which at 12Hz would otherwise spawn nothing at all below 12/sec.
+    ArenaService._pelletDebt = (ArenaService._pelletDebt or 0) + budget
+    while ArenaService._pelletDebt >= 1 and pelletCount < Config.PELLET_TARGET do
+        ArenaService._pelletDebt -= 1
+        spawnPellet(nil, nil, rng:NextNumber() < 0.012)
+    end
+end
+
+-- Hand mass to a player directly. Used by the tutorial to make the first
+-- growth step instant, and by the tests to reach a size without simulating
+-- four minutes of eating.
+function ArenaService.grant(player: Player, mass: number)
+    local run = runs[player.UserId]
+    if not run then
+        return
+    end
+    run.mass = math.max(Config.STARTING_MASS, run.mass + mass)
+    if run.mass > run.bestMass then
+        run.bestMass = run.mass
+    end
+    RollService.setRadius(player, Blob.radius(run.mass))
+end
+
+function ArenaService.start(injected: Deps)
+    deps = injected
+    -- From here on the arena is the only thing that resizes a body.
+    RollService.sizeOwnedByArena = true
+
+    -- Seed the island so the first player does not arrive to an empty floor.
+    for _ = 1, Config.PELLET_TARGET do
+        spawnPellet(nil, nil, rng:NextNumber() < 0.012)
+    end
+
+    task.spawn(function()
+        local last = os.clock()
+        while true do
+            task.wait(TICK)
+            local now = os.clock()
+            local dt = math.min(0.5, now - last)
+            last = now
+
+            local active: { Player } = {}
+            for _, player in ipairs(Players:GetPlayers()) do
+                local run = runs[player.UserId]
+                if run then
+                    tickPlayer(player, run, dt, now)
+                    table.insert(active, player)
+                    deps.sync(player, ArenaService.snapshot(player, run, now))
+                end
+            end
+
+            tickCombat(active, now)
+            topUpPellets(dt)
+            decayLumps(dt)
+        end
+    end)
+end
+
+-- What the HUD needs, and nothing else. Sent every tick, so it stays small.
+function ArenaService.snapshot(player: Player, run: Run, now: number)
+    local ball = RollService.ballFor(player)
+    local pos = ball and ball.Position or Vector3.zero
+    return {
+        mass = run.mass,
+        radius = Blob.radius(run.mass),
+        leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult,
+        harvest = Blob.harvestPerSecond(run.mass) * run.trinkets.pelletMult,
+        worth = Blob.bankValue(run.mass),
+        banking = run.banking,
+        bankNeeds = Blob.bankSeconds(run.trinkets.bankHaste),
+        powerId = run.powerId,
+        powerCooldown = math.max(0, run.powerReadyAt - now),
+        powerCost = Powers.massCost(run.powerId, run.mass),
+        safe = WorldBuilder.isSafe(pos) or now < run.safeUntil,
+        ring = WorldBuilder.ringAt(pos),
+        biome = (WorldBuilder.biomeAt(pos) or {}).name,
+        best = run.bestMass,
+        ceiling = Blob.ceiling(0.8),
+    }
+end
+
+-- Exposed for tests: the island's live contents.
+function ArenaService.stats()
+    return { pellets = pelletCount, lumps = #lumps }
+end
+
+return ArenaService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">CensusService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CensusService.luau — how many of each thing still exist, worldwide.
 --
 -- WHY THIS IS THE MOST IMPORTANT SCREEN IN THE GAME:
@@ -2640,7 +4295,7 @@ function CensusService.start()
 end
 
 return CensusService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CrewStore.luau — crews live in their own DataStore because they are shared
 -- between players and between servers. A crew read here may have been written
 -- by a different server thirty seconds ago, so every mutation goes through
@@ -2744,7 +4399,7 @@ function CrewStore.isEnabled(): boolean
 end
 
 return CrewStore
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CritterService.luau — the ACTIVE half of the loop.
 --
 -- Grow a Garden's weakness is that there is almost nothing to do while you
@@ -2928,7 +4583,7 @@ function CritterService.start()
 end
 
 return CritterService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000019"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000024"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Data.luau — profile persistence.
 --
 -- Uses DataStore with session locking, retry/backoff and a bind-to-close
@@ -2944,6 +4599,8 @@ local HttpService = game:GetService("HttpService")
 
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
+local Powers = require(game.ReplicatedStorage.GoobShared.Powers)
+local Trinkets = require(game.ReplicatedStorage.GoobShared.Trinkets)
 local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
 local Cosmetics = require(game.ReplicatedStorage.GoobShared.Cosmetics)
 local Season = require(game.ReplicatedStorage.GoobShared.Season)
@@ -2992,6 +4649,14 @@ function Data.blankProfile(userId: number)
         achievements = {} :: { [string]: boolean },
         crewId = nil :: string?,
         purchases = {} :: { [string]: boolean },
+
+        -- ── Arena ──────────────────────────────────────────────────────────
+        lifetimeBanked = 0,                        -- unlocks powers; never spent
+        powerId = Powers.DEFAULT,
+        trinketsOwned = {} :: { [string]: boolean },
+        trinketSlots = {} :: { string },
+        cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
+        bestBank = 0,
     }
 end
 
@@ -3049,6 +4714,30 @@ function Data.load(player: Player)
     profile.pitWins = profile.pitWins or 0
     profile.achievements = profile.achievements or {}
     profile.purchases = profile.purchases or {}
+
+    -- Arena fields. A profile written before the arena existed keeps every
+    -- Goob it had and simply starts the new progression at zero, which is the
+    -- only migration that is safe without asking the player anything.
+    profile.lifetimeBanked = profile.lifetimeBanked or 0
+    profile.bestBank = profile.bestBank or 0
+    profile.trinketsOwned = profile.trinketsOwned or {}
+    profile.trinketSlots = profile.trinketSlots or {}
+    profile.cratePity = profile.cratePity or {}
+    if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked) then
+        profile.powerId = Powers.DEFAULT
+    end
+    -- Drop equipped trinkets the player does not actually own. This runs on
+    -- every load on purpose: it is the one guard that survives a rollback, a
+    -- bad merge, or an exploiter writing a slot they never earned.
+    do
+        local kept = {}
+        for _, id in ipairs(profile.trinketSlots) do
+            if profile.trinketsOwned[id] and #kept < Trinkets.SLOTS then
+                table.insert(kept, id)
+            end
+        end
+        profile.trinketSlots = kept
+    end
 
     -- Cosmetics: always merge in the starters rather than replacing, so a
     -- profile written before a slot existed gains the new slot's default
@@ -3114,7 +4803,7 @@ function Data.isEnabled(): boolean
 end
 
 return Data
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000025"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- GoobService.luau — spawns, renders and simulates the Goobs sitting on plots.
 --
 -- The visual gimmick of the whole game lives here: a Goob is a translucent
@@ -3551,7 +5240,7 @@ function GoobService.applyOffline(player: Player)
 end
 
 return GoobService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">PitService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000026"><Properties><string name="Name">PitService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- PitService.luau — runs Sumo Pit matches.
 --
 -- Server-authoritative on everything that decides money: who is in the ring,
@@ -3852,7 +5541,7 @@ function PitService.state()
 end
 
 return PitService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">RollService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000027"><Properties><string name="Name">RollService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- RollService.luau — you don't stand next to your Goob, you ARE your Goob.
 --
 -- This is the change the whole redesign hangs off. Previously the active Goob
@@ -3889,6 +5578,17 @@ RollService.onShove = Instance.new("BindableEvent")
 
 local INTERIOR_MAX = 30
 
+-- Record where a welded child sits and how big it is, both expressed as a
+-- FRACTION of the ball's radius. The arena changes a blob's mass several times
+-- a second, so the body has to be rescalable in place; without these the only
+-- way to resize it is to rebuild the whole model, which would respawn the
+-- player's body out from under them mid-chase.
+local function markRelative(child: BasePart, ball: BasePart, radius: number)
+    local offset = child.Position - ball.Position
+    child:SetAttribute("RelOffset", offset / radius)
+    child:SetAttribute("RelSize", child.Size / radius)
+end
+
 local function buildBall(player: Player, goob): BasePart
     local radius = GoobMath.size(goob)
 
@@ -3923,6 +5623,7 @@ local function buildBall(player: Player, goob): BasePart
         eye.Massless = true
         eye.CFrame = ball.CFrame * CFrame.new(sx * radius, radius * 0.3, -radius * 0.9)
         eye.Parent = ball
+        markRelative(eye, ball, radius)
         local w = Instance.new("WeldConstraint")
         w.Part0, w.Part1 = ball, eye
         w.Parent = eye
@@ -3938,6 +5639,7 @@ local function buildBall(player: Player, goob): BasePart
         pupil.Massless = true
         pupil.CFrame = eye.CFrame * CFrame.new(0, 0, -eye.Size.X * 0.35)
         pupil.Parent = ball
+        markRelative(pupil, ball, radius)
         local w2 = Instance.new("WeldConstraint")
         w2.Part0, w2.Part1 = ball, pupil
         w2.Parent = pupil
@@ -3981,6 +5683,7 @@ local function buildBall(player: Player, goob): BasePart
         if dir.Magnitude < 0.001 then dir = Vector3.new(0, 1, 0) end
         p.CFrame = ball.CFrame * CFrame.new(dir.Unit * (radius * 0.7 * rng:NextNumber() ^ (1 / 3)))
         p.Parent = ball
+        markRelative(p, ball, radius)
         local w = Instance.new("WeldConstraint")
         w.Part0, w.Part1 = ball, p
         w.Parent = p
@@ -4067,6 +5770,58 @@ function RollService.ballFor(player: Player): BasePart?
     return balls[player.UserId]
 end
 
+-- Resize a live blob in place.
+--
+-- A WeldConstraint captures its offset when it is created and will not let go,
+-- so growing the ball while the eyes stay welded buries them inside the body.
+-- Every welded child therefore gets its weld dropped, is moved and scaled by
+-- the stored fractions, and is welded again. That is more work than setting
+-- one Size, but it is still far cheaper than rebuilding the model, and it is
+-- the difference between a blob that grows and a blob that flickers.
+--
+-- Throttled by RESIZE_EPSILON: the arena calls this every tick, and a blob
+-- gaining 0.3% is not worth thirty instance writes.
+RollService.RESIZE_EPSILON = 0.02
+
+function RollService.setRadius(player: Player, radius: number): boolean
+    local ball = balls[player.UserId]
+    if not ball or not ball.Parent then
+        return false
+    end
+    radius = math.max(0.8, radius)
+    local current = ball.Size.X / 2
+    if math.abs(radius - current) <= current * RollService.RESIZE_EPSILON then
+        return false
+    end
+
+    ball.Size = Vector3.new(radius, radius, radius) * 2
+
+    for _, child in ipairs(ball:GetChildren()) do
+        if child:IsA("BasePart") then
+            local relOffset = child:GetAttribute("RelOffset")
+            local relSize = child:GetAttribute("RelSize")
+            if relOffset and relSize then
+                for _, w in ipairs(child:GetChildren()) do
+                    if w:IsA("WeldConstraint") then
+                        w:Destroy()
+                    end
+                end
+                child.Size = relSize * radius
+                child.CFrame = ball.CFrame * CFrame.new(relOffset * radius)
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0, weld.Part1 = ball, child
+                weld.Parent = child
+            end
+        end
+    end
+
+    local plate = ball:FindFirstChild("Plate")
+    if plate and plate:IsA("BillboardGui") then
+        plate.StudsOffsetWorldSpace = Vector3.new(0, radius + 5, 0)
+    end
+    return true
+end
+
 function RollService.spawn(player: Player, goob, atPosition: Vector3?)
     RollService.despawn(player)
     if not goob then return end
@@ -4095,8 +5850,15 @@ function RollService.spawn(player: Player, goob, atPosition: Vector3?)
         local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then
-            hum.WalkSpeed = 0
-            hum.JumpPower = 0
+            -- PlatformStand, NOT WalkSpeed = 0.
+            --
+            -- A Humanoid with WalkSpeed = 0 does not simply decline to move: it
+            -- actively brakes its assembly to zero velocity every physics step.
+            -- The ball is welded to that assembly, so the humanoid fought every
+            -- frame of movement the controller applied and the player could not
+            -- move at all. PlatformStand makes the humanoid stop controlling
+            -- physics entirely, which is what we actually wanted.
+            hum.PlatformStand = true
             hum.AutoRotate = false
         end
         if hrp then
@@ -4165,14 +5927,27 @@ function RollService.refreshPlate(player: Player)
     end
 end
 
+-- WHO OWNS THE BODY'S SIZE.
+--
+-- Once the arena is running, the answer is the arena: a run's mass changes
+-- several times a second and setRadius reshapes the body in place to match.
+-- RollService.refresh used to resize too, by respawning the whole model when
+-- the size drifted 25% from the stored Goob's mass — which, against a live
+-- arena, would have rebuilt the player's body out from under them every few
+-- seconds, forever. Exactly one system may write Size, and this flag says
+-- which. It is set by ArenaService.start.
+RollService.sizeOwnedByArena = false
+
 function RollService.refresh(player: Player, goob)
     local ball = balls[player.UserId]
     if not ball or not goob then return end
-    local radius = GoobMath.size(goob)
-    local want = Vector3.new(radius, radius, radius) * 2
-    if (ball.Size - want).Magnitude > radius * 0.25 then
-        RollService.spawn(player, goob, ball.Position + Vector3.new(0, 2, 0))
-        return
+    if not RollService.sizeOwnedByArena then
+        local radius = GoobMath.size(goob)
+        local want = Vector3.new(radius, radius, radius) * 2
+        if (ball.Size - want).Magnitude > radius * 0.25 then
+            RollService.spawn(player, goob, ball.Position + Vector3.new(0, 2, 0))
+            return
+        end
     end
 
     local plate = ball:FindFirstChild("Plate")
@@ -4237,7 +6012,7 @@ function RollService.start(getGoob: (Player) -> any)
 end
 
 return RollService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000028"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeService.luau — player-to-player Goob trading.
 --
 -- Trading is the reason this game has a community instead of a player count.
@@ -4518,26 +6293,33 @@ function TradeService.cleanup(player: Player)
 end
 
 return TradeService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000024"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
--- WorldBuilder.luau — the entire map, generated at runtime from code.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000029"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
+-- WorldBuilder.luau — one island, generated at runtime from code.
 --
--- WHY FROM CODE: a .rbxl is an opaque binary. If the map lives in the place
--- file, nothing about the world is reviewable in a diff, mergeable between two
--- people, or restorable after a bad save. Built from code, the whole game —
--- world included — is plain text in git.
+-- WHY FROM CODE: a .rbxl is an opaque binary. Built from code, the whole game —
+-- world included — is plain text in git: reviewable in a diff, mergeable
+-- between two people, restorable after a bad save.
 --
--- WHY THIS SHAPE: the first version was a flat green plane with eight glowing
--- pads, and it read as unfinished because it WAS unfinished — there was nothing
--- to do in space, so space was decoration. With momentum movement, surface and
--- elevation become gameplay, so the map is now built around them:
+-- WHY ONE ISLAND: the previous map was four zones and a hub, and it was four
+-- times the surface area with a quarter of the players on each. An arena game
+-- needs density — the whole design rests on you constantly being able to see
+-- somebody bigger and somebody smaller — so everything is now on one 300-stud
+-- island and the four zones are gone as PLACES.
 --
---   HUB        flat, signposted, safe. Every service has a big readable icon.
---   SCRAPYARD  ramps and a half-pipe. The learning zone for dashing.
---   SLICKFIELD low friction. You slide. Fast lines, hard stops.
---   THE DEEP   sunken, rare spawns, only entered across a gap that needs a dash.
+-- They are not gone as IDEAS. Each one survives as a patch on the island:
 --
--- Every zone is reachable by rolling; only The Deep demands a dash, which is
--- what makes the dash meter mean something instead of being a speed toy.
+--   THE SLICK      near-frictionless. Fast lines, no brakes. Pellets x1.15.
+--   THE SCRAPYARD  ramps and cover. Broken sightlines, the place to hide.
+--   THE BASIN      sunken, richest pellets, one way in and out. x1.55.
+--
+-- That keeps every bit of terrain character the zones had, costs one map
+-- instead of four, and leaves the server undivided.
+--
+-- WHAT IS NOT BUILT HERE: most of the island's shape. Lumps — the congealed
+-- shells of popped blobs — are terrain, and they accumulate for the life of a
+-- server. Two hours in, the interesting geometry is all player-made. That is
+-- the design working as intended, not a gap.
+
 
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
@@ -4547,15 +6329,17 @@ local Pit = require(game.ReplicatedStorage.GoobShared.Pit)
 
 local WorldBuilder = {}
 
+-- Three rings, concentric, on one disc. Everything else is a patch on top.
+WorldBuilder.RINGS = {
+    VAULT    = { name = "The Vault",    inner = 0,   outer = Config.VAULT_RADIUS },
+    FLATS    = { name = "The Flats",    inner = Config.VAULT_RADIUS, outer = Config.SHALLOWS_INNER },
+    SHALLOWS = { name = "The Shallows", inner = Config.SHALLOWS_INNER, outer = Config.ISLAND_RADIUS },
+}
+
+-- Kept so that anything still asking "where is the middle of the world" gets a
+-- sensible answer. There is exactly one place now, so this is a constant.
 WorldBuilder.ZONES = {
-    HUB        = { name = "The Hub",     centre = Vector3.new(0, 0, 0),      radius = 170 },
-    SCRAPYARD  = { name = "Scrapyard",   centre = Vector3.new(520, 0, 0),    radius = 260 },
-    SLICKFIELD = { name = "Slickfield",  centre = Vector3.new(-520, 0, 120), radius = 260 },
-    -- Sits below and beyond the southern lip of the ground plane. The gap
-    -- between the lip (z = -452) and the landing (z = -496) is ~44 studs: far
-    -- enough that walking off is a fall, close enough that a ramp plus one dash
-    -- clears it. This is the only place in the world you can fall out of.
-    DEEP       = { name = "The Deep",    centre = Vector3.new(40, -34, -710), radius = 240 },
+    ISLAND = { name = "The Island", centre = Vector3.new(0, 0, 0), radius = Config.ISLAND_RADIUS },
 }
 
 local function part(props: { [string]: any }): BasePart
@@ -4717,6 +6501,160 @@ local function buildAmbience()
     clouds.Parent = Workspace.Terrain
 end
 
+
+-- ── Construction ───────────────────────────────────────────────────────────
+
+-- A patch of surface with its own friction, laid flush on the island so you
+-- roll onto it rather than over a lip. Friction is the whole point of a patch:
+-- The Slick is 0.03 and a heavy blob crossing it simply cannot turn.
+local function patch(parent: Instance, biome, tint: Color3, material: Enum.Material)
+    local d = disc(parent, biome.centre + Vector3.new(0, 0.35, 0), biome.radius, 1.2,
+        tint, material, "Biome_" .. biome.id)
+    d.CustomPhysicalProperties = PhysicalProperties.new(0.7, biome.friction, 0.35, 1, 1)
+    local tag = Instance.new("StringValue")
+    tag.Name = "BiomeId"
+    tag.Value = biome.id
+    tag.Parent = d
+    return d
+end
+
+-- The Shack. One building, holding every service in the game — and every one
+-- of them is ALSO a tap on the dock, from anywhere on the island. Walking here
+-- is a thing you may do, never a thing you must do. The previous map made you
+-- roll across a zone to press a button, which is how a signpost on a pole
+-- ended up being the interface.
+local function buildShack(world: Instance)
+    local base = Config.SHACK_POSITION
+    local shell = part({
+        Name = "Shack",
+        Size = Vector3.new(54, 26, 40),
+        Position = base + Vector3.new(0, 13, 0),
+        Color = Color3.fromRGB(122, 114, 104),
+        Material = Enum.Material.WoodPlanks,
+    })
+    shell.Parent = world
+
+    local roof = part({
+        Name = "ShackRoof",
+        Size = Vector3.new(60, 3, 46),
+        Position = base + Vector3.new(0, 27, 0),
+        Color = Color3.fromRGB(96, 88, 82),
+        Material = Enum.Material.Slate,
+    })
+    roof.Parent = world
+
+    -- An open front, so it reads as a shop rather than a crate.
+    local counter = part({
+        Name = "ShackCounter",
+        Size = Vector3.new(44, 5, 4),
+        Position = base + Vector3.new(0, 4, 22),
+        Color = Color3.fromRGB(146, 134, 118),
+        Material = Enum.Material.Wood,
+    })
+    counter.Parent = world
+
+    for i, entry in ipairs({
+        { icon = "🎁", label = "CRATES",   x = -17 },
+        { icon = "🔧", label = "TRINKETS", x =  -0 },
+        { icon = "🤝", label = "TRADE",    x =  17 },
+    }) do
+        local post = part({
+            Name = "ShackStall" .. i,
+            Size = Vector3.new(12, 12, 2),
+            Position = base + Vector3.new(entry.x, 12, 19),
+            Color = Color3.fromRGB(70, 72, 78),
+            Material = Enum.Material.SmoothPlastic,
+        })
+        post.Parent = world
+
+        local gui = Instance.new("BillboardGui")
+        gui.Size = UDim2.fromScale(9, 6)
+        gui.MaxDistance = 420
+        gui.StudsOffset = Vector3.new(0, 2, 2)
+        gui.Parent = post
+
+        local icon = Instance.new("TextLabel")
+        icon.Size = UDim2.fromScale(1, 0.62)
+        icon.BackgroundTransparency = 1
+        icon.Font = Enum.Font.FredokaOne
+        icon.TextScaled = true
+        icon.Text = entry.icon
+        icon.Parent = gui
+
+        local label = Instance.new("TextLabel")
+        label.Position = UDim2.fromScale(0, 0.62)
+        label.Size = UDim2.fromScale(1, 0.34)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.FredokaOne
+        label.TextScaled = true
+        label.TextColor3 = Color3.fromRGB(206, 190, 156)
+        label.Text = entry.label
+        label.Parent = gui
+    end
+
+    signpost(world, base + Vector3.new(0, 0, 30), "🏚️", "THE GOOP SHACK",
+        "or just tap the dock", Color3.fromRGB(198, 174, 118))
+end
+
+
+-- A readable standing board: a slab with a big text panel on the front. Every
+-- board in the world is one of these, so "where does information live" has a
+-- single answer instead of four bespoke props.
+local function board(parent: Instance, name: string, position: Vector3, facing: number,
+                    size: Vector2, tint: Color3)
+    local slab = part({
+        Name = name,
+        Size = Vector3.new(size.X, size.Y, 3),
+        CFrame = CFrame.new(position) * CFrame.Angles(0, math.rad(facing), 0),
+        Color = Color3.fromRGB(58, 58, 62),
+        Material = Enum.Material.Slate,
+    })
+    slab.Parent = parent
+
+    local gui = Instance.new("SurfaceGui")
+    gui.Name = "Board"
+    gui.Face = Enum.NormalId.Front
+    gui.CanvasSize = Vector2.new(size.X * 26, size.Y * 26)
+    gui.LightInfluence = 0
+    gui.Parent = slab
+
+    local pad = Instance.new("Frame")
+    pad.Size = UDim2.fromScale(1, 1)
+    pad.BackgroundColor3 = Color3.fromRGB(34, 35, 39)
+    pad.BorderSizePixel = 0
+    pad.ZIndex = 1
+    pad.Parent = gui
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 6
+    stroke.Color = tint
+    stroke.Parent = pad
+
+    local entries = Instance.new("TextLabel")
+    entries.Name = "Entries"
+    entries.Position = UDim2.fromScale(0.05, 0.05)
+    entries.Size = UDim2.fromScale(0.9, 0.9)
+    entries.BackgroundTransparency = 1
+    entries.Font = Enum.Font.FredokaOne
+    entries.TextScaled = false
+    entries.TextSize = 34
+    entries.TextWrapped = true
+    entries.TextXAlignment = Enum.TextXAlignment.Left
+    entries.TextYAlignment = Enum.TextYAlignment.Top
+    entries.TextColor3 = Color3.fromRGB(226, 224, 216)
+    -- Set here, not at first refresh: a TextLabel's default Text is the
+    -- literal string "Label", and an empty board reading "Label" in
+    -- half-metre letters is how that bug shipped last time.
+    entries.Text = name .. "\nloading…"
+    -- Parented to the SurfaceGui, NOT to the backing frame: every consumer
+    -- looks it up as Board -> Entries, and burying it one level deeper turns
+    -- that into a WaitForChild that never returns and a board that silently
+    -- says "loading…" forever.
+    entries.ZIndex = 2
+    entries.Parent = gui
+
+    return slab
+end
+
 function WorldBuilder.build()
     buildAmbience()
 
@@ -4724,375 +6662,279 @@ function WorldBuilder.build()
     world.Name = "GoobWorld"
     world.Parent = Workspace
 
-    -- Roads connect the zones, so travelling somewhere is a route rather than a
-    -- void. Declared early because the Pit uses it too.
-    local function road(from: Vector3, to: Vector3, width: number)
-        local mid = (from + to) / 2
-        local delta = to - from
-        local len = delta.Magnitude
-        local r = part({
-            Name = "Road",
-            Size = Vector3.new(width, 4, len),
-            CFrame = CFrame.new(mid, to) * CFrame.new(0, 0, 0),
-            Color = Color3.fromRGB(178, 172, 158),
-            Material = Enum.Material.Concrete,
-        })
-        r.Parent = world
-        return r
+    -- ── THE SEA ────────────────────────────────────────────────────────────
+    -- Not decoration: it is the floor under everything, so that no bug, no
+    -- knockback and no Slam can ever drop a player out of the world. An arena
+    -- game with a hole in it loses players to the hole.
+    local sea = part({
+        Name = "Sea",
+        Size = Vector3.new(4000, 8, 4000),
+        Position = Vector3.new(0, -26, 0),
+        Color = Color3.fromRGB(108, 128, 132),
+        Material = Enum.Material.Glass,
+        Transparency = 0.35,
+    })
+    sea.Parent = world
+
+    -- ── THE ISLAND ─────────────────────────────────────────────────────────
+    local island = disc(world, Vector3.new(0, -3, 0), Config.ISLAND_RADIUS, 8,
+        Color3.fromRGB(138, 150, 126), Enum.Material.Grass, "Island")
+    island.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.35, 1, 1)
+
+    -- The Shallows read as a distinct rim rather than a line on a map, because
+    -- "am I safe right now" has to be answerable at a glance while being
+    -- chased. Sand, a shade lighter, very slightly lower.
+    local shallows = disc(world, Vector3.new(0, -2.2, 0), Config.ISLAND_RADIUS, 1.4,
+        Color3.fromRGB(196, 188, 162), Enum.Material.Sand, "Shallows")
+    shallows.CanCollide = false
+
+    local flats = disc(world, Vector3.new(0, -1.6, 0), Config.SHALLOWS_INNER, 1.4,
+        Color3.fromRGB(132, 148, 118), Enum.Material.Grass, "Flats")
+    flats.CanCollide = false
+
+    -- ── THE VAULT ──────────────────────────────────────────────────────────
+    -- Raised, central, and visible from the whole island on purpose: a player
+    -- must always be able to see where their mass is safe, and everyone else
+    -- must always be able to see who is running for it.
+    local vaultBase = disc(world, Vector3.new(0, Config.VAULT_HEIGHT / 2 - 1, 0),
+        Config.VAULT_RADIUS + 10, Config.VAULT_HEIGHT + 2,
+        Color3.fromRGB(118, 112, 104), Enum.Material.Concrete, "VaultBase")
+    vaultBase.Name = "VaultBase"
+
+    local dish = disc(world, Vector3.new(0, Config.VAULT_HEIGHT, 0), Config.VAULT_RADIUS, 1.6,
+        Color3.fromRGB(176, 158, 116), Enum.Material.Foil, "VaultDish")
+    local vaultTag = Instance.new("StringValue")
+    vaultTag.Name = "VaultMarker"
+    vaultTag.Parent = dish
+
+    -- Four ramps, one per approach. A heavy blob cannot climb a step, and the
+    -- Vault has to be reachable at exactly the moment you are heaviest.
+    for i = 0, 3 do
+        local a = math.rad(i * 90 + 45)
+        local dir = Vector3.new(math.cos(a), 0, math.sin(a))
+        ramp(world, dir * (Config.VAULT_RADIUS + 24) + Vector3.new(0, Config.VAULT_HEIGHT / 2 - 1, 0),
+            Vector3.new(34, Config.VAULT_HEIGHT + 2, 34), math.deg(a) + 90,
+            Color3.fromRGB(128, 122, 112))
     end
 
-    -- ── THE GROUND ─────────────────────────────────────────────────────────
-    -- One continuous plane under everything reachable. The zone rewrite
-    -- replaced the old world plane with separate discs, which left the map as
-    -- islands floating in open sky — you could roll three steps off a pad and
-    -- fall out of the world.
-    --
-    -- The Deep is deliberately NOT on this plane: it sits lower and beyond the
-    -- southern edge, across a gap that must be dashed. That gap is the only
-    -- hole in the world, and it is there on purpose.
-    local ground = part({
-        Name = "Ground",
-        Size = Vector3.new(2400, 14, 1150),
-        Position = Vector3.new(0, -7, 120),
-        Color = Color3.fromRGB(138, 152, 124),
-        Material = Enum.Material.Grass,
-    })
-    ground.Parent = world
+    signpost(world, Vector3.new(0, Config.VAULT_HEIGHT, -(Config.VAULT_RADIUS + 18)),
+        "🏦", "THE VAULT", "roll in to bank", Color3.fromRGB(198, 174, 118))
 
-    -- A soft lip so the southern edge reads as an edge before you go over it.
-    local lip = part({
-        Name = "SouthLip",
-        Size = Vector3.new(2400, 3, 6),
-        Position = Vector3.new(0, 1, -452),
-        Color = Color3.fromRGB(166, 154, 128),
-        Material = Enum.Material.Slate,
-    })
-    lip.Parent = world
+    -- ── THE PATCHES ────────────────────────────────────────────────────────
+    patch(world, Config.BIOMES[1], Color3.fromRGB(150, 168, 176), Enum.Material.Ice)
+    patch(world, Config.BIOMES[2], Color3.fromRGB(138, 126, 112), Enum.Material.CorrodedMetal)
 
-    -- ── HUB ────────────────────────────────────────────────────────────────
-    local hub = WorldBuilder.ZONES.HUB
-    disc(world, hub.centre + Vector3.new(0, -1, 0), hub.radius, 6,
-        Color3.fromRGB(206, 198, 180), Enum.Material.Sand, "HubFloor")
+    -- The Basin is the only patch with real elevation. It is sunken, so from
+    -- inside it you cannot see who is coming, and getting out while heavy is
+    -- genuinely slow. That is what the x1.55 pellets are paying for.
+    local basin = Config.BIOMES[3]
+    local bowl = disc(world, basin.centre, basin.radius, 1.6,
+        Color3.fromRGB(104, 118, 110), Enum.Material.Mud, "Biome_basin")
+    bowl.CustomPhysicalProperties = PhysicalProperties.new(0.7, basin.friction, 0.35, 1, 1)
+    local basinTag = Instance.new("StringValue")
+    basinTag.Name = "BiomeId"
+    basinTag.Value = basin.id
+    basinTag.Parent = bowl
 
-    -- Rim so the hub reads as a raised island rather than a paint patch.
-    for i = 1, 40 do
-        local a = (i / 40) * math.pi * 2
-        local post = part({
-            Name = "HubRim",
-            Size = Vector3.new(3, 7, 3),
-            Position = hub.centre + Vector3.new(math.cos(a) * hub.radius, 3, math.sin(a) * hub.radius),
-            Color = Color3.fromRGB(150, 162, 168),
-            Material = Enum.Material.SmoothPlastic,
-            Transparency = 0.25,
-            CanCollide = false,
-        })
-        post.Parent = world
+    for i = 0, 11 do
+        local a = math.rad(i * 30)
+        -- One gap in the wall, at the north side: a basin you cannot leave is
+        -- a trap, and a trap is not a risk-reward decision.
+        if i ~= 0 and i ~= 11 then
+            local w = part({
+                Name = "BasinWall",
+                Size = Vector3.new(24, 12, 8),
+                CFrame = CFrame.new(basin.centre + Vector3.new(
+                    math.cos(a) * (basin.radius + 2), 4.5, math.sin(a) * (basin.radius + 2)))
+                    * CFrame.Angles(0, -a, 0),
+                Color = Color3.fromRGB(114, 108, 96),
+                Material = Enum.Material.Rock,
+            })
+            w.Parent = world
+        end
+    end
+    ramp(world, basin.centre + Vector3.new(0, 0, -(basin.radius + 16)),
+        Vector3.new(36, 11, 34), 180, Color3.fromRGB(122, 116, 104))
+
+    for _, b in ipairs(Config.BIOMES) do
+        signpost(world, b.centre + Vector3.new(0, 0, b.radius + 12),
+            b.id == "slick" and "🧊" or b.id == "scrap" and "🔩" or "🕳️",
+            b.name, ("pellets x%.2f"):format(b.pelletMult),
+            Color3.fromRGB(158, 166, 172))
     end
 
-    local booth = part({
-        Name = "TradeBooth",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(1.6, Config.TRADE_RANGE * 2, Config.TRADE_RANGE * 2),
-        CFrame = CFrame.new(hub.centre + Vector3.new(0, 2.4, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(198, 174, 118),
-        Material = Enum.Material.SmoothPlastic,
-        Transparency = 0.55,
-        CanCollide = false,
-    })
-    booth.Parent = world
-    signpost(world, hub.centre + Vector3.new(0, 3, -34), "🤝", "TRADE RING",
-        "roll in here with a friend", Color3.fromRGB(198, 174, 118))
-
-    signpost(world, hub.centre + Vector3.new(-64, 3, 20), "🍪", "SNACK STAND",
-        "spend 💧 on food", Color3.fromRGB(190, 158, 120))
-    signpost(world, hub.centre + Vector3.new(64, 3, 20), "🥚", "HATCHERY",
-        "new Goobs", Color3.fromRGB(150, 176, 190))
-
-    -- Leaderboard pillar.
-    local pillar = part({
-        Name = "Leaderboard",
-        Size = Vector3.new(18, 34, 4),
-        Position = hub.centre + Vector3.new(0, 17, -96),
-        Color = Color3.fromRGB(58, 60, 64),
-        Material = Enum.Material.Metal,
-    })
-    pillar.Parent = world
-
-    local surface = Instance.new("SurfaceGui")
-    surface.Name = "Board"
-    surface.Face = Enum.NormalId.Front
-    surface.CanvasSize = Vector2.new(560, 1000)
-    surface.Parent = pillar
-
-    local list = Instance.new("TextLabel")
-    list.Name = "Entries"
-    list.Size = UDim2.fromScale(1, 1)
-    list.BackgroundTransparency = 1
-    list.Font = Enum.Font.FredokaOne
-    list.TextColor3 = Color3.new(1, 1, 1)
-    list.TextXAlignment = Enum.TextXAlignment.Left
-    list.TextYAlignment = Enum.TextYAlignment.Top
-    list.TextSize = 34
-    list.Text = "🏆 BIGGEST GOOBS\n\nloading…"
-    list.Parent = surface
-
-    -- Ascension altar: the terminus. Deliberately the tallest thing on the hub.
-    local altar = part({
-        Name = "AscensionAltar",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(4, 40, 40),
-        CFrame = CFrame.new(hub.centre + Vector3.new(0, 3, 96)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(226, 216, 186),
-        Material = Enum.Material.SmoothPlastic,
-        Transparency = 0.45,
-        CanCollide = false,
-    })
-    altar.Parent = world
-    local altarLight = Instance.new("PointLight")
-    altarLight.Brightness = 2
-    altarLight.Range = 70
-    altarLight.Color = Color3.fromRGB(224, 214, 184)
-    altarLight.Parent = altar
-    signpost(world, hub.centre + Vector3.new(0, 3, 124), "👑", "ASCEND",
-        "Colossal Goobs only", Color3.fromRGB(202, 190, 150))
-
-    -- Home pads: where your OTHER Goobs sit on display now that the active one
-    -- is your body.
-    local count = Config.PLOT_COUNT
-    for i = 1, count do
-        local angle = (i - 1) / count * math.pi * 2
-        local centre = hub.centre + Vector3.new(math.cos(angle) * 132, 1, math.sin(angle) * 132)
-        local pad = part({
-            Name = "Plot" .. i,
-            Shape = Enum.PartType.Cylinder,
-            Size = Vector3.new(2, 40, 40),
-            CFrame = CFrame.new(centre) * CFrame.Angles(0, 0, math.rad(90)),
-            Color = Color3.fromRGB(190, 182, 168),
-            Material = Enum.Material.Slate,
-        })
-        pad.Parent = world
-
-        local sign = part({
-            Name = "Sign", Size = Vector3.new(1, 1, 1),
-            Position = centre + Vector3.new(0, 9, 0), Transparency = 1, CanCollide = false,
-        })
-        sign.Parent = pad
-        local gui = Instance.new("BillboardGui")
-        gui.Name = "PlotLabel"
-        gui.Size = UDim2.fromScale(14, 3.4)
-        gui.MaxDistance = 300
-        gui.Parent = sign
-        local tl = Instance.new("TextLabel")
-        tl.Size = UDim2.fromScale(1, 1)
-        tl.BackgroundTransparency = 1
-        tl.Font = Enum.Font.FredokaOne
-        tl.TextScaled = true
-        tl.TextColor3 = Color3.new(1, 1, 1)
-        tl.TextStrokeTransparency = 0.3
-        tl.Text = "OPEN PAD"
-        tl.Parent = gui
-
-        table.insert(WorldBuilder.plots, { index = i, center = centre, owner = nil })
+    -- Scrapyard furniture: cover, ramps, and things to break line of sight.
+    -- Hiding has to be possible or the smallest blob on the island has no
+    -- play except running in a straight line.
+    local scrap = Config.BIOMES[2]
+    for i = 0, 7 do
+        local a = math.rad(i * 45 + 12)
+        local r = scrap.radius * (0.35 + (i % 3) * 0.2)
+        local pos = scrap.centre + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+        if i % 2 == 0 then
+            local block = part({
+                Name = "Scrap",
+                Size = Vector3.new(16 + i, 10 + (i % 3) * 6, 12 + (i % 4) * 4),
+                CFrame = CFrame.new(pos + Vector3.new(0, 5, 0)) * CFrame.Angles(0, a, 0),
+                Color = Color3.fromRGB(120, 112, 104),
+                Material = Enum.Material.CorrodedMetal,
+            })
+            block.Parent = world
+        else
+            ramp(world, pos + Vector3.new(0, 3, 0), Vector3.new(20, 7, 26),
+                math.deg(a), Color3.fromRGB(132, 124, 112))
+        end
     end
 
-    -- ── SCRAPYARD: ramps, the learning zone ────────────────────────────────
-    local sy = WorldBuilder.ZONES.SCRAPYARD
-    disc(world, sy.centre + Vector3.new(0, -1, 0), sy.radius, 6,
-        Color3.fromRGB(146, 138, 124), Enum.Material.Ground, "ScrapyardFloor")
-    signpost(world, sy.centre + Vector3.new(-210, 3, 0), "🔧", "SCRAPYARD",
-        "ramps · common junk", Color3.fromRGB(180, 148, 116))
+    -- ── THE SHACK ──────────────────────────────────────────────────────────
+    buildShack(world)
 
-    for i = 1, 7 do
-        local a = (i / 7) * math.pi * 2
-        ramp(world, sy.centre + Vector3.new(math.cos(a) * 120, 7, math.sin(a) * 120),
-            Vector3.new(30, 14, 58), math.deg(a) + 90, Color3.fromRGB(148, 116, 100))
-    end
-    -- A half-pipe to bounce between.
-    for _, sx in ipairs({ -1, 1 }) do
-        ramp(world, sy.centre + Vector3.new(sx * 56, 11, -40),
-            Vector3.new(70, 22, 40), sx > 0 and 90 or 270, Color3.fromRGB(128, 128, 128))
+    -- Display pads beside the Shack. These are what is left of the old plot
+    -- system: a place to show a Goob you are proud of, rather than eight pads
+    -- that were the entire game.
+    WorldBuilder.plots = {}
+    for i = 1, Config.PLOT_COUNT do
+        local a = math.rad(-90 + (i - 1) * (180 / math.max(1, Config.PLOT_COUNT - 1)))
+        local centre = Config.SHACK_POSITION + Vector3.new(math.cos(a) * 62, 1, math.sin(a) * 62)
+        local pad = disc(world, centre, 11, 2,
+            Color3.fromRGB(142, 136, 124), Enum.Material.Concrete, "Plot" .. i)
+        pad.Name = "Plot" .. i
+        table.insert(WorldBuilder.plots, { index = i, center = centre + Vector3.new(0, 1, 0), owner = nil })
     end
 
-    -- ── SLICKFIELD: low friction ───────────────────────────────────────────
-    local sf = WorldBuilder.ZONES.SLICKFIELD
-    local ice = disc(world, sf.centre + Vector3.new(0, -1, 0), sf.radius, 6,
-        Color3.fromRGB(188, 202, 206), Enum.Material.Ice, "SlickfieldFloor")
-    -- Almost no friction: this is the zone's entire identity.
-    ice.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.02, 0.3, 1, 1)
-    signpost(world, sf.centre + Vector3.new(210, 3, 0), "🧊", "SLICKFIELD",
-        "no grip · go fast", Color3.fromRGB(160, 180, 190))
+    -- ── THE STANDOFF RING ──────────────────────────────────────────────────
+    -- Off the island, across a causeway, and raised. A 1v1 that anyone can
+    -- roll into is not a 1v1.
+    local ringFloor = disc(world, Pit.CENTRE - Vector3.new(0, 4, 0), Pit.START_RADIUS + 10, 8,
+        Color3.fromRGB(126, 118, 108), Enum.Material.Concrete, "PitFloor")
+    ringFloor.Name = "PitFloor"
 
-    for i = 1, 5 do
-        local a = (i / 5) * math.pi * 2
-        local pillar2 = part({
-            Name = "IcePillar",
-            Size = Vector3.new(16, 46, 16),
-            Position = sf.centre + Vector3.new(math.cos(a) * 130, 22, math.sin(a) * 130),
-            Color = Color3.fromRGB(198, 208, 210),
-            Material = Enum.Material.Ice,
-            Transparency = 0.25,
-        })
-        pillar2.Parent = world
-    end
-
-    -- ── THE DEEP: gated by a dash ──────────────────────────────────────────
-    local dp = WorldBuilder.ZONES.DEEP
-    disc(world, dp.centre + Vector3.new(0, -1, 0), dp.radius, 6,
-        Color3.fromRGB(74, 70, 82), Enum.Material.Slate, "DeepFloor")
-    signpost(world, dp.centre + Vector3.new(0, 3, 190), "🌑", "THE DEEP",
-        "rarest spawns · dash to cross", Color3.fromRGB(166, 154, 180))
-
-    -- The launch ramp, then a gap. Crossing it needs a dash off the lip; that
-    -- is the moment the dash meter stops being a toy and becomes a key.
-    ramp(world, Vector3.new(20, 7, -410), Vector3.new(70, 16, 76), 0, Color3.fromRGB(126, 116, 140))
-    local landing = part({
-        Name = "DeepLanding",
-        Size = Vector3.new(110, 6, 80),
-        Position = dp.centre + Vector3.new(0, 2, 214),
-        Color = Color3.fromRGB(92, 74, 124),
-        Material = Enum.Material.Slate,
+    local causeway = part({
+        Name = "Causeway",
+        Size = Vector3.new(34, 4, 160),
+        Position = Vector3.new(
+            (Pit.CENTRE.X + 0) / 2,
+            Pit.CENTRE.Y - 6,
+            (Pit.CENTRE.Z + Config.ISLAND_RADIUS) / 2),
+        Color = Color3.fromRGB(142, 136, 124),
+        Material = Enum.Material.Concrete,
     })
-    landing.Parent = world
+    causeway.Parent = world
 
-    for i = 1, 6 do
-        local a = (i / 6) * math.pi * 2
-        local glow = part({
-            Name = "DeepGlow",
-            Shape = Enum.PartType.Ball,
-            Size = Vector3.new(9, 9, 9),
-            Position = dp.centre + Vector3.new(math.cos(a) * 150, 14, math.sin(a) * 150),
-            Color = Color3.fromRGB(168, 152, 186),
-            Material = Enum.Material.Neon,
-            CanCollide = false,
-        })
-        glow.Parent = world
-        local l = Instance.new("PointLight")
-        l.Brightness = 2
-        l.Range = 46
-        l.Color = Color3.fromRGB(168, 152, 186)
-        l.Parent = glow
+    -- The ring itself: a flat disc PitService shrinks during a match. Named
+    -- PitRing because that is the name PitService looks up; renaming the prop
+    -- without renaming the lookup is how the last map rewrite broke the Pit.
+    local ring = disc(world, Pit.CENTRE, Pit.START_RADIUS, 1.5,
+        Color3.fromRGB(178, 150, 150), Enum.Material.SmoothPlastic, "PitRing")
+    ring.Name = "PitRing"
+    ring.CanCollide = false
+
+    signpost(world, Pit.CENTRE + Vector3.new(0, -4, Pit.START_RADIUS + 24), "🥊",
+        "THE STANDOFF", "equal mass. pure steering.", Color3.fromRGB(190, 150, 150))
+
+    -- The join pad. Joining is a dock button now, so this is not the only way
+    -- in — but a physical thing you can roll onto is how a seven-year-old
+    -- discovers a mode exists, and a menu entry is not.
+    local joinPad = disc(world, Vector3.new(0, 1.4, Config.ISLAND_RADIUS - 26), 18, 2,
+        Color3.fromRGB(178, 150, 150), Enum.Material.Neon, "PitJoinPad")
+    joinPad.Name = "PitJoinPad"
+    joinPad.CanCollide = false
+
+    -- ── THE BOARDS ─────────────────────────────────────────────────────────
+    -- Both face the Vault, because the Vault is where everyone already is.
+    board(world, "Leaderboard",
+        Vector3.new(-64, 16, -(Config.VAULT_RADIUS + 30)), 12,
+        Vector2.new(48, 30), Color3.fromRGB(198, 174, 118))
+    board(world, "Archive",
+        Vector3.new(64, 16, -(Config.VAULT_RADIUS + 30)), -12,
+        Vector2.new(48, 30), Color3.fromRGB(150, 170, 186))
+
+    -- ── SPAWNS ─────────────────────────────────────────────────────────────
+    -- Spread around the Shallows ring, so a hundred players do not all appear
+    -- inside each other, and so nobody spawns in reach of a predator.
+    for i = 1, 12 do
+        local a = math.rad(i * 30)
+        local spawn = Instance.new("SpawnLocation")
+        spawn.Name = "Spawn" .. i
+        spawn.Anchored = true
+        spawn.CanCollide = false
+        spawn.Size = Vector3.new(14, 1, 14)
+        spawn.Position = Vector3.new(math.cos(a) * Config.SPAWN_RING, 1.4, math.sin(a) * Config.SPAWN_RING)
+        spawn.Color = Color3.fromRGB(186, 190, 176)
+        spawn.Material = Enum.Material.SmoothPlastic
+        spawn.Transparency = 0.75
+        spawn.Neutral = true
+        spawn.Parent = world
     end
 
-    road(hub.centre + Vector3.new(150, -1, 0), sy.centre + Vector3.new(-220, -1, 0), 60)
-    road(hub.centre + Vector3.new(-150, -1, 40), sf.centre + Vector3.new(220, -1, 90), 60)
-    road(hub.centre + Vector3.new(0, -1, -150), Vector3.new(20, -1, -400), 60)
-
-    -- ── THE ARCHIVE ────────────────────────────────────────────────────────
-    -- A monument you roll up to and read. The whole design rests on genuine
-    -- scarcity, and until this existed a player was simply asked to take that
-    -- on faith. This is the number, worldwide, updated live.
-    local archive = part({
-        Name = "Archive",
-        Size = Vector3.new(22, 30, 4),
-        Position = hub.centre + Vector3.new(-86, 15, -70),
-        Color = Color3.fromRGB(62, 60, 66),
-        Material = Enum.Material.Marble,
-    })
-    archive.Parent = world
-
-    local archiveGui = Instance.new("SurfaceGui")
-    archiveGui.Name = "Board"
-    archiveGui.Face = Enum.NormalId.Front
-    archiveGui.CanvasSize = Vector2.new(660, 900)
-    archiveGui.Parent = archive
-
-    local archiveText = Instance.new("TextLabel")
-    archiveText.Name = "Entries"
-    archiveText.Size = UDim2.fromScale(1, 1)
-    archiveText.BackgroundTransparency = 1
-    archiveText.Font = Enum.Font.FredokaOne
-    archiveText.TextColor3 = Color3.fromRGB(226, 224, 218)
-    archiveText.TextXAlignment = Enum.TextXAlignment.Left
-    archiveText.TextYAlignment = Enum.TextYAlignment.Top
-    archiveText.TextSize = 26
-    archiveText.Text = "📜 THE ARCHIVE\n\ncounting…"
-    archiveText.Parent = archiveGui
-
-    local archiveLight = Instance.new("PointLight")
-    archiveLight.Brightness = 1.5
-    archiveLight.Range = 50
-    archiveLight.Color = Color3.fromRGB(180, 172, 190)
-    archiveLight.Parent = archive
-
-    signpost(world, hub.centre + Vector3.new(-86, 3, -44), "📜", "THE ARCHIVE",
-        "how many still exist", Color3.fromRGB(168, 158, 182))
-
-    -- ── THE SUMO PIT ───────────────────────────────────────────────────────
-    -- Raised and open-sided on purpose: the danger has to be legible from
-    -- outside, and you have to be able to SEE someone get knocked off.
-    local pitFloor = disc(world, Pit.CENTRE - Vector3.new(0, 4, 0), Pit.START_RADIUS + 8, 8,
-        Color3.fromRGB(74, 58, 58), Enum.Material.Slate, "PitFloor")
-    pitFloor.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.4, 1, 1)
-
-    -- The ring itself is resized live by PitService as the arena closes.
-    local ring = part({
-        Name = "PitRing",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(1.5, Pit.START_RADIUS * 2, Pit.START_RADIUS * 2),
-        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, 0.6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(184, 118, 112),
-        Material = Enum.Material.Neon,
-        Transparency = 0.6,
-        CanCollide = false,
-    })
-    ring.Parent = world
-
-    -- Stands, so a crowd has somewhere to watch from.
-    for i = 1, 24 do
-        local a = (i / 24) * math.pi * 2
-        local r = Pit.START_RADIUS + 34
-        local seat = part({
-            Name = "PitStand",
-            Size = Vector3.new(14, 10, 14),
-            Position = Pit.CENTRE + Vector3.new(math.cos(a) * r, -2, math.sin(a) * r),
-            Color = Color3.fromRGB(96, 74, 74),
-            Material = Enum.Material.WoodPlanks,
-        })
-        seat.Parent = world
-    end
-
-    signpost(world, Pit.CENTRE + Vector3.new(0, -4, Pit.START_RADIUS + 60), "🥊", "SUMO PIT",
-        "stake 💧 · last one in wins", Color3.fromRGB(184, 128, 122))
-
-    -- The join pad. Rolling onto it enters the queue; nothing drags you here.
-    local joinPad = part({
-        Name = "PitJoinPad",
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(2, 34, 34),
-        CFrame = CFrame.new(Pit.CENTRE + Vector3.new(0, -3, Pit.START_RADIUS + 40))
-            * CFrame.Angles(0, 0, math.rad(90)),
-        Color = Color3.fromRGB(146, 178, 140),
-        Material = Enum.Material.SmoothPlastic,
-        Transparency = 0.5,
-        CanCollide = false,
-    })
-    joinPad.Parent = world
-
-    road(hub.centre + Vector3.new(0, -1, 150), Pit.CENTRE + Vector3.new(0, -4, -Pit.START_RADIUS - 50), 60)
-
-    local spawn = Instance.new("SpawnLocation")
-    spawn.Name = "HubSpawn"
-    spawn.Size = Vector3.new(20, 1, 20)
-    spawn.Position = hub.centre + Vector3.new(0, 4, 40)
-    spawn.Anchored = true
-    spawn.CanCollide = false
-    spawn.Color = Color3.fromRGB(255, 255, 255)
-    spawn.Material = Enum.Material.SmoothPlastic
-    spawn.Transparency = 0.7
-    spawn.Neutral = true
-    spawn.Parent = world
+    -- A folder for everything the arena spawns at runtime, so pellets and
+    -- lumps never collide with the static map in a name lookup.
+    local live = Instance.new("Folder")
+    live.Name = "Arena"
+    live.Parent = world
 
     return world
+end
+
+-- ── Queries ────────────────────────────────────────────────────────────────
+
+function WorldBuilder.vaultPosition(): Vector3
+    return Vector3.new(0, Config.VAULT_HEIGHT, 0)
+end
+
+-- Which ring a point is in. Used by the arena to decide whether PvP applies,
+-- which is the single most important question on the island.
+function WorldBuilder.ringAt(position: Vector3): string
+    local r = Vector3.new(position.X, 0, position.Z).Magnitude
+    if r <= Config.VAULT_RADIUS then
+        return "VAULT"
+    elseif r <= Config.SHALLOWS_INNER then
+        return "FLATS"
+    end
+    return "SHALLOWS"
+end
+
+function WorldBuilder.isSafe(position: Vector3): boolean
+    return WorldBuilder.ringAt(position) == "SHALLOWS"
+end
+
+-- Which biome a point is over, or nil for open Flats. Returns the whole entry
+-- so callers read `.pelletMult` instead of re-deriving it from an id.
+function WorldBuilder.biomeAt(position: Vector3)
+    for _, b in ipairs(Config.BIOMES) do
+        local flat = Vector3.new(position.X - b.centre.X, 0, position.Z - b.centre.Z)
+        if flat.Magnitude <= b.radius then
+            return b
+        end
+    end
+    return nil
+end
+
+-- A point on the island suitable for dropping something loose. Uniform by
+-- AREA, not by radius: sampling radius uniformly piles everything into the
+-- middle, which would put most of the island's food inside the Vault.
+function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: number?): Vector3
+    local lo = innerR or (Config.VAULT_RADIUS + 14)
+    local hi = outerR or (Config.ISLAND_RADIUS - 10)
+    local r = math.sqrt(rng:NextNumber(lo * lo, hi * hi))
+    local a = rng:NextNumber(0, math.pi * 2)
+    local pos = Vector3.new(math.cos(a) * r, 2, math.sin(a) * r)
+    local b = WorldBuilder.biomeAt(pos)
+    if b then
+        pos = Vector3.new(pos.X, b.centre.Y + 2, pos.Z)
+    end
+    return pos
+end
+
+function WorldBuilder.arenaFolder(): Folder
+    local world = Workspace:FindFirstChild("GoobWorld")
+    return (world and world:FindFirstChild("Arena")) :: Folder
 end
 
 function WorldBuilder.claimPlot(player: Player)
     for _, plot in ipairs(WorldBuilder.plots) do
         if plot.owner == nil then
             plot.owner = player
-            local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
-            local sign = pad and pad:FindFirstChild("Sign")
-            local gui = sign and sign:FindFirstChild("PlotLabel")
-            if gui then (gui :: any).TextLabel.Text = player.DisplayName .. "'s PAD" end
             return plot
         end
     end
@@ -5103,10 +6945,6 @@ function WorldBuilder.releasePlot(player: Player)
     for _, plot in ipairs(WorldBuilder.plots) do
         if plot.owner == player then
             plot.owner = nil
-            local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
-            local sign = pad and pad:FindFirstChild("Sign")
-            local gui = sign and sign:FindFirstChild("PlotLabel")
-            if gui then (gui :: any).TextLabel.Text = "OPEN PAD" end
             return
         end
     end
@@ -5119,13 +6957,14 @@ function WorldBuilder.plotFor(player: Player)
     return nil
 end
 
--- Where the ascension altar is, for the proximity check.
+-- Ascension happens at the Vault now. There is one landmark in this game and
+-- everything ceremonial belongs on it.
 function WorldBuilder.altarPosition(): Vector3
-    return WorldBuilder.ZONES.HUB.centre + Vector3.new(0, 3, 96)
+    return WorldBuilder.vaultPosition()
 end
 
 return WorldBuilder
-]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000039"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000038"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000033"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000046"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000045"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000040"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.client.luau — client entry point.
 --
 -- Everything the client does falls into one of three jobs:
@@ -5156,11 +6995,19 @@ local Hud = require(script.Hud)
 local TradeUi = require(script.TradeUi)
 local Roll = require(script.Roll)
 local Panels = require(script.Panels)
+local ArenaHud = require(script.ArenaHud)
+local Stick = require(script.Stick)
 local Juice = require(script.Juice)
 
 local player = Players.LocalPlayer
 local gui = Hud.build()
 TradeUi.build(gui)
+
+-- ArenaHud takes over the persistent chrome. Hud keeps toasts, the drawer and
+-- the coach; it stops drawing its own stat panel, age line and drawer button,
+-- which is where most of the old overlap came from.
+ArenaHud.build()
+Hud.setArenaMode(true)
 
 -- Sound and every other feel effect now live in Juice, which reads its ids
 -- from Config and stays silent when they are unset. This file used to keep a
@@ -5649,16 +7496,24 @@ end
 do
     local Layout = require(script.Layout)
 
-    local dashBtn = Theme.button("⚡", Theme.ACCENT, UDim2.fromOffset(64, 64))
+    -- No on-screen dash button. ArenaHud's power button sits in the same
+    -- thumb gap, and two round buttons fighting for the one reachable part of
+    -- a phone's bottom edge is the overlap problem in miniature. Dash is still
+    -- on the keyboard and the gamepad, and DASH is also a carryable power.
+    local dashBtn = Instance.new("TextButton")
     dashBtn.Name = "DashButton"
-    dashBtn.TextSize = 30
+    dashBtn.Visible = false
+    dashBtn.Text = ""
     dashBtn.Parent = gui
-    dashBtn.Activated:Connect(function() Roll.dash() end)
 
     -- A charge meter, because a dash you cannot count is a dash you cannot plan.
     local meter = Instance.new("Frame")
     meter.Name = "DashMeter"
     meter.BackgroundTransparency = 1
+    -- Hidden with the dash button it belonged to. The power button carries its
+    -- own cooldown sweep, and a second charge meter in the same corner is the
+    -- overlap complaint wearing a different hat.
+    meter.Visible = false
     meter.Parent = gui
     local pips = {}
     for i = 1, Movement.DASH_CHARGES do
@@ -5677,7 +7532,7 @@ do
         local u = Layout.usable()
         local size = touch and (Layout.MIN_TAP + 20) or 56
 
-        dashBtn.Visible = touch
+        dashBtn.Visible = false   -- superseded by ArenaHud's power button
         dashBtn.Size = UDim2.fromOffset(size, size)
 
         -- Sit directly above the drawer button, both inside the safe gap.
@@ -5720,6 +7575,73 @@ do
 end
 
 -- ── Panels: wardrobe, season, crew ─────────────────────────────────────────
+
+
+-- ── The arena ──────────────────────────────────────────────────────────────
+
+-- Where the power is pointed. Where you are STEERING beats where the camera
+-- happens to face: a player mid-turn is looking at where they want to go, and
+-- firing a dash at the camera instead would feel like the game ignoring them.
+local function aimVector(): Vector3?
+    local move = Stick.moveVector()
+    if move.Magnitude > 0.15 then
+        return move.Unit
+    end
+    local camera = Workspace.CurrentCamera
+    if not camera then return nil end
+    local look = camera.CFrame.LookVector
+    local flat = Vector3.new(look.X, 0, look.Z)
+    return flat.Magnitude > 0.01 and flat.Unit or nil
+end
+
+local UsePower = Net.get("UsePower")
+local lastPower = 0
+
+local function firePower()
+    -- Client-side rate limit. The server enforces the real cooldown; this only
+    -- stops a held key from filling the remote queue with requests the server
+    -- is going to refuse anyway.
+    local now = os.clock()
+    if now - lastPower < 0.15 then return end
+    lastPower = now
+    UsePower:FireServer(aimVector())
+end
+
+ArenaHud.on.usePower = function() firePower() end
+ArenaHud.on.setPower = function(id) Net.get("SetPower"):FireServer(id) end
+ArenaHud.on.equipTrinket = function(id, slot) Net.get("EquipTrinket"):FireServer(id, slot) end
+ArenaHud.on.openCrate = function(id) Net.get("OpenCrate"):FireServer(id) end
+
+-- The dock's three delegated tabs. They close the sheet before opening, and
+-- "close" shuts everything — so there is still never more than one panel up.
+ArenaHud.on.openLegacy = function(which)
+    if which == "close" then
+        Hud.setDrawerOpen(false)
+    else
+        Hud.openDrawerTab(which)
+    end
+end
+ArenaHud.on.joinPit = function() Net.get("PitJoin"):FireServer() end
+ArenaHud.on.leavePit = function() Net.get("PitLeave"):FireServer() end
+
+Net.get("ArenaSync").OnClientEvent:Connect(function(state)
+    ArenaHud.setArena(state)
+end)
+
+Net.get("CrateResult").OnClientEvent:Connect(function(result)
+    ArenaHud.crateResult(result)
+    Juice.play("unlock")
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.Q
+        or input.KeyCode == Enum.KeyCode.ButtonX then
+        firePower()
+    elseif input.KeyCode == Enum.KeyCode.Escape then
+        ArenaHud.closeSheet()
+    end
+end)
 
 Panels.onEquip = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
 Panels.onClaimSeason = function(tier, premium) Net.get("ClaimSeason"):FireServer(tier, premium) end
@@ -5778,7 +7700,9 @@ do
         local w = compact and math.min(300, u.X - 24) or 340
         local h = compact and 60 or 66
         strip.Size = UDim2.fromOffset(w, h)
-        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 90 or 108)
+        -- Below the dock AND below the status strip. At y=90 it sat directly
+        -- on top of both, which is the overlap this whole pass exists to end.
+        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 176 or 206)
         line.Position = UDim2.fromOffset(12, 6)
         line.Size = UDim2.new(1, -140, 0, 20)
         sub.Position = UDim2.fromOffset(12, 28)
@@ -5796,11 +7720,16 @@ do
         if not ball then strip.Visible = false return end
         local d = (ball.Position - Pit.CENTRE).Magnitude
         nearPit = d < Pit.START_RADIUS + 140
-        strip.Visible = nearPit
+        -- Compact screens get the dock's Standoff tab instead. On a 320px-tall
+        -- phone there is no row left for a third banner that does not land on
+        -- the coach or the power button, and a duplicate entry point is not
+        -- worth an overlap.
+        strip.Visible = nearPit and not Layout.isCompact()
     end)
 
     Net.get("PitSync").OnClientEvent:Connect(function(state)
         if not state then return end
+        ArenaHud.setPit(state)
         local mine = false
         for _, n in ipairs(state.alive or {}) do
             if n == player.DisplayName then mine = true end
@@ -5912,7 +7841,743 @@ task.spawn(function()
 end)
 
 print("[GULP A GOOB] client ready")
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000026"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000031"><Properties><string name="Name">ArenaHud</string><ProtectedString name="Source"><![CDATA[--!strict
+-- ArenaHud.luau — the screen, rebuilt.
+--
+-- THE COMPLAINT THIS FILE EXISTS TO FIX: "everything gets in the way of
+-- everything". It was true. The old HUD had a stat panel, an age line, a
+-- drawer button, a drawer, dash pips, toasts, a trade window and four panels,
+-- any number of which could be on screen at once, several of them overlapping,
+-- and none of them aware of the others.
+--
+-- The fix is structural, not cosmetic: THERE IS ONE SHEET, AND ONLY ONE.
+-- Every service in the game is a tab on it. Opening any tab closes whatever
+-- was open. Two things cannot overlap if only one thing can exist.
+--
+-- The screen is then divided into four regions that never intersect:
+--
+--   top-left      the stat card: what you are holding and what it is worth
+--   top-centre    the dock (six icons) and, under it, the status strip
+--   top-right     Glob and your Beta Season tier
+--   bottom-centre the power button, inside the only part of the bottom edge
+--                 a phone player can actually reach
+--
+-- The dock lives at the TOP on every platform, desktop included. It is
+-- tempting to put a dock along the bottom edge on a PC — but Roblox reserves
+-- the bottom-left for a thumbstick and the bottom-right for a jump button on
+-- touch, so a bottom dock needs two layouts, and two layouts is how elements
+-- end up on top of each other. One position, everywhere.
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local Format = require(Shared.Format)
+local Powers = require(Shared.Powers)
+local Trinkets = require(Shared.Trinkets)
+local Crates = require(Shared.Crates)
+local Cosmetics = require(Shared.Cosmetics)
+
+local Theme = require(script.Parent.Theme)
+local Layout = require(script.Parent.Layout)
+
+local player = Players.LocalPlayer
+
+local ArenaHud = {}
+
+-- Filled in by init.client. Declared up front so every handler below closes
+-- over the table rather than over a local that may not exist yet — the
+-- `local function` scoping trap that took down two earlier builds.
+ArenaHud.on = {
+    usePower = function(_aim: Vector3?) end,
+    setPower = function(_id: string) end,
+    equipTrinket = function(_id: string?, _slot: number) end,
+    openCrate = function(_id: string) end,
+    openLegacy = function(_which: string) end,   -- season / goobs / close
+    joinPit = function() end,
+    leavePit = function() end,
+}
+
+local gui: ScreenGui
+local statCard: Frame
+local massLabel: TextLabel
+local worthLabel: TextLabel
+local meltLabel: TextLabel
+local globLabel: TextLabel
+local seasonLabel: TextLabel
+local statusStrip: Frame
+local statusLabel: TextLabel
+local bankBar: Frame
+local bankFill: Frame
+local dock: Frame
+local powerBtn: TextButton
+local powerCost: TextLabel
+local powerSweep: Frame
+local sheet: Frame
+local sheetTitle: TextLabel
+local sheetBody: ScrollingFrame
+
+local dockButtons: { [string]: TextButton } = {}
+local openTab: string? = nil
+local latest: any = nil
+local profile: any = nil
+local pit: any = nil
+
+local TABS = {
+    { id = "crates",   icon = "🎁", name = "CRATES" },
+    { id = "trinkets", icon = "🔧", name = "TRINKETS" },
+    { id = "powers",   icon = "⚡", name = "POWERS" },
+    { id = "season",   icon = "⭐", name = "BETA SEASON" },
+    { id = "goobs",    icon = "🫧", name = "MY GOOBS" },
+    { id = "standoff", icon = "🥊", name = "THE STANDOFF" },
+}
+
+-- ── Small builders ─────────────────────────────────────────────────────────
+
+local function row(parent: Instance, height: number, order: number): Frame
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, height)
+    f.BackgroundColor3 = Theme.BG_SOFT
+    f.BackgroundTransparency = 0.25
+    f.BorderSizePixel = 0
+    f.LayoutOrder = order
+    f.Parent = parent
+    Theme.corner(f, 12)
+    return f
+end
+
+local function actionButton(parent: Instance, text: string, colour: Color3, width: number): TextButton
+    local b = Theme.button(text, colour, UDim2.fromOffset(width, Layout.MIN_TAP))
+    b.TextSize = 18
+    b.AnchorPoint = Vector2.new(1, 0.5)
+    b.Position = UDim2.new(1, -10, 0.5, 0)
+    b.Parent = parent
+    return b
+end
+
+-- ── The sheet ──────────────────────────────────────────────────────────────
+
+local function clearSheet()
+    for _, child in ipairs(sheetBody:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+end
+
+local function renderCrates()
+    for i, crate in ipairs(Crates.LIST) do
+        local r = row(sheetBody, 84, i)
+        local name = Theme.label({
+            Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -160, 0, 26),
+            Text = crate.name, TextSize = 22, TextColor3 = Theme.GOLD,
+        })
+        name.Parent = r
+        local blurb = Theme.label({
+            Position = UDim2.fromOffset(14, 34), Size = UDim2.new(1, -160, 0, 20),
+            Text = crate.blurb, TextSize = 14, TextColor3 = Theme.TEXT_DIM,
+            TextWrapped = true,
+        })
+        blurb.Parent = r
+
+        -- The pity counter is shown, always. A gacha whose cliff is invisible
+        -- is a gacha that farms the player; one that says "three more and it
+        -- is guaranteed" is a gacha the player is choosing to play.
+        local pity = (profile and profile.cratePity and profile.cratePity[crate.id]) or 0
+        local left = Crates.rollsUntilPity(crate.id, pity)
+        local meter = Theme.label({
+            Position = UDim2.fromOffset(14, 56), Size = UDim2.new(1, -160, 0, 18),
+            Text = crate.price > 0
+                and ("💧%s   ·   %d more until a guaranteed %s")
+                    :format(Format.short(crate.price), left, crate.pityFloor)
+                or "earned from Beta Season tiers",
+            TextSize = 13, TextColor3 = Theme.ACCENT,
+        })
+        meter.Parent = r
+
+        if crate.price > 0 then
+            local afford = profile and (profile.glob or 0) >= crate.price
+            local btn = actionButton(r, afford and "OPEN" or "NEED 💧",
+                afford and Theme.GOOD or Theme.BG_SOFT, 116)
+            btn.Active = afford == true
+            btn.Activated:Connect(function()
+                if afford then ArenaHud.on.openCrate(crate.id) end
+            end)
+        end
+    end
+end
+
+local function renderTrinkets()
+    local owned = (profile and profile.trinketsOwned) or {}
+    local slots = (profile and profile.trinketSlots) or {}
+    local equipped: { [string]: number } = {}
+    for i, id in ipairs(slots) do equipped[id] = i end
+
+    local header = row(sheetBody, 56, 0)
+    local resolved = Trinkets.resolve(slots)
+    local summary = Theme.label({
+        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -24, 0, 44),
+        Text = ("%d / %d slots  ·  melt x%.2f  ·  pellets x%.2f  ·  bank %+.0f%%")
+            :format(#slots, Trinkets.SLOTS, resolved.leakMult, resolved.pelletMult,
+                    resolved.bankHaste * 100),
+        TextSize = 15, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+    })
+    summary.Parent = header
+
+    for i, t in ipairs(Trinkets.LIST) do
+        local have = owned[t.id] == true
+        local slot = equipped[t.id]
+        local r = row(sheetBody, 66, i)
+        local name = Theme.label({
+            Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -150, 0, 24),
+            Text = have and t.name or ("🔒 " .. t.name),
+            TextSize = 19,
+            TextColor3 = slot and Theme.GOOD or (have and Theme.TEXT or Theme.TEXT_DIM),
+        })
+        name.Parent = r
+        local blurb = Theme.label({
+            Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 22),
+            Text = have and t.blurb or ("Found in Deep Crates  ·  " .. t.rarity),
+            TextSize = 13, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+        })
+        blurb.Parent = r
+
+        if have then
+            local full = #slots >= Trinkets.SLOTS and not slot
+            local btn = actionButton(r,
+                slot and "REMOVE" or (full and "FULL" or "EQUIP"),
+                slot and Theme.BAD or (full and Theme.BG_SOFT or Theme.ACCENT), 108)
+            btn.Active = not full
+            btn.Activated:Connect(function()
+                if slot then
+                    ArenaHud.on.equipTrinket(nil, slot)
+                elseif not full then
+                    ArenaHud.on.equipTrinket(t.id, #slots + 1)
+                end
+            end)
+        end
+    end
+end
+
+-- The Standoff is reachable from the dock, from anywhere on the island. There
+-- is a sign and a join pad out by the ring as well, because a physical thing
+-- you can roll onto is how a seven-year-old finds out a mode exists — but
+-- nobody should have to cross the map to press a button they can see.
+local function renderStandoff()
+    local intro = row(sheetBody, 92, 0)
+    local text = Theme.label({
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 76),
+        Text = "Two blobs, the same mass, one ring.\n\n"
+            .. "Whatever you arrived with is taken away — both fighters are set "
+            .. "to the same size, so it is steering and power timing and nothing "
+            .. "else. Last one in the ring takes the pot.",
+        TextSize = 15, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+    })
+    text.Parent = intro
+
+    local status = row(sheetBody, 68, 1)
+    local queued = false
+    for _, n in ipairs((pit and pit.alive) or {}) do
+        if n == player.DisplayName then queued = true end
+    end
+    local inMatch = pit and pit.inMatch
+
+    local line = Theme.label({
+        Position = UDim2.fromOffset(14, 10), Size = UDim2.new(1, -150, 0, 24),
+        Text = inMatch and ("FIGHT IN PROGRESS · %d left"):format(#((pit and pit.alive) or {}))
+            or ("%d / %d waiting"):format((pit and pit.queued) or 0, (pit and pit.minPlayers) or 2),
+        TextSize = 19, TextColor3 = inMatch and Theme.BAD or Theme.TEXT,
+    })
+    line.Parent = status
+    local sub = Theme.label({
+        Position = UDim2.fromOffset(14, 34), Size = UDim2.new(1, -150, 0, 20),
+        Text = (pit and (pit.lobbySeconds or 0) > 0)
+            and ("starting in %ds"):format(pit.lobbySeconds)
+            or "your stake is a slice of your income, never a Goob",
+        TextSize = 13, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+    })
+    sub.Parent = status
+
+    if not inMatch then
+        local btn = actionButton(status, queued and "LEAVE" or "ENTER",
+            queued and Theme.BG_SOFT or Theme.BAD, 116)
+        btn.Activated:Connect(function()
+            if queued then ArenaHud.on.leavePit() else ArenaHud.on.joinPit() end
+        end)
+    end
+end
+
+local function renderPowers()
+    local banked = (profile and profile.lifetimeBanked) or 0
+    local current = (profile and profile.powerId) or Powers.DEFAULT
+
+    for i, p in ipairs(Powers.LIST) do
+        local unlocked = banked >= p.unlockBanked
+        local r = row(sheetBody, 72, i)
+        local name = Theme.label({
+            Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -150, 0, 24),
+            Text = unlocked and p.name or ("🔒 " .. p.name),
+            TextSize = 20,
+            TextColor3 = (p.id == current) and Theme.GOOD or (unlocked and p.color or Theme.TEXT_DIM),
+        })
+        name.Parent = r
+        local blurb = Theme.label({
+            Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 32),
+            Text = unlocked
+                and ("%s   ·   costs %d%% of you   ·   %ds"):format(p.blurb, p.cost * 100, p.cooldown)
+                or ("Unlocks at 💧%s banked  (you have 💧%s)")
+                    :format(Format.short(p.unlockBanked), Format.short(banked)),
+            TextSize = 13, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+        })
+        blurb.Parent = r
+
+        if unlocked and p.id ~= current then
+            local btn = actionButton(r, "CARRY", Theme.ACCENT, 108)
+            btn.Activated:Connect(function() ArenaHud.on.setPower(p.id) end)
+        end
+    end
+end
+
+function ArenaHud.closeSheet()
+    openTab = nil
+    sheet.Visible = false
+    for _, b in pairs(dockButtons) do
+        b.BackgroundColor3 = Theme.BG_SOFT
+    end
+end
+
+function ArenaHud.openSheet(tab: string)
+    -- Delegated tabs still go through here, so opening one closes whatever
+    -- else was up. That is the whole contract: one thing at a time.
+    if tab == "season" or tab == "goobs" then
+        ArenaHud.closeSheet()
+        ArenaHud.on.openLegacy(tab)
+        return
+    end
+    if openTab == tab then
+        ArenaHud.closeSheet()
+        return
+    end
+
+    openTab = tab
+    ArenaHud.on.openLegacy("close")   -- shut any legacy panel first
+    clearSheet()
+    for id, b in pairs(dockButtons) do
+        b.BackgroundColor3 = (id == tab) and Theme.ACCENT or Theme.BG_SOFT
+    end
+
+    for _, entry in ipairs(TABS) do
+        if entry.id == tab then
+            sheetTitle.Text = entry.icon .. "  " .. entry.name
+        end
+    end
+
+    if tab == "crates" then renderCrates()
+    elseif tab == "trinkets" then renderTrinkets()
+    elseif tab == "powers" then renderPowers()
+    elseif tab == "standoff" then renderStandoff() end
+
+    sheet.Visible = true
+    ArenaHud.applyLayout()
+end
+
+-- Re-render whatever is open, after the profile changes underneath it.
+function ArenaHud.refreshSheet()
+    if openTab then
+        local tab = openTab
+        openTab = nil
+        ArenaHud.openSheet(tab)
+    end
+end
+
+-- ── Layout ─────────────────────────────────────────────────────────────────
+
+function ArenaHud.applyLayout()
+    if not gui then return end
+    local u = Layout.usable()
+    local compact = Layout.isCompact()
+    local pad = compact and 8 or 14
+
+    -- Dock: top-centre, one row, on every platform.
+    local iconSize = compact and 44 or 54
+    local gap = compact and 5 or 8
+    local dockW = #TABS * iconSize + (#TABS - 1) * gap + pad * 2
+    dock.Size = UDim2.fromOffset(dockW, iconSize + pad * 2)
+    dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), 6)
+    for _, entry in ipairs(TABS) do
+        local b = dockButtons[entry.id]
+        if b then
+            b.Size = UDim2.fromOffset(iconSize, iconSize)
+            b.TextSize = compact and 22 or 26
+        end
+    end
+
+    -- Stat card: top-left, and never wider than the space left of the dock.
+    local cardW = Layout.fit(compact and 124 or 210, 96, math.floor((u.X - dockW) / 2) - pad)
+    statCard.Size = UDim2.fromOffset(cardW, compact and 74 or 92)
+    statCard.Position = UDim2.fromOffset(pad, 6)
+    massLabel.TextSize = compact and 24 or 32
+    worthLabel.TextSize = compact and 14 or 18
+    meltLabel.TextSize = compact and 11 or 14
+
+    -- Glob + season: top-right, mirrored.
+    globLabel.Position = UDim2.fromOffset(u.X - cardW - pad, 10)
+    globLabel.Size = UDim2.fromOffset(cardW, compact and 26 or 32)
+    globLabel.TextSize = compact and 18 or 24
+    seasonLabel.Position = UDim2.fromOffset(u.X - cardW - pad, (compact and 36 or 44))
+    seasonLabel.Size = UDim2.fromOffset(cardW, compact and 20 or 24)
+    seasonLabel.TextSize = compact and 12 or 15
+
+    -- Status strip: directly under the dock, same width, so the two read as
+    -- one block instead of two floating things.
+    statusStrip.Size = UDim2.fromOffset(dockW, compact and 30 or 36)
+    statusStrip.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), iconSize + pad * 2 + 10)
+    statusLabel.TextSize = compact and 13 or 16
+
+    -- Power button: bottom-centre, inside the band between the thumbstick and
+    -- the jump button. That band is the only part of the bottom edge a phone
+    -- player's thumb can actually reach.
+    local size = compact and 76 or 92
+    local left, right = Layout.bottomGap()
+    local x = math.floor((left + right) / 2 - size / 2)
+    x = Layout.fit(x, 8, math.max(8, u.X - size - 8))
+    powerBtn.Size = UDim2.fromOffset(size, size)
+    powerBtn.Position = UDim2.fromOffset(x, u.Y - size - (compact and 14 or 26))
+    powerBtn.TextSize = compact and 15 or 18
+    powerSweep.Size = UDim2.fromScale(1, 0)
+
+    -- The sheet: near-fullscreen on a phone, a centred panel on a desktop.
+    -- Either way it is the ONLY thing on top of the world.
+    local sheetSize = compact
+        and UDim2.fromOffset(u.X - 16, u.Y - (iconSize + pad * 2 + 52))
+        or Layout.panel(660, 460)
+    sheet.Size = sheetSize
+    if compact then
+        sheet.Position = UDim2.fromOffset(8, iconSize + pad * 2 + 46)
+    else
+        sheet.Position = Layout.centre(sheetSize)
+    end
+end
+
+-- ── Build ──────────────────────────────────────────────────────────────────
+
+function ArenaHud.build(): ScreenGui
+    gui = Instance.new("ScreenGui")
+    gui.Name = "ArenaHud"
+    gui.ResetOnSpawn = false
+    -- false: with IgnoreGuiInset on, Roblox's top bar covers the first ~36px,
+    -- which is exactly where the dock is.
+    gui.IgnoreGuiInset = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 12
+    gui.Parent = player:WaitForChild("PlayerGui")
+
+    -- Stat card.
+    statCard = Instance.new("Frame")
+    statCard.Name = "StatCard"
+    statCard.BackgroundColor3 = Theme.BG
+    statCard.BackgroundTransparency = 0.12
+    statCard.BorderSizePixel = 0
+    statCard.Parent = gui
+    Theme.corner(statCard, 14)
+    Theme.stroke(statCard, Color3.fromRGB(18, 20, 26), 2)
+
+    massLabel = Theme.label({
+        Position = UDim2.fromOffset(12, 4), Size = UDim2.new(1, -18, 0, 34),
+        Text = "0", TextSize = 32, TextColor3 = Theme.GOLD,
+    })
+    massLabel.Parent = statCard
+
+    worthLabel = Theme.label({
+        Position = UDim2.fromOffset(12, 38), Size = UDim2.new(1, -18, 0, 22),
+        Text = "worth 💧0", TextSize = 18, TextColor3 = Theme.ACCENT,
+    })
+    worthLabel.Parent = statCard
+
+    meltLabel = Theme.label({
+        Position = UDim2.fromOffset(12, 60), Size = UDim2.new(1, -18, 0, 18),
+        Text = "not melting yet", TextSize = 14, TextColor3 = Theme.TEXT_DIM,
+    })
+    meltLabel.Parent = statCard
+
+    globLabel = Theme.label({
+        Text = "💧0", TextSize = 24, TextColor3 = Theme.ACCENT,
+        TextXAlignment = Enum.TextXAlignment.Right,
+    })
+    globLabel.Parent = gui
+
+    seasonLabel = Theme.label({
+        Text = "BETA SEASON", TextSize = 15, TextColor3 = Theme.GOLD,
+        TextXAlignment = Enum.TextXAlignment.Right,
+    })
+    seasonLabel.Parent = gui
+
+    -- Dock.
+    dock = Instance.new("Frame")
+    dock.Name = "Dock"
+    dock.BackgroundColor3 = Theme.BG
+    dock.BackgroundTransparency = 0.18
+    dock.BorderSizePixel = 0
+    dock.Parent = gui
+    Theme.corner(dock, 16)
+    Theme.stroke(dock, Color3.fromRGB(18, 20, 26), 2)
+
+    local dockLayout = Instance.new("UIListLayout")
+    dockLayout.FillDirection = Enum.FillDirection.Horizontal
+    dockLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    dockLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    dockLayout.Padding = UDim.new(0, 6)
+    dockLayout.Parent = dock
+
+    for i, entry in ipairs(TABS) do
+        local b = Instance.new("TextButton")
+        b.Name = "Dock_" .. entry.id
+        b.Text = entry.icon
+        b.Font = Theme.FONT
+        b.TextSize = 26
+        b.TextColor3 = Theme.TEXT
+        b.BackgroundColor3 = Theme.BG_SOFT
+        b.AutoButtonColor = true
+        b.BorderSizePixel = 0
+        b.LayoutOrder = i
+        b.Size = UDim2.fromOffset(Layout.MIN_TAP, Layout.MIN_TAP)
+        b.Parent = dock
+        Theme.corner(b, 12)
+        dockButtons[entry.id] = b
+        b.Activated:Connect(function() ArenaHud.openSheet(entry.id) end)
+    end
+
+    -- Status strip + bank bar.
+    statusStrip = Instance.new("Frame")
+    statusStrip.Name = "Status"
+    statusStrip.BackgroundColor3 = Theme.BG
+    statusStrip.BackgroundTransparency = 0.25
+    statusStrip.BorderSizePixel = 0
+    statusStrip.Parent = gui
+    Theme.corner(statusStrip, 10)
+
+    statusLabel = Theme.label({
+        Size = UDim2.fromScale(1, 1), Text = "SAFE  ·  the Shallows",
+        TextSize = 16, TextColor3 = Theme.GOOD,
+        TextXAlignment = Enum.TextXAlignment.Center,
+    })
+    statusLabel.Parent = statusStrip
+
+    bankBar = Instance.new("Frame")
+    bankBar.Name = "BankBar"
+    bankBar.AnchorPoint = Vector2.new(0, 1)
+    bankBar.Position = UDim2.new(0, 0, 1, 0)
+    bankBar.Size = UDim2.new(1, 0, 0, 4)
+    bankBar.BackgroundColor3 = Color3.fromRGB(24, 26, 30)
+    bankBar.BorderSizePixel = 0
+    bankBar.Visible = false
+    bankBar.Parent = statusStrip
+
+    bankFill = Instance.new("Frame")
+    bankFill.Size = UDim2.fromScale(0, 1)
+    bankFill.BackgroundColor3 = Theme.GOLD
+    bankFill.BorderSizePixel = 0
+    bankFill.Parent = bankBar
+
+    -- Power button.
+    powerBtn = Instance.new("TextButton")
+    powerBtn.Name = "PowerButton"
+    powerBtn.Text = "DASH"
+    powerBtn.Font = Theme.FONT
+    powerBtn.TextSize = 18
+    powerBtn.TextColor3 = Theme.TEXT
+    powerBtn.BackgroundColor3 = Theme.BG
+    powerBtn.BackgroundTransparency = 0.1
+    powerBtn.AutoButtonColor = true
+    powerBtn.BorderSizePixel = 0
+    powerBtn.ClipsDescendants = true
+    powerBtn.Parent = gui
+    Theme.corner(powerBtn, 999)
+    Theme.stroke(powerBtn, Theme.GOLD, 3)
+
+    -- The cooldown sweep fills from the bottom. Behind the label, so the name
+    -- of the power stays readable while it recharges — a button you cannot
+    -- read is a button you stop looking at.
+    powerSweep = Instance.new("Frame")
+    powerSweep.AnchorPoint = Vector2.new(0, 1)
+    powerSweep.Position = UDim2.new(0, 0, 1, 0)
+    powerSweep.Size = UDim2.fromScale(1, 0)
+    powerSweep.BackgroundColor3 = Theme.ACCENT
+    powerSweep.BackgroundTransparency = 0.72
+    powerSweep.BorderSizePixel = 0
+    powerSweep.ZIndex = 0
+    powerSweep.Parent = powerBtn
+
+    powerCost = Theme.label({
+        AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.fromScale(1, 0.3),
+        Text = "", TextSize = 13, TextColor3 = Theme.TEXT_DIM,
+        TextXAlignment = Enum.TextXAlignment.Center,
+    })
+    powerCost.ZIndex = 2
+    powerCost.Parent = powerBtn
+
+    powerBtn.Activated:Connect(function() ArenaHud.on.usePower(nil) end)
+
+    -- The sheet.
+    sheet = Instance.new("Frame")
+    sheet.Name = "Sheet"
+    sheet.BackgroundColor3 = Theme.BG
+    sheet.BackgroundTransparency = 0.04
+    sheet.BorderSizePixel = 0
+    -- Parked AND invisible. Parking a closed panel off-screen without also
+    -- clearing Visible is how a "hidden" drawer kept showing up in the
+    -- geometry audit as 300 visible pixels of overflow.
+    sheet.Visible = false
+    sheet.Parent = gui
+    Theme.corner(sheet, 18)
+    Theme.stroke(sheet, Color3.fromRGB(18, 20, 26), 3)
+
+    sheetTitle = Theme.label({
+        Position = UDim2.fromOffset(18, 12), Size = UDim2.new(1, -84, 0, 30),
+        Text = "CRATES", TextSize = 24, TextColor3 = Theme.GOLD,
+    })
+    sheetTitle.Parent = sheet
+
+    local close = Theme.button("✕", Theme.BG_SOFT, UDim2.fromOffset(Layout.MIN_TAP, Layout.MIN_TAP))
+    close.AnchorPoint = Vector2.new(1, 0)
+    close.Position = UDim2.new(1, -12, 0, 10)
+    close.TextSize = 20
+    close.Parent = sheet
+    close.Activated:Connect(function() ArenaHud.closeSheet() end)
+
+    sheetBody = Instance.new("ScrollingFrame")
+    sheetBody.Name = "Body"
+    sheetBody.Position = UDim2.fromOffset(12, 56)
+    sheetBody.Size = UDim2.new(1, -24, 1, -68)
+    sheetBody.BackgroundTransparency = 1
+    sheetBody.BorderSizePixel = 0
+    sheetBody.ScrollBarThickness = 5
+    sheetBody.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sheetBody.CanvasSize = UDim2.new()
+    sheetBody.Parent = sheet
+
+    local bodyLayout = Instance.new("UIListLayout")
+    bodyLayout.Padding = UDim.new(0, 8)
+    bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    bodyLayout.Parent = sheetBody
+
+    ArenaHud.applyLayout()
+    Layout.changed.Event:Connect(ArenaHud.applyLayout)
+    return gui
+end
+
+-- ── Live update ────────────────────────────────────────────────────────────
+
+function ArenaHud.setProfile(snap: any)
+    profile = snap
+    if not gui then return end
+    globLabel.Text = "💧" .. Format.short(snap.glob or 0)
+    local tier = snap.season and snap.season.tier or 0
+    seasonLabel.Text = ("BETA SEASON · %d"):format(tier)
+    ArenaHud.refreshSheet()
+end
+
+function ArenaHud.setArena(state: any)
+    latest = state
+    if not gui or not state then return end
+
+    massLabel.Text = Format.short(state.mass)
+    worthLabel.Text = "worth 💧" .. Format.short(state.worth)
+
+    -- The melt readout is the game's one piece of teaching, and it has to say
+    -- what is HAPPENING rather than what the number is. "-8/s" means nothing
+    -- to a nine-year-old; "melting fast — bank it" is an instruction.
+    if state.leak <= 0 then
+        meltLabel.Text = "not melting yet"
+        meltLabel.TextColor3 = Theme.TEXT_DIM
+    elseif state.leak < state.harvest * 0.5 then
+        meltLabel.Text = ("melting -%s/s"):format(Format.short(state.leak))
+        meltLabel.TextColor3 = Theme.WARN
+    else
+        meltLabel.Text = ("MELTING FAST -%s/s"):format(Format.short(state.leak))
+        meltLabel.TextColor3 = Theme.BAD
+    end
+
+    local where = state.biome or (state.ring == "VAULT" and "the Vault"
+        or state.ring == "SHALLOWS" and "the Shallows" or "the Flats")
+    if state.banking > 0 then
+        statusLabel.Text = "BANKING — hold still"
+        statusLabel.TextColor3 = Theme.GOLD
+    elseif state.safe then
+        statusLabel.Text = "SAFE  ·  " .. where
+        statusLabel.TextColor3 = Theme.GOOD
+    else
+        statusLabel.Text = "DANGER  ·  " .. where
+        statusLabel.TextColor3 = Theme.BAD
+    end
+
+    bankBar.Visible = state.banking > 0
+    bankFill.Size = UDim2.fromScale(
+        math.clamp(state.banking / math.max(0.01, state.bankNeeds), 0, 1), 1)
+
+    local power = Powers.get(state.powerId)
+    powerBtn.Text = power and power.name or "—"
+    if state.powerCooldown > 0.05 then
+        powerCost.Text = ("%.1fs"):format(state.powerCooldown)
+        powerSweep.Size = UDim2.fromScale(1,
+            math.clamp(state.powerCooldown / math.max(0.1, power and power.cooldown or 1), 0, 1))
+        powerBtn.TextColor3 = Theme.TEXT_DIM
+    else
+        powerCost.Text = "-" .. Format.short(state.powerCost)
+        powerSweep.Size = UDim2.fromScale(1, 0)
+        powerBtn.TextColor3 = Theme.TEXT
+    end
+end
+
+function ArenaHud.crateResult(result: any)
+    if not gui then return end
+    -- The reveal reuses the sheet rather than opening a window over it, which
+    -- is the same rule as everything else here: one thing at a time.
+    ArenaHud.openSheet("crates")
+    local banner = Instance.new("Frame")
+    banner.Size = UDim2.new(1, 0, 0, 76)
+    banner.LayoutOrder = -1
+    banner.BackgroundColor3 = Theme.BG_SOFT
+    banner.BorderSizePixel = 0
+    banner.Parent = sheetBody
+    Theme.corner(banner, 12)
+    Theme.stroke(banner, Cosmetics.RARITY_COLOUR[result.reward.rarity] or Theme.GOLD, 3)
+
+    local text = Theme.label({
+        Position = UDim2.fromOffset(14, 10), Size = UDim2.new(1, -24, 0, 30),
+        Text = ("%s  (%s)"):format(result.reward.name, result.reward.rarity),
+        TextSize = 22, TextColor3 = Cosmetics.RARITY_COLOUR[result.reward.rarity] or Theme.GOLD,
+    })
+    text.Parent = banner
+
+    local sub = Theme.label({
+        Position = UDim2.fromOffset(14, 40), Size = UDim2.new(1, -24, 0, 26),
+        Text = result.duplicate
+            and ("already owned — refunded 💧%s"):format(Format.short(result.refund))
+            or "NEW!",
+        TextSize = 15, TextColor3 = result.duplicate and Theme.TEXT_DIM or Theme.GOOD,
+    })
+    sub.Parent = banner
+
+    TweenService:Create(banner, TweenInfo.new(0.25, Enum.EasingStyle.Back,
+        Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, 76) }):Play()
+end
+
+function ArenaHud.setPit(state: any)
+    pit = state
+    if openTab == "standoff" then
+        ArenaHud.refreshSheet()
+    end
+end
+
+function ArenaHud.isSheetOpen(): boolean
+    return openTab ~= nil
+end
+
+return ArenaHud
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000032"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Hud.luau — the heads-up display and the Goob drawer.
 --
 -- Layout philosophy: ONE always-visible number (your power), ONE always-visible
@@ -6173,6 +8838,11 @@ end
 
 function Hud.applyLayout()
     if not topFrame then return end
+    if Hud.arenaMode then
+        topFrame.Visible = false
+        if ageLabel then ageLabel.Visible = false end
+        if openButton then openButton.Visible = false end
+    end
     local compact = Layout.isCompact()
     local touch = Layout.isTouch()
     local u = Layout.usable()
@@ -6215,7 +8885,11 @@ function Hud.applyLayout()
     -- Snack stand: its own panel when there is room, inside the drawer when
     -- there is not. A phone screen cannot host both.
     local standH = (compact and 3 * 48 + 34 or 132)
-    if compact then
+    -- In arena mode it ALWAYS goes in the drawer, on every screen size. As a
+    -- free-floating panel it is persistent chrome, and persistent chrome is
+    -- what ArenaHud now owns; leaving it loose on a desktop put it straight
+    -- under the tutorial coach.
+    if compact or Hud.arenaMode then
         standFrame.Parent = drawer
         standFrame.Size = UDim2.fromOffset(drawerW - 20, standH)
         standFrame.Position = UDim2.fromOffset(10, headerH)
@@ -6333,7 +9007,19 @@ function Hud.applyLayout()
         local cw = compact and math.min(330, u.X - 24) or 460
         local ch = compact and 76 or 84
         coach.Size = UDim2.fromOffset(cw, ch)
-        coach.Position = UDim2.fromOffset(math.floor((u.X - cw) / 2), compact and 6 or 14)
+        -- Under the dock and the status strip, not on top of them. At y=6 the
+        -- coach sat exactly where ArenaHud's dock now lives, which put the
+        -- game's teaching text underneath the thing it is teaching you to use.
+        local below = Hud.arenaMode and (compact and 106 or 134) or (compact and 6 or 14)
+        -- Centred, but never far enough right to push its own skip button into
+        -- the jump-button zone. On a 568x320 phone the centred coach's top
+        -- right corner landed exactly on it, which makes "skip the tutorial"
+        -- into "jump" — the single worst tap to get wrong.
+        local x = math.floor((u.X - cw) / 2)
+        if Hud.arenaMode then
+            x = Layout.fit(x, 8, math.max(8, u.X - Layout.JUMP_BUTTON.X - cw - 10))
+        end
+        coach.Position = UDim2.fromOffset(x, below)
         coachStep.Position = UDim2.fromOffset(14, 6)
         coachStep.Size = UDim2.new(1, -50, 0, 16)
         coachText.Position = UDim2.fromOffset(14, 22)
@@ -6714,6 +9400,37 @@ Hud.onDismissCoach = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
 
+-- ArenaHud owns the persistent chrome now: the stat card, the currency
+-- readout and the way into every panel. Hud keeps what it is still best at —
+-- toasts, the Goob drawer, the coach — and stops drawing a second stat panel
+-- on top of the first one. This is the single switch that turns "everything
+-- gets in the way of everything" into one screen with one owner per region.
+Hud.arenaMode = false
+
+-- Opened and closed from the dock. Exposed rather than left to the old toggle
+-- button, which ArenaHud has taken over.
+function Hud.setDrawerOpen(open: boolean)
+    drawerOpen = open
+    if drawer then
+        drawer.Visible = open
+        drawer.Position = Hud.drawerPosition(open)
+        if open then rebuildDrawer() end
+    end
+end
+
+function Hud.openDrawerTab(tab: string)
+    currentTab = tab
+    Hud.setDrawerOpen(true)
+    Hud.applyLayout()
+end
+
+function Hud.setArenaMode(on: boolean)
+    Hud.arenaMode = on
+    if topFrame then topFrame.Visible = not on end
+    if ageLabel then ageLabel.Visible = not on end
+    if openButton then openButton.Visible = not on end
+end
+
 function Hud.getState() return state end
 
 function Hud.setTradeOpen(open: boolean)
@@ -6723,7 +9440,7 @@ function Hud.setTradeOpen(open: boolean)
 end
 
 return Hud
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000027"><Properties><string name="Name">Juice</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000033"><Properties><string name="Name">Juice</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Juice.luau — the feedback that makes a world feel inhabited.
 --
 -- The play-test note was "the area is so bland, needs to feel more alive".
@@ -6925,7 +9642,7 @@ function Juice.start()
 end
 
 return Juice
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000028"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000034"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Layout.luau — one place that knows how big the screen is and what that means.
 --
 -- MEASURED, NOT GUESSED. Before this existed, at 568x320 (iPhone SE landscape)
@@ -7091,7 +9808,7 @@ function Layout.start()
 end
 
 return Layout
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000029"><Properties><string name="Name">Panels</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000035"><Properties><string name="Name">Panels</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Panels.luau — the wardrobe, season pass and crew screens.
 --
 -- All three live as TABS inside the drawer that already exists rather than
@@ -7474,7 +10191,7 @@ function Panels.render(tab: string, container: Frame, state: any)
 end
 
 return Panels
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000030"><Properties><string name="Name">Roll</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000036"><Properties><string name="Name">Roll</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Roll.luau — the controller.
 --
 -- Direct velocity control rather than forces. Forces are more "physical" and
@@ -7494,6 +10211,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
 local Movement = require(Shared.Movement)
+local Stick = require(script.Parent.Stick)
 
 local player = Players.LocalPlayer
 local Roll = {}
@@ -7536,28 +10254,11 @@ function Roll.refillProgress(): number
     return math.clamp(dashRefillClock / Movement.DASH_REFILL, 0, 1)
 end
 
+-- Input comes entirely from Stick: keyboard, gamepad and our own thumbstick.
+-- Reading Humanoid.MoveDirection was the original approach and it did not work
+-- (see the note at the top of Stick.luau).
 local function moveInput(): Vector3
-    local char = player.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local dir = hum and hum.MoveDirection or Vector3.zero
-    if dir.Magnitude > 0.05 then
-        return Vector3.new(dir.X, 0, dir.Z).Unit
-    end
-
-    -- Fallback for the case where a zeroed WalkSpeed also zeroes MoveDirection.
-    -- Cheap insurance: without it a single engine behaviour change silently
-    -- removes the ability to move at all.
-    local camera = Workspace.CurrentCamera
-    if not camera then return Vector3.zero end
-    local fwd = camera.CFrame.LookVector
-    local right = camera.CFrame.RightVector
-    local v = Vector3.zero
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then v += fwd end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then v -= fwd end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then v += right end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then v -= right end
-    v = Vector3.new(v.X, 0, v.Z)
-    return v.Magnitude > 0.05 and v.Unit or Vector3.zero
+    return Stick.moveVector()
 end
 
 local function checkGrounded(b: BasePart): boolean
@@ -7664,22 +10365,202 @@ function Roll.step(dt: number)
 end
 
 function Roll.bindInput()
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
-        if input.KeyCode == Enum.KeyCode.Space then
-            Roll.jump()
-        elseif input.KeyCode == Enum.KeyCode.LeftShift
-            or input.KeyCode == Enum.KeyCode.Q
-            or input.KeyCode == Enum.KeyCode.ButtonR2 then
-            Roll.dash()
-        elseif input.KeyCode == Enum.KeyCode.ButtonA then
-            Roll.jump()
-        end
-    end)
+    Stick.onJump = Roll.jump
+    Stick.onDash = Roll.dash
 end
 
 return Roll
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000031"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000037"><Properties><string name="Name">Stick</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Stick.luau — our own input, because borrowing Roblox's did not work.
+--
+-- THE BUG THIS EXISTS TO FIX: the first version set Humanoid.WalkSpeed = 0 to
+-- stop the avatar walking, and read Humanoid.MoveDirection for input. Both
+-- halves of that were wrong:
+--
+--   1. A Humanoid with WalkSpeed = 0 does not merely decline to move — it
+--      actively brakes its assembly to zero velocity every physics step. The
+--      ball was welded to that assembly, so the humanoid fought every frame of
+--      movement the controller applied.
+--   2. MoveDirection is zero when WalkSpeed is zero, so the input read was dead
+--      as well. The keyboard fallback was carrying the whole thing.
+--
+-- So: the humanoid is put into PlatformStand (it stops controlling physics
+-- entirely) and input comes from here — keyboard, gamepad, and a thumbstick we
+-- draw ourselves. No dependency on the default control module at all.
+
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+
+local Theme = require(script.Parent.Theme)
+
+local player = Players.LocalPlayer
+local Stick = {}
+
+local keys = { W = false, A = false, S = false, D = false }
+local gamepad = Vector2.new(0, 0)
+local touchVector = Vector2.new(0, 0)
+
+Stick.onJump = function() end
+Stick.onDash = function() end
+
+-- ── Camera-relative movement vector, from whichever device is in use ───────
+
+function Stick.moveVector(): Vector3
+    local camera = Workspace.CurrentCamera
+    if not camera then return Vector3.zero end
+
+    local look = camera.CFrame.LookVector
+    local right = camera.CFrame.RightVector
+    local fwd = Vector3.new(look.X, 0, look.Z)
+    local side = Vector3.new(right.X, 0, right.Z)
+    if fwd.Magnitude < 0.001 then return Vector3.zero end
+    fwd, side = fwd.Unit, side.Unit
+
+    local x, z = 0, 0
+    if keys.W then z += 1 end
+    if keys.S then z -= 1 end
+    if keys.D then x += 1 end
+    if keys.A then x -= 1 end
+
+    -- Analogue sources win over digital when they are actually deflected, so a
+    -- thumb resting on a stick doesn't get overridden by a stuck key.
+    if math.abs(gamepad.X) > 0.15 or math.abs(gamepad.Y) > 0.15 then
+        x, z = gamepad.X, gamepad.Y
+    end
+    if touchVector.Magnitude > 0.12 then
+        x, z = touchVector.X, touchVector.Y
+    end
+
+    local v = side * x + fwd * z
+    if v.Magnitude < 0.05 then return Vector3.zero end
+    return (v.Magnitude > 1 and v.Unit or v)
+end
+
+-- ── Keyboard and gamepad ───────────────────────────────────────────────────
+
+local KEYMAP = {
+    [Enum.KeyCode.W] = "W", [Enum.KeyCode.Up] = "W",
+    [Enum.KeyCode.S] = "S", [Enum.KeyCode.Down] = "S",
+    [Enum.KeyCode.A] = "A", [Enum.KeyCode.Left] = "A",
+    [Enum.KeyCode.D] = "D", [Enum.KeyCode.Right] = "D",
+}
+
+local function bindHardware()
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        local k = KEYMAP[input.KeyCode]
+        if k then keys[k] = true return end
+        if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
+            Stick.onJump()
+        elseif input.KeyCode == Enum.KeyCode.LeftShift
+            or input.KeyCode == Enum.KeyCode.Q
+            or input.KeyCode == Enum.KeyCode.ButtonR2
+            or input.KeyCode == Enum.KeyCode.ButtonB then
+            Stick.onDash()
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        local k = KEYMAP[input.KeyCode]
+        if k then keys[k] = false end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.Thumbstick1 then
+            local p = input.Position
+            gamepad = Vector2.new(p.X, p.Y)
+        end
+    end)
+
+    -- Keys can stick if focus is lost mid-press.
+    UserInputService.WindowFocusReleased:Connect(function()
+        for k in pairs(keys) do keys[k] = false end
+        gamepad = Vector2.new(0, 0)
+    end)
+end
+
+-- ── The touch thumbstick we draw ourselves ─────────────────────────────────
+
+local base: Frame? = nil
+local knob: Frame? = nil
+local activeTouch: InputObject? = nil
+local centre = Vector2.new(0, 0)
+local RADIUS = 62
+
+function Stick.build(gui: ScreenGui)
+    local b = Instance.new("Frame")
+    b.Name = "MoveStick"
+    b.Size = UDim2.fromOffset(RADIUS * 2, RADIUS * 2)
+    b.BackgroundColor3 = Theme.BG
+    b.BackgroundTransparency = 0.55
+    b.Visible = false
+    b.Parent = gui
+    Theme.corner(b, RADIUS)
+    Theme.stroke(b, Theme.TEXT_DIM, 2)
+    base = b
+
+    local k = Instance.new("Frame")
+    k.Name = "Knob"
+    k.Size = UDim2.fromOffset(56, 56)
+    k.Position = UDim2.new(0.5, -28, 0.5, -28)
+    k.BackgroundColor3 = Theme.ACCENT
+    k.BackgroundTransparency = 0.2
+    k.Parent = b
+    Theme.corner(k, 28)
+    Theme.stroke(k, Theme.BG, 2)
+    knob = k
+
+    bindHardware()
+
+    -- Drag anywhere in the lower-left quadrant, not just on the stick: a thumb
+    -- rarely lands exactly on a circle, and re-centring the stick where the
+    -- thumb actually touched is the difference between responsive and fiddly.
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed or input.UserInputType ~= Enum.UserInputType.Touch then return end
+        local cam = Workspace.CurrentCamera
+        local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+        local p = input.Position
+        if p.X > vp.X * 0.45 or p.Y < vp.Y * 0.35 then return end
+
+        activeTouch = input
+        centre = Vector2.new(p.X, p.Y)
+        b.Position = UDim2.fromOffset(centre.X - RADIUS, centre.Y - RADIUS)
+        b.Visible = true
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input ~= activeTouch then return end
+        local p = Vector2.new(input.Position.X, input.Position.Y)
+        local delta = p - centre
+        local mag = math.min(delta.Magnitude, RADIUS)
+        local dir = delta.Magnitude > 0.001 and delta.Unit or Vector2.new(0, 0)
+        local offset = dir * mag
+        if knob then
+            knob.Position = UDim2.new(0.5, offset.X - 28, 0.5, offset.Y - 28)
+        end
+        -- Screen Y grows downward; forward is negative Y.
+        touchVector = Vector2.new(offset.X / RADIUS, -offset.Y / RADIUS)
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input ~= activeTouch then return end
+        activeTouch = nil
+        touchVector = Vector2.new(0, 0)
+        if knob then knob.Position = UDim2.new(0.5, -28, 0.5, -28) end
+        if base then base.Visible = false end
+    end)
+end
+
+function Stick.setTouchEnabled(on: boolean)
+    if base and not on then
+        base.Visible = false
+        touchVector = Vector2.new(0, 0)
+    end
+end
+
+return Stick
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000038"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Theme.luau — one place for every colour, corner radius and font in the UI.
 -- Chunky, high-contrast, oversized text: the target player is nine and may be
 -- on a phone, so nothing here is subtle.
@@ -7762,7 +10643,7 @@ function Theme.button(text: string, color: Color3, size: UDim2): TextButton
 end
 
 return Theme
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000032"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000039"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeUi.luau — the trade window.
 --
 -- The whole design goal is SCAM RESISTANCE made visible. A young player cannot

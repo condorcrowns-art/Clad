@@ -48,6 +48,7 @@ local DEVICES = {
 -- the player is not steering while a dialog is open. Enforcing the rule on
 -- dialogs would have forced every modal into a 178px-wide strip between the
 -- thumbstick and the jump button, which is not a real constraint.
+local MODALS
 local function touchZones(w, h)
     return {
         { name = "thumbstick", x = 0,       y = h - 190, w = 230, h = 190 },
@@ -63,13 +64,50 @@ svc.enterClientMode(alice)
 _G.BOOT_CLIENT()
 tick(2)
 
-local hud = alice:FindFirstChild("PlayerGui"):FindFirstChild("GoobHud")
-if not hud then emit("  no HUD; aborting") return end
+-- EVERY ScreenGui, not one of them. This test audited only "GoobHud" and so
+-- reported a clean bill of health for a phone screen while an entire second
+-- HUD — the dock, the stat card, the power button, the sheet — was not being
+-- looked at at all. A geometry audit that cannot see half the geometry is
+-- worse than no audit, because it is believed.
+local playerGui = alice:FindFirstChild("PlayerGui")
+local huds = {}
+for _, child in ipairs(playerGui:GetChildren()) do
+    if child.ClassName == "ScreenGui" then
+        table.insert(huds, child)
+    end
+end
+if #huds == 0 then emit("  no HUD; aborting") return end
+local hud = huds[1]
+emit(("  auditing %d ScreenGui(s):"):format(#huds))
+for _, h in ipairs(huds) do emit("    " .. h.Name) end
 
 local function openEverything()
-    for _, d in ipairs(hud:GetDescendants()) do
-        if d:IsA("TextButton") and tostring(d.Text):find("GOOBS") then
-            d.Activated:Fire()
+    for _, h in ipairs(huds) do
+        for _, d in ipairs(h:GetDescendants()) do
+            if d:IsA("TextButton") then
+                local name = tostring(d.Name)
+                -- The drawer toggle, and every tab on the dock. Opening one
+                -- closes the last, so this ends with a sheet up rather than
+                -- six of them, which is exactly the contract being tested.
+                if tostring(d.Text):find("GOOBS") or name:find("^Dock_") then
+                    d.Activated:Fire()
+                end
+            end
+        end
+    end
+    tick(1)
+end
+
+-- The audit above deliberately leaves a panel OPEN, which means the state
+-- players actually spend the game in — nothing open — was never measured. A
+-- mutation that stopped the sheet hiding on close went undetected because of
+-- it. Close everything and look again.
+local function closeEverything()
+    for _, h in ipairs(huds) do
+        for _, d in ipairs(h:GetDescendants()) do
+            if d:IsA("TextButton") and (d.Text == "✕" or tostring(d.Name) == "SkipCoach") then
+                d.Activated:Fire()
+            end
         end
     end
     tick(1)
@@ -101,7 +139,12 @@ for _, dev in ipairs(DEVICES) do
     tick(2)
     openEverything()
 
-    local boxes = G.resolve(hud, dev.w, dev.h, svc.topInset)
+    local boxes = {}
+    for _, h in ipairs(huds) do
+        for _, b in ipairs(G.resolve(h, dev.w, dev.h, svc.topInset)) do
+            table.insert(boxes, b)
+        end
+    end
 
     -- A parked-off-screen panel must not be left visible.
     for _, b in ipairs(boxes) do
@@ -112,8 +155,24 @@ for _, dev in ipairs(DEVICES) do
         end
     end
 
+    -- Content inside a ScrollingFrame is SUPPOSED to extend past its parent —
+    -- that is what scrolling is. Counting it as overflow reported four
+    -- phantom failures for a list that was working exactly as designed.
+    local function inScroller(inst)
+        local n = inst and inst.Parent
+        while n and n.ClassName ~= "ScreenGui" do
+            if n.ClassName == "ScrollingFrame" then return true end
+            n = n.Parent
+        end
+        return false
+    end
+    local onScreenBoxes = {}
+    for _, b in ipairs(boxes) do
+        if not inScroller(b.inst) then table.insert(onScreenBoxes, b) end
+    end
+
     -- 1. Nothing visible may hang off the screen.
-    local bad = G.offscreen(boxes, dev.w, dev.h, true)
+    local bad = G.offscreen(onScreenBoxes, dev.w, dev.h, true)
     local worst = bad[1]
     check("all visible UI fits on screen",
         #bad == 0,
@@ -121,13 +180,16 @@ for _, dev in ipairs(DEVICES) do
             :format(#bad, worst.box.class, worst.box.name, math.floor(worst.over)) or "")
 
     -- 2. Persistent HUD controls must not sit under the touch controls.
-    local MODALS = {
+    MODALS = {
         GulpConfirm = true, RenameDialog = true, TradeWindow = true,
         TradeRequestStrip = true, GoobDrawer = true,
     }
+    -- "Sheet" is modal by construction: it is the only thing on screen when
+    -- it is up, and it deliberately covers the touch zones on a phone.
+    MODALS.Sheet = true
     local function insideModal(inst)
         local n = inst
-        while n and n ~= hud do
+        while n and n.ClassName ~= "ScreenGui" and n ~= nil do
             if MODALS[n.Name] then return true end
             n = n.Parent
         end
@@ -148,8 +210,12 @@ for _, dev in ipairs(DEVICES) do
         end
         check("no persistent HUD button under the thumbstick or jump button",
             #blocked == 0, table.concat(blocked, ", "))
-        check("HUD renders above the touch controls (DisplayOrder)",
-            (hud.DisplayOrder or 0) > 0, tostring(hud.DisplayOrder))
+        local lowest = {}
+        for _, h in ipairs(huds) do
+            if (h.DisplayOrder or 0) <= 0 then table.insert(lowest, h.Name) end
+        end
+        check("every HUD renders above the touch controls (DisplayOrder)",
+            #lowest == 0, table.concat(lowest, ", "))
     end
 
     -- 3. Tap targets need to be physically hittable with a thumb.
@@ -166,14 +232,92 @@ for _, dev in ipairs(DEVICES) do
             table.concat(tiny, ", "):sub(1, 120))
     end
 
+    -- A fully transparent frame with no text of its own paints nothing: it is
+    -- a positioning container, like the full-screen holder the toasts stack
+    -- inside. Counting those as "UI" put screen coverage at 128% and reported
+    -- every single element as overlapping the toast holder. What matters is
+    -- what a player can actually SEE on top of something else.
+    local function paints(b)
+        local inst = b.inst
+        local bg = inst.BackgroundTransparency
+        if bg ~= nil and bg < 0.95 then return true end
+        local text = inst.Text
+        if text ~= nil and text ~= "" then return true end
+        return false
+    end
+
     -- 4. The HUD must not swallow the whole screen.
     local uiArea, screenArea = 0, dev.w * dev.h
     for _, b in ipairs(boxes) do
-        if b.visible and b.depth == 0 and b.w > 0 then uiArea += b.w * b.h end
+        -- Modals excluded, for the same reason they are excluded from the
+        -- touch-zone rule: an open dialog is ALLOWED to cover the screen.
+        -- What must not swallow the screen is the persistent chrome.
+        if b.visible and b.depth == 0 and b.w > 0 and paints(b)
+            and not insideModal(b.inst) then
+            uiArea += b.w * b.h
+        end
     end
     check("top-level UI covers under 70% of the screen",
         uiArea / screenArea < 0.70,
         ("%.0f%%"):format(uiArea / screenArea * 100))
+
+    -- 5. THE COMPLAINT, AS AN ASSERTION.
+    --
+    -- "everything gets in the way of everything." Nothing above catches that:
+    -- two panels can each fit the screen perfectly, clear every touch zone and
+    -- still be drawn on top of one another. So check it directly — no two
+    -- persistent, non-modal, top-level elements may overlap, across every HUD
+    -- at once.
+    local persistent = {}
+    for _, b in ipairs(boxes) do
+        if b.visible and b.depth == 0 and b.w > 4 and b.h > 4
+            and paints(b) and not insideModal(b.inst) then
+            table.insert(persistent, b)
+        end
+    end
+    local collisions = {}
+    for i = 1, #persistent do
+        for j = i + 1, #persistent do
+            local a, c = persistent[i], persistent[j]
+            if G.overlaps(a, c.x, c.y, c.w, c.h) then
+                table.insert(collisions, a.name .. " over " .. c.name)
+            end
+        end
+    end
+    check("no two persistent HUD elements overlap each other",
+        #collisions == 0, table.concat(collisions, ", "):sub(1, 160))
+
+    -- 6. THE RESTING STATE. Everything above ran with a panel open. This is
+    -- the screen a player looks at for the other ninety-nine percent of the
+    -- session, and a panel that forgets to hide itself is invisible to every
+    -- check that only ever measures the open state.
+    closeEverything()
+    tick(1)
+    local closedBoxes = {}
+    for _, h in ipairs(huds) do
+        for _, b in ipairs(G.resolve(h, dev.w, dev.h, svc.topInset)) do
+            table.insert(closedBoxes, b)
+        end
+    end
+    local stillUp = {}
+    for _, b in ipairs(closedBoxes) do
+        if b.visible and (b.name == "Sheet" or b.name == "GoobDrawer") then
+            table.insert(stillUp, b.name)
+        end
+    end
+    check("every panel is actually hidden when closed",
+        #stillUp == 0, table.concat(stillUp, ", "))
+
+    local badClosed = {}
+    for _, b in ipairs(G.offscreen(closedBoxes, dev.w, dev.h, true)) do
+        if not inScroller(b.box.inst) then table.insert(badClosed, b) end
+    end
+    check("the resting screen fits too", #badClosed == 0,
+        badClosed[1] and ("%d overflow; worst: %s by %dpx")
+            :format(#badClosed, badClosed[1].box.name, math.floor(badClosed[1].over)) or "")
+
+    -- Re-open for the next device, so the loop keeps testing the open state.
+    openEverything()
 end
 
 emit("")

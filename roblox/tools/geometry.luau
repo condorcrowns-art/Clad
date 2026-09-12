@@ -37,11 +37,22 @@ function G.resolve(screenGui, viewportW, viewportH, topInset)
 
     local function walk(parent, pPos, pSize, depth, parentVisible)
         -- Detect a UIListLayout so stacked children get sensible positions.
-        local layout, padding = nil, 0
+        -- NOTE ON COMPARING ENUMS HERE: the stub builds a fresh table on every
+-- Enum.X.Y access, so `dir == Enum.FillDirection.Horizontal` is false even
+-- when it should be true, and tostring() gives a table address. Read .Name.
+-- FillDirection matters. This resolver used to stack EVERY list layout
+        -- vertically, which silently turned a horizontal toolbar into a column
+        -- running off the bottom of the screen — and then reported the
+        -- resulting "buttons under the thumbstick" as a HUD bug. A measuring
+        -- tool that is wrong is worse than no measuring tool, because its
+        -- output is believed.
+        local layout, padding, horizontal = nil, 0, false
         for _, c in ipairs(parent:GetChildren()) do
             if c.IsA and c:IsA("UIListLayout") then
                 layout = c
                 padding = (c.Padding and c.Padding.Offset) or 0
+                local dir = c.FillDirection
+                horizontal = type(dir) == "table" and dir.Name == "Horizontal"
             end
         end
 
@@ -54,6 +65,28 @@ function G.resolve(screenGui, viewportW, viewportH, topInset)
             return (a.LayoutOrder or 0) < (b.LayoutOrder or 0)
         end)
 
+        -- Alignment. A centred row resolves flush-left without this, which is
+        -- off by half the leftover space and can invent an overflow that is
+        -- not there.
+        local lead = 0
+        if layout then
+            local total = 0
+            for i, c in ipairs(kids) do
+                local sz = c.Size or env.UDim2.new(0, 0, 0, 0)
+                total += udim(horizontal and sz.X or sz.Y, horizontal and pSize.x or pSize.y)
+                if i < #kids then total += padding end
+            end
+            local align = horizontal and layout.HorizontalAlignment or layout.VerticalAlignment
+            local span = horizontal and pSize.x or pSize.y
+            local aName = type(align) == "table" and align.Name or nil
+            if aName == "Center" then
+                lead = math.max(0, (span - total) / 2)
+            elseif aName == "Right" or aName == "Bottom" then
+                lead = math.max(0, span - total)
+            end
+        end
+        cursor = lead
+
         for _, c in ipairs(kids) do
             local sz = c.Size or env.UDim2.new(0, 0, 0, 0)
             local ps = c.Position or env.UDim2.new(0, 0, 0, 0)
@@ -64,9 +97,15 @@ function G.resolve(screenGui, viewportW, viewportH, topInset)
 
             local x, y
             if layout then
-                x = pPos.x
-                y = pPos.y + cursor
-                cursor += h + padding
+                if horizontal then
+                    x = pPos.x + cursor
+                    y = pPos.y
+                    cursor += w + padding
+                else
+                    x = pPos.x
+                    y = pPos.y + cursor
+                    cursor += h + padding
+                end
             else
                 x = pPos.x + udim(ps.X, pSize.x) - (anchor.X or 0) * w
                 y = pPos.y + udim(ps.Y, pSize.y) - (anchor.Y or 0) * h
