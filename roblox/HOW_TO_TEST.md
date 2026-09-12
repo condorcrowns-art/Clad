@@ -28,6 +28,18 @@ window and send me what it says.
 
 ---
 
+## There's a coach now
+
+A brand-new save gets a gold banner at the top walking you through the whole
+loop in about two minutes — **catch → digest → snack → hatch → gulp → trade** —
+one sentence at a time. It advances when you actually *do* the thing, not on a
+timer, and it pulses whichever button it's asking for.
+
+`✖` skips it permanently. Existing saves are never shown it.
+
+**To see it again:** Studio → View → Explorer, or just test in a fresh place —
+the state lives in your DataStore profile, so wiping the save resets it.
+
 ## A 5-minute test run
 
 **1. Catch things.** Junk wanders the field. Just run into it — no clicking.
@@ -65,8 +77,11 @@ confirmation bars must snap back to empty. That is the anti-scam rule.
    looking at it, or is it just colourful mush?
 3. **Is catching fun or tedious?** Auto-collect on touch, ~1 item per 4 seconds
    for an engaged player.
-4. **Is the first 60 seconds clear?** You get one welcome toast and no tutorial.
-   That is almost certainly not enough — I want to know where you got stuck.
+4. **Does the coach actually teach it?** Follow it as if you'd never seen the
+   game. The step that matters most is the gulp one — it's the only place the
+   core idea ("destroying a Goob is how you grow") is ever explained. If that
+   lands, the design works. If it doesn't, the design has a problem no amount
+   of UI will fix.
 
 ---
 

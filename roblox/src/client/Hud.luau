@@ -33,6 +33,12 @@ local toastHolder: Frame
 local drawerOpen = false
 local snackButtons: { [string]: TextButton } = {}
 local eggButton: TextButton
+local coach: Frame
+local coachText: TextLabel
+local coachHint: TextLabel
+local coachStep: TextLabel
+local pulseTarget: GuiObject? = nil
+local pulseClock = 0
 local topFrame: Frame
 local standFrame: Frame
 local openButton: TextButton
@@ -358,6 +364,29 @@ function Hud.applyLayout()
         openButton.TextSize = 24
     end
 
+    -- Coach banner, centred under the top bar. Narrow enough on a phone that
+    -- it never collides with the stat panel or the toasts.
+    if coach then
+        local cw = compact and math.min(330, u.X - 24) or 460
+        local ch = compact and 76 or 84
+        coach.Size = UDim2.fromOffset(cw, ch)
+        coach.Position = UDim2.fromOffset(math.floor((u.X - cw) / 2), compact and 6 or 14)
+        coachStep.Position = UDim2.fromOffset(14, 6)
+        coachStep.Size = UDim2.new(1, -50, 0, 16)
+        coachText.Position = UDim2.fromOffset(14, 22)
+        coachText.Size = UDim2.new(1, -28, 0, compact and 26 or 30)
+        coachText.TextSize = compact and 17 or 20
+        coachHint.Position = UDim2.fromOffset(14, compact and 48 or 54)
+        coachHint.Size = UDim2.new(1, -28, 0, compact and 24 or 26)
+        coachHint.TextSize = compact and 12 or 14
+        local skip = coach:FindFirstChild("SkipCoach") :: TextButton?
+        if skip then
+            local sz = touch and 34 or 28
+            skip.Size = UDim2.fromOffset(sz, sz)
+            skip.Position = UDim2.fromOffset(cw - sz - 8, 6)
+        end
+    end
+
     drawer.Position = Hud.drawerPosition(drawerOpen)
     drawer.Visible = drawerOpen
     if drawerOpen then rebuildDrawer() end
@@ -515,6 +544,45 @@ function Hud.build(): ScreenGui
         snackButtons[tier.id] = btn
     end
 
+    -- The first-run coach. Top-centre, above everything, one instruction at a
+    -- time. Deliberately NOT a modal: the player should be doing the thing
+    -- while reading it, not dismissing a wall of text before they can move.
+    coach = Instance.new("Frame")
+    coach.Name = "Coach"
+    coach.BackgroundColor3 = Theme.BG
+    coach.BackgroundTransparency = 0.05
+    coach.Visible = false
+    coach.ZIndex = 20
+    coach.Parent = gui
+    Theme.corner(coach, 16)
+    Theme.stroke(coach, Theme.GOLD, 3)
+
+    coachStep = Theme.label({
+        Name = "Step", Text = "", TextSize = 13,
+        TextColor3 = Theme.GOLD, ZIndex = 21,
+    })
+    coachStep.Parent = coach
+
+    coachText = Theme.label({
+        Name = "Line", Text = "", TextSize = 20, ZIndex = 21,
+        TextWrapped = true,
+    })
+    coachText.Parent = coach
+
+    coachHint = Theme.label({
+        Name = "Hint", Text = "", TextSize = 14,
+        TextColor3 = Theme.TEXT_DIM, TextWrapped = true, ZIndex = 21,
+    })
+    coachHint.Parent = coach
+
+    local skip = Theme.button("✖", Theme.BG_SOFT, UDim2.fromOffset(28, 28))
+    skip.Name = "SkipCoach"
+    skip.TextColor3 = Theme.TEXT_DIM
+    skip.TextSize = 14
+    skip.ZIndex = 21
+    skip.Parent = coach
+    skip.Activated:Connect(function() Hud.onDismissCoach() end)
+
     -- Toast column, top-right.
     toastHolder = Instance.new("Frame")
     toastHolder.Name = "Toasts"
@@ -529,6 +597,29 @@ function Hud.build(): ScreenGui
     -- Smoothly count the glob counter up between server pushes, so the number
     -- visibly ticks instead of jumping twice a second. Pure juice, big payoff.
     RunService.RenderStepped:Connect(function(dt)
+        -- Pulse the coached control. Restores the stroke when the target
+        -- changes so a button never stays stuck mid-glow.
+        pulseClock += dt
+        for _, btn in pairs(snackButtons) do
+            local st = btn:FindFirstChildOfClass("UIStroke")
+            if st and btn ~= pulseTarget then st.Thickness = 3 end
+        end
+        if openButton then
+            local st = openButton:FindFirstChildOfClass("UIStroke")
+            if st and openButton ~= pulseTarget then st.Thickness = 3 end
+        end
+        if eggButton then
+            local st = eggButton:FindFirstChildOfClass("UIStroke")
+            if st and eggButton ~= pulseTarget then st.Thickness = 3 end
+        end
+        if pulseTarget then
+            local st = pulseTarget:FindFirstChildOfClass("UIStroke")
+            if st then
+                st.Color = Theme.GOLD
+                st.Thickness = 3 + math.abs(math.sin(pulseClock * 3)) * 4
+            end
+        end
+
         if not state then return end
         displayedGlob += (state.glob - displayedGlob) * math.min(1, dt * 6)
         displayedGlob += state.income * dt
@@ -582,6 +673,32 @@ function Hud.update(snap: any)
         end
     end
 
+    -- First-run coach.
+    local tut = snap.tutorial
+    if coach then
+        if tut then
+            coach.Visible = true
+            coachStep.Text = ("STEP %d OF %d"):format(tut.index, tut.total)
+                .. (tut.progress and ("   ·   " .. tut.progress) or "")
+            coachText.Text = tut.text
+            coachHint.Text = tut.hint or ""
+
+            -- Pulse whichever control the step is asking for. Pointing at the
+            -- button beats describing where it is, especially for a player who
+            -- cannot read quickly yet.
+            if tut.target == "snack" then
+                pulseTarget = snackButtons["snack"]
+            elseif tut.target == "drawer" then
+                pulseTarget = drawerOpen and eggButton or openButton
+            else
+                pulseTarget = nil
+            end
+        else
+            coach.Visible = false
+            pulseTarget = nil
+        end
+    end
+
     if drawerOpen then rebuildDrawer() end
 end
 
@@ -591,6 +708,7 @@ Hud.onGulp = function(_: string) end
 Hud.onOffer = function(_: string) end
 Hud.onBuySnack = function(_: string) end
 Hud.onBuyEgg = function() end
+Hud.onDismissCoach = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
 

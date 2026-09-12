@@ -14,6 +14,7 @@ local HttpService = game:GetService("HttpService")
 
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
+local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
 
 local Data = {}
 
@@ -49,6 +50,7 @@ function Data.blankProfile(userId: number)
         lastSeen = os.time(),
         stats = { caught = 0, gulps = 0, trades = 0, bestMass = Config.STARTING_MASS },
         discovered = {} :: { [string]: boolean },
+        tutorial = Tutorial.blank(),
     }
 end
 
@@ -101,6 +103,15 @@ function Data.load(player: Player)
     -- Forward-migrate older saves here as the schema grows.
     profile.stats = profile.stats or { caught = 0, gulps = 0, trades = 0, bestMass = 0 }
     profile.discovered = profile.discovered or {}
+    -- Players who joined before the tutorial existed already know the game, so
+    -- they get it marked complete rather than being walked through it.
+    if not profile.tutorial then
+        local t = Tutorial.blank()
+        t.done = true
+        t.dismissed = true
+        t.step = #Tutorial.STEPS
+        profile.tutorial = t
+    end
     if not profile.activeGoobId and profile.goobs[1] then
         profile.activeGoobId = profile.goobs[1].id
     end

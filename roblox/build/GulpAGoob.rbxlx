@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000019"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000020"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000021"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000007"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000020"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000021"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000022"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000008"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Config.luau — every tunable number in GULP A GOOB lives here.
 -- Design rule: no magic numbers anywhere else in the codebase. If you want to
 -- rebalance the game, you should only ever have to open this file.
@@ -564,6 +564,7 @@ Net.EVENTS = {
     "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
     "BuySnack",       -- C->S  spend Glob on feedstock rolls
     "BuyEgg",         -- C->S  hatch a new Goob (the only source of new Goobs)
+    "DismissTutorial",-- C->S  stop showing the first-run guide
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S
@@ -607,7 +608,144 @@ function Net.get(name: string): any
 end
 
 return Net
-]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000022"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000013"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000007"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Tutorial.luau — the first-run guided loop.
+--
+-- WHY THIS IS NOT OPTIONAL. A new player spawns next to a blob with some junk
+-- floating around it. Nothing on screen says that running into the junk feeds
+-- the blob, and nothing at all hints that the central mechanic — destroying one
+-- Goob to grow another — exists. The entire design thesis is invisible until
+-- somebody tells you about it.
+--
+-- So this walks a new player through the whole loop in about two minutes:
+-- catch → digest → buy → hatch → gulp → trade. Each step is a single sentence
+-- with one verb, and it advances on the player actually DOING the thing rather
+-- than on a timer or a "Next" button.
+
+local Tutorial = {}
+
+export type Step = {
+    id: string,
+    text: string,
+    hint: string?,
+    target: string?,   -- UI element to pulse: "snack" | "drawer" | "egg" | nil
+    goal: number?,     -- for counted steps
+}
+
+Tutorial.STEPS = {
+    {
+        id = "catch",
+        text = "Run into the junk to feed your Goob!",
+        hint = "No clicking — just touch it.",
+        goal = 5,
+    },
+    {
+        id = "digest",
+        text = "Nice! Your Goob is digesting it.",
+        hint = "Watch ⚡ climb. Bigger Goob = more 💧 per second.",
+    },
+    {
+        id = "snack",
+        text = "Spend 💧 on a Snack.",
+        hint = "Food you don't have to chase. Bottom left.",
+        target = "snack",
+    },
+    {
+        id = "egg",
+        text = "Open 🫧 MY GOOBS and hatch a second Goob.",
+        hint = "A place to keep Goobs you trade for.",
+        target = "drawer",
+    },
+    {
+        id = "gulp",
+        text = "Now GULP the new one into your big one.",
+        hint = "It's gone forever — but yours keeps 75% of it. That's the whole game.",
+        target = "drawer",
+    },
+    {
+        id = "done",
+        text = "You've got it. Go find someone to trade with!",
+        hint = "Stand in the gold 🤝 zone at the hub with another player.",
+    },
+}
+
+local byId: { [string]: number } = {}
+for i, step in ipairs(Tutorial.STEPS) do
+    byId[step.id] = i
+end
+
+function Tutorial.indexOf(id: string): number?
+    return byId[id]
+end
+
+function Tutorial.step(index: number): Step?
+    return Tutorial.STEPS[index]
+end
+
+function Tutorial.isLast(index: number): boolean
+    return index >= #Tutorial.STEPS
+end
+
+-- A fresh tutorial record. `caught` counts only toward the first step.
+function Tutorial.blank()
+    return { step = 1, caught = 0, done = false, dismissed = false }
+end
+
+-- Advance if `event` is what the current step is waiting for. Returns the new
+-- state and whether it moved, so the caller can decide whether to notify.
+function Tutorial.advance(state: any, event: string): (any, boolean)
+    if not state or state.done or state.dismissed then return state, false end
+
+    local step = Tutorial.STEPS[state.step]
+    if not step then
+        state.done = true
+        return state, false
+    end
+
+    if step.id ~= event then return state, false end
+
+    -- Counted steps need `goal` occurrences before moving on.
+    if step.goal then
+        state.caught = (state.caught or 0) + 1
+        if state.caught < step.goal then return state, false end
+    end
+
+    state.step += 1
+    -- `>=`, not `>`. The final entry is a closing message with no event of its
+    -- own, so the index can never go past it — with `>` the tutorial stayed
+    -- flagged as in-progress forever once a player reached the end.
+    if state.step >= #Tutorial.STEPS then
+        state.step = #Tutorial.STEPS
+        state.done = true
+    end
+    return state, true
+end
+
+-- What the HUD should show right now, or nil once it's finished.
+function Tutorial.display(state: any)
+    if not state or state.dismissed then return nil end
+    local step = Tutorial.STEPS[state.step]
+    if not step then return nil end
+
+    local progress = nil
+    if step.goal then
+        progress = ("%d / %d"):format(math.min(state.caught or 0, step.goal), step.goal)
+    end
+
+    return {
+        id = step.id,
+        index = state.step,
+        total = #Tutorial.STEPS,
+        text = step.text,
+        hint = step.hint,
+        target = step.target,
+        progress = progress,
+        done = state.done == true,
+    }
+end
+
+return Tutorial
+]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000023"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000014"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.server.luau — the single entry point. Wires every service together and
 -- owns all the RemoteEvent handlers, so there is exactly one file to read to
 -- understand what the client is allowed to ask the server to do.
@@ -623,6 +761,7 @@ local GoobMath = require(Shared.GoobMath)
 local Format = require(Shared.Format)
 local Names = require(Shared.Names)
 local Feedstock = require(Shared.Feedstock)
+local Tutorial = require(Shared.Tutorial)
 
 local Data = require(script.Data)
 local WorldBuilder = require(script.WorldBuilder)
@@ -695,6 +834,7 @@ local function snapshot(player: Player)
     end
 
     local eggPrice = active and GoobMath.eggPrice(active, #profile.goobs) or 0
+    local tutorial = Tutorial.display(profile.tutorial)
 
     return {
         glob = profile.glob,
@@ -711,8 +851,22 @@ local function snapshot(player: Player)
         activeGoobId = profile.activeGoobId,
         stats = profile.stats,
         discovered = profile.discovered,
+        tutorial = tutorial,
         datastore = Data.isEnabled(),
     }
+end
+
+-- Nudge the tutorial forward when the player does the thing it asked for.
+local function teach(player: Player, event: string)
+    local profile = Data.get(player)
+    if not profile or not profile.tutorial then return end
+    local _, moved = Tutorial.advance(profile.tutorial, event)
+    if moved then
+        local shown = Tutorial.display(profile.tutorial)
+        if shown then
+            notify(player, "✅ " .. shown.text, "good")
+        end
+    end
 end
 
 local function push(player: Player)
@@ -828,6 +982,10 @@ Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: I
     local ok, item = CritterService.tryCatch(player, target)
     if not ok then return end
     GoobService.feed(player, item.id)
+    teach(player, "catch")
+    -- The digest step has no action of its own; catching enough to see the
+    -- number move is the lesson, so it clears alongside.
+    teach(player, "digest")
     push(player)
     local isBig = item.rarity ~= "Common" and item.rarity ~= "Uncommon"
     notify(player, ("+%s  (%s)"):format(item.name, item.rarity), isBig and "good" or "info")
@@ -860,6 +1018,13 @@ Net.get("RenameGoob").OnServerEvent:Connect(function(player: Player, goobId: str
             return
         end
     end
+end)
+
+Net.get("DismissTutorial").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile or not profile.tutorial then return end
+    profile.tutorial.dismissed = true
+    push(player)
 end)
 
 Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: string)
@@ -898,6 +1063,7 @@ Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
     profile.glob -= price
     local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
     table.insert(profile.goobs, egg)
+    teach(player, "egg")
     push(player)
     notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
         :format(egg.nickname), "good")
@@ -937,6 +1103,7 @@ Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: strin
         if rank > bestRarity then best, bestRarity = item, rank end
     end
 
+    teach(player, "snack")
     push(player)
     if best then
         notify(player, ("%s %s — %d items, best was %s (%s)")
@@ -949,6 +1116,7 @@ Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: stri
     local ok, reason = GoobService.gulp(player, eaterId, eatenId)
     if ok then
         notify(player, "😋 GULP! Your Goob swallowed another one.", "good")
+        teach(player, "gulp")
         push(player)
     elseif reason then
         notify(player, reason, "warn")
@@ -986,7 +1154,7 @@ end)
 
 print(("[%s] ready. %d plots, %d feedstock types.")
     :format(Config.GAME_NAME, Config.PLOT_COUNT, #Feedstock.ITEMS))
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000008"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000009"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CritterService.luau — the ACTIVE half of the loop.
 --
 -- Grow a Garden's weakness is that there is almost nothing to do while you
@@ -1158,7 +1326,7 @@ function CritterService.start()
 end
 
 return CritterService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000009"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000010"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Data.luau — profile persistence.
 --
 -- Uses DataStore with session locking, retry/backoff and a bind-to-close
@@ -1174,6 +1342,7 @@ local HttpService = game:GetService("HttpService")
 
 local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
+local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
 
 local Data = {}
 
@@ -1209,6 +1378,7 @@ function Data.blankProfile(userId: number)
         lastSeen = os.time(),
         stats = { caught = 0, gulps = 0, trades = 0, bestMass = Config.STARTING_MASS },
         discovered = {} :: { [string]: boolean },
+        tutorial = Tutorial.blank(),
     }
 end
 
@@ -1261,6 +1431,15 @@ function Data.load(player: Player)
     -- Forward-migrate older saves here as the schema grows.
     profile.stats = profile.stats or { caught = 0, gulps = 0, trades = 0, bestMass = 0 }
     profile.discovered = profile.discovered or {}
+    -- Players who joined before the tutorial existed already know the game, so
+    -- they get it marked complete rather than being walked through it.
+    if not profile.tutorial then
+        local t = Tutorial.blank()
+        t.done = true
+        t.dismissed = true
+        t.step = #Tutorial.STEPS
+        profile.tutorial = t
+    end
     if not profile.activeGoobId and profile.goobs[1] then
         profile.activeGoobId = profile.goobs[1].id
     end
@@ -1305,7 +1484,7 @@ function Data.isEnabled(): boolean
 end
 
 return Data
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000010"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000011"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- GoobService.luau — spawns, renders and simulates the Goobs sitting on plots.
 --
 -- The visual gimmick of the whole game lives here: a Goob is a translucent
@@ -1733,7 +1912,7 @@ function GoobService.applyOffline(player: Player)
 end
 
 return GoobService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000011"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000012"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeService.luau — player-to-player Goob trading.
 --
 -- Trading is the reason this game has a community instead of a player count.
@@ -2014,7 +2193,7 @@ function TradeService.cleanup(player: Player)
 end
 
 return TradeService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000012"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000013"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
 -- WorldBuilder.luau — the entire map is generated at runtime from code.
 --
 -- WHY: a .rbxl place file is an opaque binary blob. If the map lives in the
@@ -2258,7 +2437,7 @@ function WorldBuilder.plotFor(player: Player)
 end
 
 return WorldBuilder
-]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000024"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000023"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000018"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000025"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000024"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000019"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.client.luau — client entry point.
 --
 -- Everything the client does falls into one of three jobs:
@@ -2385,6 +2564,10 @@ end
 
 Hud.onBuyEgg = function()
     Net.get("BuyEgg"):FireServer()
+end
+
+Hud.onDismissCoach = function()
+    Net.get("DismissTutorial"):FireServer()
 end
 
 -- Gulping is irreversible, so it gets a real two-step confirmation with the
@@ -2712,7 +2895,7 @@ task.spawn(function()
 end)
 
 print("[GULP A GOOB] client ready")
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000014"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000015"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Hud.luau — the heads-up display and the Goob drawer.
 --
 -- Layout philosophy: ONE always-visible number (your power), ONE always-visible
@@ -2747,6 +2930,12 @@ local toastHolder: Frame
 local drawerOpen = false
 local snackButtons: { [string]: TextButton } = {}
 local eggButton: TextButton
+local coach: Frame
+local coachText: TextLabel
+local coachHint: TextLabel
+local coachStep: TextLabel
+local pulseTarget: GuiObject? = nil
+local pulseClock = 0
 local topFrame: Frame
 local standFrame: Frame
 local openButton: TextButton
@@ -3072,6 +3261,29 @@ function Hud.applyLayout()
         openButton.TextSize = 24
     end
 
+    -- Coach banner, centred under the top bar. Narrow enough on a phone that
+    -- it never collides with the stat panel or the toasts.
+    if coach then
+        local cw = compact and math.min(330, u.X - 24) or 460
+        local ch = compact and 76 or 84
+        coach.Size = UDim2.fromOffset(cw, ch)
+        coach.Position = UDim2.fromOffset(math.floor((u.X - cw) / 2), compact and 6 or 14)
+        coachStep.Position = UDim2.fromOffset(14, 6)
+        coachStep.Size = UDim2.new(1, -50, 0, 16)
+        coachText.Position = UDim2.fromOffset(14, 22)
+        coachText.Size = UDim2.new(1, -28, 0, compact and 26 or 30)
+        coachText.TextSize = compact and 17 or 20
+        coachHint.Position = UDim2.fromOffset(14, compact and 48 or 54)
+        coachHint.Size = UDim2.new(1, -28, 0, compact and 24 or 26)
+        coachHint.TextSize = compact and 12 or 14
+        local skip = coach:FindFirstChild("SkipCoach") :: TextButton?
+        if skip then
+            local sz = touch and 34 or 28
+            skip.Size = UDim2.fromOffset(sz, sz)
+            skip.Position = UDim2.fromOffset(cw - sz - 8, 6)
+        end
+    end
+
     drawer.Position = Hud.drawerPosition(drawerOpen)
     drawer.Visible = drawerOpen
     if drawerOpen then rebuildDrawer() end
@@ -3229,6 +3441,45 @@ function Hud.build(): ScreenGui
         snackButtons[tier.id] = btn
     end
 
+    -- The first-run coach. Top-centre, above everything, one instruction at a
+    -- time. Deliberately NOT a modal: the player should be doing the thing
+    -- while reading it, not dismissing a wall of text before they can move.
+    coach = Instance.new("Frame")
+    coach.Name = "Coach"
+    coach.BackgroundColor3 = Theme.BG
+    coach.BackgroundTransparency = 0.05
+    coach.Visible = false
+    coach.ZIndex = 20
+    coach.Parent = gui
+    Theme.corner(coach, 16)
+    Theme.stroke(coach, Theme.GOLD, 3)
+
+    coachStep = Theme.label({
+        Name = "Step", Text = "", TextSize = 13,
+        TextColor3 = Theme.GOLD, ZIndex = 21,
+    })
+    coachStep.Parent = coach
+
+    coachText = Theme.label({
+        Name = "Line", Text = "", TextSize = 20, ZIndex = 21,
+        TextWrapped = true,
+    })
+    coachText.Parent = coach
+
+    coachHint = Theme.label({
+        Name = "Hint", Text = "", TextSize = 14,
+        TextColor3 = Theme.TEXT_DIM, TextWrapped = true, ZIndex = 21,
+    })
+    coachHint.Parent = coach
+
+    local skip = Theme.button("✖", Theme.BG_SOFT, UDim2.fromOffset(28, 28))
+    skip.Name = "SkipCoach"
+    skip.TextColor3 = Theme.TEXT_DIM
+    skip.TextSize = 14
+    skip.ZIndex = 21
+    skip.Parent = coach
+    skip.Activated:Connect(function() Hud.onDismissCoach() end)
+
     -- Toast column, top-right.
     toastHolder = Instance.new("Frame")
     toastHolder.Name = "Toasts"
@@ -3243,6 +3494,29 @@ function Hud.build(): ScreenGui
     -- Smoothly count the glob counter up between server pushes, so the number
     -- visibly ticks instead of jumping twice a second. Pure juice, big payoff.
     RunService.RenderStepped:Connect(function(dt)
+        -- Pulse the coached control. Restores the stroke when the target
+        -- changes so a button never stays stuck mid-glow.
+        pulseClock += dt
+        for _, btn in pairs(snackButtons) do
+            local st = btn:FindFirstChildOfClass("UIStroke")
+            if st and btn ~= pulseTarget then st.Thickness = 3 end
+        end
+        if openButton then
+            local st = openButton:FindFirstChildOfClass("UIStroke")
+            if st and openButton ~= pulseTarget then st.Thickness = 3 end
+        end
+        if eggButton then
+            local st = eggButton:FindFirstChildOfClass("UIStroke")
+            if st and eggButton ~= pulseTarget then st.Thickness = 3 end
+        end
+        if pulseTarget then
+            local st = pulseTarget:FindFirstChildOfClass("UIStroke")
+            if st then
+                st.Color = Theme.GOLD
+                st.Thickness = 3 + math.abs(math.sin(pulseClock * 3)) * 4
+            end
+        end
+
         if not state then return end
         displayedGlob += (state.glob - displayedGlob) * math.min(1, dt * 6)
         displayedGlob += state.income * dt
@@ -3296,6 +3570,32 @@ function Hud.update(snap: any)
         end
     end
 
+    -- First-run coach.
+    local tut = snap.tutorial
+    if coach then
+        if tut then
+            coach.Visible = true
+            coachStep.Text = ("STEP %d OF %d"):format(tut.index, tut.total)
+                .. (tut.progress and ("   ·   " .. tut.progress) or "")
+            coachText.Text = tut.text
+            coachHint.Text = tut.hint or ""
+
+            -- Pulse whichever control the step is asking for. Pointing at the
+            -- button beats describing where it is, especially for a player who
+            -- cannot read quickly yet.
+            if tut.target == "snack" then
+                pulseTarget = snackButtons["snack"]
+            elseif tut.target == "drawer" then
+                pulseTarget = drawerOpen and eggButton or openButton
+            else
+                pulseTarget = nil
+            end
+        else
+            coach.Visible = false
+            pulseTarget = nil
+        end
+    end
+
     if drawerOpen then rebuildDrawer() end
 end
 
@@ -3305,6 +3605,7 @@ Hud.onGulp = function(_: string) end
 Hud.onOffer = function(_: string) end
 Hud.onBuySnack = function(_: string) end
 Hud.onBuyEgg = function() end
+Hud.onDismissCoach = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
 
@@ -3317,7 +3618,7 @@ function Hud.setTradeOpen(open: boolean)
 end
 
 return Hud
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000015"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">Layout</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Layout.luau — one place that knows how big the screen is and what that means.
 --
 -- MEASURED, NOT GUESSED. Before this existed, at 568x320 (iPhone SE landscape)
@@ -3454,7 +3755,7 @@ function Layout.start()
 end
 
 return Layout
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Theme.luau — one place for every colour, corner radius and font in the UI.
 -- Chunky, high-contrast, oversized text: the target player is nine and may be
 -- on a phone, so nothing here is subtle.
@@ -3526,7 +3827,7 @@ function Theme.button(text: string, color: Color3, size: UDim2): TextButton
 end
 
 return Theme
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000017"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
 -- TradeUi.luau — the trade window.
 --
 -- The whole design goal is SCAM RESISTANCE made visible. A young player cannot

@@ -18,6 +18,7 @@ Net.EVENTS = {
     "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
     "BuySnack",       -- C->S  spend Glob on feedstock rolls
     "BuyEgg",         -- C->S  hatch a new Goob (the only source of new Goobs)
+    "DismissTutorial",-- C->S  stop showing the first-run guide
     "GulpGoob",       -- C->S  feed one of my Goobs to another
     "TradeRequest",   -- C->S
     "TradeRespond",   -- C->S

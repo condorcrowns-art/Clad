@@ -14,6 +14,7 @@ local GoobMath = require(Shared.GoobMath)
 local Format = require(Shared.Format)
 local Names = require(Shared.Names)
 local Feedstock = require(Shared.Feedstock)
+local Tutorial = require(Shared.Tutorial)
 
 local Data = require(script.Data)
 local WorldBuilder = require(script.WorldBuilder)
@@ -86,6 +87,7 @@ local function snapshot(player: Player)
     end
 
     local eggPrice = active and GoobMath.eggPrice(active, #profile.goobs) or 0
+    local tutorial = Tutorial.display(profile.tutorial)
 
     return {
         glob = profile.glob,
@@ -102,8 +104,22 @@ local function snapshot(player: Player)
         activeGoobId = profile.activeGoobId,
         stats = profile.stats,
         discovered = profile.discovered,
+        tutorial = tutorial,
         datastore = Data.isEnabled(),
     }
+end
+
+-- Nudge the tutorial forward when the player does the thing it asked for.
+local function teach(player: Player, event: string)
+    local profile = Data.get(player)
+    if not profile or not profile.tutorial then return end
+    local _, moved = Tutorial.advance(profile.tutorial, event)
+    if moved then
+        local shown = Tutorial.display(profile.tutorial)
+        if shown then
+            notify(player, "✅ " .. shown.text, "good")
+        end
+    end
 end
 
 local function push(player: Player)
@@ -219,6 +235,10 @@ Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: I
     local ok, item = CritterService.tryCatch(player, target)
     if not ok then return end
     GoobService.feed(player, item.id)
+    teach(player, "catch")
+    -- The digest step has no action of its own; catching enough to see the
+    -- number move is the lesson, so it clears alongside.
+    teach(player, "digest")
     push(player)
     local isBig = item.rarity ~= "Common" and item.rarity ~= "Uncommon"
     notify(player, ("+%s  (%s)"):format(item.name, item.rarity), isBig and "good" or "info")
@@ -251,6 +271,13 @@ Net.get("RenameGoob").OnServerEvent:Connect(function(player: Player, goobId: str
             return
         end
     end
+end)
+
+Net.get("DismissTutorial").OnServerEvent:Connect(function(player: Player)
+    local profile = Data.get(player)
+    if not profile or not profile.tutorial then return end
+    profile.tutorial.dismissed = true
+    push(player)
 end)
 
 Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: string)
@@ -289,6 +316,7 @@ Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
     profile.glob -= price
     local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
     table.insert(profile.goobs, egg)
+    teach(player, "egg")
     push(player)
     notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
         :format(egg.nickname), "good")
@@ -328,6 +356,7 @@ Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: strin
         if rank > bestRarity then best, bestRarity = item, rank end
     end
 
+    teach(player, "snack")
     push(player)
     if best then
         notify(player, ("%s %s — %d items, best was %s (%s)")
@@ -340,6 +369,7 @@ Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: stri
     local ok, reason = GoobService.gulp(player, eaterId, eatenId)
     if ok then
         notify(player, "😋 GULP! Your Goob swallowed another one.", "good")
+        teach(player, "gulp")
         push(player)
     elseif reason then
         notify(player, reason, "warn")
