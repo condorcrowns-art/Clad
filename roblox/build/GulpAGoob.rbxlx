@@ -1,0 +1,3247 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000018"><Properties><string name="Name">Workspace</string><bool name="FilteringEnabled">true</bool></Properties></Item><Item class="Lighting" referent="RBX000019"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000020"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000007"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Config.luau — every tunable number in GULP A GOOB lives here.
+-- Design rule: no magic numbers anywhere else in the codebase. If you want to
+-- rebalance the game, you should only ever have to open this file.
+
+local Config = {}
+
+Config.GAME_NAME = "GULP A GOOB"
+Config.DATASTORE_KEY = "GoobProfile_v1"
+Config.CENSUS_STORE = "GoobCensus_v1"
+
+-- ── Core economy ───────────────────────────────────────────────────────────
+-- Currency is "Glob" 💧. It is produced passively by digestion, NOT by selling
+-- Goobs. Selling is deliberately impossible: the only way a Goob leaves the
+-- world is by being fed to another Goob. That is the entire scarcity engine.
+Config.STARTING_GLOB = 250
+Config.STARTING_MASS = 10
+
+-- Passive income: glob/sec = MASS ^ INCOME_EXPONENT * INCOME_SCALE
+-- Sub-linear on purpose, so a 1000x bigger Goob earns ~63x more, not 1000x.
+-- This keeps day-1 players inside the same order of magnitude as whales.
+Config.INCOME_EXPONENT = 0.60
+Config.INCOME_SCALE = 0.35
+
+-- Offline earnings are capped so logging in daily beats hoarding a week.
+Config.OFFLINE_CAP_SECONDS = 8 * 60 * 60
+Config.OFFLINE_EFFICIENCY = 0.55 -- you earn 55% rate while away
+
+-- ── Size / power scale ─────────────────────────────────────────────────────
+-- Physical size is LOGARITHMIC in mass, not a cube root.
+--
+-- A cube root sounds right and is wrong: it saturates. With a cube root and a
+-- 180-stud clamp, every Goob past ~1e6 mass renders at exactly the same size,
+-- which is reached within a few hours of play. From then on the entire
+-- "you can see how strong someone is" promise is dead, and a 1e6 Goob is
+-- visually indistinguishable from a 1e20 one.
+--
+-- A log curve instead gives roughly constant visual growth per ORDER OF
+-- MAGNITUDE, so every tenfold gain is a visible step forever. The clamp is
+-- still there, but it is not reached until ~1e24, which no player will see.
+Config.SIZE_BASE = 4          -- studs, at STARTING_MASS
+Config.SIZE_LOG_K = 0.78      -- studs of growth per natural-log unit of mass
+Config.SIZE_MAX = 180         -- hard clamp, for sanity only
+Config.COLOSSAL_MASS = 5e6    -- mass at which the Colossal crown unlocks
+
+-- Why 5e6: it is 20x the largest single drop in the game, which is what keeps
+-- one lucky catch from skipping the whole progression. At the measured ~73
+-- mass per catch and a catch every ~4 seconds that is roughly 75 hours of pure
+-- active play — but gulping and trading shortcut it enormously, which is the
+-- point. Colossal should be a TRADING milestone, not a grinding one.
+
+-- Feeding: the Goob does not gain mass instantly. Food enters the STOMACH and
+-- digests over time — this is the offline hook, and it is also the anti-bot
+-- measure (you cannot burst-feed 10,000 items into a number).
+Config.DIGEST_RATE = 0.08     -- fraction of stomach converted to mass per second
+Config.STOMACH_SOFT_CAP = 40  -- items; beyond this digestion slows
+Config.STOMACH_OVERFULL_PENALTY = 0.45
+
+-- ── Age: the unfarmable rarity axis ────────────────────────────────────────
+-- Age is measured in REAL seconds since the Goob was first hatched, and it
+-- travels with the Goob through trades. You cannot bot it, dupe it, or buy it.
+-- It is the only stat in the game with a genuinely fixed supply curve.
+Config.AGE_TIERS = {
+    { name = "Fresh",    seconds = 0,                 mult = 1.00, color = Color3.fromRGB(180, 255, 190), emoji = "🌱" },
+    { name = "Ripe",     seconds = 60 * 60 * 24,      mult = 1.25, color = Color3.fromRGB(160, 235, 255), emoji = "💧" },
+    { name = "Seasoned", seconds = 60 * 60 * 24 * 3,  mult = 1.60, color = Color3.fromRGB(170, 190, 255), emoji = "🔷" },
+    { name = "Ancient",  seconds = 60 * 60 * 24 * 7,  mult = 2.20, color = Color3.fromRGB(215, 165, 255), emoji = "🔮" },
+    { name = "Fossil",   seconds = 60 * 60 * 24 * 30, mult = 3.50, color = Color3.fromRGB(255, 195, 120), emoji = "🦴" },
+    { name = "Mythic",   seconds = 60 * 60 * 24 * 90, mult = 6.00, color = Color3.fromRGB(255, 140, 150), emoji = "👑" },
+    { name = "Eternal",  seconds = 60 * 60 * 24 * 365,mult = 12.0, color = Color3.fromRGB(255, 240, 140), emoji = "⭐" },
+}
+
+-- ── Gulping (the sink) ─────────────────────────────────────────────────────
+-- Feeding Goob B to Goob A destroys B forever and transfers a fraction of its
+-- mass. The transfer is < 100% on purpose: every gulp BURNS mass out of the
+-- world economy. Combined with fixed spawn rates this makes the total mass in
+-- existence self-limiting instead of exponential.
+Config.GULP_MASS_TRANSFER = 0.75
+Config.GULP_AGE_TRANSFER = 0.35   -- you inherit 35% of the eaten Goob's age
+Config.GULP_MIN_MASS_RATIO = 0.02 -- can't gulp something >50x your size
+
+-- ── The Snack Stand: what Glob is actually FOR ─────────────────────────────
+--
+-- Without this, idle income is decorative. You earn Glob, and there is nothing
+-- to do with it — which severs the offline pillar from progression entirely.
+-- That is the exact pillar that made Grow a Garden the biggest new game on the
+-- platform, so it cannot be an afterthought.
+--
+-- The stand closes the loop:  idle → Glob → snack rolls → stomach → mass.
+--
+-- Prices scale with your CURRENT income rather than being flat, so a snack
+-- always costs roughly the same number of SECONDS of income no matter how big
+-- you are. A flat price would be unaffordable on day one and free by day ten.
+Config.SNACK_TIERS = {
+    { id = "snack",    name = "Snack",    emoji = "🍪", seconds =   60, rolls = 3,  luck = 1 },
+    { id = "feast",    name = "Feast",    emoji = "🍗", seconds =  300, rolls = 12, luck = 2 },
+    { id = "banquet",  name = "Banquet",  emoji = "👑", seconds = 1200, rolls = 40, luck = 4 },
+}
+-- A small markup so buying is never strictly better than playing actively.
+-- Catching is the intended primary loop; the stand is what your AFK time buys.
+Config.SNACK_MARKUP = 1.35
+
+-- ── Critters (the active loop) ─────────────────────────────────────────────
+Config.CRITTER_MAX_ALIVE = 26
+Config.CRITTER_SPAWN_INTERVAL = 3.5
+Config.CRITTER_LIFETIME = 90
+Config.CRITTER_CATCH_RADIUS = 9
+
+-- ── Trading ────────────────────────────────────────────────────────────────
+Config.TRADE_RANGE = 24
+Config.TRADE_CONFIRM_LOCK = 3   -- seconds both sides must hold confirm (anti scam)
+Config.TRADE_MAX_SLOTS = 4
+
+-- ── Misc ───────────────────────────────────────────────────────────────────
+Config.AUTOSAVE_INTERVAL = 90
+Config.PLOT_COUNT = 8
+Config.PLOT_SIZE = 90
+Config.PLOT_SPACING = 130
+
+return Config
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000002"><Properties><string name="Name">Feedstock</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Feedstock.luau — the catalogue of everything a Goob can swallow.
+--
+-- DESIGN NOTE: the contents of a Goob are VISIBLE through its translucent
+-- body. That means this list is not just loot-table data, it is the art of the
+-- game. A Goob stuffed with 300 rubber ducks looks completely different from
+-- one stuffed with 300 traffic cones, and that visual difference is the
+-- player's entire flex. So every entry needs a distinct silhouette and colour.
+
+export type Item = {
+    id: string,
+    name: string,
+    mass: number,          -- how much mass it contributes once digested
+    rarity: string,
+    weight: number,        -- relative spawn chance among critters
+    color: Color3,
+    shape: string,         -- Ball | Block | Cylinder | Wedge  (visible inside the Goob)
+    scale: Vector3,
+}
+
+local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
+
+local Feedstock = {}
+
+Feedstock.RARITY_ORDER = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret" }
+
+Feedstock.RARITY_COLOR = {
+    Common    = rgb(190, 195, 205),
+    Uncommon  = rgb(120, 225, 140),
+    Rare      = rgb(105, 175, 255),
+    Epic      = rgb(190, 130, 255),
+    Legendary = rgb(255, 190,  70),
+    Mythic    = rgb(255, 105, 140),
+    Secret    = rgb(255, 255, 255),
+}
+
+-- BALANCE NOTE (measured, not guessed — see roblox/tools/balance.luau)
+--
+-- The first pass had Secret items at 0.9M-4M mass. Simulating 300 players
+-- showed that one Pocket Singularity accounted for 69-93% of a player's
+-- ENTIRE progression to Colossal, and Secret items alone were 48% of all value
+-- in the game. That makes the game a slot machine: twenty hours of play gets
+-- erased by one drop, and there is nothing left worth trading because a single
+-- Secret outweighs everything a player could offer for it.
+--
+-- So the top of the ladder is deliberately compressed. The rule now is:
+-- NO SINGLE DROP MAY EXCEED ~5% OF THE COLOSSAL MILESTONE.
+--
+-- Secrets are still the rarest things in the game (1 in ~20,000), they still
+-- sit visibly inside your Goob forever, and they are still what people will
+-- trade for. They are COLLECTIBLES, not power spikes. That distinction is what
+-- keeps the economy liquid: if the rarest item were also the most powerful,
+-- nobody would ever part with one and the market would seize.
+Feedstock.ITEMS = {
+    -- Common ────────────────────────────────────────────────────────────────
+    { id = "sock",     name = "Lost Sock",       mass = 1,     rarity = "Common",    weight = 100, color = rgb(235, 235, 240), shape = "Block",    scale = Vector3.new(0.5, 0.9, 0.3) },
+    { id = "pebble",   name = "Pebble",          mass = 1,     rarity = "Common",    weight = 100, color = rgb(150, 148, 140), shape = "Ball",     scale = Vector3.new(0.5, 0.5, 0.5) },
+    { id = "acorn",    name = "Acorn",           mass = 2,     rarity = "Common",    weight =  85, color = rgb(150, 105,  55), shape = "Ball",     scale = Vector3.new(0.45, 0.6, 0.45) },
+    { id = "can",      name = "Dented Can",      mass = 3,     rarity = "Common",    weight =  70, color = rgb(195, 200, 210), shape = "Cylinder", scale = Vector3.new(0.7, 0.55, 0.55) },
+    { id = "cone",     name = "Traffic Cone",    mass = 4,     rarity = "Common",    weight =  60, color = rgb(255, 110,  40), shape = "Wedge",    scale = Vector3.new(0.7, 0.9, 0.7) },
+
+    -- Uncommon ──────────────────────────────────────────────────────────────
+    { id = "duck",     name = "Rubber Duck",     mass = 12,    rarity = "Uncommon",  weight = 42, color = rgb(255, 215,  60), shape = "Ball",     scale = Vector3.new(0.8, 0.7, 1.0) },
+    { id = "pizza",    name = "Cold Pizza",      mass = 15,    rarity = "Uncommon",  weight = 38, color = rgb(235, 165,  75), shape = "Wedge",    scale = Vector3.new(1.1, 0.2, 1.1) },
+    { id = "boot",     name = "Big Boot",        mass = 18,    rarity = "Uncommon",  weight = 32, color = rgb(105,  70,  50), shape = "Block",    scale = Vector3.new(0.7, 0.8, 1.2) },
+    { id = "toaster",  name = "Toaster",         mass = 24,    rarity = "Uncommon",  weight = 26, color = rgb(215, 220, 230), shape = "Block",    scale = Vector3.new(1.0, 0.8, 0.7) },
+
+    -- Rare ──────────────────────────────────────────────────────────────────
+    { id = "anvil",    name = "Anvil",           mass = 90,    rarity = "Rare",      weight = 17, color = rgb( 85,  88,  95), shape = "Block",    scale = Vector3.new(1.2, 0.8, 0.7) },
+    { id = "piano",    name = "Tiny Piano",      mass = 120,   rarity = "Rare",      weight = 13, color = rgb( 40,  40,  46), shape = "Block",    scale = Vector3.new(1.4, 0.9, 1.0) },
+    { id = "globe",    name = "Globe",           mass = 150,   rarity = "Rare",      weight = 11, color = rgb( 80, 150, 210), shape = "Ball",     scale = Vector3.new(1.1, 1.1, 1.1) },
+
+    -- Epic ──────────────────────────────────────────────────────────────────
+    { id = "meteor",   name = "Warm Meteor",     mass = 600,   rarity = "Epic",      weight = 6.0, color = rgb(120,  70,  55), shape = "Ball",     scale = Vector3.new(1.4, 1.4, 1.4) },
+    { id = "statue",   name = "Marble Statue",   mass = 820,   rarity = "Epic",      weight = 4.5, color = rgb(240, 238, 230), shape = "Block",    scale = Vector3.new(0.9, 2.0, 0.9) },
+    { id = "safe",     name = "Bank Safe",       mass = 1100,  rarity = "Epic",      weight = 3.2, color = rgb( 60,  75,  70), shape = "Block",    scale = Vector3.new(1.3, 1.5, 1.3) },
+
+    -- Legendary ─────────────────────────────────────────────────────────────
+    { id = "car",      name = "Rusty Car",       mass = 4500,  rarity = "Legendary", weight = 1.4, color = rgb(190,  65,  60), shape = "Block",    scale = Vector3.new(1.2, 0.9, 2.6) },
+    { id = "bell",     name = "Cathedral Bell",  mass = 6200,  rarity = "Legendary", weight = 0.9, color = rgb(205, 165,  70), shape = "Cylinder", scale = Vector3.new(1.8, 1.8, 1.8) },
+
+    -- Mythic ────────────────────────────────────────────────────────────────
+    { id = "moon",     name = "Chunk of Moon",   mass = 20000, rarity = "Mythic",    weight = 0.22, color = rgb(225, 228, 240), shape = "Ball",    scale = Vector3.new(2.4, 2.4, 2.4) },
+    { id = "blackbox", name = "The Black Box",   mass = 30000, rarity = "Mythic",    weight = 0.14, color = rgb( 25,  25,  32), shape = "Block",   scale = Vector3.new(1.6, 1.6, 1.6) },
+
+    -- Secret ────────────────────────────────────────────────────────────────
+    -- Deliberately absurd odds. These exist to be screenshotted and traded,
+    -- not to be farmed. ~1 in 40,000 catches.
+    { id = "goobfsl",  name = "Goob Fossil",     mass = 120000, rarity = "Secret", weight = 0.020, color = rgb(255, 250, 205), shape = "Ball",  scale = Vector3.new(2.0, 2.0, 2.0) },
+    { id = "singular", name = "Pocket Singularity", mass = 250000, rarity = "Secret", weight = 0.006, color = rgb( 10,  10,  14), shape = "Ball", scale = Vector3.new(1.5, 1.5, 1.5) },
+}
+
+local byId: { [string]: Item } = {}
+local totalWeight = 0
+for _, item in ipairs(Feedstock.ITEMS) do
+    byId[item.id] = item
+    totalWeight += item.weight
+end
+
+Feedstock.TOTAL_WEIGHT = totalWeight
+
+function Feedstock.get(id: string): Item?
+    return byId[id]
+end
+
+-- Weighted roll.
+--
+-- `luck` > 1 shifts the roll toward better items. `allowSecret` defaults to
+-- true; the Snack Stand passes FALSE, and that is a deliberate design rule:
+--
+--   ⭐ SECRETS CANNOT BE BOUGHT. THEY ONLY COME FROM WILD CATCHES. ⭐
+--
+-- Why it exists: simulation showed a 40-roll Banquet at luck x4 put Secret
+-- odds at 1 in ~104 per purchase. On a brand-new Goob one such purchase
+-- yielded 292,000 mass — 19x the average and 6% of the entire Colossal
+-- milestone, bought with 27 minutes of AFK income on day one. That is the
+-- slot-machine failure mode all over again, and worse, it lets money buy the
+-- collectibles the whole trading economy is built on.
+--
+-- Locking Secrets to the wild loop fixes both at once: the active loop gets a
+-- reward the idle loop can NEVER provide, and the rarest items in the game
+-- stay earned rather than purchased.
+--
+-- Luck is also capped per tier rather than applied flat, so a high-luck roll
+-- reliably improves the MIDDLE of the table (where steady progression lives)
+-- instead of buying lottery tickets at the top.
+local LUCK_CAP = {
+    Common    = 0,    -- luck only ever reduces these
+    Uncommon  = 0,
+    Rare      = 3.0,
+    Epic      = 3.0,
+    Legendary = 2.0,
+    Mythic    = 1.5,  -- deliberately weak; Mythics should still feel like luck
+    Secret    = 1.0,  -- never boosted, even on a wild catch
+}
+
+function Feedstock.roll(rng: Random, luck: number?, allowSecret: boolean?): Item
+    local l = math.max(1, luck or 1)
+    local permitSecret = allowSecret ~= false
+
+    local sum = 0
+    local acc = {}
+    for _, item in ipairs(Feedstock.ITEMS) do
+        if item.rarity == "Secret" and not permitSecret then
+            continue
+        end
+        local w = item.weight
+        if l > 1 then
+            local cap = LUCK_CAP[item.rarity] or 1
+            if cap <= 0 then
+                w /= l              -- commons get rarer as luck rises
+            else
+                w *= math.min(l, cap)
+            end
+        end
+        sum += w
+        table.insert(acc, { item = item, acc = sum })
+    end
+
+    local pick = rng:NextNumber() * sum
+    for _, entry in ipairs(acc) do
+        if pick <= entry.acc then return entry.item end
+    end
+    return acc[#acc] and acc[#acc].item or Feedstock.ITEMS[1]
+end
+
+return Feedstock
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000003"><Properties><string name="Name">Format</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Format.luau — number formatting for a genuinely huge power scale.
+-- Goob mass is expected to reach 1e30+. Roblox's default tostring() gives you
+-- "1e+30" which means nothing to a nine-year-old, so we ladder suffixes.
+
+local Format = {}
+
+local SUFFIXES = {
+    "", "K", "M", "B", "T",
+    "Qa", "Qi", "Sx", "Sp", "Oc", "No",
+    "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", "OcDc", "NoDc",
+    "Vg", "UVg", "DVg", "TVg", "QaVg", "QiVg", "SxVg", "SpVg", "OcVg", "NoVg",
+    "Tg",
+}
+
+-- 1234 -> "1.23K" ; 1e15 -> "1Qa" ; 999 -> "999"
+function Format.short(n: number): string
+    if n ~= n then return "0" end                 -- NaN guard
+    if n == math.huge then return "∞" end
+    local neg = n < 0
+    n = math.abs(n)
+    if n < 1000 then
+        local s = (n < 10 and n % 1 ~= 0) and string.format("%.1f", n) or string.format("%d", math.floor(n))
+        return (neg and "-" or "") .. s
+    end
+    local tier = math.floor(math.log(n, 1000))
+    tier = math.clamp(tier, 1, #SUFFIXES - 1)
+    local scaled = n / (1000 ^ tier)
+    local s
+    if scaled >= 100 then s = string.format("%.0f", scaled)
+    elseif scaled >= 10 then s = string.format("%.1f", scaled)
+    else s = string.format("%.2f", scaled) end
+    -- trim trailing zeros: "1.00K" -> "1K"
+    s = s:gsub("%.?0+$", "")
+    return (neg and "-" or "") .. s .. SUFFIXES[tier + 1]
+end
+
+-- 4821 -> "4,821" (used where exactness matters, e.g. census counts)
+function Format.comma(n: number): string
+    local s = tostring(math.floor(n))
+    local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+    return (out:gsub("^,", ""))
+end
+
+-- 93784 -> "1d 2h" — used for Goob age, which is the whole rarity axis.
+function Format.duration(sec: number): string
+    sec = math.max(0, math.floor(sec))
+    local d = math.floor(sec / 86400)
+    local h = math.floor((sec % 86400) / 3600)
+    local m = math.floor((sec % 3600) / 60)
+    if d > 0 then return string.format("%dd %dh", d, h) end
+    if h > 0 then return string.format("%dh %dm", h, m) end
+    if m > 0 then return string.format("%dm", m) end
+    return string.format("%ds", sec)
+end
+
+return Format
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000004"><Properties><string name="Name">GoobMath</string><ProtectedString name="Source"><![CDATA[--!strict
+-- GoobMath.luau — the single source of truth for how a Goob's numbers work.
+-- Shared between server (authority) and client (prediction/display) so the HUD
+-- never disagrees with the server about how big your Goob is.
+
+local Config = require(script.Parent.Config)
+
+local GoobMath = {}
+
+export type Goob = {
+    id: string,
+    nickname: string,
+    hue: number,            -- 0-1, the body tint
+    mass: number,
+    stomach: { { id: string, mass: number } },
+    bornAt: number,         -- os.time() at hatch; NEVER reset, travels via trade
+    inheritedAge: number,   -- extra seconds absorbed from gulped Goobs
+    lineage: { string },    -- nicknames of every Goob this one has eaten
+    contents: { [string]: number }, -- itemId -> count, for the visible interior
+}
+
+-- Real age in seconds, including age inherited from gulped Goobs.
+function GoobMath.ageSeconds(goob: Goob, now: number?): number
+    return math.max(0, (now or os.time()) - goob.bornAt) + (goob.inheritedAge or 0)
+end
+
+function GoobMath.ageTier(goob: Goob, now: number?)
+    local age = GoobMath.ageSeconds(goob, now)
+    local best = Config.AGE_TIERS[1]
+    for _, tier in ipairs(Config.AGE_TIERS) do
+        if age >= tier.seconds then best = tier else break end
+    end
+    return best
+end
+
+function GoobMath.ageMultiplier(goob: Goob, now: number?): number
+    return GoobMath.ageTier(goob, now).mult
+end
+
+-- POWER is the headline number. It is mass scaled by the age multiplier, so an
+-- old Goob genuinely outclasses a freshly-farmed one of the same size. This is
+-- the whole anti-inflation thesis expressed in one line.
+function GoobMath.power(goob: Goob, now: number?): number
+    return goob.mass * GoobMath.ageMultiplier(goob, now)
+end
+
+-- Physical radius in studs.
+--
+-- Logarithmic, so each ORDER OF MAGNITUDE of mass is a roughly equal visible
+-- step. See the long note in Config about why a cube root is the wrong curve
+-- here — it saturates inside the first few hours of play and then every Goob
+-- in the server looks the same.
+function GoobMath.size(goob: Goob): number
+    local ratio = math.max(1, goob.mass / Config.STARTING_MASS)
+    local s = Config.SIZE_BASE * (1 + Config.SIZE_LOG_K * math.log(ratio))
+    return math.min(s, Config.SIZE_MAX)
+end
+
+function GoobMath.isColossal(goob: Goob): boolean
+    return goob.mass >= Config.COLOSSAL_MASS
+end
+
+-- Glob per second. Sub-linear so newcomers are never hopelessly behind.
+function GoobMath.incomePerSecond(goob: Goob, now: number?): number
+    local p = GoobMath.power(goob, now)
+    return (p ^ Config.INCOME_EXPONENT) * Config.INCOME_SCALE
+end
+
+-- How much stomach mass converts to body mass this frame.
+function GoobMath.digestStep(goob: Goob, dt: number): number
+    local pending = 0
+    for _, entry in ipairs(goob.stomach) do pending += entry.mass end
+    if pending <= 0 then return 0 end
+
+    local rate = Config.DIGEST_RATE
+    if #goob.stomach > Config.STOMACH_SOFT_CAP then
+        rate *= Config.STOMACH_OVERFULL_PENALTY
+    end
+    return pending * math.min(1, rate * dt)
+end
+
+-- Can goob A swallow goob B? Guards against a level-1 Goob eating a whale's
+-- Goob in a scam trade, and against eating something so tiny it's pointless.
+function GoobMath.canGulp(a: Goob, b: Goob): (boolean, string?)
+    if a.id == b.id then return false, "A Goob can't gulp itself." end
+    if b.mass > a.mass / Config.GULP_MIN_MASS_RATIO then
+        return false, "That Goob is far too big for yours to swallow."
+    end
+    return true
+end
+
+-- Perform the gulp. Returns a NEW mass/age for A. B is destroyed by the caller.
+-- Note the transfer is lossy on purpose: mass is permanently burned out of the
+-- world every time this runs. That is the deflation engine.
+function GoobMath.applyGulp(a: Goob, b: Goob, now: number?): ()
+    local n = now or os.time()
+    a.mass += b.mass * Config.GULP_MASS_TRANSFER
+    a.inheritedAge = (a.inheritedAge or 0) + GoobMath.ageSeconds(b, n) * Config.GULP_AGE_TRANSFER
+
+    -- Absorb the visible contents so the interior tells the full story.
+    for itemId, count in pairs(b.contents) do
+        a.contents[itemId] = (a.contents[itemId] or 0) + count
+    end
+
+    -- Lineage: the eaten Goob's name, and everything IT ever ate, is recorded.
+    table.insert(a.lineage, b.nickname)
+    for _, ancestor in ipairs(b.lineage) do
+        table.insert(a.lineage, ancestor)
+    end
+    -- Cap the stored lineage so a 10,000-generation Goob doesn't blow the
+    -- DataStore 4MB limit. We keep the most recent 60 names.
+    while #a.lineage > 60 do table.remove(a.lineage, 1) end
+end
+
+-- Price of a snack tier, in Glob, for this Goob right now.
+--
+-- Expressed as "N seconds of your own income", so the stand stays exactly as
+-- affordable at 1e12 mass as it was at 100. Shared with the client so the
+-- price on the button is always the price the server charges.
+function GoobMath.snackPrice(goob: Goob, tier: any, now: number?): number
+    return GoobMath.incomePerSecond(goob, now) * tier.seconds * Config.SNACK_MARKUP
+end
+
+function GoobMath.generation(goob: Goob): number
+    return #goob.lineage + 1
+end
+
+return GoobMath
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000005"><Properties><string name="Name">Names</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Names.luau — every Goob is auto-named at hatch. Names are silly, readable,
+-- and pronounceable by a seven-year-old, because the name is what gets shouted
+-- across a trading server.
+
+local Names = {}
+
+local FIRST = {
+    "Gob", "Blorp", "Squish", "Mun", "Pib", "Wobble", "Drool", "Chomp", "Glug",
+    "Nub", "Splat", "Thonk", "Bimble", "Gurp", "Snorf", "Plop", "Yeet", "Crumb",
+    "Zorp", "Mopp", "Bap", "Flub", "Gnash", "Slurm", "Quib", "Doof", "Hork",
+}
+
+local SECOND = {
+    "kin", "ling", "ster", "bo", "zo", "ers", "us", "ito", "ington", "azoid",
+    "omatic", "erson", "amus", "ini", "oid", "opolis", "whack", "nugget",
+}
+
+local TITLE = {
+    "the Damp", "the Round", "Jr.", "Sr.", "the Third", "the Hungry",
+    "Esq.", "the Wide", "the Unbothered", "the Enormous", "the Soggy",
+    "the Loud", "the Brave", "the Confused", "of the Deep", "the Elder",
+}
+
+function Names.random(rng: Random): string
+    local name = FIRST[rng:NextInteger(1, #FIRST)] .. SECOND[rng:NextInteger(1, #SECOND)]
+    if rng:NextNumber() < 0.30 then
+        name ..= " " .. TITLE[rng:NextInteger(1, #TITLE)]
+    end
+    return name
+end
+
+-- Players can rename their Goob. We allow letters, digits, spaces and a couple
+-- of punctuation marks only — Roblox's own TextService filter runs on top of
+-- this server-side, this is just the cheap structural pass.
+function Names.sanitize(raw: string): string?
+    if typeof(raw) ~= "string" then return nil end
+    local trimmed = raw:match("^%s*(.-)%s*$") or ""
+    if #trimmed < 2 or #trimmed > 22 then return nil end
+    if trimmed:match("[^%w%s'%.%-!]") then return nil end
+    return trimmed
+end
+
+return Names
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000006"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Net.luau — one manifest of every RemoteEvent/RemoteFunction in the game.
+-- The server creates them; the client waits for them. Neither side hardcodes a
+-- string anywhere else, so a typo becomes a Luau error instead of a silent
+-- "nothing happens when I click the button" bug.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Net = {}
+
+Net.EVENTS = {
+    "StateSync",      -- S->C  full/partial profile push
+    "Notify",         -- S->C  toast message
+    "CatchCritter",   -- C->S  player touched a critter
+    "FeedGoob",       -- C->S  push stomach items (auto, but kept explicit)
+    "RenameGoob",     -- C->S
+    "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
+    "BuySnack",       -- C->S  spend Glob on feedstock rolls
+    "GulpGoob",       -- C->S  feed one of my Goobs to another
+    "TradeRequest",   -- C->S
+    "TradeRespond",   -- C->S
+    "TradeOffer",     -- C->S  put/remove a Goob in a slot
+    "TradeConfirm",   -- C->S
+    "TradeCancel",    -- C->S
+    "TradeSync",      -- S->C  live state of the open trade window
+    "LeaderboardSync",-- S->C
+}
+
+Net.FUNCTIONS = {
+    "RequestProfile", -- C->S  initial load
+    "RequestGoob",    -- C->S  inspect another player's Goob (for trade vetting)
+}
+
+local folder: Folder
+
+function Net.init(): Folder
+    assert(RunService:IsServer(), "Net.init must run on the server")
+    folder = Instance.new("Folder")
+    folder.Name = "GoobNet"
+    for _, name in ipairs(Net.EVENTS) do
+        local r = Instance.new("RemoteEvent")
+        r.Name = name
+        r.Parent = folder
+    end
+    for _, name in ipairs(Net.FUNCTIONS) do
+        local r = Instance.new("RemoteFunction")
+        r.Name = name
+        r.Parent = folder
+    end
+    folder.Parent = ReplicatedStorage
+    return folder
+end
+
+function Net.get(name: string): any
+    if not folder then
+        folder = ReplicatedStorage:WaitForChild("GoobNet") :: Folder
+    end
+    return folder:WaitForChild(name)
+end
+
+return Net
+]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000021"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000013"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
+-- init.server.luau — the single entry point. Wires every service together and
+-- owns all the RemoteEvent handlers, so there is exactly one file to read to
+-- understand what the client is allowed to ask the server to do.
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local TextService = game:GetService("TextService")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local Net = require(Shared.Net)
+local GoobMath = require(Shared.GoobMath)
+local Format = require(Shared.Format)
+local Names = require(Shared.Names)
+local Feedstock = require(Shared.Feedstock)
+
+local Data = require(script.Data)
+local WorldBuilder = require(script.WorldBuilder)
+local GoobService = require(script.GoobService)
+local CritterService = require(script.CritterService)
+local TradeService = require(script.TradeService)
+
+print(("[%s] booting…"):format(Config.GAME_NAME))
+
+Net.init()
+WorldBuilder.build()
+CritterService.start()
+GoobService.start()
+
+local Notify = Net.get("Notify")
+local StateSync = Net.get("StateSync")
+local TradeSync = Net.get("TradeSync")
+local LeaderboardSync = Net.get("LeaderboardSync")
+
+local function notify(player: Player, msg: string, kind: string?)
+    Notify:FireClient(player, msg, kind or "info")
+end
+
+-- ── State push ─────────────────────────────────────────────────────────────
+-- We send a compact, display-ready snapshot rather than the raw profile. The
+-- client never needs the stomach contents or DataStore metadata, and not
+-- sending them keeps bandwidth low with 30 players on a server.
+
+local function snapshot(player: Player)
+    local profile = Data.get(player)
+    if not profile then return nil end
+    local active = GoobService.activeGoob(profile)
+
+    local goobs = {}
+    for _, g in ipairs(profile.goobs) do
+        local tier = GoobMath.ageTier(g)
+        table.insert(goobs, {
+            id = g.id,
+            nickname = g.nickname,
+            hue = g.hue,
+            mass = g.mass,
+            massText = Format.short(g.mass),
+            power = GoobMath.power(g),
+            powerText = Format.short(GoobMath.power(g)),
+            ageSeconds = GoobMath.ageSeconds(g),
+            ageText = Format.duration(GoobMath.ageSeconds(g)),
+            ageTier = tier.name,
+            ageEmoji = tier.emoji,
+            ageColor = tier.color,
+            ageMult = tier.mult,
+            generation = GoobMath.generation(g),
+            stomachCount = #g.stomach,
+            lineage = g.lineage,
+            contents = g.contents,
+            isActive = active ~= nil and g.id == active.id,
+        })
+    end
+
+    local snacks = {}
+    if active then
+        for _, tier in ipairs(Config.SNACK_TIERS) do
+            local price = GoobMath.snackPrice(active, tier)
+            table.insert(snacks, {
+                id = tier.id, name = tier.name, emoji = tier.emoji,
+                rolls = tier.rolls, luck = tier.luck,
+                price = price, priceText = Format.short(price),
+                affordable = profile.glob >= price,
+            })
+        end
+    end
+
+    return {
+        glob = profile.glob,
+        globText = Format.short(profile.glob),
+        snacks = snacks,
+        income = active and GoobMath.incomePerSecond(active) or 0,
+        incomeText = active and Format.short(GoobMath.incomePerSecond(active)) or "0",
+        goobs = goobs,
+        activeGoobId = profile.activeGoobId,
+        stats = profile.stats,
+        discovered = profile.discovered,
+        datastore = Data.isEnabled(),
+    }
+end
+
+local function push(player: Player)
+    local snap = snapshot(player)
+    if snap then StateSync:FireClient(player, snap) end
+end
+
+-- Steady HUD refresh. 2Hz is plenty — glob ticks up smoothly on the client via
+-- local interpolation, so we only need to correct it twice a second.
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        for _, player in ipairs(Players:GetPlayers()) do
+            push(player)
+        end
+    end
+end)
+
+-- ── Leaderboard ────────────────────────────────────────────────────────────
+
+task.spawn(function()
+    local pillar = Workspace:WaitForChild("GoobWorld"):WaitForChild("Leaderboard")
+    local entries = pillar:WaitForChild("Board"):WaitForChild("Entries") :: TextLabel
+    while true do
+        local rows = {}
+        for _, player in ipairs(Players:GetPlayers()) do
+            local profile = Data.get(player)
+            local goob = profile and GoobService.activeGoob(profile)
+            if goob then
+                table.insert(rows, {
+                    name = player.DisplayName,
+                    power = GoobMath.power(goob),
+                    tier = GoobMath.ageTier(goob),
+                    goobName = goob.nickname,
+                })
+            end
+        end
+        table.sort(rows, function(x, y) return x.power > y.power end)
+
+        local text = "🏆 BIGGEST GOOBS\n\n"
+        for i = 1, math.min(10, #rows) do
+            local r = rows[i]
+            text ..= string.format("%d. %s\n    %s %s · ⚡%s\n",
+                i, r.name, r.tier.emoji, r.goobName, Format.short(r.power))
+        end
+        if #rows == 0 then text ..= "nobody yet — be the first!" end
+        entries.Text = text
+        LeaderboardSync:FireAllClients(rows)
+        task.wait(4)
+    end
+end)
+
+-- ── Player lifecycle ───────────────────────────────────────────────────────
+
+local function onJoin(player: Player)
+    local profile = Data.load(player)
+    if not profile then return end   -- Data.load kicks on a real load failure
+
+    WorldBuilder.claimPlot(player)
+
+    local earned = GoobService.applyOffline(player)
+    if earned > 1 then
+        notify(player, ("💤 While you were gone your Goob digested and earned 💧%s")
+            :format(Format.short(earned)), "good")
+    end
+
+    player.CharacterAdded:Connect(function()
+        task.wait(0.4)
+        GoobService.spawnFor(player)
+    end)
+
+    GoobService.spawnFor(player)
+    push(player)
+
+    notify(player, "Welcome to " .. Config.GAME_NAME .. "! Chase the junk, feed your Goob. 🫧", "good")
+end
+
+local function onLeave(player: Player)
+    TradeService.cleanup(player)
+    GoobService.despawnFor(player)
+    WorldBuilder.releasePlot(player)
+    Data.save(player, true)
+end
+
+Players.PlayerAdded:Connect(onJoin)
+Players.PlayerRemoving:Connect(onLeave)
+for _, p in ipairs(Players:GetPlayers()) do task.spawn(onJoin, p) end
+
+task.spawn(function()
+    while true do
+        task.wait(Config.AUTOSAVE_INTERVAL)
+        Data.saveAll()
+    end
+end)
+
+game:BindToClose(function()
+    for _, player in ipairs(Players:GetPlayers()) do
+        Data.save(player, false)
+    end
+    task.wait(1.5)
+end)
+
+-- ── Remote handlers ────────────────────────────────────────────────────────
+
+Net.get("RequestProfile").OnServerInvoke = function(player: Player)
+    -- Wait briefly in case the player fired this before Data.load finished.
+    local deadline = os.clock() + 8
+    while not Data.get(player) and os.clock() < deadline do task.wait(0.1) end
+    return snapshot(player)
+end
+
+Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: Instance)
+    local ok, item = CritterService.tryCatch(player, target)
+    if not ok then return end
+    GoobService.feed(player, item.id)
+    push(player)
+    local isBig = item.rarity ~= "Common" and item.rarity ~= "Uncommon"
+    notify(player, ("+%s  (%s)"):format(item.name, item.rarity), isBig and "good" or "info")
+end)
+
+Net.get("RenameGoob").OnServerEvent:Connect(function(player: Player, goobId: string, raw: string)
+    local profile = Data.get(player)
+    if not profile then return end
+    local clean = Names.sanitize(raw)
+    if not clean then
+        notify(player, "That name won't work — 2 to 22 letters, no symbols.", "warn")
+        return
+    end
+    -- Roblox requires a real filter pass on anything a player typed that other
+    -- players will see. This is a policy requirement, not an optional nicety.
+    local ok, filtered = pcall(function()
+        local res = TextService:FilterStringAsync(clean, player.UserId, Enum.TextFilterContext.PublicChat)
+        return res:GetNonChatStringForBroadcastAsync()
+    end)
+    if not ok then
+        notify(player, "Couldn't check that name right now, try again.", "warn")
+        return
+    end
+
+    for _, g in ipairs(profile.goobs) do
+        if g.id == goobId then
+            g.nickname = filtered
+            if g.id == profile.activeGoobId then GoobService.refreshModel(player, g) end
+            push(player)
+            return
+        end
+    end
+end)
+
+Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: string)
+    local profile = Data.get(player)
+    if not profile or typeof(goobId) ~= "string" then return end
+    for _, g in ipairs(profile.goobs) do
+        if g.id == goobId then
+            profile.activeGoobId = goobId
+            GoobService.spawnFor(player)
+            push(player)
+            notify(player, "Now displaying " .. g.nickname .. ".", "info")
+            return
+        end
+    end
+end)
+
+Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: string)
+    local profile = Data.get(player)
+    if not profile or typeof(tierId) ~= "string" then return end
+    local goob = GoobService.activeGoob(profile)
+    if not goob then return end
+
+    local tier
+    for _, t in ipairs(Config.SNACK_TIERS) do
+        if t.id == tierId then tier = t break end
+    end
+    if not tier then return end
+
+    -- Price is recomputed server-side from the CURRENT Goob. The client sends
+    -- only which button was pressed, never a price.
+    local price = GoobMath.snackPrice(goob, tier)
+    if profile.glob < price then
+        notify(player, "Not enough 💧 for a " .. tier.name .. ".", "warn")
+        return
+    end
+
+    profile.glob -= price
+    local rng = Random.new(os.clock() * 1e6 + player.UserId)
+    local best, bestRarity = nil, 0
+    local rarityRank = {}
+    for i, r in ipairs(Feedstock.RARITY_ORDER) do rarityRank[r] = i end
+
+    for _ = 1, tier.rolls do
+        -- `false` = no Secrets from the shop. See Feedstock.roll.
+        local item = Feedstock.roll(rng, tier.luck, false)
+        GoobService.feed(player, item.id)
+        local rank = rarityRank[item.rarity] or 0
+        if rank > bestRarity then best, bestRarity = item, rank end
+    end
+
+    push(player)
+    if best then
+        notify(player, ("%s %s — %d items, best was %s (%s)")
+            :format(tier.emoji, tier.name, tier.rolls, best.name, best.rarity),
+            bestRarity >= 5 and "good" or "info")
+    end
+end)
+
+Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: string, eatenId: string)
+    local ok, reason = GoobService.gulp(player, eaterId, eatenId)
+    if ok then
+        notify(player, "😋 GULP! Your Goob swallowed another one.", "good")
+        push(player)
+    elseif reason then
+        notify(player, reason, "warn")
+    end
+end)
+
+Net.get("TradeRequest").OnServerEvent:Connect(function(player, targetName)
+    if typeof(targetName) == "string" then TradeService.request(player, targetName) end
+end)
+Net.get("TradeRespond").OnServerEvent:Connect(function(player, accept)
+    TradeService.respond(player, accept == true)
+end)
+Net.get("TradeOffer").OnServerEvent:Connect(function(player, goobId, add)
+    if typeof(goobId) == "string" then TradeService.offer(player, goobId, add == true) end
+end)
+Net.get("TradeConfirm").OnServerEvent:Connect(function(player, holding)
+    TradeService.confirm(player, holding == true)
+end)
+Net.get("TradeCancel").OnServerEvent:Connect(function(player)
+    TradeService.cancel(player)
+end)
+
+TradeService.onSync.Event:Connect(function(player, state)
+    TradeSync:FireClient(player, state)
+    push(player)
+end)
+TradeService.onNotify.Event:Connect(function(player, msg, kind)
+    notify(player, msg, kind)
+end)
+
+CritterService.onSecret.Event:Connect(function(item)
+    Notify:FireAllClients(("🌟 A %s just appeared somewhere in the world — GO!")
+        :format(item.name), "secret")
+end)
+
+print(("[%s] ready. %d plots, %d feedstock types.")
+    :format(Config.GAME_NAME, Config.PLOT_COUNT, #Feedstock.ITEMS))
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000008"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- CritterService.luau — the ACTIVE half of the loop.
+--
+-- Grow a Garden's weakness is that there is almost nothing to do while you
+-- wait. Here, junk physically wanders the map and you chase it down. Catching
+-- is the only source of new mass in the world, and the spawn rate is a hard
+-- server-wide constant — that is what makes the economy finite rather than
+-- "everyone can farm infinite value".
+
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local Feedstock = require(Shared.Feedstock)
+
+local CritterService = {}
+
+local alive: { [BasePart]: { item: Feedstock.Item, born: number, vel: Vector3 } } = {}
+local aliveCount = 0
+local rng = Random.new(os.clock() * 1e6)
+local folder: Folder
+
+local ROAM_RADIUS = 520
+
+local function spawnCritter()
+    if aliveCount >= Config.CRITTER_MAX_ALIVE then return end
+
+    local item = Feedstock.roll(rng, 1)
+
+    local p = Instance.new("Part")
+    p.Name = "Critter_" .. item.id
+    p.Size = item.scale * 3.4
+    p.Color = item.color
+    p.Material = if item.rarity == "Secret" or item.rarity == "Mythic"
+        then Enum.Material.Neon else Enum.Material.SmoothPlastic
+    p.Anchored = true
+    p.CanCollide = false
+    p.CanQuery = false
+    if item.shape == "Ball" then p.Shape = Enum.PartType.Ball
+    elseif item.shape == "Cylinder" then p.Shape = Enum.PartType.Cylinder end
+
+    local angle = rng:NextNumber() * math.pi * 2
+    local dist = 120 + rng:NextNumber() * ROAM_RADIUS
+    p.Position = Vector3.new(math.cos(angle) * dist, 4 + rng:NextNumber() * 3, math.sin(angle) * dist)
+
+    -- Rarer things are visibly special from a distance: a coloured glow and a
+    -- floating label. A kid should be able to see a Mythic across the map and
+    -- sprint for it.
+    if item.rarity ~= "Common" and item.rarity ~= "Uncommon" then
+        local light = Instance.new("PointLight")
+        light.Color = Feedstock.RARITY_COLOR[item.rarity]
+        light.Brightness = 3
+        light.Range = 26
+        light.Parent = p
+
+        local gui = Instance.new("BillboardGui")
+        gui.Size = UDim2.fromScale(10, 2.4)
+        gui.StudsOffset = Vector3.new(0, 3.4, 0)
+        gui.AlwaysOnTop = true
+        gui.MaxDistance = 500
+        local tl = Instance.new("TextLabel")
+        tl.Size = UDim2.fromScale(1, 1)
+        tl.BackgroundTransparency = 1
+        tl.Font = Enum.Font.FredokaOne
+        tl.TextScaled = true
+        tl.TextStrokeTransparency = 0.2
+        tl.TextColor3 = Feedstock.RARITY_COLOR[item.rarity]
+        tl.Text = string.upper(item.rarity) .. "\n" .. item.name
+        tl.Parent = gui
+        gui.Parent = p
+    end
+
+    p.Parent = folder
+
+    alive[p] = {
+        item = item,
+        born = os.clock(),
+        vel = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1)).Unit * rng:NextNumber(6, 16),
+    }
+    aliveCount += 1
+
+    -- A Secret spawning is a server-wide event. Announcing it turns a solo
+    -- farm into a race, which is free multiplayer drama.
+    if item.rarity == "Secret" then
+        CritterService.onSecret:Fire(item)
+    end
+end
+
+local function despawn(p: BasePart)
+    if not alive[p] then return end
+    alive[p] = nil
+    aliveCount -= 1
+    p:Destroy()
+end
+
+CritterService.onSecret = Instance.new("BindableEvent")
+CritterService.onCatch = Instance.new("BindableEvent")
+
+-- Server-authoritative catching. The client NEVER tells us what it caught —
+-- it tells us which part it touched, and we verify distance ourselves. This is
+-- the single most important anti-exploit line in the game.
+function CritterService.tryCatch(player: Player, target: Instance): (boolean, any)
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+    if not root then return false end
+    if not target or not target:IsA("BasePart") then return false end
+
+    local entry = alive[target]
+    if not entry then return false end   -- already taken; first to touch wins
+
+    if (root.Position - target.Position).Magnitude > Config.CRITTER_CATCH_RADIUS then
+        return false
+    end
+
+    -- Claim it immediately so two players can't both bank the same critter.
+    alive[target] = nil
+    aliveCount -= 1
+
+    -- Fly the critter into the player, then vanish. Feedback matters more than
+    -- almost anything else in a game aimed at nine-year-olds.
+    target.CanCollide = false
+    target.Anchored = true
+    local tween = TweenService:Create(target, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        CFrame = root.CFrame,
+        Size = Vector3.new(0.2, 0.2, 0.2),
+        Transparency = 1,
+    })
+    tween:Play()
+    Debris:AddItem(target, 0.45)
+
+    CritterService.onCatch:Fire(player, entry.item)
+    return true, entry.item
+end
+
+function CritterService.start()
+    folder = Instance.new("Folder")
+    folder.Name = "Critters"
+    folder.Parent = Workspace
+
+    task.spawn(function()
+        while true do
+            spawnCritter()
+            task.wait(Config.CRITTER_SPAWN_INTERVAL)
+        end
+    end)
+
+    -- Roaming. Critters bob and wander so the world feels alive; they bounce
+    -- off an invisible boundary so nothing escapes to infinity.
+    RunService.Heartbeat:Connect(function(dt)
+        local now = os.clock()
+        for p, entry in pairs(alive) do
+            if now - entry.born > Config.CRITTER_LIFETIME then
+                despawn(p)
+            else
+                local pos = p.Position + entry.vel * dt
+                if math.sqrt(pos.X ^ 2 + pos.Z ^ 2) > ROAM_RADIUS + 140 then
+                    entry.vel = -entry.vel
+                    pos = p.Position + entry.vel * dt
+                end
+                local bob = math.sin(now * 2.2 + p.Position.X) * 0.6
+                p.CFrame = CFrame.new(pos.X, 4 + bob, pos.Z)
+                    * CFrame.Angles(0, now * 0.9, math.sin(now) * 0.25)
+            end
+        end
+    end)
+end
+
+return CritterService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000009"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Data.luau — profile persistence.
+--
+-- Uses DataStore with session locking, retry/backoff and a bind-to-close
+-- flush. Roblox DataStores fail more often than new developers expect, and the
+-- single fastest way to kill a trading game is to roll back someone's Goob
+-- after a trade. So: never overwrite a profile we failed to load, and never
+-- let a player act on a profile that isn't confirmed loaded.
+
+local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+
+local Config = require(game.ReplicatedStorage.GoobShared.Config)
+local Names = require(game.ReplicatedStorage.GoobShared.Names)
+
+local Data = {}
+
+local store = DataStoreService:GetDataStore(Config.DATASTORE_KEY)
+local profiles: { [number]: any } = {}
+local loading: { [number]: boolean } = {}
+
+-- In Studio without API access, DataStore calls throw. We detect that once and
+-- fall back to in-memory profiles so the game is fully playable in Studio.
+local datastoreEnabled = true
+
+local function newGoob(rng: Random)
+    return {
+        id = HttpService:GenerateGUID(false),
+        nickname = Names.random(rng),
+        hue = rng:NextNumber(),
+        mass = Config.STARTING_MASS,
+        stomach = {},
+        bornAt = os.time(),
+        inheritedAge = 0,
+        lineage = {},
+        contents = {},
+    }
+end
+
+function Data.blankProfile(userId: number)
+    local rng = Random.new(userId + os.time())
+    return {
+        version = 1,
+        glob = Config.STARTING_GLOB,
+        goobs = { newGoob(rng) },
+        activeGoobId = nil :: string?,
+        lastSeen = os.time(),
+        stats = { caught = 0, gulps = 0, trades = 0, bestMass = Config.STARTING_MASS },
+        discovered = {} :: { [string]: boolean },
+    }
+end
+
+Data.newGoob = newGoob
+
+local function retry<T>(fn: () -> T, attempts: number): (boolean, any)
+    local delayFor = 0.5
+    for i = 1, attempts do
+        local ok, res = pcall(fn)
+        if ok then return true, res end
+        if i == attempts then return false, res end
+        task.wait(delayFor)
+        delayFor *= 2
+    end
+    return false, nil
+end
+
+function Data.load(player: Player)
+    local userId = player.UserId
+    if profiles[userId] then return profiles[userId] end
+    loading[userId] = true
+
+    local profile
+    if datastoreEnabled then
+        local ok, res = retry(function()
+            return store:GetAsync("u_" .. userId)
+        end, 4)
+        if ok then
+            profile = res
+        else
+            -- Distinguish "no API access in Studio" from a real outage.
+            if RunService:IsStudio() then
+                datastoreEnabled = false
+                warn("[Goob/Data] DataStores unavailable (Studio). Running in-memory.")
+            else
+                warn("[Goob/Data] Load failed for " .. userId .. ": " .. tostring(res))
+                loading[userId] = nil
+                -- Refuse to hand back a blank profile in live servers — that is
+                -- how you wipe someone's year-old Goob. Kick instead.
+                player:Kick("Couldn't load your Goobs. Please rejoin — nothing was lost.")
+                return nil
+            end
+        end
+    end
+
+    if not profile then
+        profile = Data.blankProfile(userId)
+    end
+
+    -- Forward-migrate older saves here as the schema grows.
+    profile.stats = profile.stats or { caught = 0, gulps = 0, trades = 0, bestMass = 0 }
+    profile.discovered = profile.discovered or {}
+    if not profile.activeGoobId and profile.goobs[1] then
+        profile.activeGoobId = profile.goobs[1].id
+    end
+
+    profiles[userId] = profile
+    loading[userId] = nil
+    return profile
+end
+
+function Data.get(player: Player)
+    return profiles[player.UserId]
+end
+
+function Data.save(player: Player, release: boolean?)
+    local userId = player.UserId
+    local profile = profiles[userId]
+    if not profile then return end
+    profile.lastSeen = os.time()
+
+    if datastoreEnabled then
+        local ok, err = retry(function()
+            return store:UpdateAsync("u_" .. userId, function()
+                return profile
+            end)
+        end, 3)
+        if not ok then
+            warn("[Goob/Data] Save failed for " .. userId .. ": " .. tostring(err))
+        end
+    end
+
+    if release then profiles[userId] = nil end
+end
+
+function Data.saveAll()
+    for _, player in ipairs(Players:GetPlayers()) do
+        task.spawn(Data.save, player, false)
+    end
+end
+
+function Data.isEnabled(): boolean
+    return datastoreEnabled
+end
+
+return Data
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000010"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- GoobService.luau — spawns, renders and simulates the Goobs sitting on plots.
+--
+-- The visual gimmick of the whole game lives here: a Goob is a translucent
+-- blob, and the things it has eaten are REAL PARTS suspended inside it. That
+-- means two players with identical mass can look completely different, and you
+-- can read someone's entire play history by walking up and looking at them.
+
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local GoobMath = require(Shared.GoobMath)
+local Feedstock = require(Shared.Feedstock)
+local Format = require(Shared.Format)
+
+local Data = require(script.Parent.Data)
+local WorldBuilder = require(script.Parent.WorldBuilder)
+
+local GoobService = {}
+
+local models: { [number]: Model } = {}      -- userId -> rendered Goob model
+local INTERIOR_MAX = 45                      -- cap on visible interior parts
+
+-- ── Rendering ──────────────────────────────────────────────────────────────
+
+local function shapeFor(name: string): (Enum.PartType?, string)
+    if name == "Ball" then return Enum.PartType.Ball, "Part" end
+    if name == "Cylinder" then return Enum.PartType.Cylinder, "Part" end
+    if name == "Wedge" then return nil, "WedgePart" end
+    return Enum.PartType.Block, "Part"
+end
+
+-- Build the parts visible inside the blob. We sample the contents table so a
+-- Goob with 50,000 socks shows a representative handful, not 50,000 parts.
+local function buildInterior(goob, model: Model, radius: number)
+    local existing = model:FindFirstChild("Interior")
+    if existing then existing:Destroy() end
+
+    local interior = Instance.new("Folder")
+    interior.Name = "Interior"
+
+    -- Flatten contents into a weighted pick list, biased toward rarer items so
+    -- your one Pocket Singularity is always visible among the socks.
+    local picks = {}
+    local totalCount = 0
+    for id, count in pairs(goob.contents) do totalCount += count end
+    if totalCount == 0 then
+        interior.Parent = model
+        return
+    end
+
+    for id, count in pairs(goob.contents) do
+        local item = Feedstock.get(id)
+        if item then
+            local share = count / totalCount
+            local rarityBoost = (item.mass >= 600) and 6 or 1
+            local slots = math.max(1, math.round(share * INTERIOR_MAX * rarityBoost))
+            for _ = 1, math.min(slots, INTERIOR_MAX) do
+                table.insert(picks, item)
+                if #picks >= INTERIOR_MAX then break end
+            end
+        end
+        if #picks >= INTERIOR_MAX then break end
+    end
+
+    local rng = Random.new(#goob.id + math.floor(goob.bornAt))
+    local root = model.PrimaryPart
+    if not root then interior.Parent = model return end
+
+    for i, item in ipairs(picks) do
+        local partType, className = shapeFor(item.shape)
+        local p = Instance.new(className) :: BasePart
+        p.Name = item.id
+        p.Anchored = false
+        p.CanCollide = false
+        p.CanQuery = false
+        p.CanTouch = false
+        p.Massless = true
+        p.Material = Enum.Material.SmoothPlastic
+        p.Color = item.color
+        p.Size = item.scale * math.max(1, radius * 0.13)
+        if partType and p:IsA("Part") then p.Shape = partType end
+
+        -- Distribute inside the sphere using a cube-root radial so items fill
+        -- the volume evenly instead of clumping at the centre.
+        local dir = Vector3.new(rng:NextNumber(-1, 1), rng:NextNumber(-1, 1), rng:NextNumber(-1, 1))
+        if dir.Magnitude < 0.001 then dir = Vector3.new(0, 1, 0) end
+        dir = dir.Unit
+        local dist = radius * 0.72 * (rng:NextNumber() ^ (1 / 3))
+        p.CFrame = root.CFrame * CFrame.new(dir * dist) * CFrame.Angles(
+            rng:NextNumber() * 6.28, rng:NextNumber() * 6.28, rng:NextNumber() * 6.28
+        )
+
+        -- Weld each item to the blob so it drifts with it as one body.
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = root
+        weld.Part1 = p
+        weld.Parent = p
+
+        p.Parent = interior
+    end
+
+    interior.Parent = model
+end
+
+local function buildModel(player: Player, goob): Model
+    local plot = WorldBuilder.plotFor(player)
+    local center = plot and plot.center or Vector3.new(0, 0, 0)
+    local radius = GoobMath.size(goob)
+
+    local model = Instance.new("Model")
+    model.Name = "Goob_" .. player.UserId
+
+    local body = Instance.new("Part")
+    body.Name = "Body"
+    body.Shape = Enum.PartType.Ball
+    body.Size = Vector3.new(radius, radius, radius) * 2
+    body.Position = center + Vector3.new(0, radius + 2, 0)
+    body.Anchored = true
+    body.CanCollide = false
+    body.Material = Enum.Material.Glass
+    body.Transparency = 0.55
+    body.Color = Color3.fromHSV(goob.hue, 0.55, 1)
+    body.Reflectance = 0.08
+    body.Parent = model
+    model.PrimaryPart = body
+
+    -- Eyes. Two spheres and a smile — this is 90% of why it reads as a
+    -- character instead of a ball, and it costs almost nothing.
+    for _, sx in ipairs({ -0.34, 0.34 }) do
+        local eye = Instance.new("Part")
+        eye.Name = "Eye"
+        eye.Shape = Enum.PartType.Ball
+        eye.Size = Vector3.new(radius * 0.34, radius * 0.34, radius * 0.34)
+        eye.Anchored = true
+        eye.CanCollide = false
+        eye.Material = Enum.Material.SmoothPlastic
+        eye.Color = Color3.new(1, 1, 1)
+        eye.CFrame = body.CFrame * CFrame.new(sx * radius, radius * 0.28, -radius * 0.92)
+        eye.Parent = model
+
+        local pupil = Instance.new("Part")
+        pupil.Name = "Pupil"
+        pupil.Shape = Enum.PartType.Ball
+        pupil.Size = eye.Size * 0.55
+        pupil.Anchored = true
+        pupil.CanCollide = false
+        pupil.Material = Enum.Material.SmoothPlastic
+        pupil.Color = Color3.fromRGB(25, 25, 35)
+        pupil.CFrame = eye.CFrame * CFrame.new(0, 0, -eye.Size.X * 0.34)
+        pupil.Parent = model
+    end
+
+    -- Nameplate: name, age tier, power. Everything a trader needs at a glance.
+    local plate = Instance.new("BillboardGui")
+    plate.Name = "Plate"
+    plate.Size = UDim2.fromScale(16, 5)
+    plate.StudsOffsetWorldSpace = Vector3.new(0, radius + 6, 0)
+    plate.AlwaysOnTop = false
+    plate.MaxDistance = 400
+    plate.Parent = body
+
+    local text = Instance.new("TextLabel")
+    text.Name = "Info"
+    text.Size = UDim2.fromScale(1, 1)
+    text.BackgroundTransparency = 1
+    text.Font = Enum.Font.FredokaOne
+    text.TextScaled = true
+    text.TextColor3 = Color3.new(1, 1, 1)
+    text.TextStrokeTransparency = 0.25
+    text.Parent = plate
+
+    buildInterior(goob, model, radius)
+    model.Parent = Workspace.GoobWorld
+    return model
+end
+
+-- Update an existing model in place rather than rebuilding it. Rebuilding
+-- every frame would destroy performance and make the Goob visibly flicker.
+local function refreshModel(player: Player, goob)
+    local model = models[player.UserId]
+    if not model or not model.PrimaryPart then return end
+    local body = model.PrimaryPart
+    local radius = GoobMath.size(goob)
+    local targetSize = Vector3.new(radius, radius, radius) * 2
+
+    if (body.Size - targetSize).Magnitude > 0.05 then
+        local plot = WorldBuilder.plotFor(player)
+        local center = plot and plot.center or Vector3.new(0, 0, 0)
+        TweenService:Create(body, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = targetSize,
+            Position = center + Vector3.new(0, radius + 2, 0),
+        }):Play()
+
+        local plate = body:FindFirstChild("Plate") :: BillboardGui?
+        if plate then plate.StudsOffsetWorldSpace = Vector3.new(0, radius + 6, 0) end
+    end
+
+    local tier = GoobMath.ageTier(goob)
+    local plate = body:FindFirstChild("Plate")
+    local info = plate and plate:FindFirstChild("Info") :: TextLabel?
+    if info then
+        info.Text = string.format(
+            "%s\n%s %s · Gen %d\n⚡ %s",
+            goob.nickname,
+            tier.emoji, tier.name,
+            GoobMath.generation(goob),
+            Format.short(GoobMath.power(goob))
+        )
+        info.TextColor3 = tier.color
+    end
+
+    -- Colossal Goobs get a glow so you can spot one from across the map.
+    if GoobMath.isColossal(goob) and not body:FindFirstChild("Colossal") then
+        local light = Instance.new("PointLight")
+        light.Name = "Colossal"
+        light.Brightness = 4
+        light.Range = 80
+        light.Color = Color3.fromRGB(255, 220, 120)
+        light.Parent = body
+    end
+end
+
+GoobService.refreshModel = refreshModel
+
+function GoobService.activeGoob(profile)
+    if not profile then return nil end
+    for _, g in ipairs(profile.goobs) do
+        if g.id == profile.activeGoobId then return g end
+    end
+    return profile.goobs[1]
+end
+
+function GoobService.spawnFor(player: Player)
+    local profile = Data.get(player)
+    if not profile then return end
+    local goob = GoobService.activeGoob(profile)
+    if not goob then return end
+    if models[player.UserId] then models[player.UserId]:Destroy() end
+    models[player.UserId] = buildModel(player, goob)
+    refreshModel(player, goob)
+end
+
+function GoobService.despawnFor(player: Player)
+    local m = models[player.UserId]
+    if m then m:Destroy() end
+    models[player.UserId] = nil
+end
+
+-- Add an item to the active Goob's stomach. Returns false if something's wrong
+-- so the caller can stay silent rather than desyncing the client.
+function GoobService.feed(player: Player, itemId: string): boolean
+    local profile = Data.get(player)
+    if not profile then return false end
+    local goob = GoobService.activeGoob(profile)
+    if not goob then return false end
+    local item = Feedstock.get(itemId)
+    if not item then return false end
+
+    table.insert(goob.stomach, { id = itemId, mass = item.mass })
+    goob.contents[itemId] = (goob.contents[itemId] or 0) + 1
+    profile.discovered[itemId] = true
+    profile.stats.caught += 1
+    return true
+end
+
+-- Feed one of the player's own Goobs to another. This is THE sink: the eaten
+-- Goob is gone from the world permanently, and only 75% of its mass survives.
+function GoobService.gulp(player: Player, eaterId: string, eatenId: string): (boolean, string?)
+    local profile = Data.get(player)
+    if not profile then return false, "No profile." end
+
+    local eater, eaten, eatenIndex
+    for i, g in ipairs(profile.goobs) do
+        if g.id == eaterId then eater = g end
+        if g.id == eatenId then eaten = g; eatenIndex = i end
+    end
+    if not eater or not eaten then return false, "Goob not found." end
+    if #profile.goobs <= 1 then return false, "You need to keep at least one Goob." end
+
+    local ok, reason = GoobMath.canGulp(eater, eaten)
+    if not ok then return false, reason end
+
+    GoobMath.applyGulp(eater, eaten)
+    table.remove(profile.goobs, eatenIndex)
+    profile.stats.gulps += 1
+    profile.stats.bestMass = math.max(profile.stats.bestMass, eater.mass)
+
+    if profile.activeGoobId == eatenId then profile.activeGoobId = eater.id end
+    if profile.activeGoobId == eater.id then
+        GoobService.spawnFor(player) -- full rebuild: the interior changed a lot
+    end
+    return true
+end
+
+-- ── Simulation ─────────────────────────────────────────────────────────────
+-- One heartbeat loop for every player. Digestion converts stomach -> mass,
+-- and mass -> glob. Runs at 4Hz, not 60Hz: nothing here needs frame precision
+-- and 4Hz keeps the server cheap with 30 players on it.
+
+local accumulator = 0
+local TICK = 0.25
+
+function GoobService.start()
+    RunService.Heartbeat:Connect(function(dt)
+        accumulator += dt
+        if accumulator < TICK then return end
+        local step = accumulator
+        accumulator = 0
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            local profile = Data.get(player)
+            if profile then
+                local goob = GoobService.activeGoob(profile)
+                if goob then
+                    -- Digest
+                    local converted = GoobMath.digestStep(goob, step)
+                    if converted > 0 then
+                        goob.mass += converted
+                        local remaining = converted
+                        while remaining > 0 and #goob.stomach > 0 do
+                            local entry = goob.stomach[1]
+                            if entry.mass <= remaining then
+                                remaining -= entry.mass
+                                table.remove(goob.stomach, 1)
+                            else
+                                entry.mass -= remaining
+                                remaining = 0
+                            end
+                        end
+                        profile.stats.bestMass = math.max(profile.stats.bestMass, goob.mass)
+                        refreshModel(player, goob)
+                    end
+
+                    -- Earn
+                    profile.glob += GoobMath.incomePerSecond(goob) * step
+                end
+            end
+        end
+    end)
+end
+
+-- Called once at login: pay out (capped, discounted) offline digestion.
+function GoobService.applyOffline(player: Player)
+    local profile = Data.get(player)
+    if not profile then return 0 end
+    local away = math.clamp(os.time() - (profile.lastSeen or os.time()), 0, Config.OFFLINE_CAP_SECONDS)
+    if away < 30 then return 0 end
+
+    local goob = GoobService.activeGoob(profile)
+    if not goob then return 0 end
+
+    -- Digest whatever was left in the stomach while away.
+    local digested = 0
+    local budget = away
+    while budget > 0 and #goob.stomach > 0 do
+        local converted = GoobMath.digestStep(goob, math.min(budget, 60))
+        if converted <= 0 then break end
+        goob.mass += converted
+        digested += converted
+        local remaining = converted
+        while remaining > 0 and #goob.stomach > 0 do
+            local entry = goob.stomach[1]
+            if entry.mass <= remaining then
+                remaining -= entry.mass
+                table.remove(goob.stomach, 1)
+            else
+                entry.mass -= remaining
+                remaining = 0
+            end
+        end
+        budget -= 60
+    end
+
+    local earned = GoobMath.incomePerSecond(goob) * away * Config.OFFLINE_EFFICIENCY
+    profile.glob += earned
+    return earned
+end
+
+return GoobService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000011"><Properties><string name="Name">TradeService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- TradeService.luau — player-to-player Goob trading.
+--
+-- Trading is the reason this game has a community instead of a player count.
+-- It is also the single most exploited system in every Roblox game, so the
+-- rules here are deliberately paranoid:
+--   1. The server owns every Goob. The client can only reference IDs it owns.
+--   2. Confirming is a HOLD, not a click, and any change to either offer
+--      resets both confirmations. This kills the classic "swap the item at the
+--      last moment" scam outright.
+--   3. Both players must be physically in the trade zone for the whole trade.
+--   4. The swap itself is atomic — we validate everything, then move.
+
+local Players = game:GetService("Players")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local GoobMath = require(Shared.GoobMath)
+local Format = require(Shared.Format)
+
+local Data = require(script.Parent.Data)
+local GoobService = require(script.Parent.GoobService)
+
+local TradeService = {}
+
+type Session = {
+    a: Player, b: Player,
+    offers: { [number]: { string } },   -- userId -> goob ids
+    confirmed: { [number]: number? },   -- userId -> os.clock() when hold began
+    open: boolean,
+}
+
+local sessions: { Session } = {}
+local sessionOf: { [number]: Session } = {}
+local pending: { [number]: number } = {}  -- targetUserId -> requesterUserId
+
+TradeService.onSync = Instance.new("BindableEvent")
+TradeService.onNotify = Instance.new("BindableEvent")
+
+local function notify(player: Player, msg: string, kind: string?)
+    TradeService.onNotify:Fire(player, msg, kind or "info")
+end
+
+local function inTradeZone(player: Player): boolean
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+    if not root then return false end
+    local flat = Vector3.new(root.Position.X, 0, root.Position.Z)
+    return flat.Magnitude <= Config.TRADE_RANGE
+end
+
+local function goobById(profile, id: string)
+    for i, g in ipairs(profile.goobs) do
+        if g.id == id then return g, i end
+    end
+    return nil
+end
+
+-- Serialise just enough for the other player to judge the deal. We send power
+-- and age, NOT internal ids of things they don't own.
+local function describe(goob)
+    local tier = GoobMath.ageTier(goob)
+    return {
+        id = goob.id,
+        nickname = goob.nickname,
+        hue = goob.hue,
+        mass = goob.mass,
+        power = GoobMath.power(goob),
+        powerText = Format.short(GoobMath.power(goob)),
+        ageText = Format.duration(GoobMath.ageSeconds(goob)),
+        ageTier = tier.name,
+        ageEmoji = tier.emoji,
+        generation = GoobMath.generation(goob),
+        contents = goob.contents,
+    }
+end
+
+local function sync(session: Session)
+    for _, player in ipairs({ session.a, session.b }) do
+        local other = if player == session.a then session.b else session.a
+        local myProfile = Data.get(player)
+        local otherProfile = Data.get(other)
+        if myProfile and otherProfile then
+            local function pack(profile, ids)
+                local out = {}
+                for _, id in ipairs(ids) do
+                    local g = goobById(profile, id)
+                    if g then table.insert(out, describe(g)) end
+                end
+                return out
+            end
+            TradeService.onSync:Fire(player, {
+                open = session.open,
+                partner = other.Name,
+                partnerDisplay = other.DisplayName,
+                myOffer = pack(myProfile, session.offers[player.UserId]),
+                theirOffer = pack(otherProfile, session.offers[other.UserId]),
+                myConfirmed = session.confirmed[player.UserId] ~= nil,
+                theirConfirmed = session.confirmed[other.UserId] ~= nil,
+                lockSeconds = Config.TRADE_CONFIRM_LOCK,
+            })
+        end
+    end
+end
+
+-- Any change to the deal wipes both confirmations. Non-negotiable.
+local function resetConfirms(session: Session)
+    session.confirmed[session.a.UserId] = nil
+    session.confirmed[session.b.UserId] = nil
+end
+
+function TradeService.request(from: Player, targetName: string)
+    local target = Players:FindFirstChild(targetName) :: Player?
+    if not target or target == from then return end
+    if sessionOf[from.UserId] or sessionOf[target.UserId] then
+        notify(from, "One of you is already trading.", "warn")
+        return
+    end
+    if not inTradeZone(from) or not inTradeZone(target) then
+        notify(from, "You both need to stand in the 🤝 TRADE ZONE.", "warn")
+        return
+    end
+    pending[target.UserId] = from.UserId
+    notify(target, from.DisplayName .. " wants to trade Goobs!", "trade")
+    notify(from, "Trade request sent to " .. target.DisplayName .. ".", "info")
+end
+
+function TradeService.respond(target: Player, accept: boolean)
+    local requesterId = pending[target.UserId]
+    if not requesterId then return end
+    pending[target.UserId] = nil
+    local requester = Players:GetPlayerByUserId(requesterId)
+    if not requester then return end
+    if not accept then
+        notify(requester, target.DisplayName .. " declined.", "warn")
+        return
+    end
+    if sessionOf[target.UserId] or sessionOf[requesterId] then return end
+
+    local session: Session = {
+        a = requester, b = target,
+        offers = { [requesterId] = {}, [target.UserId] = {} },
+        confirmed = {},
+        open = true,
+    }
+    table.insert(sessions, session)
+    sessionOf[requesterId] = session
+    sessionOf[target.UserId] = session
+    sync(session)
+end
+
+function TradeService.offer(player: Player, goobId: string, add: boolean)
+    local session = sessionOf[player.UserId]
+    if not session or not session.open then return end
+    local profile = Data.get(player)
+    if not profile then return end
+
+    local list = session.offers[player.UserId]
+    if add then
+        if #list >= Config.TRADE_MAX_SLOTS then return end
+        if not goobById(profile, goobId) then return end
+        -- You must always keep at least one Goob. Offering your last one is
+        -- how new players get talked out of everything they own.
+        if #list + 1 >= #profile.goobs then
+            notify(player, "You have to keep at least one Goob.", "warn")
+            return
+        end
+        for _, id in ipairs(list) do if id == goobId then return end end
+        table.insert(list, goobId)
+    else
+        for i, id in ipairs(list) do
+            if id == goobId then table.remove(list, i) break end
+        end
+    end
+    resetConfirms(session)
+    sync(session)
+end
+
+function TradeService.confirm(player: Player, holding: boolean)
+    local session = sessionOf[player.UserId]
+    if not session or not session.open then return end
+
+    if not holding then
+        session.confirmed[player.UserId] = nil
+        sync(session)
+        return
+    end
+
+    session.confirmed[player.UserId] = os.clock()
+    sync(session)
+
+    -- Wait out the hold, then re-check EVERYTHING. State can change during the
+    -- three seconds and we must never trust the snapshot we took at the start.
+    task.delay(Config.TRADE_CONFIRM_LOCK, function()
+        if not session.open then return end
+        local aOk = session.confirmed[session.a.UserId]
+        local bOk = session.confirmed[session.b.UserId]
+        if not aOk or not bOk then return end
+        if os.clock() - aOk < Config.TRADE_CONFIRM_LOCK - 0.05 then return end
+        if os.clock() - bOk < Config.TRADE_CONFIRM_LOCK - 0.05 then return end
+        TradeService.execute(session)
+    end)
+end
+
+function TradeService.execute(session: Session)
+    local a, b = session.a, session.b
+    local pa, pb = Data.get(a), Data.get(b)
+    if not pa or not pb then TradeService.cancel(a) return end
+    if not inTradeZone(a) or not inTradeZone(b) then
+        notify(a, "Trade cancelled — someone left the trade zone.", "warn")
+        notify(b, "Trade cancelled — someone left the trade zone.", "warn")
+        TradeService.cancel(a)
+        return
+    end
+
+    -- Validate both sides fully BEFORE mutating anything.
+    local moveA, moveB = {}, {}
+    for _, id in ipairs(session.offers[a.UserId]) do
+        local g = goobById(pa, id)
+        if not g then TradeService.cancel(a) return end
+        table.insert(moveA, g)
+    end
+    for _, id in ipairs(session.offers[b.UserId]) do
+        local g = goobById(pb, id)
+        if not g then TradeService.cancel(a) return end
+        table.insert(moveB, g)
+    end
+    if #moveA == 0 and #moveB == 0 then return end
+    if #pa.goobs - #moveA + #moveB < 1 then TradeService.cancel(a) return end
+    if #pb.goobs - #moveB + #moveA < 1 then TradeService.cancel(a) return end
+
+    local function remove(profile, goob)
+        for i, g in ipairs(profile.goobs) do
+            if g.id == goob.id then table.remove(profile.goobs, i) return end
+        end
+    end
+
+    for _, g in ipairs(moveA) do remove(pa, g); table.insert(pb.goobs, g) end
+    for _, g in ipairs(moveB) do remove(pb, g); table.insert(pa.goobs, g) end
+
+    -- If either player traded away the Goob they had on display, promote
+    -- another one so their plot is never empty.
+    if not goobById(pa, pa.activeGoobId or "") then pa.activeGoobId = pa.goobs[1].id end
+    if not goobById(pb, pb.activeGoobId or "") then pb.activeGoobId = pb.goobs[1].id end
+
+    pa.stats.trades += 1
+    pb.stats.trades += 1
+
+    session.open = false
+    sessionOf[a.UserId] = nil
+    sessionOf[b.UserId] = nil
+
+    GoobService.spawnFor(a)
+    GoobService.spawnFor(b)
+    Data.save(a); Data.save(b)
+
+    notify(a, "✅ Trade complete!", "good")
+    notify(b, "✅ Trade complete!", "good")
+    sync(session)
+end
+
+function TradeService.cancel(player: Player)
+    local session = sessionOf[player.UserId]
+    if not session then return end
+    session.open = false
+    sessionOf[session.a.UserId] = nil
+    sessionOf[session.b.UserId] = nil
+    sync(session)
+    notify(session.a, "Trade cancelled.", "warn")
+    notify(session.b, "Trade cancelled.", "warn")
+end
+
+function TradeService.cleanup(player: Player)
+    pending[player.UserId] = nil
+    for id, requester in pairs(pending) do
+        if requester == player.UserId then pending[id] = nil end
+    end
+    TradeService.cancel(player)
+end
+
+return TradeService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000012"><Properties><string name="Name">WorldBuilder</string><ProtectedString name="Source"><![CDATA[--!strict
+-- WorldBuilder.luau — the entire map is generated at runtime from code.
+--
+-- WHY: a .rbxl place file is an opaque binary blob. If the map lives in the
+-- place file, nothing about the world is reviewable in a diff, mergeable
+-- between two people, or restorable after a bad save. Building it from code
+-- means the whole game — world included — is plain text in git.
+
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+
+local Config = require(game.ReplicatedStorage.GoobShared.Config)
+
+local WorldBuilder = {}
+
+local function part(props: { [string]: any }): BasePart
+    local p = Instance.new("Part")
+    p.Anchored = true
+    p.CanCollide = true
+    p.Material = Enum.Material.SmoothPlastic
+    p.TopSurface = Enum.SurfaceType.Smooth
+    p.BottomSurface = Enum.SurfaceType.Smooth
+    for k, v in pairs(props) do
+        (p :: any)[k] = v
+    end
+    return p
+end
+
+local function label(text: string, size: number, parent: BasePart, offset: Vector3?)
+    local gui = Instance.new("BillboardGui")
+    gui.Size = UDim2.fromScale(14, 3)
+    gui.StudsOffset = offset or Vector3.new(0, 5, 0)
+    gui.AlwaysOnTop = true
+    gui.MaxDistance = 260
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.fromScale(1, 1)
+    tl.BackgroundTransparency = 1
+    tl.Font = Enum.Font.FredokaOne
+    tl.TextScaled = true
+    tl.TextColor3 = Color3.new(1, 1, 1)
+    tl.TextStrokeTransparency = 0.2
+    tl.TextStrokeColor3 = Color3.new(0, 0, 0)
+    tl.Text = text
+    tl.Parent = gui
+    gui.Parent = parent
+    return gui
+end
+
+WorldBuilder.plots = {} :: { { index: number, center: Vector3, owner: Player? } }
+
+function WorldBuilder.build()
+    -- Sky & atmosphere: bright, saturated, high-contrast. Young players read
+    -- shape and colour far faster than detail, so we lean cartoon.
+    Lighting.Ambient = Color3.fromRGB(120, 120, 140)
+    Lighting.OutdoorAmbient = Color3.fromRGB(140, 145, 170)
+    Lighting.Brightness = 2.4
+    Lighting.ClockTime = 14.5
+    Lighting.GeographicLatitude = 12
+    Lighting.FogEnd = 1400
+    Lighting.FogColor = Color3.fromRGB(180, 215, 240)
+
+    local atmo = Instance.new("Atmosphere")
+    atmo.Density = 0.32
+    atmo.Haze = 1.2
+    atmo.Color = Color3.fromRGB(210, 230, 255)
+    atmo.Decay = Color3.fromRGB(160, 190, 230)
+    atmo.Parent = Lighting
+
+    local bloom = Instance.new("BloomEffect")
+    bloom.Intensity = 0.45
+    bloom.Threshold = 0.9
+    bloom.Size = 22
+    bloom.Parent = Lighting
+
+    local world = Instance.new("Folder")
+    world.Name = "GoobWorld"
+    world.Parent = Workspace
+
+    -- Ground: a big soft-green field. Deliberately NOT a Roblox baseplate —
+    -- the default grey grid instantly reads as "unfinished".
+    local ground = part({
+        Name = "Ground",
+        Size = Vector3.new(1400, 8, 1400),
+        Position = Vector3.new(0, -4, 0),
+        Color = Color3.fromRGB(126, 196, 118),
+        Material = Enum.Material.Grass,
+    })
+    ground.Parent = world
+
+    -- Central hub disc where the shop / leaderboard / trade booth live.
+    local hub = part({
+        Name = "Hub",
+        Shape = Enum.PartType.Cylinder,
+        Size = Vector3.new(3, 130, 130),
+        CFrame = CFrame.new(0, 0.5, 0) * CFrame.Angles(0, 0, math.rad(90)),
+        Color = Color3.fromRGB(245, 238, 220),
+        Material = Enum.Material.Sand,
+    })
+    hub.Parent = world
+
+    -- Plots arranged in a ring around the hub. Each player claims one on join.
+    local count = Config.PLOT_COUNT
+    for i = 1, count do
+        local angle = (i - 1) / count * math.pi * 2
+        local radius = Config.PLOT_SPACING * 1.6
+        local center = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+
+        local pad = part({
+            Name = "Plot" .. i,
+            Size = Vector3.new(Config.PLOT_SIZE, 2, Config.PLOT_SIZE),
+            Position = center + Vector3.new(0, 1, 0),
+            Color = Color3.fromRGB(238, 224, 196),
+            Material = Enum.Material.Sand,
+        })
+        pad.Parent = world
+
+        -- A low rim so the plot reads as "yours" from the ground.
+        for _, side in ipairs({ Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0), Vector3.new(0, 0, 1), Vector3.new(0, 0, -1) }) do
+            local rim = part({
+                Name = "Rim",
+                Size = if side.X ~= 0 then Vector3.new(2, 4, Config.PLOT_SIZE) else Vector3.new(Config.PLOT_SIZE, 4, 2),
+                Position = center + side * (Config.PLOT_SIZE / 2) + Vector3.new(0, 2, 0),
+                Color = Color3.fromRGB(120, 190, 235),
+                Material = Enum.Material.Neon,
+                Transparency = 0.45,
+                CanCollide = false,
+            })
+            rim.Parent = pad
+        end
+
+        local sign = part({
+            Name = "Sign",
+            Size = Vector3.new(10, 1, 1),
+            Position = center + Vector3.new(0, 8, -Config.PLOT_SIZE / 2),
+            Transparency = 1,
+            CanCollide = false,
+        })
+        sign.Parent = pad
+        label("PLOT " .. i .. "\nOPEN", 3, sign).Name = "PlotLabel"
+
+        table.insert(WorldBuilder.plots, { index = i, center = center, owner = nil })
+    end
+
+    -- Trade booth: a physical place you have to walk to. Making trading
+    -- location-bound (rather than a menu you open anywhere) is what turns the
+    -- hub into a crowded, noisy market — which is the social hook.
+    local booth = part({
+        Name = "TradeBooth",
+        Size = Vector3.new(26, 2, 26),
+        Position = Vector3.new(0, 2, 0),
+        Color = Color3.fromRGB(255, 205, 90),
+        Material = Enum.Material.Neon,
+        Transparency = 0.25,
+        CanCollide = false,
+    })
+    booth.Parent = world
+    label("🤝 TRADE ZONE\nstand here with a friend", 4, booth, Vector3.new(0, 9, 0))
+
+    -- Leaderboard pillar.
+    local pillar = part({
+        Name = "Leaderboard",
+        Size = Vector3.new(14, 26, 3),
+        Position = Vector3.new(0, 13, -52),
+        Color = Color3.fromRGB(45, 50, 70),
+        Material = Enum.Material.Metal,
+    })
+    pillar.Parent = world
+
+    local surface = Instance.new("SurfaceGui")
+    surface.Name = "Board"
+    surface.Face = Enum.NormalId.Front
+    surface.CanvasSize = Vector2.new(560, 1000)
+    surface.Parent = pillar
+
+    local list = Instance.new("TextLabel")
+    list.Name = "Entries"
+    list.Size = UDim2.fromScale(1, 1)
+    list.BackgroundTransparency = 1
+    list.Font = Enum.Font.FredokaOne
+    list.TextColor3 = Color3.new(1, 1, 1)
+    list.TextXAlignment = Enum.TextXAlignment.Left
+    list.TextYAlignment = Enum.TextYAlignment.Top
+    list.TextSize = 34
+    list.Text = "🏆 BIGGEST GOOBS\n\nloading…"
+    list.Parent = surface
+
+    -- Spawn location on the hub.
+    local spawn = Instance.new("SpawnLocation")
+    spawn.Name = "HubSpawn"
+    spawn.Size = Vector3.new(16, 1, 16)
+    spawn.Position = Vector3.new(0, 2.5, 34)
+    spawn.Anchored = true
+    spawn.Color = Color3.fromRGB(255, 255, 255)
+    spawn.Material = Enum.Material.Neon
+    spawn.Transparency = 0.4
+    spawn.Neutral = true
+    spawn.Parent = world
+
+    return world
+end
+
+function WorldBuilder.claimPlot(player: Player)
+    for _, plot in ipairs(WorldBuilder.plots) do
+        if plot.owner == nil then
+            plot.owner = player
+            local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
+            if pad then
+                local sign = pad:FindFirstChild("Sign")
+                local gui = sign and sign:FindFirstChild("PlotLabel")
+                if gui then
+                    (gui :: any).TextLabel.Text = player.DisplayName .. "'s\nGOOB"
+                end
+            end
+            return plot
+        end
+    end
+    return nil
+end
+
+function WorldBuilder.releasePlot(player: Player)
+    for _, plot in ipairs(WorldBuilder.plots) do
+        if plot.owner == player then
+            plot.owner = nil
+            local pad = Workspace.GoobWorld:FindFirstChild("Plot" .. plot.index)
+            if pad then
+                local sign = pad:FindFirstChild("Sign")
+                local gui = sign and sign:FindFirstChild("PlotLabel")
+                if gui then
+                    (gui :: any).TextLabel.Text = "PLOT " .. plot.index .. "\nOPEN"
+                end
+            end
+            return
+        end
+    end
+end
+
+function WorldBuilder.plotFor(player: Player)
+    for _, plot in ipairs(WorldBuilder.plots) do
+        if plot.owner == player then return plot end
+    end
+    return nil
+end
+
+return WorldBuilder
+]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX000023"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX000022"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="LocalScript" referent="RBX000017"><Properties><string name="Name">GoobClient</string><ProtectedString name="Source"><![CDATA[--!strict
+-- init.client.luau — client entry point.
+--
+-- Everything the client does falls into one of three jobs:
+--   1. Draw the UI from server snapshots (it never computes authoritative state)
+--   2. Detect what the player is standing near and ASK the server about it
+--   3. Play feedback (toasts, sounds, camera pops)
+--
+-- Note job 2: the client never says "I caught a Mythic". It says "I touched
+-- this part", and the server decides. Every exploit in this genre comes from
+-- getting that backwards.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+
+local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
+local Config = require(Shared.Config)
+local Net = require(Shared.Net)
+local Format = require(Shared.Format)
+
+local Theme = require(script.Theme)
+local Hud = require(script.Hud)
+local TradeUi = require(script.TradeUi)
+
+local player = Players.LocalPlayer
+local gui = Hud.build()
+TradeUi.build(gui)
+
+-- ── Sound ──────────────────────────────────────────────────────────────────
+-- Three sounds carry the entire game feel: a catch blip, a rare fanfare and a
+-- gulp. They are generated from Roblox's built-in library so the place has no
+-- external asset dependencies and works the moment you open it.
+
+local function sound(id: string, volume: number, pitch: number?): Sound
+    local s = Instance.new("Sound")
+    s.SoundId = id
+    s.Volume = volume
+    s.PlaybackSpeed = pitch or 1
+    s.Parent = SoundService
+    return s
+end
+
+local sfxCatch = sound("rbxassetid://6026984224", 0.35)
+local sfxRare  = sound("rbxassetid://9125402735", 0.5)
+local sfxGulp  = sound("rbxassetid://5852470908", 0.6)
+
+local function play(s: Sound, pitchJitter: number?)
+    if pitchJitter then
+        s.PlaybackSpeed = 1 + (math.random() - 0.5) * pitchJitter
+    end
+    s:Play()
+end
+
+-- ── Catching ───────────────────────────────────────────────────────────────
+-- Auto-collect on proximity. Requiring a click would be miserable on mobile,
+-- and "run through the thing to get the thing" is the most legible verb there
+-- is. We throttle per-part so we never spam the server.
+
+local critterFolder = Workspace:WaitForChild("Critters")
+local lastAsked: { [Instance]: number } = {}
+local CatchRemote = Net.get("CatchCritter")
+
+RunService.Heartbeat:Connect(function()
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+    if not root then return end
+
+    local now = os.clock()
+    for _, part in ipairs(critterFolder:GetChildren()) do
+        if part:IsA("BasePart") then
+            local d = (part.Position - root.Position).Magnitude
+            if d <= Config.CRITTER_CATCH_RADIUS - 1 then
+                if (now - (lastAsked[part] or 0)) > 0.4 then
+                    lastAsked[part] = now
+                    CatchRemote:FireServer(part)
+                end
+            end
+        end
+    end
+
+    -- Reap the throttle table so it doesn't grow forever over a long session.
+    if #critterFolder:GetChildren() == 0 then
+        lastAsked = {}
+    end
+end)
+
+-- ── Server -> client ───────────────────────────────────────────────────────
+
+Net.get("StateSync").OnClientEvent:Connect(function(snap)
+    Hud.update(snap)
+end)
+
+Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
+    Hud.toast(message, kind)
+    if kind == "secret" then
+        play(sfxRare)
+    elseif kind == "good" then
+        play(sfxCatch, 0.2)
+    end
+end)
+
+Net.get("TradeSync").OnClientEvent:Connect(function(state)
+    TradeUi.sync(state)
+    Hud.setTradeOpen(state ~= nil and state.open == true)
+end)
+
+-- ── Client -> server actions ───────────────────────────────────────────────
+
+Hud.onSetActive = function(goobId: string)
+    Net.get("SetActiveGoob"):FireServer(goobId)
+end
+
+Hud.onOffer = function(goobId: string)
+    Net.get("TradeOffer"):FireServer(goobId, true)
+end
+
+Hud.onBuySnack = function(tierId: string)
+    Net.get("BuySnack"):FireServer(tierId)
+    play(sfxCatch, 0.25)
+end
+
+-- Gulping is irreversible, so it gets a real two-step confirmation with the
+-- consequence spelled out in words a child will actually read.
+local pendingGulp: string? = nil
+local confirmFrame: Frame
+
+local function buildGulpConfirm()
+    confirmFrame = Instance.new("Frame")
+    confirmFrame.Size = UDim2.fromOffset(420, 210)
+    confirmFrame.Position = UDim2.new(0.5, -210, 0.5, -105)
+    confirmFrame.BackgroundColor3 = Theme.BG
+    confirmFrame.Visible = false
+    confirmFrame.Parent = gui
+    Theme.corner(confirmFrame, 18)
+    Theme.stroke(confirmFrame, Theme.BAD, 4)
+
+    local title = Theme.label({
+        Position = UDim2.fromOffset(20, 16), Size = UDim2.new(1, -40, 0, 30),
+        Text = "😋 GULP THIS GOOB?", TextSize = 26, TextColor3 = Theme.BAD,
+    })
+    title.Parent = confirmFrame
+
+    local body = Theme.label({
+        Name = "Body",
+        Position = UDim2.fromOffset(20, 52), Size = UDim2.new(1, -40, 0, 92),
+        Text = "", TextSize = 17, TextWrapped = true,
+        TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = Theme.TEXT_DIM,
+    })
+    body.Parent = confirmFrame
+
+    local yes = Theme.button("😋 GULP IT", Theme.BAD, UDim2.fromOffset(170, 44))
+    yes.Position = UDim2.fromOffset(20, 150)
+    yes.Parent = confirmFrame
+    yes.Activated:Connect(function()
+        local state = Hud.getState()
+        if pendingGulp and state then
+            local activeId = state.activeGoobId
+            Net.get("GulpGoob"):FireServer(activeId, pendingGulp)
+            play(sfxGulp)
+        end
+        pendingGulp = nil
+        confirmFrame.Visible = false
+    end)
+
+    local no = Theme.button("✖ KEEP IT", Theme.ACCENT, UDim2.fromOffset(170, 44))
+    no.Position = UDim2.new(1, -190, 0, 150)
+    no.Parent = confirmFrame
+    no.Activated:Connect(function()
+        pendingGulp = nil
+        confirmFrame.Visible = false
+    end)
+end
+buildGulpConfirm()
+
+Hud.onGulp = function(goobId: string)
+    local state = Hud.getState()
+    if not state then return end
+    local target, active
+    for _, g in ipairs(state.goobs) do
+        if g.id == goobId then target = g end
+        if g.isActive then active = g end
+    end
+    if not target or not active then return end
+
+    pendingGulp = goobId
+    local body = confirmFrame:FindFirstChild("Body") :: TextLabel
+    body.Text = string.format(
+        "%s (⚡%s, %s old) will be GONE FOREVER.\n\n%s will gain about ⚡%s and %s of its age.\n\nThis cannot be undone.",
+        target.nickname, target.powerText, target.ageText,
+        active.nickname,
+        Format.short(target.mass * Config.GULP_MASS_TRANSFER * active.ageMult),
+        Format.duration(target.ageSeconds * Config.GULP_AGE_TRANSFER)
+    )
+    confirmFrame.Visible = true
+end
+
+-- Rename: a tiny inline prompt rather than a modal, because renaming is a
+-- low-stakes action and a modal for it would be annoying.
+local renameFrame: Frame
+local renameBox: TextBox
+local renameTarget: string? = nil
+
+do
+    renameFrame = Instance.new("Frame")
+    renameFrame.Size = UDim2.fromOffset(400, 150)
+    renameFrame.Position = UDim2.new(0.5, -200, 0.5, -75)
+    renameFrame.BackgroundColor3 = Theme.BG
+    renameFrame.Visible = false
+    renameFrame.Parent = gui
+    Theme.corner(renameFrame, 18)
+    Theme.stroke(renameFrame, Theme.GOLD, 4)
+
+    local title = Theme.label({
+        Position = UDim2.fromOffset(20, 14), Size = UDim2.new(1, -40, 0, 28),
+        Text = "✏️ NAME YOUR GOOB", TextSize = 24, TextColor3 = Theme.GOLD,
+    })
+    title.Parent = renameFrame
+
+    renameBox = Instance.new("TextBox")
+    renameBox.Position = UDim2.fromOffset(20, 52)
+    renameBox.Size = UDim2.new(1, -40, 0, 42)
+    renameBox.BackgroundColor3 = Theme.BG_SOFT
+    renameBox.Font = Theme.FONT
+    renameBox.TextSize = 20
+    renameBox.TextColor3 = Theme.TEXT
+    renameBox.PlaceholderText = "2–22 letters…"
+    renameBox.ClearTextOnFocus = false
+    renameBox.Text = ""
+    renameBox.Parent = renameFrame
+    Theme.corner(renameBox, 10)
+
+    local ok = Theme.button("SAVE", Theme.GOOD, UDim2.fromOffset(160, 38))
+    ok.Position = UDim2.fromOffset(20, 102)
+    ok.Parent = renameFrame
+    ok.Activated:Connect(function()
+        if renameTarget and #renameBox.Text >= 2 then
+            Net.get("RenameGoob"):FireServer(renameTarget, renameBox.Text)
+        end
+        renameFrame.Visible = false
+        renameTarget = nil
+    end)
+
+    local cancel = Theme.button("CANCEL", Theme.BAD, UDim2.fromOffset(160, 38))
+    cancel.Position = UDim2.new(1, -180, 0, 102)
+    cancel.Parent = renameFrame
+    cancel.Activated:Connect(function()
+        renameFrame.Visible = false
+        renameTarget = nil
+    end)
+end
+
+Hud.onRename = function(goobId: string)
+    renameTarget = goobId
+    renameBox.Text = ""
+    renameFrame.Visible = true
+    renameBox:CaptureFocus()
+end
+
+-- ── Trade initiation ───────────────────────────────────────────────────────
+-- Walking into the trade zone next to someone shows a single button. No chat
+-- commands, no typing a username — both of which are where younger players get
+-- socially engineered.
+
+local tradePrompt: TextButton
+do
+    tradePrompt = Theme.button("🤝 TRADE", Theme.GOLD, UDim2.fromOffset(220, 54))
+    tradePrompt.Position = UDim2.new(0.5, -110, 1, -140)
+    tradePrompt.TextSize = 22
+    tradePrompt.Visible = false
+    tradePrompt.Parent = gui
+end
+
+local nearestPartner: Player? = nil
+
+RunService.Heartbeat:Connect(function()
+    if TradeUi.isOpen() then
+        tradePrompt.Visible = false
+        return
+    end
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+    if not root then tradePrompt.Visible = false return end
+
+    local flat = Vector3.new(root.Position.X, 0, root.Position.Z)
+    if flat.Magnitude > Config.TRADE_RANGE then
+        tradePrompt.Visible = false
+        nearestPartner = nil
+        return
+    end
+
+    local best, bestDist = nil, math.huge
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player then
+            local oc = other.Character
+            local orr = oc and oc:FindFirstChild("HumanoidRootPart") :: BasePart?
+            if orr then
+                local oflat = Vector3.new(orr.Position.X, 0, orr.Position.Z)
+                if oflat.Magnitude <= Config.TRADE_RANGE then
+                    local d = (orr.Position - root.Position).Magnitude
+                    if d < bestDist then best, bestDist = other, d end
+                end
+            end
+        end
+    end
+
+    nearestPartner = best
+    tradePrompt.Visible = best ~= nil
+    if best then tradePrompt.Text = "🤝 TRADE WITH " .. string.upper(best.DisplayName) end
+end)
+
+tradePrompt.Activated:Connect(function()
+    if nearestPartner then
+        Net.get("TradeRequest"):FireServer(nearestPartner.Name)
+    end
+end)
+
+-- Incoming trade request: accept/decline strip.
+do
+    local strip = Instance.new("Frame")
+    strip.Size = UDim2.fromOffset(360, 60)
+    strip.Position = UDim2.new(0.5, -180, 0, 90)
+    strip.BackgroundColor3 = Theme.BG
+    strip.Visible = false
+    strip.Parent = gui
+    Theme.corner(strip, 14)
+    Theme.stroke(strip, Theme.GOLD, 3)
+
+    local accept = Theme.button("✅ ACCEPT", Theme.GOOD, UDim2.fromOffset(160, 42))
+    accept.Position = UDim2.fromOffset(12, 9)
+    accept.Parent = strip
+    local decline = Theme.button("✖ NO", Theme.BAD, UDim2.fromOffset(160, 42))
+    decline.Position = UDim2.new(1, -172, 0, 9)
+    decline.Parent = strip
+
+    accept.Activated:Connect(function()
+        Net.get("TradeRespond"):FireServer(true)
+        strip.Visible = false
+    end)
+    decline.Activated:Connect(function()
+        Net.get("TradeRespond"):FireServer(false)
+        strip.Visible = false
+    end)
+
+    Net.get("Notify").OnClientEvent:Connect(function(_: string, kind: string?)
+        if kind == "trade" then
+            strip.Visible = true
+            task.delay(12, function() strip.Visible = false end)
+        end
+    end)
+end
+
+-- ── Boot ───────────────────────────────────────────────────────────────────
+
+task.spawn(function()
+    local snap = Net.get("RequestProfile"):InvokeServer()
+    if snap then Hud.update(snap) end
+end)
+
+print("[GULP A GOOB] client ready")
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000014"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Hud.luau — the heads-up display and the Goob drawer.
+--
+-- Layout philosophy: ONE always-visible number (your power), ONE always-visible
+-- currency, and everything else behind a single big button. Kids bounce off
+-- cluttered UI faster than they bounce off bad gameplay.
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Format = require(Shared.Format)
+local Feedstock = require(Shared.Feedstock)
+local Config = require(Shared.Config)
+local Net = require(Shared.Net)
+
+local Theme = require(script.Parent.Theme)
+
+local player = Players.LocalPlayer
+local Hud = {}
+
+local gui: ScreenGui
+local powerLabel: TextLabel
+local globLabel: TextLabel
+local incomeLabel: TextLabel
+local ageLabel: TextLabel
+local drawer: Frame
+local drawerList: ScrollingFrame
+local toastHolder: Frame
+local drawerOpen = false
+local snackButtons: { [string]: TextButton } = {}
+
+local state: any = nil
+local displayedGlob = 0
+
+-- ── Toasts ─────────────────────────────────────────────────────────────────
+
+local TOAST_COLOR = {
+    info = Theme.ACCENT, good = Theme.GOOD, warn = Theme.WARN,
+    trade = Theme.GOLD, secret = Color3.fromRGB(255, 255, 255),
+}
+
+function Hud.toast(message: string, kind: string?)
+    local color = TOAST_COLOR[kind or "info"] or Theme.ACCENT
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 46)
+    frame.BackgroundColor3 = Theme.PANEL
+    frame.BackgroundTransparency = 0.06
+    Theme.corner(frame)
+    Theme.stroke(frame, color, 3)
+
+    local text = Theme.label({
+        Size = UDim2.new(1, -20, 1, 0),
+        Position = UDim2.fromOffset(12, 0),
+        Text = message,
+        TextColor3 = color,
+        TextSize = 19,
+        TextWrapped = true,
+        TextYAlignment = Enum.TextYAlignment.Center,
+    })
+    text.Parent = frame
+    frame.Parent = toastHolder
+
+    -- Slide in, hold, fade out. A Secret announcement holds longer because it
+    -- is a call to action, not a receipt.
+    frame.Position = UDim2.new(1, 40, 0, 0)
+    TweenService:Create(frame, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 0, 0, 0),
+    }):Play()
+
+    local hold = (kind == "secret") and 6 or 3.2
+    task.delay(hold, function()
+        if not frame.Parent then return end
+        local out = TweenService:Create(frame, TweenInfo.new(0.3), {
+            Position = UDim2.new(1, 60, 0, 0), BackgroundTransparency = 1,
+        })
+        TweenService:Create(text, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+        out:Play()
+        out.Completed:Wait()
+        frame:Destroy()
+    end)
+end
+
+-- ── Goob drawer ────────────────────────────────────────────────────────────
+
+local function contentsSummary(contents: { [string]: number }): string
+    local rows = {}
+    for id, count in pairs(contents) do
+        local item = Feedstock.get(id)
+        if item then table.insert(rows, { name = item.name, count = count, mass = item.mass }) end
+    end
+    table.sort(rows, function(a, b) return a.mass * a.count > b.mass * b.count end)
+    local out = {}
+    for i = 1, math.min(3, #rows) do
+        table.insert(out, ("%s ×%s"):format(rows[i].name, Format.comma(rows[i].count)))
+    end
+    if #rows > 3 then table.insert(out, ("+%d more"):format(#rows - 3)) end
+    return #out > 0 and table.concat(out, " · ") or "empty — go catch something!"
+end
+
+local function buildCard(goob: any, index: number): Frame
+    local card = Instance.new("Frame")
+    card.Name = "Goob" .. index
+    card.Size = UDim2.new(1, 0, 0, 118)
+    card.BackgroundColor3 = goob.isActive and Theme.BG_SOFT or Theme.PANEL
+    Theme.corner(card)
+    Theme.stroke(card, goob.isActive and Theme.ACCENT or Color3.fromRGB(16, 18, 30), goob.isActive and 3 or 2)
+
+    -- Colour chip showing the Goob's actual body hue, so the list matches what
+    -- you see standing on the plot.
+    local chip = Instance.new("Frame")
+    chip.Size = UDim2.fromOffset(66, 66)
+    chip.Position = UDim2.fromOffset(12, 12)
+    chip.BackgroundColor3 = Color3.fromHSV(goob.hue, 0.55, 1)
+    chip.Parent = card
+    Theme.corner(chip, 33)
+    Theme.stroke(chip, Color3.fromRGB(16, 18, 30), 3)
+
+    local gen = Theme.label({
+        Size = UDim2.fromScale(1, 1), Text = "G" .. goob.generation,
+        TextSize = 22, TextXAlignment = Enum.TextXAlignment.Center,
+        TextColor3 = Color3.fromRGB(25, 27, 40),
+    })
+    gen.Parent = chip
+
+    local name = Theme.label({
+        Position = UDim2.fromOffset(90, 10), Size = UDim2.new(1, -100, 0, 24),
+        Text = goob.nickname, TextSize = 21,
+    })
+    name.Parent = card
+
+    local stats = Theme.label({
+        Position = UDim2.fromOffset(90, 36), Size = UDim2.new(1, -100, 0, 22),
+        Text = ("⚡ %s   %s %s (×%.2f)   ⏳ %s")
+            :format(goob.powerText, goob.ageEmoji, goob.ageTier, goob.ageMult, goob.ageText),
+        TextSize = 16, TextColor3 = goob.ageColor,
+    })
+    stats.Parent = card
+
+    local belly = Theme.label({
+        Position = UDim2.fromOffset(90, 58), Size = UDim2.new(1, -100, 0, 20),
+        Text = "🫧 " .. contentsSummary(goob.contents),
+        TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextTruncate = Enum.TextTruncate.AtEnd,
+    })
+    belly.Parent = card
+
+    local row = Instance.new("Frame")
+    row.Position = UDim2.fromOffset(90, 82)
+    row.Size = UDim2.new(1, -102, 0, 28)
+    row.BackgroundTransparency = 1
+    row.Parent = card
+
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.Padding = UDim.new(0, 6)
+    layout.Parent = row
+
+    if not goob.isActive then
+        local show = Theme.button("👁 Display", Theme.ACCENT, UDim2.fromOffset(104, 28))
+        show.TextSize = 15
+        show.Parent = row
+        show.Activated:Connect(function()
+            Hud.onSetActive(goob.id)
+        end)
+
+        local gulp = Theme.button("😋 Gulp", Theme.BAD, UDim2.fromOffset(88, 28))
+        gulp.TextSize = 15
+        gulp.Parent = row
+        gulp.Activated:Connect(function()
+            Hud.onGulp(goob.id)
+        end)
+    else
+        local rename = Theme.button("✏️ Rename", Theme.GOLD, UDim2.fromOffset(104, 28))
+        rename.TextSize = 15
+        rename.Parent = row
+        rename.Activated:Connect(function() Hud.onRename(goob.id) end)
+    end
+
+    -- While a trade window is open, every card grows an "offer" button. This
+    -- keeps the trade UI itself read-only, which means the list you are
+    -- agreeing to and the list you are editing can never drift apart.
+    if Hud.tradeOpen then
+        local offer = Theme.button("➕ Offer", Theme.GOOD, UDim2.fromOffset(90, 28))
+        offer.TextSize = 15
+        offer.Parent = row
+        offer.Activated:Connect(function() Hud.onOffer(goob.id) end)
+    end
+
+    return card
+end
+
+local function rebuildDrawer()
+    if not state then return end
+    for _, child in ipairs(drawerList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    -- Active Goob first, then by power descending.
+    local sorted = table.clone(state.goobs)
+    table.sort(sorted, function(a, b)
+        if a.isActive ~= b.isActive then return a.isActive end
+        return a.power > b.power
+    end)
+    for i, goob in ipairs(sorted) do
+        local card = buildCard(goob, i)
+        card.LayoutOrder = i
+        card.Parent = drawerList
+    end
+    drawerList.CanvasSize = UDim2.new(0, 0, 0, #sorted * 126 + 8)
+end
+
+-- ── Build ──────────────────────────────────────────────────────────────────
+
+function Hud.build(): ScreenGui
+    gui = Instance.new("ScreenGui")
+    gui.Name = "GoobHud"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Parent = player:WaitForChild("PlayerGui")
+
+    -- Top-left: the two numbers that matter.
+    local top = Instance.new("Frame")
+    top.Size = UDim2.fromOffset(300, 108)
+    top.Position = UDim2.fromOffset(16, 16)
+    top.BackgroundColor3 = Theme.BG
+    top.BackgroundTransparency = 0.12
+    top.Parent = gui
+    Theme.corner(top, 18)
+    Theme.stroke(top, Color3.fromRGB(14, 16, 26), 3)
+
+    powerLabel = Theme.label({
+        Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -24, 0, 40),
+        Text = "⚡ 0", TextSize = 34, TextColor3 = Theme.GOLD,
+    })
+    powerLabel.Parent = top
+
+    globLabel = Theme.label({
+        Position = UDim2.fromOffset(16, 48), Size = UDim2.new(1, -24, 0, 26),
+        Text = "💧 0", TextSize = 22, TextColor3 = Theme.ACCENT,
+    })
+    globLabel.Parent = top
+
+    incomeLabel = Theme.label({
+        Position = UDim2.fromOffset(16, 74), Size = UDim2.new(1, -24, 0, 22),
+        Text = "+0 /sec", TextSize = 15, TextColor3 = Theme.TEXT_DIM,
+    })
+    incomeLabel.Parent = top
+
+    ageLabel = Theme.label({
+        Position = UDim2.fromOffset(16, 130), Size = UDim2.fromOffset(300, 24),
+        Text = "", TextSize = 17,
+    })
+    ageLabel.Parent = gui
+
+    -- Bottom-left: the one big button.
+    local openBtn = Theme.button("🫧 MY GOOBS", Theme.ACCENT, UDim2.fromOffset(190, 58))
+    openBtn.Position = UDim2.new(0, 16, 1, -74)
+    openBtn.TextSize = 24
+    openBtn.Parent = gui
+
+    -- Drawer.
+    drawer = Instance.new("Frame")
+    drawer.Size = UDim2.fromOffset(430, 460)
+    drawer.Position = UDim2.new(0, -450, 1, -544)
+    drawer.BackgroundColor3 = Theme.BG
+    drawer.BackgroundTransparency = 0.06
+    drawer.Parent = gui
+    Theme.corner(drawer, 18)
+    Theme.stroke(drawer, Color3.fromRGB(14, 16, 26), 3)
+
+    local title = Theme.label({
+        Position = UDim2.fromOffset(18, 12), Size = UDim2.new(1, -36, 0, 30),
+        Text = "🫧 MY GOOBS", TextSize = 26,
+    })
+    title.Parent = drawer
+
+    local hint = Theme.label({
+        Position = UDim2.fromOffset(18, 42), Size = UDim2.new(1, -36, 0, 20),
+        Text = "Gulping one Goob into another DESTROYS it forever.",
+        TextSize = 14, TextColor3 = Theme.WARN, TextWrapped = true,
+    })
+    hint.Parent = drawer
+
+    drawerList = Instance.new("ScrollingFrame")
+    drawerList.Position = UDim2.fromOffset(14, 70)
+    drawerList.Size = UDim2.new(1, -28, 1, -84)
+    drawerList.BackgroundTransparency = 1
+    drawerList.BorderSizePixel = 0
+    drawerList.ScrollBarThickness = 6
+    drawerList.ScrollBarImageColor3 = Theme.ACCENT
+    drawerList.Parent = drawer
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 8)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = drawerList
+
+    openBtn.Activated:Connect(function()
+        drawerOpen = not drawerOpen
+        TweenService:Create(drawer, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Position = drawerOpen and UDim2.new(0, 16, 1, -544) or UDim2.new(0, -450, 1, -544),
+        }):Play()
+        if drawerOpen then rebuildDrawer() end
+    end)
+
+    -- Snack Stand: three buttons under the HUD. This is where idle income
+    -- turns back into progression, so it is always on screen, never in a menu.
+    local stand = Instance.new("Frame")
+    stand.Name = "SnackStand"
+    stand.Size = UDim2.fromOffset(300, 132)
+    stand.Position = UDim2.fromOffset(16, 158)
+    stand.BackgroundColor3 = Theme.BG
+    stand.BackgroundTransparency = 0.12
+    stand.Parent = gui
+    Theme.corner(stand, 16)
+    Theme.stroke(stand, Color3.fromRGB(14, 16, 26), 3)
+
+    local standTitle = Theme.label({
+        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 0, 22),
+        Text = "🍪 SNACK STAND", TextSize = 17, TextColor3 = Theme.GOLD,
+    })
+    standTitle.Parent = stand
+
+    snackButtons = {}
+    for i, tier in ipairs(Config.SNACK_TIERS) do
+        local btn = Theme.button("", Theme.BG_SOFT, UDim2.new(1, -28, 0, 30))
+        btn.Position = UDim2.fromOffset(14, 30 + (i - 1) * 34)
+        btn.TextColor3 = Theme.TEXT
+        btn.TextSize = 15
+        btn.Text = tier.emoji .. " " .. tier.name
+        btn.Parent = stand
+        btn.Activated:Connect(function() Hud.onBuySnack(tier.id) end)
+        snackButtons[tier.id] = btn
+    end
+
+    -- Toast column, top-right.
+    toastHolder = Instance.new("Frame")
+    toastHolder.Size = UDim2.fromOffset(340, 400)
+    toastHolder.Position = UDim2.new(1, -356, 0, 16)
+    toastHolder.BackgroundTransparency = 1
+    toastHolder.Parent = gui
+
+    local toastLayout = Instance.new("UIListLayout")
+    toastLayout.Padding = UDim.new(0, 8)
+    toastLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+    toastLayout.Parent = toastHolder
+
+    -- Smoothly count the glob counter up between server pushes, so the number
+    -- visibly ticks instead of jumping twice a second. Pure juice, big payoff.
+    RunService.RenderStepped:Connect(function(dt)
+        if not state then return end
+        displayedGlob += (state.glob - displayedGlob) * math.min(1, dt * 6)
+        displayedGlob += state.income * dt
+        globLabel.Text = "💧 " .. Format.short(displayedGlob)
+    end)
+
+    return gui
+end
+
+function Hud.update(snap: any)
+    state = snap
+    if math.abs(displayedGlob - snap.glob) > math.max(10, snap.glob * 0.25) then
+        displayedGlob = snap.glob
+    end
+    incomeLabel.Text = "+" .. snap.incomeText .. " 💧/sec"
+
+    local active
+    for _, g in ipairs(snap.goobs) do if g.isActive then active = g end end
+    if active then
+        powerLabel.Text = "⚡ " .. active.powerText
+        ageLabel.Text = ("%s %s · %s old · ×%.2f power")
+            :format(active.ageEmoji, active.ageTier, active.ageText, active.ageMult)
+        ageLabel.TextColor3 = active.ageColor
+    end
+    -- Snack prices come from the server every push, so the button always shows
+    -- exactly what will be charged.
+    for _, snack in ipairs(snap.snacks or {}) do
+        local btn = snackButtons[snack.id]
+        if btn then
+            btn.Text = ("%s %s  ·  💧%s  ·  %d items")
+                :format(snack.emoji, snack.name, snack.priceText, snack.rolls)
+            btn.BackgroundColor3 = snack.affordable and Theme.GOOD or Theme.BG_SOFT
+            btn.TextColor3 = snack.affordable and Color3.fromRGB(20, 22, 34) or Theme.TEXT_DIM
+        end
+    end
+
+    if drawerOpen then rebuildDrawer() end
+end
+
+-- Wired up by init.client.
+Hud.tradeOpen = false
+Hud.onGulp = function(_: string) end
+Hud.onOffer = function(_: string) end
+Hud.onBuySnack = function(_: string) end
+Hud.onRename = function(_: string) end
+Hud.onSetActive = function(_: string) end
+
+function Hud.getState() return state end
+
+function Hud.setTradeOpen(open: boolean)
+    if Hud.tradeOpen == open then return end
+    Hud.tradeOpen = open
+    if drawerOpen then rebuildDrawer() end
+end
+
+return Hud
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000015"><Properties><string name="Name">Theme</string><ProtectedString name="Source"><![CDATA[--!strict
+-- Theme.luau — one place for every colour, corner radius and font in the UI.
+-- Chunky, high-contrast, oversized text: the target player is nine and may be
+-- on a phone, so nothing here is subtle.
+
+local Theme = {}
+
+Theme.FONT = Enum.Font.FredokaOne
+Theme.BG        = Color3.fromRGB(28, 30, 48)
+Theme.BG_SOFT   = Color3.fromRGB(42, 46, 72)
+Theme.PANEL     = Color3.fromRGB(36, 39, 62)
+Theme.ACCENT    = Color3.fromRGB(120, 220, 255)
+Theme.GOOD      = Color3.fromRGB(110, 235, 150)
+Theme.WARN      = Color3.fromRGB(255, 185, 80)
+Theme.BAD       = Color3.fromRGB(255, 105, 120)
+Theme.GOLD      = Color3.fromRGB(255, 210, 90)
+Theme.TEXT      = Color3.fromRGB(255, 255, 255)
+Theme.TEXT_DIM  = Color3.fromRGB(178, 186, 215)
+
+function Theme.corner(parent: Instance, radius: number?)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 14)
+    c.Parent = parent
+    return c
+end
+
+function Theme.stroke(parent: Instance, color: Color3?, thickness: number?)
+    local s = Instance.new("UIStroke")
+    s.Color = color or Color3.fromRGB(16, 18, 30)
+    s.Thickness = thickness or 3
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+function Theme.pad(parent: Instance, px: number)
+    local p = Instance.new("UIPadding")
+    p.PaddingTop = UDim.new(0, px)
+    p.PaddingBottom = UDim.new(0, px)
+    p.PaddingLeft = UDim.new(0, px)
+    p.PaddingRight = UDim.new(0, px)
+    p.Parent = parent
+    return p
+end
+
+function Theme.label(props: { [string]: any }): TextLabel
+    local t = Instance.new("TextLabel")
+    t.BackgroundTransparency = 1
+    t.Font = Theme.FONT
+    t.TextColor3 = Theme.TEXT
+    t.TextScaled = false
+    t.TextSize = 18
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    for k, v in pairs(props) do (t :: any)[k] = v end
+    return t
+end
+
+function Theme.button(text: string, color: Color3, size: UDim2): TextButton
+    local b = Instance.new("TextButton")
+    b.Text = text
+    b.Size = size
+    b.BackgroundColor3 = color
+    b.Font = Theme.FONT
+    b.TextColor3 = Color3.fromRGB(20, 22, 34)
+    b.TextSize = 20
+    b.AutoButtonColor = true
+    Theme.corner(b, 12)
+    Theme.stroke(b)
+    return b
+end
+
+return Theme
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000016"><Properties><string name="Name">TradeUi</string><ProtectedString name="Source"><![CDATA[--!strict
+-- TradeUi.luau — the trade window.
+--
+-- The whole design goal is SCAM RESISTANCE made visible. A young player cannot
+-- be expected to notice a swapped item, so the UI does the noticing for them:
+-- both offers are shown at identical size, confirming is a hold-to-fill bar,
+-- and any change to either side visibly snaps both bars back to empty.
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Net = require(Shared.Net)
+local Format = require(Shared.Format)
+
+local Theme = require(script.Parent.Theme)
+
+local player = Players.LocalPlayer
+local TradeUi = {}
+
+local root: Frame
+local myList: Frame
+local theirList: Frame
+local statusLabel: TextLabel
+local confirmBtn: TextButton
+local fillBar: Frame
+local partnerLabel: TextLabel
+
+local holding = false
+local holdStart = 0
+local lockSeconds = 3
+local current: any = nil
+
+local function clear(frame: Frame)
+    for _, c in ipairs(frame:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+end
+
+local function offerCard(goob: any, mine: boolean): Frame
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 74)
+    card.BackgroundColor3 = Theme.PANEL
+    Theme.corner(card, 12)
+    Theme.stroke(card, Color3.fromRGB(16, 18, 30), 2)
+
+    local chip = Instance.new("Frame")
+    chip.Size = UDim2.fromOffset(50, 50)
+    chip.Position = UDim2.fromOffset(10, 12)
+    chip.BackgroundColor3 = Color3.fromHSV(goob.hue, 0.55, 1)
+    chip.Parent = card
+    Theme.corner(chip, 25)
+    Theme.stroke(chip, Color3.fromRGB(16, 18, 30), 2)
+
+    local name = Theme.label({
+        Position = UDim2.fromOffset(70, 8), Size = UDim2.new(1, -80, 0, 22),
+        Text = goob.nickname, TextSize = 18, TextTruncate = Enum.TextTruncate.AtEnd,
+    })
+    name.Parent = card
+
+    -- Age is shown as loudly as power. It is the stat new traders undervalue,
+    -- and the one they get talked out of.
+    local stat = Theme.label({
+        Position = UDim2.fromOffset(70, 30), Size = UDim2.new(1, -80, 0, 20),
+        Text = ("⚡ %s   Gen %d"):format(goob.powerText, goob.generation),
+        TextSize = 15, TextColor3 = Theme.GOLD,
+    })
+    stat.Parent = card
+
+    local age = Theme.label({
+        Position = UDim2.fromOffset(70, 50), Size = UDim2.new(1, -80, 0, 18),
+        Text = ("%s %s · %s old"):format(goob.ageEmoji, goob.ageTier, goob.ageText),
+        TextSize = 14, TextColor3 = Theme.ACCENT,
+    })
+    age.Parent = card
+
+    if mine then
+        local remove = Theme.button("✖", Theme.BAD, UDim2.fromOffset(30, 30))
+        remove.Position = UDim2.new(1, -38, 0, 8)
+        remove.TextSize = 16
+        remove.Parent = card
+        remove.Activated:Connect(function()
+            Net.get("TradeOffer"):FireServer(goob.id, false)
+        end)
+    end
+
+    return card
+end
+
+local function column(parent: Frame, title: string, x: UDim2): Frame
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(0.5, -14, 1, -164)
+    holder.Position = x
+    holder.BackgroundTransparency = 1
+    holder.Parent = parent
+
+    local head = Theme.label({
+        Size = UDim2.new(1, 0, 0, 26), Text = title, TextSize = 20,
+        TextXAlignment = Enum.TextXAlignment.Center,
+    })
+    head.Name = "Head"
+    head.Parent = holder
+
+    local list = Instance.new("Frame")
+    list.Name = "List"
+    list.Position = UDim2.fromOffset(0, 32)
+    list.Size = UDim2.new(1, 0, 1, -32)
+    list.BackgroundColor3 = Theme.BG_SOFT
+    list.BackgroundTransparency = 0.35
+    list.Parent = holder
+    Theme.corner(list, 12)
+    Theme.pad(list, 8)
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 6)
+    layout.Parent = list
+
+    return list
+end
+
+function TradeUi.build(gui: ScreenGui)
+    root = Instance.new("Frame")
+    root.Name = "TradeWindow"
+    root.Size = UDim2.fromOffset(640, 480)
+    root.Position = UDim2.new(0.5, -320, 0.5, -240)
+    root.BackgroundColor3 = Theme.BG
+    root.Visible = false
+    root.Parent = gui
+    Theme.corner(root, 18)
+    Theme.stroke(root, Theme.GOLD, 4)
+
+    local title = Theme.label({
+        Position = UDim2.fromOffset(20, 12), Size = UDim2.new(1, -40, 0, 30),
+        Text = "🤝 TRADE", TextSize = 28, TextColor3 = Theme.GOLD,
+    })
+    title.Parent = root
+
+    partnerLabel = Theme.label({
+        Position = UDim2.fromOffset(20, 44), Size = UDim2.new(1, -40, 0, 22),
+        Text = "", TextSize = 17, TextColor3 = Theme.TEXT_DIM,
+    })
+    partnerLabel.Parent = root
+
+    myList = column(root, "YOU GIVE", UDim2.fromOffset(14, 76))
+    theirList = column(root, "YOU GET", UDim2.new(0.5, 0, 0, 76))
+
+    statusLabel = Theme.label({
+        Position = UDim2.new(0, 20, 1, -84), Size = UDim2.new(1, -40, 0, 22),
+        Text = "Add Goobs from your drawer, then hold CONFIRM.",
+        TextSize = 15, TextColor3 = Theme.TEXT_DIM,
+        TextXAlignment = Enum.TextXAlignment.Center,
+    })
+    statusLabel.Parent = root
+
+    confirmBtn = Theme.button("HOLD TO CONFIRM", Theme.GOOD, UDim2.fromOffset(300, 46))
+    confirmBtn.Position = UDim2.new(0.5, -160, 1, -58)
+    confirmBtn.TextSize = 20
+    confirmBtn.Parent = root
+
+    -- The fill bar lives *inside* the button and grows left to right. It is
+    -- the entire anti-scam affordance: you physically cannot confirm by
+    -- reflex, and the bar emptying is impossible to miss.
+    fillBar = Instance.new("Frame")
+    fillBar.Size = UDim2.fromScale(0, 1)
+    fillBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    fillBar.BackgroundTransparency = 0.62
+    fillBar.BorderSizePixel = 0
+    fillBar.ZIndex = 0
+    fillBar.Parent = confirmBtn
+    Theme.corner(fillBar, 12)
+
+    local cancel = Theme.button("✖ CANCEL", Theme.BAD, UDim2.fromOffset(120, 46))
+    cancel.Position = UDim2.new(0.5, 152, 1, -58)
+    cancel.TextSize = 17
+    cancel.Parent = root
+    cancel.Activated:Connect(function()
+        Net.get("TradeCancel"):FireServer()
+    end)
+
+    local function beginHold()
+        if not current or not current.open then return end
+        holding = true
+        holdStart = os.clock()
+        Net.get("TradeConfirm"):FireServer(true)
+    end
+    local function endHold()
+        if not holding then return end
+        holding = false
+        fillBar.Size = UDim2.fromScale(0, 1)
+        Net.get("TradeConfirm"):FireServer(false)
+    end
+
+    confirmBtn.MouseButton1Down:Connect(beginHold)
+    confirmBtn.MouseButton1Up:Connect(endHold)
+    confirmBtn.MouseLeave:Connect(endHold)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            endHold()
+        end
+    end)
+
+    RunService.RenderStepped:Connect(function()
+        if holding then
+            local pct = math.clamp((os.clock() - holdStart) / lockSeconds, 0, 1)
+            fillBar.Size = UDim2.fromScale(pct, 1)
+        end
+    end)
+end
+
+function TradeUi.sync(stateIn: any)
+    current = stateIn
+    if not stateIn or not stateIn.open then
+        root.Visible = false
+        holding = false
+        fillBar.Size = UDim2.fromScale(0, 1)
+        return
+    end
+    root.Visible = true
+    lockSeconds = stateIn.lockSeconds or 3
+    partnerLabel.Text = "Trading with " .. (stateIn.partnerDisplay or stateIn.partner)
+
+    clear(myList)
+    clear(theirList)
+    for _, goob in ipairs(stateIn.myOffer) do offerCard(goob, true).Parent = myList end
+    for _, goob in ipairs(stateIn.theirOffer) do offerCard(goob, false).Parent = theirList end
+
+    -- If either offer changed, the server already reset both confirmations.
+    -- Reflecting that instantly is the point.
+    if not stateIn.myConfirmed and holding then
+        holding = false
+        fillBar.Size = UDim2.fromScale(0, 1)
+    end
+
+    if stateIn.theirConfirmed and stateIn.myConfirmed then
+        statusLabel.Text = "Both confirmed — finishing…"
+        statusLabel.TextColor3 = Theme.GOOD
+    elseif stateIn.theirConfirmed then
+        statusLabel.Text = "⚠️ They confirmed. Check the deal, then hold CONFIRM."
+        statusLabel.TextColor3 = Theme.WARN
+    else
+        statusLabel.Text = "Add Goobs from your drawer, then hold CONFIRM."
+        statusLabel.TextColor3 = Theme.TEXT_DIM
+    end
+end
+
+function TradeUi.isOpen(): boolean
+    return current ~= nil and current.open == true
+end
+
+return TradeUi
+]]></ProtectedString></Properties></Item></Item></Item></Item></roblox>
