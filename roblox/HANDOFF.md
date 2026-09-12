@@ -341,3 +341,95 @@ The harness proves the code doesn't explode; it cannot prove the game is fun.
 - **Never leave a `TextLabel` on its default `Text`** — it renders the literal
   word "Label".
 - **Never `math.clamp` layout maths directly** — use `Layout.fit`.
+
+
+---
+
+# ADDENDUM — THE GOOP REWORK (agar.io pivot)
+
+Everything above this line describes the game BEFORE the rework. Where the two
+disagree, this section wins. `GOOP.md` is the design; this is the state.
+
+## What changed, in one paragraph
+
+The game is now an agar.io-shaped arena on ONE island. You are a blob. You eat
+pellets and smaller players. Past a grace mass you LEAK constantly, and what
+you leak becomes real food on the floor, so a big blob is a moving buffet
+everyone can see. To keep anything you must roll into the Vault at the centre
+and bank, which resets you to small. If something bigger reaches you first you
+pop: your mass scatters as pellets and your shell congeals into the island as
+terrain that lasts for the life of the server.
+
+## The two curves (this is the whole design)
+
+- `harvest(mass)` is LOGARITHMIC — derived physically: a blob sweeps a corridor
+  2*radius wide at its own top speed through pellets at a fixed density. Radius
+  grows logarithmically and speed FALLS with mass.
+- `leak(mass)` is SUPER-LINEAR — `LEAK_SCALE * (mass - 60) ^ 1.15`.
+
+They cross once, at a mass no skill passes. Measured at 80% harvest efficiency:
+ceiling 1.06K mass, 600 at 70s, 90% of ceiling at 180s, 99% at 349s.
+
+## New files
+
+| file | what |
+|---|---|
+| `src/shared/Blob.luau` | the arena core: radius, speed, harvest, leak, ceiling, eat, pop split, bank |
+| `src/shared/Powers.luau` | 8 powers, one carried, each costs your own mass |
+| `src/shared/Trinkets.luau` | 8 trinkets, 3 slots, duplicates no-op, per-axis caps |
+| `src/shared/Crates.luau` | 3 crates, hard pity, dupe refunds, Glob only |
+| `src/server/ArenaService.luau` | the live loop; pellets in a spatial hash |
+| `src/client/ArenaHud.luau` | the whole screen: stat card, dock, status strip, power button, one sheet |
+| `tools/arena.luau` | 29 assertions on the curves |
+| `tools/crates.luau` | 24 assertions on gacha and trinket balance |
+
+## Rewritten
+
+- `WorldBuilder.luau` — one 300-stud island. Rings VAULT / FLATS / SHALLOWS.
+  Biome patches slick / scrap / basin. One building (the Shack). Sea underneath
+  so nobody can fall out of the world.
+- `Hud.luau` — gave up the stat panel, age line and drawer button to ArenaHud
+  via `Hud.setArenaMode(true)`. Still owns toasts, the drawer and the coach.
+- `mobile_test.luau` / `geometry.luau` — see "traps" below.
+
+## Invariants that must not break
+
+1. **A blob may never re-eat its own drips.** Leak lands outside the body AND a
+   pellet is locked to its dropper for 4s. Without both, net melt is zero and
+   the entire game evaporates. `roll_test.luau` asserts it.
+2. **Exactly one system writes ball Size.** `RollService.sizeOwnedByArena` is
+   set true by `ArenaService.start`. Otherwise `RollService.refresh` respawns
+   the player's body every few seconds forever.
+3. **Nothing with a gameplay number is sold for Robux.** Crates cost Glob,
+   powers unlock on lifetime banked, trinkets come from crates and the season.
+4. **One panel at a time.** Every dock tab routes through `ArenaHud.openSheet`,
+   which closes whatever was open first.
+5. **Boards expose `Board -> Entries`** as a direct child. Burying it deeper is
+   a silent WaitForChild hang, not an error.
+
+## Harness traps added this pass
+
+- `mobile_test` used to audit ONE ScreenGui by name. It walks all of them now.
+  If you add a third, it is covered automatically.
+- `geometry.luau` treated every UIListLayout as vertical. It reads
+  `FillDirection` now — and enums must be compared by `.Name`, because the stub
+  builds a fresh table on every `Enum.X.Y` access, so identity is always false.
+- Fully transparent containers do not count as visible UI; ScrollingFrame
+  content does not count as overflow.
+- The audit now measures the RESTING screen (everything closed) as well as the
+  open one. A mutation that stopped the sheet hiding went undetected until it did.
+- `ArenaSync` carries the run state; read it with an `arenaOf(player)` helper
+  over `_G.TRAFFIC` rather than inferring mass from ball radius. Radius is
+  logarithmic in mass and only redraws past a 2% threshold, so it is a terrible
+  proxy and it reported "no melt" while the blob shed ninety mass.
+
+## Still outstanding
+
+- Real asset IDs (`Config.SOUNDS` is all empty strings by design; user supplies).
+- Open Cloud auto-publish.
+- Daily login streak.
+- SLAM's shockwave is fired but its landing impulse is not yet applied to
+  nearby blobs; HOOK and SPLIT apply velocity but have no tether/merge logic.
+  The cost, cooldown and mass drop are all live — the visuals are the gap.
+- The tutorial still teaches the old loop in places; it boots and passes, but
+  its copy wants a pass for eat -> melt -> bank.
