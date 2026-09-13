@@ -24,19 +24,57 @@ export type Power = {
     cooldown: number,    -- seconds
     duration: number,    -- seconds of effect, 0 for instant
     unlockBanked: number,-- lifetime banked glob needed to own it
+    fixed: boolean?,     -- always in the hotbar; not a choice
+    season: boolean?,    -- granted by the season's free track, never by banking
     color: Color3,
 }
 
--- Ordered by unlock, which is also roughly ordered by how much thinking each
--- one asks for. DASH first because it is legible in a quarter of a second.
-Powers.LIST = {
+-- ── THE TWO YOU ALWAYS HAVE ───────────────────────────────────────────────
+--
+-- DASH and SPLIT are not choices, they are verbs the game is built out of. A
+-- game in this shape needs a lunge and a way to throw part of yourself at
+-- something out of reach; without both, half the situations on the island have
+-- no answer at all.
+--
+-- They used to sit in the same pool as everything else, competing for the one
+-- carried slot — and SPLIT was pinned near the top of the unlock ladder, which
+-- meant the mechanic the whole genre is named for was invisible for the first
+-- ten hours. Now they are slots 1 and 2, owned from the first second, and the
+-- chosen power is slot 3.
+--
+-- They still cost mass like everything else. That is the balance model and it
+-- does not get an exception: a free button is a button that gets held down.
+Powers.FIXED = {
     {
         id = "dash", name = "DASH",
         blurb = "Shove yourself forward, fast.",
-        cost = 0.08, cooldown = 3.5, duration = 0.22,
-        unlockBanked = 0,
-        color = Color3.fromRGB(150, 205, 225),
+        cost = 0.05, cooldown = 3.0, duration = 0.22,
+        unlockBanked = 0, fixed = true,
+        color = Color3.fromRGB(210, 210, 214),
     },
+    {
+        id = "split", name = "SPLIT",
+        blurb = "Throw three pieces of yourself forward, tethered to you.",
+        -- Cheaper and far quicker than the old one-shot 50% lunge. SPLIT is
+        -- meant to be a move you make several times a round — to reach food,
+        -- to fence somebody off, to commit to a kill — not a once-a-minute
+        -- gamble with half your body.
+        cost = 0.22, cooldown = 9, duration = 6,
+        unlockBanked = 0, fixed = true,
+        color = Color3.fromRGB(180, 180, 186),
+    },
+} :: { Power }
+
+-- ── THE ONE YOU CHOOSE ────────────────────────────────────────────────────
+--
+-- ORDERED BY UNLOCK, and it must stay that way: nextLocked() walks this array
+-- and returns the first thing the player cannot afford, so an out-of-order
+-- entry points them at a target that is not actually next. Four powers were
+-- appended to the end of this list when they were written and it did exactly
+-- that until a test caught it.
+--
+-- Roughly ordered by how much thinking each one asks for, too.
+Powers.LIST = {
     {
         id = "magnet", name = "MAGNET",
         blurb = "Yank every loose pellet nearby straight into you.",
@@ -72,14 +110,7 @@ Powers.LIST = {
         unlockBanked = 52000,
         color = Color3.fromRGB(206, 186, 132),
     },
-    {
-        id = "hook", name = "HOOK",
-        blurb = "Grab the nearest blob and reel. Bigger pulls, smaller gets pulled.",
-        cost = 0.10, cooldown = 13, duration = 1.2,
-        unlockBanked = 74000,
-        color = Color3.fromRGB(190, 180, 145),
-    },
-    {
+        {
         id = "siphon", name = "SIPHON",
         blurb = "Drain the nearest blob bigger than you.",
         cost = 0.09, cooldown = 19, duration = 3,
@@ -94,25 +125,43 @@ Powers.LIST = {
         color = Color3.fromRGB(175, 200, 200),
     },
     {
-        id = "split", name = "SPLIT",
-        blurb = "Throw half of yourself at them. It comes back.",
-        cost = 0.50, cooldown = 18, duration = 8,
-        unlockBanked = 170000,
-        color = Color3.fromRGB(195, 165, 195),
-    },
-    {
         id = "blink", name = "BLINK",
         blurb = "Vanish and reappear ahead. Straight through anything.",
         cost = 0.18, cooldown = 17, duration = 0,
         unlockBanked = 215000,
         color = Color3.fromRGB(186, 170, 206),
     },
+    } :: { Power }
+
+-- ── EARNED FROM THE BETA SEASON, NOT FROM BANKING ─────────────────────────
+--
+-- These are not on the ladder and no amount of Glob reaches them. The only way
+-- in is playing far enough into the season's FREE track (Season.POWER_AT), and
+-- that is deliberate on two counts.
+--
+-- It makes the season pass worth finishing with something a skin cannot be:
+-- a button nobody who skipped the season has. And it keeps the monetisation
+-- wall intact, because the free track is the one thing in this game that
+-- cannot be bought at any price — `Monetisation.violations()` fails the build
+-- if a purchasable item carries a gameplay number, and a power is the most
+-- gameplay-carrying thing there is.
+--
+-- They are kept OUT of Powers.LIST so that `nextLocked` never points a player
+-- at a target no amount of play on the banking ladder will reach.
+Powers.SEASON = {
+    {
+        id = "hook", name = "HOOK",
+        blurb = "Grab the nearest blob and reel. Bigger pulls, smaller gets pulled.",
+        cost = 0.10, cooldown = 13, duration = 1.2,
+        unlockBanked = math.huge, season = true,
+        color = Color3.fromRGB(214, 214, 218),
+    },
     {
         id = "spike", name = "SPIKE",
         blurb = "For three seconds, anything that eats you pops instead.",
         cost = 0.20, cooldown = 24, duration = 3,
-        unlockBanked = 265000,
-        color = Color3.fromRGB(205, 150, 155),
+        unlockBanked = math.huge, season = true,
+        color = Color3.fromRGB(226, 106, 106),
     },
 } :: { Power }
 
@@ -163,41 +212,96 @@ end
 -- progress bar.
 function Powers.masteryNext(uses: number?): (number?, number?)
     local n = uses or 0
-    for i, need in ipairs(-- ORDERED BY UNLOCK, and it must stay that way: nextLocked() walks the array
--- and returns the first thing the player cannot afford, so an out-of-order
--- entry points them at a target that is not actually next. Four powers were
--- appended to the end of this list when they were written and it did exactly
--- that until a test caught it.
-Powers.MASTERY_TIERS) do
+    for i, need in ipairs(Powers.MASTERY_TIERS) do
         if n < need then return i, need - n end
     end
     return nil, nil
 end
 
+-- Both pools, by id. FIXED first so that if a power ever appeared in both by
+-- mistake the fixed definition is the one that loses — a duplicate should show
+-- up as the CHOSEN version being unreachable, which is visible, rather than as
+-- the hotbar quietly using different numbers from the wardrobe.
 local byId: { [string]: Power } = {}
+for _, p in ipairs(Powers.FIXED) do
+    byId[p.id] = p
+end
+for _, p in ipairs(Powers.SEASON) do
+    byId[p.id] = p
+end
 for _, p in ipairs(Powers.LIST) do
     byId[p.id] = p
 end
 
-Powers.DEFAULT = "dash"
+-- The default CHOSEN power — slot 3. Not dash: dash is slot 1 and always has
+-- been since the hotbar existed, so defaulting the choice to it would hand a
+-- new player a duplicate and an empty-feeling third button.
+Powers.DEFAULT = "magnet"
+
+--- What is in each hotbar slot, given what the player owns and what they chose.
+--- ONE function, server and client both read it, so "what is in slot 3" cannot
+--- have two answers.
+function Powers.hotbar(chosenId: string?, lifetimeBanked: number,
+    granted: { [string]: boolean }?): { Power }
+    local out = { Powers.FIXED[1], Powers.FIXED[2] }
+    local chosen = byId[chosenId or ""]
+    -- A chosen power that is fixed, unknown, or not yet unlocked falls back to
+    -- the default rather than leaving a hole: an empty slot reads as a bug,
+    -- and this happens legitimately every time the ladder is rebalanced under
+    -- a saved profile.
+    local haveIt = chosen ~= nil
+        and (lifetimeBanked >= chosen.unlockBanked
+            or (granted ~= nil and granted[chosen.id] == true))
+    if not chosen or chosen.fixed or not haveIt then
+        chosen = byId[Powers.DEFAULT]
+    end
+    if chosen then
+        out[3] = chosen
+    end
+    return out
+end
 
 function Powers.get(id: string): Power?
     return byId[id]
 end
 
-function Powers.owned(lifetimeBanked: number): { Power }
+-- TWO WAYS TO OWN A POWER, and `granted` is the second one.
+--
+-- Most are earned on the banking ladder. Two are not on that ladder at all and
+-- arrive from the BETA SEASON's free track instead — see Season.POWER_AT. They
+-- live in `profile.powersGranted`, and the important property is that there is
+-- no third way in: the season's paid track cannot reach them, because
+-- Season.powerAt takes no premium argument.
+function Powers.owned(lifetimeBanked: number, granted: { [string]: boolean }?): { Power }
     local out = {}
     for _, p in ipairs(Powers.LIST) do
-        if lifetimeBanked >= p.unlockBanked then
+        if lifetimeBanked >= p.unlockBanked or (granted and granted[p.id]) then
+            out[#out + 1] = p
+        end
+    end
+    for _, p in ipairs(Powers.SEASON) do
+        if granted and granted[p.id] then
             out[#out + 1] = p
         end
     end
     return out
 end
 
-function Powers.isOwned(id: string, lifetimeBanked: number): boolean
+--- Every power a player could ever choose from, owned or not — the wardrobe
+--- needs to show the locked ones or nobody learns they exist.
+function Powers.catalogue(): { Power }
+    local out = {}
+    for _, p in ipairs(Powers.LIST) do out[#out + 1] = p end
+    for _, p in ipairs(Powers.SEASON) do out[#out + 1] = p end
+    return out
+end
+
+function Powers.isOwned(id: string, lifetimeBanked: number,
+    granted: { [string]: boolean }?): boolean
     local p = byId[id]
-    return p ~= nil and lifetimeBanked >= p.unlockBanked
+    if not p then return false end
+    if granted and granted[id] then return true end
+    return lifetimeBanked >= p.unlockBanked
 end
 
 -- What using it actually costs right now, in mass. Floored at a flat minimum

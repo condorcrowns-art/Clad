@@ -422,11 +422,12 @@ roblox/
       GoobService.luau      rendering, digestion, income, gulping
       ArenaService.luau     the live round: pellets, eating, powers, the board
       BotService.luau       the rest of the field (bodies + steering only)
+      GoopService.luau      globlets, tethers and spore pods (bodies only)
       TradeService.luau     the paranoid trade state machine
     client/                 → StarterPlayer.StarterPlayerScripts.GoobClient
       init.client.luau      input, proximity, feedback
-      ArenaHud.luau         the dock, the stat card, the one sheet
-      Hud.luau              toasts + the tutorial coach
+      ArenaHud.luau         the menu, the stat card, the hotbar, the one sheet
+      Hud.luau              toasts
       TradeUi.luau          the trade window
       Theme.luau            every colour and corner radius
 ```

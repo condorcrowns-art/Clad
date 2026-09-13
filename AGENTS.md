@@ -121,6 +121,19 @@ loudly, which is exactly why they are written down.
    the client forever on a folder that was never going to appear, with
    everything below that line silently never running.
 
+10. **If a test cannot represent the property, fix the HARNESS, not the test.**
+    Both waiting-room boards faced away from the room for weeks. Nothing
+    caught it because the CFrame stub was translation-only and discarded
+    rotation, so "which way does this face" was not a question the harness
+    could be asked — and a question the harness cannot ask is a bug class it
+    can never catch. `CFrame.lookAt` now keeps its direction, which is the one
+    property that mattered, and `roll_test` asserts every board faces the
+    floor players stand on.
+
+    The same rule caught a second one this pass: the mobile audit could not
+    see content hidden inside a ScrollingFrame with no canvas, so a panel that
+    swallowed half its own controls looked tidy to it.
+
 ## Conventions
 
 - The map is generated from code, not stored in a `.rbxl`. Everything about

@@ -28,6 +28,7 @@ local Format = require(Shared.Format)
 local RollService = require(script.Parent.RollService)
 local WorldBuilder = require(script.Parent.WorldBuilder)
 local BotService = require(script.Parent.BotService)
+local GoopService = require(script.Parent.GoopService)
 
 local ArenaService = {}
 
@@ -53,6 +54,12 @@ local DECOY_LIFETIME = 7
 export type Run = {
     mass: number,
     powerId: string,
+    -- ONE COOLDOWN PER SLOT, not one for the blob. The hotbar is three
+    -- buttons; a shared cooldown would make pressing DASH disable SPLIT, which
+    -- is not a trade anybody would choose to make and reads as a bug.
+    slotReadyAt: { number },
+    globlets: { any },      -- live SPLIT pieces, each tethered back to the body
+    snagUntil: number,      -- slowed by somebody's tether
     powerReadyAt: number,
     powerUntil: number,
     activeEffect: string?,
@@ -91,7 +98,21 @@ local rng = Random.new(os.clock() * 1e6 // 1)
 -- A dropped pellet is now untouchable BY ITS DROPPER for a few seconds, and
 -- lands outside their body as well. Belt and braces, because this one is not
 -- allowed to come back.
-type Pellet = { part: BasePart, value: number, key: string, owner: number?, ownerUntil: number }
+-- TWO owners, not one. The second is the blob that CAUSED the drop.
+--
+-- Deflation scatters what it knocks off, and the whole point of that is to
+-- feed whoever is standing nearby — but the blob standing nearest is always
+-- the one that just landed the hit, and once bodies got physically bigger
+-- (radius went from a logarithm to a cube root) its pickup reach covered the
+-- entire scatter ring. The attacker vacuumed up its own deflation before
+-- anybody else could move, which turns a comeback mechanic into a feeding
+-- mechanic for whoever is already winning.
+--
+-- Same shape as the original fix for a blob eating its own drips: the food is
+-- real, it is on the floor, and for a few seconds it belongs to everybody
+-- except the two blobs that produced it.
+type Pellet = { part: BasePart, value: number, key: string,
+    owner: number?, owner2: number?, ownerUntil: number }
 local pellets: { [BasePart]: Pellet } = {}
 local grid: { [string]: { [BasePart]: Pellet } } = {}
 local pelletCount = 0
@@ -108,6 +129,15 @@ type Deps = {
     loadout: (player: Player) -> ({ string }, string),   -- trinket ids, power id
     sync: (player: Player, state: any) -> (),
     teach: (player: Player, event: string) -> (),
+    -- Lifetime banked Glob, which is what decides whether the power in slot 3
+    -- is actually unlocked. Read through deps rather than cached on the run:
+    -- it can cross an unlock threshold mid-round, and a hotbar that only
+    -- refreshed on respawn would show a power the server then refuses.
+    banked: (player: Player) -> number,
+    -- Powers handed over by the BETA SEASON's free track rather than earned on
+    -- the banking ladder. A second way to own a power, and the only way into
+    -- the two that are not on the ladder at all.
+    granted: (player: Player) -> { [string]: boolean },
     powerUses: (player: Player) -> { [string]: number },
     notePowerUse: (player: Player, id: string) -> (),
     -- Everything a finished round owes the PROFILE rather than the wallet:
@@ -145,7 +175,8 @@ end
 -- Seconds a dropper cannot re-eat what it just shed.
 local OWNER_LOCKOUT = 4
 
-local function spawnPellet(at: Vector3?, value: number?, golden: boolean?, owner: number?)
+local function spawnPellet(at: Vector3?, value: number?, golden: boolean?,
+    owner: number?, owner2: number?)
     if pelletCount >= Config.PELLET_TARGET + 260 then
         return -- the floor is already carpeted; dropping more helps nobody
     end
@@ -179,7 +210,8 @@ local function spawnPellet(at: Vector3?, value: number?, golden: boolean?, owner
         value = worth,
         key = cellKey(pos.X, pos.Z),
         owner = owner,
-        ownerUntil = owner and (os.clock() + OWNER_LOCKOUT) or 0,
+        owner2 = owner2,
+        ownerUntil = (owner or owner2) and (os.clock() + OWNER_LOCKOUT) or 0,
     }
     pellets[part] = p
     gridAdd(p)
@@ -311,7 +343,8 @@ end
 -- standing nearby. That is the entire comeback loop in one function.
 --
 -- Returns how much was removed, so a thief (SIPHON) can keep it instead.
-local function deflate(target: Player, targetRun: Run, fraction: number, scatterIt: boolean): number
+local function deflate(target: Player, targetRun: Run, fraction: number,
+    scatterIt: boolean, byUserId: number?): number
     if fraction <= 0 then
         return 0
     end
@@ -332,7 +365,7 @@ local function deflate(target: Player, targetRun: Run, fraction: number, scatter
             local a = math.rad((360 / n) * i + rng:NextNumber(-12, 12))
             local d = radius * 1.6 + rng:NextNumber(3, 18)
             spawnPellet(Vector3.new(at.X + math.cos(a) * d, at.Y, at.Z + math.sin(a) * d),
-                food / n, false, target.UserId)
+                food / n, false, target.UserId, byUserId)
         end
     end
 
@@ -348,7 +381,8 @@ end
 --- What must NOT diverge is the fraction and the fact that what comes off
 --- lands as food — both come straight from Config here, same as for a player,
 --- so deflating the leader feeds the island whether the leader is human or not.
-local function deflateBot(bot: any, fraction: number, scatterIt: boolean): number
+local function deflateBot(bot: any, fraction: number, scatterIt: boolean,
+    byUserId: number?): number
     local taken = bot.mass * math.clamp(fraction, 0, 0.9)
     if taken <= 0 then
         return 0
@@ -362,7 +396,7 @@ local function deflateBot(bot: any, fraction: number, scatterIt: boolean): numbe
             local a = math.rad((360 / drops) * i) + rng:NextNumber(-0.3, 0.3)
             local d = r * 1.8 + rng:NextNumber(3, 14)
             spawnPellet(Vector3.new(bot.pos.X + math.cos(a) * d, 2,
-                bot.pos.Z + math.sin(a) * d), back / drops, false)
+                bot.pos.Z + math.sin(a) * d), back / drops, false, nil, byUserId)
         end
     end
     return taken
@@ -442,6 +476,8 @@ local function sendToArena(player: Player, index: number)
         run.activeEffect = nil
         run.powerUntil = 0
         run.ateThisRun = 0
+        run.snagUntil = 0
+        run.slotReadyAt = { 0, 0, 0 }
         run.startedAt = os.clock()
         run.safeUntil = os.clock() + POP_INVULN
         RollService.setRadius(player, Blob.radius(run.mass))
@@ -457,6 +493,9 @@ local function newRun(player: Player): Run
     return {
         mass = Config.STARTING_MASS,
         powerId = Powers.get(powerId) and powerId or Powers.DEFAULT,
+        slotReadyAt = { 0, 0, 0 },
+        globlets = {},
+        snagUntil = 0,
         powerReadyAt = 0,
         powerUntil = 0,
         activeEffect = nil,
@@ -608,6 +647,10 @@ end
 -- ── Popping ────────────────────────────────────────────────────────────────
 
 local function pop(player: Player, at: Vector3, killer: Player?)
+    -- Your tethers die with you. A fence still standing after its builder has
+    -- been eaten is a wire to nowhere, and it would let a dead player keep
+    -- shaping the fight from the respawn queue.
+    GoopService.clearOwner(player.UserId)
     local run = runs[player.UserId]
     if not run then
         return
@@ -684,7 +727,15 @@ end
 
 -- ── Powers ─────────────────────────────────────────────────────────────────
 
-function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?)
+--- THE HOTBAR, resolved. Slot 1 is DASH, slot 2 is SPLIT, slot 3 is the power
+--- the player chose. One function, so "what is in slot 3" has a single answer
+--- on the server and the client reads the same one off the snapshot.
+function ArenaService.hotbarFor(player: Player): { any }
+    local run = runs[player.UserId]
+    return Powers.hotbar(run and run.powerId, deps.banked(player), deps.granted(player))
+end
+
+function ArenaService.usePower(player: Player, slot: number?, aim: Vector3?): (boolean, string?)
     local run = runs[player.UserId]
     if not run then
         return false, "You're not in the arena."
@@ -692,16 +743,25 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if phase ~= "PLAYING" then
         return false, "Wait for the round to start."
     end
-    local now = os.clock()
-    if now < run.powerReadyAt then
-        return false, ("%.1fs"):format(run.powerReadyAt - now)
-    end
-    local power = Powers.get(run.powerId)
+    -- Defaulting to slot 1 rather than rejecting a missing slot: an old client
+    -- that has not been reloaded still sends the one-button shape, and having
+    -- its DASH silently stop working would be a much worse failure than having
+    -- it press the first slot.
+    local index = math.clamp(math.floor(tonumber(slot) or 1), 1, 3)
+    local bar = Powers.hotbar(run.powerId, deps.banked(player), deps.granted(player))
+    local power = bar[index]
     if not power then
-        return false, "No power equipped."
+        return false, "Nothing in that slot."
     end
-    local uses = usesOf(player, run.powerId)
-    local cost = Powers.massCost(run.powerId, run.mass, uses)
+
+    local now = os.clock()
+    run.slotReadyAt = run.slotReadyAt or { 0, 0, 0 }
+    if now < (run.slotReadyAt[index] or 0) then
+        return false, ("%.1fs"):format(run.slotReadyAt[index] - now)
+    end
+
+    local uses = usesOf(player, power.id)
+    local cost = Powers.massCost(power.id, run.mass, uses)
     if run.mass - cost < Config.STARTING_MASS * 0.5 then
         return false, "Too small to pay for that."
     end
@@ -711,8 +771,13 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     end
 
     run.mass -= cost
-    run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste, uses)
-    deps.notePowerUse(player, run.powerId)
+    run.slotReadyAt[index] = now + Powers.cooldown(power.id, run.trinkets.powerHaste, uses)
+    deps.notePowerUse(player, power.id)
+    -- `activePower` is what the rest of this function branches on. It used to
+    -- read run.powerId directly, which was correct when the blob carried one
+    -- power and is wrong now: pressing DASH would have run the chosen power's
+    -- effect while charging DASH's cooldown.
+    local activePower = power.id
     -- Settle any outstanding SPLIT first. activeEffect is overwritten below,
     -- so without this the thrown half is orphaned the moment you press any
     -- other power and its mass is silently deleted — you pay half of yourself
@@ -723,7 +788,7 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     end
 
     run.powerUntil = now + math.max(0.05, power.duration)
-    run.activeEffect = run.powerId
+    run.activeEffect = activePower
 
     -- The mass you spend is not deleted: it lands on the floor as food. Powers
     -- feeding the island is what stops a lobby full of dashing from starving
@@ -743,18 +808,28 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     dir = Vector3.new(dir.X, 0, dir.Z)
     dir = dir.Magnitude > 0.01 and dir.Unit or Vector3.new(0, 0, 1)
 
-    if run.powerId == "dash" then
+    if activePower == "dash" then
         ball.AssemblyLinearVelocity = dir * 110 + Vector3.new(0, 8, 0)
-    elseif run.powerId == "slam" then
+    elseif activePower == "slam" then
         ball.AssemblyLinearVelocity = Vector3.new(0, 74, 0) + dir * 24
         -- The impact is not instant: it lands when you do. tickPlayer watches
         -- slamUntil and fires the shockwave at the bottom of the arc, which is
         -- the only timing that reads as a slam rather than a shrug.
         run.slamUntil = now + SLAM_AIRTIME
-    elseif run.powerId == "split" then
-        ball.AssemblyLinearVelocity = dir * 128
-        run.splitOwed = cost
-    elseif run.powerId == "hook" then
+    elseif activePower == "split" then
+        -- THROW, don't lunge. The old SPLIT shoved your whole body forward at
+        -- 128 studs/sec and booked half your mass to be refunded later, which
+        -- is a dash with a bill attached — it looked like nothing had split.
+        -- Now it actually splits: pieces leave the body, fly out on their own,
+        -- eat, and come back, each one trailing a tether that other blobs have
+        -- to respect.
+        local each = math.max(Config.LEAK_PELLET_MASS, run.mass * 0.06)
+        local thrown = GoopService.split(player.UserId, ball.Position, dir,
+            each, Config.SPLIT_PIECES, ball.Color, false)
+        run.mass = math.max(Config.STARTING_MASS, run.mass - thrown)
+        ball.AssemblyLinearVelocity = dir * 42 + Vector3.new(0, 6, 0)
+        deps.effect(player, "split", { pieces = Config.SPLIT_PIECES })
+    elseif activePower == "hook" then
         -- Reel. Bigger drags smaller toward it; smaller drags ITSELF toward
         -- bigger, which is what makes HOOK a chase tool for the hunter and an
         -- escape-the-open-ground tool for the hunted with the same button.
@@ -790,7 +865,7 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 else
                     ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
                 end
-                deflateBot(hookBot, Config.DEFLATE.hook, true)
+                deflateBot(hookBot, Config.DEFLATE.hook, true, player.UserId)
                 deps.teach(player, "deflate")
                 deps.effect(player, "hook", { to = hookBot.name })
             end
@@ -808,13 +883,13 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                     else
                         ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
                     end
-                    deflate(target, tr, Config.DEFLATE.hook, true)
+                    deflate(target, tr, Config.DEFLATE.hook, true, player.UserId)
                     deps.teach(player, "deflate")
                     deps.effect(player, "hook", { to = target.DisplayName })
                 end
             end
         end
-    elseif run.powerId == "blink" then
+    elseif activePower == "blink" then
         -- A teleport, not a shove. It goes THROUGH blobs and lumps, which is
         -- the only thing DASH cannot do, and is why it costs more than twice
         -- as much. Routed through RollService.teleport so the anti-cheat is
@@ -828,10 +903,10 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         end
         RollService.teleport(player, to + Vector3.new(0, 4, 0))
 
-    elseif run.powerId == "decoy" then
+    elseif activePower == "decoy" then
         spawnDecoy(player, run, ball.Position - dir * (radius * 2.2))
 
-    elseif run.powerId == "siphon" then
+    elseif activePower == "siphon" then
         -- Drains the nearest blob BIGGER than you. The only power in the game
         -- that works exclusively upward: it is the comeback tool, so it has to
         -- be useless to whoever is already winning.
@@ -876,11 +951,11 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
             deps.effect(target, "siphoned", { by = player.DisplayName, amount = drained })
         end
 
-    elseif run.powerId == "magnet" or run.powerId == "beacon" then
+    elseif activePower == "magnet" or activePower == "beacon" then
         -- handled in tick while powerUntil holds
     end
 
-    deps.effect(player, "power", { id = run.powerId, cost = cost })
+    deps.effect(player, "power", { id = activePower, cost = cost, slot = index })
     deps.teach(player, "power")
     return true, nil
 end
@@ -950,7 +1025,9 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
             if bucket then
                 for part, pellet in pairs(bucket) do
                     if part.Parent then
-                        local mine = pellet.owner == player.UserId and now < pellet.ownerUntil
+                        local mine = now < pellet.ownerUntil
+                            and (pellet.owner == player.UserId
+                                or pellet.owner2 == player.UserId)
                         local d = (part.Position - pos)
                         if not mine and d.Magnitude <= reach then
                             local worth = pellet.value * run.trinkets.pelletMult
@@ -1005,7 +1082,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                         + Vector3.new(0, 26 * falloff, 0)
                     -- Scaled by how central the hit was, so a clean slam on
                     -- the leader is worth lining up.
-                    deflate(other, orun, Config.DEFLATE.slam * falloff, true)
+                    deflate(other, orun, Config.DEFLATE.slam * falloff, true, player.UserId)
                     deps.teach(player, "deflate")
                     hits += 1
                 end
@@ -1022,7 +1099,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                     local falloff = 1 - (flat.Magnitude / SLAM_RADIUS)
                     bot.pos += flat.Unit * (SLAM_RADIUS * 0.5 * falloff)
                     bot.goal = bot.pos
-                    deflateBot(bot, Config.DEFLATE.slam * falloff, true)
+                    deflateBot(bot, Config.DEFLATE.slam * falloff, true, player.UserId)
                     hits += 1
                 end
             end
@@ -1117,6 +1194,151 @@ local function tickCombat(list: { Player }, now: number)
                                 end
                             end
                         end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ── Goop: globlets, tethers and pods ──────────────────────────────────────
+
+--- Where a given owner's body is, for GoopService to reel its pieces home.
+--- Negative ids are bots; positive are players. One function so the tether
+--- system never has to know which it is dealing with.
+local function bodyPosFor(ownerId: number): Vector3?
+    if ownerId < 0 then
+        for _, bot in ipairs(BotService.living()) do
+            if -bot.id == ownerId then
+                return bot.pos
+            end
+        end
+        return nil
+    end
+    local player = Players:GetPlayerByUserId(ownerId)
+    local run = player and runs[player.UserId]
+    local ball = run and RollService.ballFor(player)
+    return (ball and ball.Parent) and ball.Position or nil
+end
+
+--- Pay a returning globlet's mass back to whoever threw it.
+local function payBack(ownerId: number, mass: number)
+    local back = mass * Config.SPLIT_RETURN_FRACTION
+    if ownerId < 0 then
+        for _, bot in ipairs(BotService.living()) do
+            if -bot.id == ownerId then
+                bot.mass += back
+                return
+            end
+        end
+        return
+    end
+    local player = Players:GetPlayerByUserId(ownerId)
+    local run = player and runs[player.UserId]
+    if run then
+        run.mass += back
+    end
+end
+
+--- Everything the goop layer does in one tick: move the pieces, let them eat,
+--- bite anybody crossing a strand, and burst anybody big who walked into a pod.
+---
+--- ALL the mass rules live here rather than in GoopService, for the same
+--- reason they live here rather than in BotService: "how much does this take
+--- off you" must have exactly one answer for players and bots alike.
+local function tickGoop(dt: number, now: number, list: { Player })
+    -- Pieces move, then eat off the floor at their own small reach.
+    local returned = GoopService.step(dt, now, bodyPosFor)
+    for _, g in ipairs(returned) do
+        payBack(g.ownerId, g.mass)
+    end
+    for _, g in ipairs(GoopService.list()) do
+        g.mass += harvestAt(g.pos, Config.GLOBLET_PICKUP + Blob.radius(g.mass) * 0.5)
+    end
+
+    -- ── Tethers ───────────────────────────────────────────────────────────
+    --
+    -- Deliberately weak per touch and on a per-victim cooldown: this is area
+    -- denial, not a damage engine. Walking the length of a strand costs you a
+    -- noticeable slice; clipping the end of one barely registers.
+    local live = GoopService.list()
+    if #live > 0 then
+        for _, g in ipairs(live) do
+            local home = bodyPosFor(g.ownerId)
+            if home then
+                for _, player in ipairs(list) do
+                    local run = runs[player.UserId]
+                    local ball = run and RollService.ballFor(player)
+                    -- NEVER YOUR OWN. A fence that cut its own builder would
+                    -- make splitting strictly self-harming, which is the one
+                    -- way to guarantee nobody ever presses the button.
+                    if run and ball and ball.Parent and g.ownerId ~= player.UserId
+                        and not protected(player, run, now) then
+                        local d = GoopService.distanceToStrand(g, home, ball.Position)
+                        if d <= Config.TETHER_WIDTH + Blob.radius(run.mass)
+                            and GoopService.canHit(g, "p" .. player.UserId, now) then
+                            deflate(player, run, Config.TETHER_DEFLATE, true,
+                                g.ownerId > 0 and g.ownerId or nil)
+                            run.snagUntil = now + Config.TETHER_SLOW_TIME
+                            deps.effect(player, "snagged", {})
+                        end
+                    end
+                end
+                for _, bot in ipairs(BotService.living()) do
+                    if g.ownerId ~= -bot.id and not botProtected(bot) then
+                        local d = GoopService.distanceToStrand(g, home, bot.pos)
+                        if d <= Config.TETHER_WIDTH + Blob.radius(bot.mass)
+                            and GoopService.canHit(g, "b" .. bot.id, now) then
+                            deflateBot(bot, Config.TETHER_DEFLATE, true,
+                                g.ownerId > 0 and g.ownerId or nil)
+                            bot.snagUntil = now + Config.TETHER_SLOW_TIME
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- ── Spore pods ────────────────────────────────────────────────────────
+    --
+    -- Only blobs over POD_MIN_MASS set one off, which is the whole reason the
+    -- things are on the map: a pod field is ground a small player can hide in
+    -- and a big one cannot follow into.
+    GoopService.regrowPods(now)
+    for _, pod in ipairs(GoopService.pods()) do
+        if pod.readyAt == 0 then
+            for _, player in ipairs(list) do
+                local run = runs[player.UserId]
+                local ball = run and RollService.ballFor(player)
+                if run and ball and ball.Parent and run.mass >= Config.POD_MIN_MASS then
+                    local flat = Vector3.new(ball.Position.X - pod.pos.X, 0,
+                        ball.Position.Z - pod.pos.Z)
+                    if flat.Magnitude <= Config.POD_RADIUS + Blob.radius(run.mass) then
+                        -- A BURST, NOT A TAX. The mass is not destroyed and it
+                        -- is not handed to anybody — it leaves as globlets and
+                        -- comes back. What the pod costs you is CONTROL: for a
+                        -- few seconds your tethers are everywhere at once,
+                        -- which is dangerous for everyone nearby, including
+                        -- whoever herded you into it.
+                        local each = math.max(Config.LEAK_PELLET_MASS,
+                            run.mass * 0.05)
+                        local thrown = GoopService.split(player.UserId, ball.Position,
+                            ball.CFrame.LookVector, each, Config.POD_PIECES,
+                            ball.Color, true)
+                        run.mass = math.max(Config.STARTING_MASS, run.mass - thrown)
+                        -- SHOVED CLEAR. Without this a blob that stops on a
+                        -- pod re-bursts the instant it regrows, forever: the
+                        -- pod is permanently useless to everybody else and the
+                        -- blob is permanently scattered. The shove is outward
+                        -- from the pod along the approach, which also reads
+                        -- correctly — the thing exploded underneath you.
+                        local away = flat.Magnitude > 0.01 and flat.Unit
+                            or Vector3.new(0, 0, 1)
+                        ball.AssemblyLinearVelocity = away * 70 + Vector3.new(0, 26, 0)
+                        GoopService.spendPod(pod, now)
+                        deps.effect(player, "podBurst", { pieces = Config.POD_PIECES })
+                        deps.notify(player, "\u{1F4A5} A spore pod burst you open!", "warn")
+                        break
                     end
                 end
             end
@@ -1296,6 +1518,10 @@ local function beginLobby()
     -- nobody is in costs a Heartbeat's worth of work per bot for an empty
     -- stage, and it makes the lobby's "round starts in" clock read as a lie.
     BotService.clear()
+    -- Strands with nothing on either end of them, and a hazard field nobody is
+    -- standing in. Both go with the round.
+    GoopService.clear()
+    GoopService.clearPods()
     phase = "LOBBY"
     phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
     local i = 0
@@ -1325,6 +1551,12 @@ local function beginRound()
     for _ = 1, Config.PELLET_TARGET do
         spawnPellet(nil, nil, rng:NextNumber() < 0.012)
     end
+    -- Pods are re-scattered every round rather than placed once at boot: their
+    -- positions are most of a round's terrain knowledge, and a map whose
+    -- hazards never move is one where the regulars always know where the small
+    -- players are hiding.
+    GoopService.clear()
+    GoopService.seedPods()
 
     local humans = #Players:GetPlayers()
 
@@ -1456,6 +1688,9 @@ function ArenaService.start(injected: Deps)
                 -- walked into you is eaten on the tick it arrives rather than
                 -- appearing to phase through and get you on the next one.
                 tickBots(dt, now, active)
+                -- Goop before combat: a globlet that just arrived should bite
+                -- on the tick it lands, not the one after.
+                tickGoop(dt, now, active)
                 tickCombat(active, now)
                 tickBotCombat(active, now)
                 topUpPellets(dt)
@@ -1483,7 +1718,35 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         banking = run.banking,
         bankNeeds = Blob.bankSeconds(run.trinkets.bankHaste),
         powerId = run.powerId,
-        powerCooldown = math.max(0, run.powerReadyAt - now),
+        -- ── THE HOTBAR ────────────────────────────────────────────────────
+        -- Three slots, resolved server-side. The client draws exactly what is
+        -- in here and decides nothing: the third slot depends on what the
+        -- player owns, and a button that offers something the server will
+        -- refuse is the worst kind of control.
+        slots = (function()
+            local bar = Powers.hotbar(run.powerId, deps.banked(player), deps.granted(player))
+            local out = {}
+            for i, power in ipairs(bar) do
+                local uses = usesOf(player, power.id)
+                table.insert(out, {
+                    id = power.id,
+                    name = power.name,
+                    cost = Powers.massCost(power.id, run.mass, uses),
+                    cooldown = math.max(0, (run.slotReadyAt[i] or 0) - now),
+                    cooldownMax = Powers.cooldown(power.id, run.trinkets.powerHaste, uses),
+                    mastery = Powers.masteryTier(uses),
+                    locked = false,
+                })
+            end
+            return out
+        end)(),
+        globlets = GoopService.countFor(player.UserId),
+        snagged = now < run.snagUntil,
+        -- KEPT, and now derived from slot 3 rather than from a field nothing
+        -- writes. `run.powerReadyAt` stopped being set when cooldowns moved
+        -- per-slot, so this quietly reported "always ready" for the chosen
+        -- power to anything still reading it.
+        powerCooldown = math.max(0, (run.slotReadyAt[3] or 0) - now),
         powerCost = Powers.massCost(run.powerId, run.mass, usesOf(player, run.powerId)),
         mastery = Powers.masteryTier(usesOf(player, run.powerId)),
         lit = run.activeEffect == "beacon" and now < run.powerUntil,
@@ -1513,6 +1776,24 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         field = #Players:GetPlayers() + BotService.count(),
         bots = BotService.count(),
     }
+end
+
+--- Who a crumb is locked against, and until when.
+---
+--- Exposed because the lock is invisible from outside and therefore untestable
+--- from outside: deflation drops belong to nobody for a few seconds except the
+--- two blobs that made them, and the only way to tell one of those crumbs from
+--- the fourteen hundred ambient pellets on the floor is to ask. A test that
+--- guessed — "the newest part near the victim is probably a drop" — would be
+--- wrong roughly as often as the respawn rate, which is forty-eight a second.
+---
+--- Read-only, and it returns nothing for a part that is not a live pellet.
+function ArenaService.pelletLock(part: BasePart): (number?, number?, number)
+    local p = pellets[part]
+    if not p then
+        return nil, nil, 0
+    end
+    return p.owner, p.owner2, p.ownerUntil
 end
 
 -- Exposed for tests: the island's live contents.

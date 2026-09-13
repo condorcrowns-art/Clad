@@ -188,6 +188,76 @@ function RollService.applyCosmetics(player: Player, loadout: { [string]: string 
         ball:SetAttribute("Skin", skin.id)
     end
 
+    -- ── PARTICLES, FOR THE RARE ONES ──────────────────────────────────────
+    --
+    -- Rebuilt rather than edited, for the same reason the trail below is: an
+    -- emitter carries half a dozen sequences and changing one leaves the rest
+    -- describing the previous skin.
+    --
+    -- WHY THESE EXIST AT ALL. A rare skin that is only a different colour is a
+    -- rare skin nobody can tell you own — the difference between Common and
+    -- Legendary has to be visible from across the island, in motion, without a
+    -- menu. Only Rare and above get one: if everything sparkles, nothing does,
+    -- and twelve emitting blobs on a phone is a framerate problem.
+    local oldFx = ball:FindFirstChild("SkinFx")
+    if oldFx then oldFx:Destroy() end
+    if skin and skin.particle then
+        local tint = skin.colour or ball.Color
+        local fx = Instance.new("Attachment")
+        fx.Name = "SkinFx"
+        fx.Parent = ball
+
+        local e = Instance.new("ParticleEmitter")
+        e.Name = "Fx"
+        e.Color = ColorSequence.new(tint)
+        e.LightEmission = 1
+        e.LightInfluence = 0
+        e.Speed = NumberRange.new(2, 7)
+        e.Lifetime = NumberRange.new(0.5, 1.1)
+        e.Rate = 14
+        e.SpreadAngle = Vector2.new(180, 180)
+        e.Transparency = NumberSequence.new(0.15, 1)
+        -- Emitted from a SHELL, not from the centre: EmissionDirection plus a
+        -- wide spread on a ball attachment puts the whole cloud inside the
+        -- body, where a translucent skin hides it entirely.
+        e.EmissionDirection = Enum.NormalId.Top
+
+        -- One shape per name. Deliberately a small vocabulary — four looks the
+        -- player can learn to recognise — rather than a bespoke emitter per
+        -- skin, which is how a cosmetic catalogue becomes unmaintainable.
+        if skin.particle == "ember" then
+            e.Size = NumberSequence.new(1.6, 0)
+            e.Rate = 22
+            e.Acceleration = Vector3.new(0, 14, 0)
+        elseif skin.particle == "spark" then
+            e.Size = NumberSequence.new(0.9, 0)
+            e.Speed = NumberRange.new(10, 18)
+            e.Lifetime = NumberRange.new(0.25, 0.5)
+            e.Rate = 26
+        elseif skin.particle == "grid" then
+            e.Size = NumberSequence.new(2.4, 0)
+            e.Speed = NumberRange.new(0.5, 2)
+            e.Lifetime = NumberRange.new(0.8, 1.4)
+            e.Rate = 10
+        elseif skin.particle == "void" then
+            e.Size = NumberSequence.new(0, 3.2)
+            e.Speed = NumberRange.new(-9, -4)   -- inward: it falls into you
+            e.Lifetime = NumberRange.new(0.6, 1.0)
+            e.Rate = 18
+        elseif skin.particle == "prism" then
+            e.Size = NumberSequence.new(1.2, 0)
+            e.Rate = 20
+            -- The one place a colour ramp is allowed to be a rainbow, because
+            -- the skin is literally called Prism.
+            e.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 96, 96)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(96, 255, 200)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 120, 255)),
+            })
+        end
+        e.Parent = fx
+    end
+
     -- Trail. Rebuilt rather than tweaked because Trail needs two attachments
     -- and changing colour alone would leave a stale one behind.
     local old = ball:FindFirstChild("GoobTrail")

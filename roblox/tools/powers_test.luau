@@ -61,6 +61,23 @@ tick(4)
 
 local Powers = _G.SHARED("Powers")
 local Config = _G.SHARED("Config")
+
+-- EVERYTHING UNLOCKED, BY BOTH ROUTES.
+--
+-- Banking alone is no longer enough: HOOK and SPIKE come off the BETA SEASON's
+-- free track (Season.POWER_AT) and are deliberately not on the banking ladder
+-- at all, so a test that only sets lifetimeBanked cannot select them and
+-- Powers.hotbar quietly hands back the default instead.
+local function unlockEverything(p)
+    local prof = _G.SERVER("Data").get(p)
+    if not prof then return end
+    prof.lifetimeBanked = 1e9
+    prof.powersGranted = prof.powersGranted or {}
+    for _, power in ipairs(_G.SHARED("Powers").SEASON) do
+        prof.powersGranted[power.id] = true
+    end
+end
+
 local world = svc.Workspace:FindFirstChild("GoobWorld")
 local arena = world:FindFirstChild("Arena")
 
@@ -97,24 +114,25 @@ end
 -- back — so a test that repeatedly slams a blob onto the Vault ends up fighting
 -- the very protection it is not trying to test, and the scenario it set up
 -- never happens. Walk instead, in steps a real blob could cover.
-local function walkTo(p, dest, stepStuds)
-    stepStuds = stepStuds or 36
-    for _ = 1, 60 do
-        local b = ballOf(p)
-        if not b then return end
-        local delta = dest - b.Position
-        if delta.Magnitude <= stepStuds then
-            svc.movePlayer(p, dest)
-            b.Position = dest
-            b.AssemblyLinearVelocity = V3.new(0, 0, 0)
-            tick(0.3)
-            return
-        end
-        local next = b.Position + delta.Unit * stepStuds
-        svc.movePlayer(p, next)
-        b.Position = next
-        tick(0.3)
-    end
+-- PUT A BLOB SOMEWHERE, the way the server does it.
+--
+-- This used to inch the ball across the island in steps small enough to look
+-- plausible to the anti-cheat, which samples speed at 4Hz and snaps a blob
+-- back after three implausible readings. That worked until blob radius went
+-- from a logarithm to a cube root: a well-fed test blob is now genuinely
+-- enormous and genuinely slow, so the old step size was several times its
+-- plausible speed and the walk got snapped back partway.
+--
+-- RollService.teleport is the call the arena itself uses to place a player at
+-- a spawn point: it moves the ball, zeroes its velocity and clears the
+-- violation count. That is exactly "the server decided you are here", which is
+-- what a test means when it puts a blob somewhere.
+local Roll = _G.SERVER("RollService")
+local function walkTo(p, dest, _stepStuds)
+    local b = ballOf(p)
+    local lift = math.max(10, (b and b.Size.X or 10) / 2 + 4)
+    Roll.teleport(p, V3.new(dest.X, lift, dest.Z))
+    tick(0.3)
 end
 
 local function feed(p, n)
@@ -158,13 +176,21 @@ check("the island stocks itself when the round starts",
 
 emit("")
 emit("══ EVERY POWER FIRES ══")
--- Grant the whole ladder by fiat so that all twelve branches execute. The
--- UNLOCK rules are tested separately; what is under test here is the code
--- inside each branch, which is the part that had never run.
+-- EVERY POOL, not just the choosable one.
+--
+-- This test exists because eleven of the twelve powers had never been executed
+-- once. It walked Powers.LIST — which was all of them, and is now only some:
+-- DASH and SPLIT moved to the fixed hotbar slots and HOOK and SPIKE moved to
+-- the season track, so walking LIST alone would have quietly stopped covering
+-- four branches while still reporting a pass. That is the original bug, coming
+-- back through a refactor rather than through neglect.
+--
+-- The fixed two are pressed in their own slots; everything else goes in slot 3.
+-- Unlocks are granted by fiat here; the unlock RULES are tested separately.
 local Data = _G.SERVER("Data")
 local profile = Data and Data.get(alice)
 check("the test can reach a profile", profile ~= nil)
-if profile then profile.lifetimeBanked = 1e9 end
+unlockEverything(alice)
 
 local pressed, refused = {}, {}
 -- A round is shorter than twelve cooldowns back to back, so this loop crosses
@@ -172,7 +198,16 @@ local pressed, refused = {}, {}
 -- the top is not enough: the clock can run out DURING the feed and the press
 -- then lands in the lobby. Each power gets a few attempts, and every attempt
 -- re-establishes the round immediately before pressing.
-for _, power in ipairs(Powers.LIST) do
+local everyPower = {}
+for i, power in ipairs(Powers.FIXED) do
+    table.insert(everyPower, { power = power, slot = i })
+end
+for _, power in ipairs(Powers.catalogue()) do
+    table.insert(everyPower, { power = power, slot = 3 })
+end
+
+for _, entry in ipairs(everyPower) do
+    local power, slot = entry.power, entry.slot
     local charged, note, before, after = 0, "", 0, 0
     for attempt = 1, 3 do
         if not waitForRound(alice, 140) then break end
@@ -180,15 +215,21 @@ for _, power in ipairs(Powers.LIST) do
         if phaseOf(alice) ~= "PLAYING" then
             note = "round ended during setup"
         else
-            svc.fireAs("SetPower", alice, power.id)
-            tick(0.4)
+            -- A fixed power is not set; it is already in its slot.
+            if slot == 3 then
+                svc.fireAs("SetPower", alice, power.id)
+                tick(0.4)
+            end
             local got = arenaOf(alice)
-            if not got or got.powerId ~= power.id then
-                note = "not equipped: " .. tostring(got and got.powerId)
+            local inPlace = got ~= nil
+                and ((got.slots or {})[slot] or {}).id == power.id
+            if not inPlace then
+                note = ("not in slot %d: %s"):format(slot,
+                    tostring(got and ((got.slots or {})[slot] or {}).id))
             else
                 before = got.mass
                 local mark = #_G.TRAFFIC
-                svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+                svc.fireAs("UsePower", alice, slot, V3.new(0, 0, 1))
                 tick(0.6)
                 after = (arenaOf(alice) or {}).mass or 0
                 for i = mark + 1, #_G.TRAFFIC do
@@ -214,8 +255,15 @@ for _, power in ipairs(Powers.LIST) do
 end
 
 emit(("  fired: %s"):format(table.concat(pressed, ", ")))
-check("all twelve powers execute and charge you",
-    #pressed == #Powers.LIST, table.concat(refused, " | "))
+check("every power in the game executes and charges you",
+    #pressed == #everyPower,
+    ("%d of %d — %s"):format(#pressed, #everyPower, table.concat(refused, " | ")))
+-- And the count is the WHOLE game, not one pool of it. Without this the check
+-- above passes just as happily after somebody moves a power to a new pool and
+-- forgets to list it here.
+check("and that is all three pools",
+    #everyPower == #Powers.FIXED + #Powers.LIST + #Powers.SEASON,
+    tostring(#everyPower))
 
 emit("")
 emit("══ NOTHING BREAKS THE WORLD ══")
@@ -233,7 +281,7 @@ local rim = V3.new(0, 6, Config.ISLAND_RADIUS - 8)
 svc.movePlayer(alice, rim)
 if ballOf(alice) then ballOf(alice).Position = rim end
 tick(0.5)
-svc.fireAs("UsePower", alice, V3.new(0, 0, 1))   -- aimed straight off the edge
+svc.fireAs("UsePower", alice, 3, V3.new(0, 0, 1))   -- aimed straight off the edge
 tick(1)
 local pos = ballOf(alice).Position
 local outFromCentre = V3.new(pos.X, 0, pos.Z).Magnitude
@@ -249,12 +297,19 @@ emit("══ MASTERY COUNTS ONCE PER PRESS ══")
 if profile then
     if phaseOf(alice) ~= "PLAYING" then waitForRound(alice, 120) end
     profile.powerUses = {}
-    svc.fireAs("SetPower", alice, "dash")
+    -- SLOT 1, and DASH is not set with SetPower anymore.
+    --
+    -- DASH is a fixed slot now, not a choice: SetPower refuses it, and
+    -- Powers.hotbar would have quietly put the DEFAULT power in slot 3
+    -- instead — so this test was pressing a different power from the one it
+    -- then counted uses of, and read zero. Slot 1 is also the button players
+    -- press more than any other, which makes it the right one to hold this
+    -- invariant against.
     tick(0.5)
     feed(alice, 20)
     local mark2 = #_G.TRAFFIC
     for _ = 1, 5 do
-        svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+        svc.fireAs("UsePower", alice, 1, V3.new(0, 0, 1))
         tick(5)
         feed(alice, 6)
     end
@@ -317,20 +372,30 @@ local function placeAndHook(bobSpot, aliceOffset, prep)
     if prep then prep() end
 
     local mark = #_G.TRAFFIC
-    svc.fireAs("UsePower", alice, V3.new(0, 0, -1))
+    svc.fireAs("UsePower", alice, 3, V3.new(0, 0, -1))
     tick(0.4)
 
+    -- DID IT HOOK *BOB*, not "did a hook happen".
+    --
+    -- There are eleven bots on the island and HOOK takes the nearest valid
+    -- target, so one of them is regularly closer than the player this test
+    -- planted. The old check read any hook effect at all as a hit on Bob,
+    -- which meant the safe-zone assertion failed because the power correctly
+    -- grabbed somebody else entirely.
     local fired = false
     for i = mark + 1, #_G.TRAFFIC do
         local t = _G.TRAFFIC[i]
-        if t.remote == "Effect" and t.args[1] == "hook" then fired = true end
+        if t.remote == "Effect" and t.args[1] == "hook"
+            and t.args[2] and t.args[2].to == bob.DisplayName then
+            fired = true
+        end
     end
     return fired, (bb and bb.AssemblyLinearVelocity.Magnitude or 0)
 end
 
 if profile then
     if phaseOf(alice) ~= "PLAYING" then waitForRound(alice, 120) end
-    profile.lifetimeBanked = 1e9
+    unlockEverything(alice)
     svc.fireAs("SetPower", alice, "hook")
     tick(0.5)
     feed(alice, 24)      -- afford the cost

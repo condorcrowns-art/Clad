@@ -52,6 +52,7 @@ export type Bot = {
     nextThink: number,
     respawnAt: number,     -- 0 when alive
     rimGrace: number,
+    snagUntil: number,     -- slowed by somebody's tether; see GoopService
     committed: boolean,    -- has it ever left the rim; see Config.SHALLOWS_GRACE
     part: BasePart?,
     label: TextLabel?,
@@ -121,9 +122,9 @@ local function makeBody(bot: Bot)
     p.Position = bot.pos
     p.Parent = parent
 
-    -- Named, and openly tagged as a bot. Pretending otherwise is a lie the
-    -- player catches the first time one walks into a wall, and being caught
-    -- lying costs more trust than the illusion was ever worth.
+    -- Just the name, the same way a player's nameplate reads. The robot tag
+    -- that used to hang here made a full island look like an empty one — see
+    -- Config.BOT_FIRST.
     local gui = Instance.new("BillboardGui")
     gui.Name = "Tag"
     gui.Size = UDim2.fromScale(9, 2)
@@ -137,7 +138,7 @@ local function makeBody(bot: Bot)
     tl.TextScaled = true
     tl.TextStrokeTransparency = 0.35
     tl.TextColor3 = Color3.fromRGB(226, 232, 240)
-    tl.Text = bot.name .. " 🤖"
+    tl.Text = bot.name
     tl.Parent = gui
     gui.Parent = p
 
@@ -170,24 +171,30 @@ local function pickSkill()
     return Config.BOT_SKILLS[1]
 end
 
--- Names must be unique within a round. A board with two "Gloop" rows on it
+-- Names must be unique within a round. A board with two identical rows on it
 -- looks like a bug even when it is not, and the player cannot tell which one
 -- just ate them.
+--
+-- Shaped like a Roblox username — a name and some digits — rather than like a
+-- blob pet. See Config.BOT_FIRST for why the cute names and the robot tags
+-- both went.
 local function pickName(): string
     local taken: { [string]: boolean } = {}
     for _, b in ipairs(bots) do
         taken[b.name] = true
     end
-    local pool = {}
-    for _, n in ipairs(Config.BOT_NAMES) do
+    for _ = 1, 40 do
+        local stem = Config.BOT_FIRST[rng:NextInteger(1, #Config.BOT_FIRST)]
+        local n = stem .. tostring(rng:NextInteger(
+            Config.BOT_SUFFIX_MIN, Config.BOT_SUFFIX_MAX))
         if not taken[n] then
-            table.insert(pool, n)
+            return n
         end
     end
-    if #pool == 0 then
-        return "Blob " .. nextId
-    end
-    return pool[rng:NextInteger(1, #pool)]
+    -- Forty collisions against a pool of tens of thousands means the generator
+    -- is broken, not unlucky. A guaranteed-unique fallback beats a loop that
+    -- could spin forever on a server that has been up for a week.
+    return "Blob" .. nextId
 end
 
 local function spawnPos(): Vector3
@@ -211,6 +218,7 @@ local function newBot(): Bot
         nextThink = 0,
         respawnAt = 0,
         rimGrace = Config.SHALLOWS_GRACE,
+        snagUntil = 0,
         committed = false,
         part = nil,
         label = nil,
@@ -376,6 +384,7 @@ function BotService.step(dt: number, now: number, field: { Contender },
                 bot.mode = "wander"
                 bot.nextThink = 0
                 bot.rimGrace = Config.SHALLOWS_GRACE
+                bot.snagUntil = 0
                 bot.committed = false
                 makeBody(bot)
             end
@@ -416,7 +425,31 @@ function BotService.step(dt: number, now: number, field: { Contender },
                 bot.heading = (bot.heading:Lerp(to.Unit, math.clamp(dt * 4, 0, 1))).Unit
             end
             local speed = Blob.speed(bot.mass) * Config.BOT_SPEED_MULT
-            bot.pos = clampToIsland(bot.pos + bot.heading * speed * dt)
+            -- Tethers slow bots exactly as they slow players. A fence the AI
+            -- could walk through at full speed would make splitting useless in
+            -- the games that are mostly bots, which is most games.
+            if now < bot.snagUntil then
+                speed *= Config.TETHER_SLOW
+            end
+            -- MOVE, THEN GET PUSHED OUT OF ANYTHING SOLID.
+            --
+            -- A kinematic body is not in the physics world, so CanCollide on a
+            -- boulder means nothing to it — which is why bots walked straight
+            -- through every rock and ramp on the island, the single most
+            -- obvious tell that a thing is not a player. WorldBuilder keeps a
+            -- footprint for every solid prop; this resolves against it.
+            local wanted = clampToIsland(bot.pos + bot.heading * speed * dt)
+            local r0 = Blob.radius(bot.mass)
+            local resolved, blocked = WorldBuilder.pushOut(wanted, r0 * 0.9)
+            bot.pos = clampToIsland(resolved)
+            if blocked then
+                -- Turn along the wall rather than grinding into it. Without
+                -- this a bot that walked into a rock stayed pressed against it
+                -- for the rest of its think interval, vibrating.
+                local slide = Vector3.new(-bot.heading.Z, 0, bot.heading.X)
+                bot.heading = (bot.heading * 0.35 + slide * 0.65).Unit
+                bot.goal = bot.pos + bot.heading * 60
+            end
 
             local r = Blob.radius(bot.mass)
             bot.pos = Vector3.new(bot.pos.X, 2 + r, bot.pos.Z)

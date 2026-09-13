@@ -47,6 +47,55 @@ WorldBuilder.ZONES = {
     ISLAND = { name = "The Island", centre = Vector3.new(0, 0, 0), radius = Config.ISLAND_RADIUS },
 }
 
+-- ── OBSTACLES, AND WHY BOTS WALKED THROUGH THEM ───────────────────────────
+--
+-- Bot movement is kinematic: a position integrated by hand, not a physics
+-- body. That is the right call — twelve unanchored balls network-owned by the
+-- server is a real cost, and a bot does not need momentum to be convincing —
+-- but it has one consequence nobody accounted for. A kinematic body is not in
+-- the physics world, so `CanCollide` on a rock means nothing to it. Bots
+-- walked through every boulder, ramp and signpost on the island, which is the
+-- single most obvious way a thing announces that it is not a player.
+--
+-- The fix is a list. Every solid, standing prop registers its footprint here
+-- as a circle, and BotService resolves against it. A circle rather than the
+-- real shape because it is one distance test, the props are all roughly round
+-- in plan, and being twenty percent too generous costs a bot a slightly wider
+-- berth — where being wrong the other way costs the illusion.
+WorldBuilder.OBSTACLES = {} :: { { pos: Vector3, radius: number } }
+
+-- A PROP IS SMALL. Anything huge is ground.
+--
+-- The first version filtered only on height — "flat things are floors" — and
+-- the island disc is SIX studs thick, which is not flat. So the island itself
+-- registered as a 480-stud obstacle centred on the origin, and every bot was
+-- shoved to the shoreline on the first tick of every round. Nothing errored;
+-- the bots simply stopped being anywhere near the game, and four separate
+-- assertions failed with symptoms that pointed at eating, at SLAM and at
+-- tethers rather than at this.
+--
+-- Two gates now, and the upper one is the load-bearing one: a thing you walk
+-- around is a rock or a ramp or a signpost, and none of those are sixty studs
+-- wide. Anything bigger is terrain the bot is meant to be standing on.
+local OBSTACLE_MIN_RADIUS = 2
+local OBSTACLE_MAX_RADIUS = 60
+local OBSTACLE_MIN_HEIGHT = 6
+
+local function noteObstacle(p: BasePart)
+    -- Flat things are floors, not walls. A bot standing ON something is fine;
+    -- it is standing IN something that looks wrong.
+    if p.Size.Y < OBSTACLE_MIN_HEIGHT then
+        return
+    end
+    -- Radius from the wider footprint axis, so a long ramp is covered along
+    -- its length rather than only at its centre.
+    local r = math.max(p.Size.X, p.Size.Z) * 0.5
+    if r < OBSTACLE_MIN_RADIUS or r > OBSTACLE_MAX_RADIUS then
+        return
+    end
+    table.insert(WorldBuilder.OBSTACLES, { pos = p.Position, radius = r })
+end
+
 local function part(props: { [string]: any }): BasePart
     local p = Instance.new("Part")
     p.Anchored = true
@@ -55,6 +104,12 @@ local function part(props: { [string]: any }): BasePart
     p.TopSurface = Enum.SurfaceType.Smooth
     p.BottomSurface = Enum.SurfaceType.Smooth
     for k, v in pairs(props) do (p :: any)[k] = v end
+    -- Registered from the ONE constructor every prop goes through, rather than
+    -- from a list maintained by hand. A hand-maintained list is a list that is
+    -- missing whatever was added last.
+    if p.CanCollide then
+        noteObstacle(p)
+    end
     return p
 end
 
@@ -64,6 +119,9 @@ local function wedge(props: { [string]: any }): BasePart
     p.CanCollide = true
     p.Material = Enum.Material.SmoothPlastic
     for k, v in pairs(props) do (p :: any)[k] = v end
+    if p.CanCollide then
+        noteObstacle(p)
+    end
     return p
 end
 
@@ -252,13 +310,30 @@ end
 -- deleted along with the Shack when that block was cut out, and the result was
 -- not a compile error — `board(...)` simply became a call to a nil GLOBAL and
 -- the server died on boot. Same trap, fourth time.
-local function board(parent: Instance, name: string, position: Vector3, facing: number,
+-- IT TAKES A POINT TO LOOK AT, NOT AN ANGLE.
+--
+-- It used to take a yaw in degrees, and both boards in the waiting room were
+-- given one that pointed their text AWAY from the floor players stand on — you
+-- walked up to two blank slate slabs and read the leaderboard by walking off
+-- the edge behind them. That is the bug reported as "the leaderboards are on
+-- the wrong way", and it was not a typo so much as an interface that made the
+-- mistake easy: nothing about the number 24 says which way a face ends up
+-- pointing, so the only way to get it right was to build it and look.
+--
+-- `lookAt` makes it impossible to state wrongly. CFrame.lookAt aims a part's
+-- -Z at the target, and SurfaceGui's Front face IS -Z, so a board built to
+-- look at the middle of the room has its text facing the middle of the room,
+-- by construction rather than by arithmetic.
+local function board(parent: Instance, name: string, position: Vector3, lookAt: Vector3,
                     size: Vector2, tint: Color3)
+    -- Levelled: lookAt with a target at a different height would tip the slab
+    -- back, and a leaderboard leaning over the room reads as damaged.
+    local target = Vector3.new(lookAt.X, position.Y, lookAt.Z)
     local slab = part({
         Name = name,
         Size = Vector3.new(size.X, size.Y, 3),
-        CFrame = CFrame.new(position) * CFrame.Angles(0, math.rad(facing), 0),
-        Color = Color3.fromRGB(58, 58, 62),
+        CFrame = CFrame.lookAt(position, target),
+        Color = Color3.fromRGB(24, 24, 27),
         Material = Enum.Material.Slate,
     })
     slab.Parent = parent
@@ -272,7 +347,7 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
 
     local pad = Instance.new("Frame")
     pad.Size = UDim2.fromScale(1, 1)
-    pad.BackgroundColor3 = Color3.fromRGB(34, 35, 39)
+    pad.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
     pad.BorderSizePixel = 0
     pad.ZIndex = 1
     pad.Parent = surface
@@ -291,7 +366,7 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     entries.TextWrapped = true
     entries.TextXAlignment = Enum.TextXAlignment.Left
     entries.TextYAlignment = Enum.TextYAlignment.Top
-    entries.TextColor3 = Color3.fromRGB(226, 224, 216)
+    entries.TextColor3 = Color3.fromRGB(242, 242, 244)
     -- Set here, not at first refresh: a TextLabel's default Text is the
     -- literal string "Label", and an empty board reading "Label" in half-metre
     -- letters is how that bug shipped once already.
@@ -305,43 +380,140 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     return slab
 end
 
+-- ── THE WAITING ROOM ──────────────────────────────────────────────────────
+--
+-- Thirty-five seconds between rounds, spent somewhere nothing can eat you.
+-- It used to be a grey disc, a rail, and two boards facing the wrong way, and
+-- it read as a holding pen — which is a waste of the one moment in the loop
+-- where the player is standing still and willing to look at something.
+--
+-- MONOCHROME, BY RULE. Black, grey and white, the same palette as the
+-- interface, and for the same reason: the blobs are the only saturated things
+-- in this game, and everything else being greyscale is what makes a neon skin
+-- land. A player walking in wearing Ultraviolet should be the brightest thing
+-- in the room by a mile.
+--
+-- Built out of a few shapes repeated with rhythm rather than a lot of
+-- different props: concentric rings, a ribbed colonnade, a stepped dais, and
+-- floor bands that point at the middle. Repetition with variation is what
+-- reads as designed; a scatter of unrelated objects reads as clutter, and I
+-- am not going to out-detail a real artist so the answer is to out-order one.
 local function buildLobby(world: Instance)
     local c = Config.LOBBY_CENTRE
+    local R = Config.LOBBY_RADIUS
 
-    local floor = disc(world, c, Config.LOBBY_RADIUS, 6,
-        Color3.fromRGB(128, 130, 136), Enum.Material.Concrete, "LobbyFloor")
+    local floor = disc(world, c, R, 6,
+        Color3.fromRGB(26, 26, 29), Enum.Material.Concrete, "LobbyFloor")
     floor.Name = "LobbyFloor"
 
-    local inlay = disc(world, c + Vector3.new(0, 3.2, 0), Config.LOBBY_RADIUS - 18, 1,
-        Color3.fromRGB(146, 140, 126), Enum.Material.Marble, "LobbyInlay")
-    inlay.CanCollide = false
+    -- Two inlaid rings, lighter toward the middle, so the eye is walked
+    -- inward to the dais instead of out to the rail.
+    local ring1 = disc(world, c + Vector3.new(0, 3.2, 0), R - 16, 1,
+        Color3.fromRGB(38, 38, 42), Enum.Material.Marble, "LobbyRingOuter")
+    ring1.CanCollide = false
+    local ring2 = disc(world, c + Vector3.new(0, 3.4, 0), R - 52, 1,
+        Color3.fromRGB(52, 52, 57), Enum.Material.Marble, "LobbyRingInner")
+    ring2.CanCollide = false
 
-    -- A rail all the way round. Falling off a lobby while waiting for a round
-    -- is pure frustration: nothing is gained by making the floor dangerous.
-    for i = 0, 35 do
-        local a = math.rad(i * 10)
+    -- Floor bands radiating from the centre. Thin, white, and flush — the
+    -- cheapest possible thing that makes a flat disc look composed.
+    for i = 0, 23 do
+        local a = math.rad(i * 15)
+        local bandLen = R - 20
+        local band = part({
+            Name = "LobbyBand",
+            Size = Vector3.new(1.6, 0.4, bandLen),
+            CFrame = CFrame.new(c + Vector3.new(
+                math.cos(a) * (bandLen / 2 + 14), 3.6, math.sin(a) * (bandLen / 2 + 14)))
+                * CFrame.Angles(0, -a + math.pi / 2, 0),
+            Color = Color3.fromRGB(86, 86, 92),
+            Material = Enum.Material.Neon,
+        })
+        band.CanCollide = false
+        band.Parent = world
+    end
+
+    -- A stepped dais in the middle. Somewhere to stand, something to orbit,
+    -- and the thing the floor bands point at.
+    for step = 1, 3 do
+        local d = disc(world, c + Vector3.new(0, 3.6 + (step - 1) * 2.4, 0),
+            34 - (step - 1) * 9, 2.4,
+            Color3.fromRGB(30 + step * 10, 30 + step * 10, 34 + step * 10),
+            Enum.Material.Concrete, "Dais" .. step)
+        d.CanCollide = false
+    end
+
+    -- A colonnade: tall ribs around the inner ring, alternating heights so the
+    -- silhouette has a rhythm instead of a fence's flat line.
+    for i = 0, 17 do
+        local a = math.rad(i * 20)
+        local tall = (i % 2 == 0)
+        local h = tall and 46 or 30
+        local rib = part({
+            Name = "LobbyRib",
+            Size = Vector3.new(5, h, 5),
+            CFrame = CFrame.new(c + Vector3.new(
+                math.cos(a) * (R - 34), 4 + h / 2, math.sin(a) * (R - 34)))
+                * CFrame.Angles(0, -a, 0),
+            Color = tall and Color3.fromRGB(18, 18, 21) or Color3.fromRGB(46, 46, 51),
+            Material = Enum.Material.Slate,
+        })
+        rib.CanCollide = false
+        rib.Parent = world
+
+        -- A white cap on the tall ones. One bright accent per rib, at the same
+        -- height all the way round, is what turns a ring of posts into a room.
+        if tall then
+            local cap = part({
+                Name = "LobbyRibCap",
+                Size = Vector3.new(6.5, 1.2, 6.5),
+                CFrame = CFrame.new(c + Vector3.new(
+                    math.cos(a) * (R - 34), 4 + h + 0.6, math.sin(a) * (R - 34))),
+                Color = Color3.fromRGB(236, 236, 240),
+                Material = Enum.Material.Neon,
+            })
+            cap.CanCollide = false
+            cap.Parent = world
+        end
+    end
+
+    -- The rail. Falling off a lobby while waiting for a round is pure
+    -- frustration: nothing is gained by making this floor dangerous.
+    for i = 0, 47 do
+        local a = math.rad(i * 7.5)
         local post = part({
             Name = "LobbyRail",
-            Size = Vector3.new(9, 14, 5),
+            Size = Vector3.new(7, 11, 4),
             CFrame = CFrame.new(c + Vector3.new(
-                math.cos(a) * (Config.LOBBY_RADIUS + 2), 7, math.sin(a) * (Config.LOBBY_RADIUS + 2)))
+                math.cos(a) * (R + 2), 6, math.sin(a) * (R + 2)))
                 * CFrame.Angles(0, -a, 0),
-            Color = Color3.fromRGB(108, 110, 116),
+            Color = Color3.fromRGB(16, 16, 19),
             Material = Enum.Material.Metal,
         })
         post.Parent = world
     end
 
-    board(world, "Leaderboard", c + Vector3.new(-58, 22, -Config.LOBBY_RADIUS + 26), 24,
-        Vector2.new(52, 32), Color3.fromRGB(198, 174, 118))
-    board(world, "Archive", c + Vector3.new(58, 22, -Config.LOBBY_RADIUS + 26), -24,
-        Vector2.new(52, 32), Color3.fromRGB(150, 170, 186))
+    -- ── The boards ────────────────────────────────────────────────────────
+    --
+    -- Flanking the dais and FACING IT — which is to say, facing the middle of
+    -- the floor, where players actually stand. They are given a point to look
+    -- at rather than an angle, because the previous pair were given angles and
+    -- both ended up pointing their text off the edge of the world.
+    local eye = c + Vector3.new(0, 22, 0)
+    board(world, "Leaderboard", c + Vector3.new(-64, 22, -46), eye,
+        Vector2.new(52, 30), Color3.fromRGB(236, 236, 240))
+    board(world, "Archive", c + Vector3.new(64, 22, -46), eye,
+        Vector2.new(52, 30), Color3.fromRGB(236, 236, 240))
 
-    signpost(world, c + Vector3.new(0, 3, Config.LOBBY_RADIUS - 30), "\u{1F6CB}\u{FE0F}", "THE WAITING ROOM",
-        "trade, dress up, get ready", Color3.fromRGB(198, 174, 118))
+    signpost(world, c + Vector3.new(0, 12, 26), "\u{1F6CB}\u{FE0F}", "THE WAITING ROOM",
+        "trade, dress up, pick your third power", Color3.fromRGB(236, 236, 240))
 end
 
 function WorldBuilder.build()
+    -- Rebuilt from scratch, not appended to. The harness boots the world more
+    -- than once in a single process and a growing obstacle list would make
+    -- bots progressively more claustrophobic across a test run.
+    table.clear(WorldBuilder.OBSTACLES)
     buildAmbience()
 
     local rng = Random.new(20260913)
@@ -971,6 +1143,37 @@ function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: n
         pos = Vector3.new(pos.X, b.centre.Y + 2, pos.Z)
     end
     return pos
+end
+
+--- Push a point out of any obstacle it is standing inside. Returns the
+--- corrected point and whether anything moved.
+---
+--- Used by the kinematic movers — bots — which are not in the physics world
+--- and so get nothing from CanCollide. Only props ON THE ISLAND count: the
+--- lobby is 420 studs up with its own floor and rail, and nothing kinematic
+--- moves around up there.
+function WorldBuilder.pushOut(at: Vector3, bodyRadius: number): (Vector3, boolean)
+    local moved = false
+    local x, z = at.X, at.Z
+    for _, o in ipairs(WorldBuilder.OBSTACLES) do
+        if math.abs(o.pos.Y - Config.LOBBY_CENTRE.Y) > 120 then
+            local dx, dz = x - o.pos.X, z - o.pos.Z
+            local d = math.sqrt(dx * dx + dz * dz)
+            local need = o.radius + bodyRadius
+            if d < need then
+                if d < 0.01 then
+                    -- Dead centre. Any direction will do; a fixed one would
+                    -- make every bot that clipped this prop leave it the same
+                    -- way, which looks like a conveyor belt.
+                    dx, dz, d = 1, 0, 1
+                end
+                x = o.pos.X + (dx / d) * need
+                z = o.pos.Z + (dz / d) * need
+                moved = true
+            end
+        end
+    end
+    return Vector3.new(x, at.Y, z), moved
 end
 
 function WorldBuilder.arenaFolder(): Folder

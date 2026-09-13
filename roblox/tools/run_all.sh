@@ -28,9 +28,6 @@ node integration.mjs .. client_test.luau
 echo "── 6. roll + world + ascension ──"
 node integration.mjs .. roll_test.luau
 
-echo "── 7. tutorial: walk a new player through the first run ──"
-node integration.mjs .. tutorial_test.luau
-
 echo "── 8. mobile: every panel on 5 real device sizes ──"
 node integration.mjs .. mobile_test.luau
 
@@ -43,7 +40,7 @@ node integration.mjs .. census_test.luau
 echo "── 11. rounds: the lobby/round cycle and deflation ──"
 node integration.mjs .. rounds_test.luau
 
-echo "── 12. powers: press all twelve, with a second player ──"
+echo "── 12. powers: press every power, with a second player ──"
 node integration.mjs .. powers_test.luau
 
 echo "── 13. adversarial: attack it ──"
@@ -51,6 +48,9 @@ node integration.mjs .. adversarial.luau
 
 echo "── 14. bots: the rest of the field ──"
 node integration.mjs .. bots_test.luau
+
+echo "── 15. goop: split, tethers and spore pods ──"
+node integration.mjs .. goop_test.luau
 
 echo "── 12. balance sweeps"
 node sim.mjs ../src/shared move.luau

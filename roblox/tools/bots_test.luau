@@ -33,6 +33,23 @@ _G.BOOT_SERVER()
 tick(1)
 
 local Config = _G.SHARED("Config")
+
+-- EVERYTHING UNLOCKED, BY BOTH ROUTES.
+--
+-- Banking alone is no longer enough: HOOK and SPIKE come off the BETA SEASON's
+-- free track (Season.POWER_AT) and are deliberately not on the banking ladder
+-- at all, so a test that only sets lifetimeBanked cannot select them and
+-- Powers.hotbar quietly hands back the default instead.
+local function unlockEverything(p)
+    local prof = _G.SERVER("Data").get(p)
+    if not prof then return end
+    prof.lifetimeBanked = 1e9
+    prof.powersGranted = prof.powersGranted or {}
+    for _, power in ipairs(_G.SHARED("Powers").SEASON) do
+        prof.powersGranted[power.id] = true
+    end
+end
+
 local Blob = _G.SHARED("Blob")
 local Arena = _G.SERVER("ArenaService")
 local Bots = _G.SERVER("BotService")
@@ -163,6 +180,56 @@ do
     local pellets = Arena.stats().pellets
     check("the island's pellet count is finite and bounded",
         pellets > 0 and pellets <= Config.PELLET_TARGET + 260, tostring(pellets))
+end
+
+emit("")
+emit("══ BOTS WALK AROUND THINGS, NOT THROUGH THEM ══")
+-- THE TELL. Bot movement is kinematic — a position integrated by hand rather
+-- than a physics body — which is the right call for twelve of them on a
+-- Roblox server. The consequence nobody accounted for is that a kinematic
+-- body is not in the physics world at all, so `CanCollide` on a boulder means
+-- precisely nothing to it. Bots walked through every rock, ramp and signpost
+-- on the island, which is the most obvious way a thing announces it is not a
+-- player.
+do
+    local WB = _G.SERVER("WorldBuilder")
+    check("the world registered some obstacles", #WB.OBSTACLES > 0,
+        tostring(#WB.OBSTACLES))
+
+    -- AND NOT THE ISLAND ITSELF. The first version of the filter only skipped
+    -- FLAT things, and the island disc is six studs thick — so the island
+    -- registered as a 480-stud obstacle centred on the origin and every bot
+    -- was shoved to the shoreline on the first tick of every round. Nothing
+    -- errored; the bots just stopped being anywhere near the game.
+    local huge = {}
+    for _, o in ipairs(WB.OBSTACLES) do
+        if o.radius > 80 then
+            table.insert(huge, ("r=%.0f"):format(o.radius))
+        end
+    end
+    check("and none of them is a floor", #huge == 0, table.concat(huge, ", "))
+
+    -- The resolver itself, on a known obstacle.
+    local o = WB.OBSTACLES[1]
+    local inside = V3.new(o.pos.X, o.pos.Y, o.pos.Z)
+    local out, moved = WB.pushOut(inside, 6)
+    check("standing inside a prop pushes you out of it", moved,
+        tostring(moved))
+    check("and out means outside its footprint",
+        V3.new(out.X - o.pos.X, 0, out.Z - o.pos.Z).Magnitude >= o.radius + 5.9,
+        ("%.1f vs needed %.1f"):format(
+            V3.new(out.X - o.pos.X, 0, out.Z - o.pos.Z).Magnitude, o.radius + 6))
+
+    -- And a live bot, dropped into a prop, does not stay in it.
+    local victim = Bots.living()[1]
+    check("there is a bot to test with", victim ~= nil)
+    if victim then
+        victim.pos = V3.new(o.pos.X, 2 + Blob.radius(victim.mass), o.pos.Z)
+        tick(1)
+        local d = V3.new(victim.pos.X - o.pos.X, 0, victim.pos.Z - o.pos.Z).Magnitude
+        check("a bot dropped inside a prop walks out of it", d > o.radius,
+            ("%.1f from centre, prop radius %.1f"):format(d, o.radius))
+    end
 end
 
 emit("")
@@ -314,7 +381,7 @@ emit("══ ABILITIES DEFLATE BOTS ══")
 -- servers where it matters most.
 do
     local profile = _G.SERVER("Data").get(alice)
-    if profile then profile.lifetimeBanked = 1e9 end
+    unlockEverything(alice)
     svc.fireAs("SetPower", alice, "slam")
     tick(0.5)
     local run = Arena.runFor(alice)
@@ -373,7 +440,7 @@ do
         local n = 0
         for _, d in ipairs(arena:GetChildren()) do
             if (d.Name == "Pellet" or d.Name == "Crumb")
-                and (d.Position - at).Magnitude < r then
+                and (V3.new(d.Position.X - at.X, 0, d.Position.Z - at.Z)).Magnitude < r then
                 n += 1
             end
         end
@@ -383,9 +450,17 @@ do
     -- here" is true on any square foot of this island — the floor is carpeted
     -- with 1,400 of them — so an absolute count would pass whether or not the
     -- slam dropped a single crumb.
-    local foodBefore = foodNear(spot, 40)
+    -- MEASURED IN A RING THAT SCALES WITH THE BODIES.
+    --
+    -- 40 studs was right when a 3,700-mass blob had a radius of about 13. It
+    -- now has a radius of 36, and deflation scatters what it sheds in a ring
+    -- proportional to that radius — correctly, a big blob sheds over a big
+    -- area — so every crumb landed 60 to 100 studs out and the window caught
+    -- none of it. The window is derived from the same radius the scatter is.
+    local ringR = Blob.radius(3700) * 2.4 + 40
+    local foodBefore = foodNear(spot, ringR)
 
-    svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+    svc.fireAs("UsePower", alice, 3, V3.new(0, 0, 1))
     tick(2.5)   -- SLAM hangs in the air before it lands
 
     local hit = 0
@@ -403,8 +478,8 @@ do
     -- a half seconds is ordinary drift, not evidence. Three deflations of 10%
     -- of 3,700 return several hundred mass in chunks, which is many crumbs.
     check("and what came off them landed on the floor as food",
-        foodNear(spot, 40) >= foodBefore + 5,
-        ("%d -> %d"):format(foodBefore, foodNear(spot, 40)))
+        foodNear(spot, ringR) >= foodBefore + 5,
+        ("%d -> %d within %.0f studs"):format(foodBefore, foodNear(spot, ringR), ringR))
 
     Config.BOT_SPEED_MULT = realSpeed
 end
@@ -435,6 +510,50 @@ do
     -- Two rows reading "Gloop" looks like a bug even when it is not, and the
     -- player cannot tell which one just ate them.
     check("every bot on the board has a distinct name", not duplicateName)
+
+    -- SHAPED LIKE A USERNAME, and carrying no marker anywhere.
+    --
+    -- The first version named them Gloop and Custard and hung a robot emoji
+    -- over each one, on the theory that pretending otherwise was a lie the
+    -- player would resent. That was wrong twice: a board full of tagged blob
+    -- words reads as an EMPTY SERVER rather than as honesty, and no game in
+    -- this genre labels its fill — so the tag was announcing a weakness
+    -- nobody else admits to. Kai8842 is not a lie about a person; it is the
+    -- same shape as every other name on a Roblox leaderboard.
+    local shaped, tagged = 0, {}
+    for _, row in ipairs(results) do
+        if row.bot then
+            local n = tostring(row.name)
+            if n:match("^%a+%d+$") then shaped += 1 end
+            if n:find("bot") or n:find("BOT") or n:find("\u{1F916}")
+                or n:find("NPC") or n:find("CPU") then
+                table.insert(tagged, n)
+            end
+        end
+    end
+    check("bot names look like usernames", shaped == bots,
+        ("%d of %d"):format(shaped, bots))
+    check("and none of them is tagged as a bot anywhere a player can read",
+        #tagged == 0, table.concat(tagged, ", "))
+
+    -- The world label too, not only the board.
+    local world = svc.Workspace:FindFirstChild("GoobWorld")
+    local folder = world and world:FindFirstChild("Bots")
+    local badPlate = {}
+    for _, part in ipairs(folder and folder:GetChildren() or {}) do
+        local tag = part:FindFirstChild("Tag")
+        -- Walked rather than looked up by class: the harness implements
+        -- FindFirstChild and IsA, not FindFirstChildWhichIsA.
+        local text = ""
+        for _, child in ipairs(tag and tag:GetChildren() or {}) do
+            if child:IsA("TextLabel") then text = tostring(child.Text) end
+        end
+        if text:find("\u{1F916}") or text:find("bot") or text:find("BOT") then
+            table.insert(badPlate, text)
+        end
+    end
+    check("and no nameplate in the world is tagged either",
+        #badPlate == 0, table.concat(badPlate, ", "))
     check("the board is sorted biggest first",
         (function()
             for i = 2, #results do

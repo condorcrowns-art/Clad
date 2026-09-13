@@ -89,7 +89,15 @@ local function openEverything()
                 -- The drawer toggle, and every tab on the dock. Opening one
                 -- closes the last, so this ends with a sheet up rather than
                 -- six of them, which is exactly the contract being tested.
-                if tostring(d.Text):find("GOOBS") or name:find("^Dock_") then
+                -- THE MENU BUTTON FIRST, and it matters.
+                --
+                -- The tab rows live inside a dropdown that is CLOSED by default
+                -- on a phone, and a closed panel is not measured — so without
+                -- opening it this audit would have declared the busiest, most
+                -- collision-prone element on the screen clean by never looking
+                -- at it. That is the same mistake that let an entire second
+                -- HUD go unaudited for weeks.
+                if name == "MenuButton" or name:find("^Dock_") then
                     d.Activated:Fire()
                 end
             end
@@ -105,7 +113,8 @@ end
 local function closeEverything()
     for _, h in ipairs(huds) do
         for _, d in ipairs(h:GetDescendants()) do
-            if d:IsA("TextButton") and (d.Text == "✕" or tostring(d.Name) == "SkipCoach") then
+            -- The sheet's close button. SkipCoach is gone with the tutorial.
+            if d:IsA("TextButton") and d.Text == "✕" then
                 d.Activated:Fire()
             end
         end

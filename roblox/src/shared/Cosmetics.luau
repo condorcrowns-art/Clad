@@ -23,6 +23,10 @@ export type Item = {
     beta: boolean?,      -- BETA SEASON exclusive, retired when Season 0 closes
     colour: Color3?,
     material: Enum.Material?,
+    -- Rare and above get one. Named rather than described so the catalogue
+    -- stays data and RollService stays the only place that knows how to build
+    -- a ParticleEmitter — see RollService.applyCosmetics.
+    particle: string?,
     emoji: string?,
 }
 
@@ -41,28 +45,57 @@ local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
 
 Cosmetics.ITEMS = {
     -- ── Skins: the body itself ─────────────────────────────────────────────
-    -- No colour: the default skin keeps the Goob's own hue, which is its
-    -- identity. Transparency is set by RollService, not here.
+    --
+    -- NEON, AND LOUD ON PURPOSE. The whole interface is greyscale now — black
+    -- panels, white text, colour reserved for meaning — and that was done for
+    -- this: the blobs are the only saturated thing in the world, so a skin has
+    -- nothing to compete with and reads from across the island.
+    --
+    -- `glow` sets how hard a skin emits. `particle` names a shape that
+    -- RollService attaches at Rare and above, so the difference between a
+    -- Common and a Legendary is visible in motion and not only in a menu — a
+    -- rare skin that just sits there is a rare skin nobody can tell you own.
     { id = "skin_default", name = "Classic Goo",   kind = "skin", rarity = "Common",
       source = "starter", material = Enum.Material.Glass },
     { id = "skin_jelly",   name = "Jelly",         kind = "skin", rarity = "Common",
-      source = "season", tier = 3, material = Enum.Material.Glass, colour = rgb(224, 123, 158) },
+      source = "season", tier = 3, material = Enum.Material.Neon, colour = rgb(255, 92, 168) },
+    { id = "skin_slime",   name = "Toxic Slime",   kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Neon, colour = rgb(148, 255, 64) },
     { id = "skin_bubble",  name = "Soap Bubble",   kind = "skin", rarity = "Uncommon",
-      source = "season", tier = 8, material = Enum.Material.ForceField },
-    { id = "skin_stone",   name = "Boulder",       kind = "skin", rarity = "Uncommon",
-      source = "shop", material = Enum.Material.Slate, colour = rgb(130, 128, 122) },
+      source = "season", tier = 8, material = Enum.Material.ForceField, colour = rgb(120, 232, 255) },
+    { id = "skin_magma",   name = "Magma",         kind = "skin", rarity = "Uncommon",
+      source = "shop", material = Enum.Material.Neon, colour = rgb(255, 122, 26),
+      particle = "ember" },
     { id = "skin_chrome",  name = "Chrome",        kind = "skin", rarity = "Rare",
-      source = "season", tier = 18, material = Enum.Material.Metal, colour = rgb(209, 215, 224) },
+      source = "season", tier = 18, material = Enum.Material.Metal, colour = rgb(226, 232, 240),
+      particle = "spark" },
+    { id = "skin_cyber",   name = "Cyber Grid",    kind = "skin", rarity = "Rare",
+      source = "crate_goop", material = Enum.Material.Neon, colour = rgb(0, 255, 214),
+      particle = "grid" },
     { id = "skin_lava",    name = "Molten",        kind = "skin", rarity = "Epic",
-      source = "season", tier = 28, premium = true, material = Enum.Material.Neon, colour = rgb(224, 155, 121) },
+      source = "season", tier = 28, premium = true, material = Enum.Material.Neon,
+      colour = rgb(255, 74, 46), particle = "ember" },
     { id = "skin_void",    name = "Void",          kind = "skin", rarity = "Epic",
-      source = "shop", material = Enum.Material.Neon, colour = rgb( 27,  22,  41) },
+      source = "shop", material = Enum.Material.Neon, colour = rgb(88, 24, 214),
+      particle = "void" },
+    { id = "skin_plasma",  name = "Plasma",        kind = "skin", rarity = "Epic",
+      source = "crate_deep", material = Enum.Material.Neon, colour = rgb(196, 64, 255),
+      particle = "spark" },
     { id = "skin_prism",   name = "Prism",         kind = "skin", rarity = "Legendary",
-      source = "season", tier = 45, premium = true, material = Enum.Material.Glass, colour = rgb(158, 194, 224) },
+      source = "season", tier = 45, premium = true, material = Enum.Material.Glass,
+      colour = rgb(120, 200, 255), particle = "prism" },
     { id = "skin_ancient", name = "Ancient Amber", kind = "skin", rarity = "Legendary",
-      source = "ascend", material = Enum.Material.Glass, colour = rgb(224, 184, 121) },
+      source = "ascend", material = Enum.Material.Neon, colour = rgb(255, 186, 48),
+      particle = "ember" },
+    { id = "skin_ultra",   name = "Ultraviolet",   kind = "skin", rarity = "Legendary",
+      source = "crate_deep", material = Enum.Material.Neon, colour = rgb(150, 40, 255),
+      particle = "void" },
     { id = "skin_goldleaf",name = "Gold Leaf",     kind = "skin", rarity = "Mythic",
-      source = "achievement", material = Enum.Material.Foil, colour = rgb(224, 196, 121) },
+      source = "achievement", material = Enum.Material.Neon, colour = rgb(255, 214, 92),
+      particle = "prism" },
+    { id = "skin_singular",name = "Event Horizon", kind = "skin", rarity = "Mythic",
+      source = "beta", beta = true, material = Enum.Material.Neon, colour = rgb(12, 12, 16),
+      particle = "void" },
 
     -- ── Trails ─────────────────────────────────────────────────────────────
     { id = "trail_none",   name = "No Trail",      kind = "trail", rarity = "Common", source = "starter" },

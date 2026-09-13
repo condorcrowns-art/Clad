@@ -299,6 +299,45 @@ check("crests persist to the DataStore", saved and saved.crests == 1,
     saved and tostring(saved.crests))
 
 emit("")
+emit("")
+emit("══ SIGNS AND BOARDS FACE THE PEOPLE READING THEM ══")
+-- THE BUG THIS EXISTS FOR. Both waiting-room boards were built with a yaw in
+-- degrees, and both yaws pointed their text AWAY from the floor players stand
+-- on — you walked up to two blank slate slabs and could only read the
+-- leaderboard by standing off the edge of the world behind it.
+--
+-- Nothing caught it because "which way does this face" was not a thing the
+-- harness could represent: the CFrame stub is translation-only and discarded
+-- rotation entirely. It now keeps the direction handed to CFrame.lookAt, which
+-- is the single property that mattered, and board() takes a point to look at
+-- rather than an angle so the mistake is not expressible anymore.
+do
+    local world = svc.Workspace:FindFirstChild("GoobWorld")
+    local centre = _G.SHARED("Config").LOBBY_CENTRE
+    local checked, wrong = 0, {}
+    for _, name in ipairs({ "Leaderboard", "Archive" }) do
+        local slab = world and world:FindFirstChild(name)
+        if slab then
+            checked += 1
+            local look = slab.CFrame.LookVector
+            local toCentre = V3.new(centre.X - slab.Position.X, 0,
+                centre.Z - slab.Position.Z)
+            if toCentre.Magnitude > 0.01 then
+                toCentre = toCentre.Unit
+                -- Dot product: +1 is facing the middle of the room, -1 is
+                -- facing directly away from it, which is what shipped.
+                local dot = look.X * toCentre.X + look.Z * toCentre.Z
+                if dot < 0.35 then
+                    table.insert(wrong, ("%s (dot %.2f)"):format(name, dot))
+                end
+            end
+        end
+    end
+    check("both boards were found", checked == 2, tostring(checked))
+    check("every board faces the middle of the waiting room",
+        #wrong == 0, table.concat(wrong, ", "))
+end
+
 emit(("══ %s ══"):format(fails == 0 and "ALL ROLL CHECKS PASSED" or (fails .. " FAILURE(S)")))
 
 -- FAIL THE BUILD, not just the transcript.

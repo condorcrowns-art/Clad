@@ -211,7 +211,24 @@ CFrame.__index = function(t, k)
     if k == "Position" or k == "p" then return v3(rawget(t, "_x"), rawget(t, "_y"), rawget(t, "_z")) end
     -- Fixed basis vectors: this stub carries no rotation, but controller code
     -- legitimately reads them to build camera-relative movement.
-    if k == "LookVector" then return v3(0, 0, -1) end
+    -- A REAL LookVector WHEN ONE WAS GIVEN.
+    --
+    -- This stub is translation-only and discards rotation, which is fine for
+    -- almost everything — until a bug ships because a thing was FACING the
+    -- wrong way and no test could see it. Both waiting-room boards pointed
+    -- their text off the edge of the world for weeks; the geometry audit
+    -- measured them happily because facing was not a thing the harness could
+    -- represent.
+    --
+    -- CFrame.lookAt stores the direction it was asked to look, so the one
+    -- property that mattered is now inspectable. Everything else about
+    -- rotation is still discarded, and deliberately so: this is a place to
+    -- answer "which way does it point", not a transform library.
+    if k == "LookVector" then
+        local lx, ly, lz = rawget(t, "_lx"), rawget(t, "_ly"), rawget(t, "_lz")
+        if lx then return v3(lx, ly, lz) end
+        return v3(0, 0, -1)
+    end
     if k == "RightVector" then return v3(1, 0, 0) end
     if k == "UpVector" then return v3(0, 1, 0) end
     if k == "X" then return rawget(t, "_x") end
@@ -231,8 +248,42 @@ env.CFrame = {
     -- Also accepts CFrame.new(position, lookAt); the look target is discarded
     -- since this stub is translation-only.
     new = function(a, b, c)
-        if type(a) == "table" then return cf(a.X, a.Y, a.Z) end
+        if type(a) == "table" then
+            local made = cf(a.X, a.Y, a.Z)
+            -- CFrame.new(position, lookAt) is the older spelling of lookAt and
+            -- carries the same information, so it keeps the same direction.
+            -- Only when the second argument is genuinely a point. Roblox has
+            -- several two-argument CFrame.new spellings and the stub is handed
+            -- all of them; treating a quaternion or a rotation matrix as a
+            -- look target reads `.X` off something that does not have one.
+            if type(b) == "table" and type(b.X) == "number"
+                and type(b.Y) == "number" and type(b.Z) == "number" then
+                local dx, dy, dz = b.X - a.X, b.Y - a.Y, b.Z - a.Z
+                local len = math.sqrt(dx * dx + dy * dy + dz * dz)
+                if len > 1e-6 then
+                    rawset(made, "_lx", dx / len)
+                    rawset(made, "_ly", dy / len)
+                    rawset(made, "_lz", dz / len)
+                end
+            end
+            return made
+        end
         return cf(a, b, c)
+    end,
+    --- Position, aimed at a target. The look direction is kept (see LookVector
+    --- above); the roll is not.
+    lookAt = function(at, target)
+        local c2 = cf(at.X, at.Y, at.Z)
+        if target then
+            local dx, dy, dz = target.X - at.X, target.Y - at.Y, target.Z - at.Z
+            local len = math.sqrt(dx * dx + dy * dy + dz * dz)
+            if len > 1e-6 then
+                rawset(c2, "_lx", dx / len)
+                rawset(c2, "_ly", dy / len)
+                rawset(c2, "_lz", dz / len)
+            end
+        end
+        return c2
     end,
     Angles = function() return cf(0, 0, 0) end,
     fromEulerAnglesXYZ = function() return cf(0, 0, 0) end,

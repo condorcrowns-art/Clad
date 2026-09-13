@@ -17,7 +17,7 @@ and why it mattered, the conventions, the traps, and what comes next.
 | CI | none configured — "all suites pass" means `roblox/tools/run_all.sh`, run locally |
 | Check-ins | an hourly self-wake re-checks PR #8; re-arm silently if nothing changed, stop when merged/closed |
 | Build | `cd roblox && python3 build_place.py` → `build/GulpAGoob.rbxlx` |
-| Test | `cd roblox/tools && ./run_all.sh` (14 suites) |
+| Test | `cd roblox/tools && ./run_all.sh` (15 suites) |
 
 ### What the last pass did (bots · edge food · the purge)
 
@@ -54,6 +54,68 @@ so `run_all.sh` would have said "ALL SUITES PASSED" over real failures. This is
 the same bug class that was found and fixed in the pure sims months ago; it
 came back in the suites written afterwards. All eight are armed now, and all 21
 mutations are caught.
+
+### What the last pass did (split · tethers · pods · the monochrome UI)
+
+From the playtest: *"The leaderboards are on the wrong way… spice up the
+waiting area… very monochrome… the slime skins should be neon… make the ui
+easier to read and have a drop down menu with the names on the right side
+vertically… the bots shouldnt be labeled as bots… the bots phase through
+objects… size should scale better when you eat blobs… you should be able to
+split kinda like agario… bombs that split you into a ton of pieces… something
+else so its unique… get rid of the tutorial altogether… have like 3 in your
+hotbar, Dash required, Split required, and your custom one."*
+
+1. **The tutorial is gone**, module and all. It was explaining a game that
+   explains itself, and on a landscape phone its banner fought the round clock
+   for the one free band on screen — which is what "overlapping weirdly" was.
+2. **Three hotbar slots.** DASH and SPLIT are `Powers.FIXED`, owned from the
+   first second; slot 3 is the chosen power. `Powers.hotbar()` is the single
+   answer to "what is in a slot", read by both server and client. Cooldowns
+   are per-slot (`run.slotReadyAt`).
+3. **SPLIT actually splits**, and `GoopService.luau` is the new module.
+   Globlets fly out, eat, and come home — and each one trails a **tether** that
+   deflates and slows any blob crossing it. That is the part that is not
+   agar.io: a split is three lines drawn across the floor, so it controls space
+   rather than only reaching. **Spore pods** burst a big blob into a whole web
+   at once and let small blobs hide where big ones dare not follow.
+4. **Size is a cube root now** (`Config.BLOB_RADIUS_EXP`). The log curve was
+   correct for a game that reached 1e24 and invisible across a round's band —
+   eating somebody your own size added one and a half studs. Doubling mass now
+   makes you 26% wider. Pellet respawn rose with it, because bigger bodies
+   sweep wider corridors.
+5. **Monochrome UI.** Black/grey/white by rule; the only chroma is meaning. The
+   dock became a **named vertical menu down the right**, opening as a dropdown
+   (left of the button on touch, because Roblox reserves the bottom-right
+   160x160 for the jump button).
+6. **Neon skins with particles** at Rare and above — the greyscale interface
+   exists so these read.
+7. **Bots are `Kai8842`, not `Gloop 🤖`**, and they no longer walk through
+   rocks: `WorldBuilder.OBSTACLES` + `pushOut`.
+8. **Rare skills from the Beta Pass.** HOOK and SPIKE left the banking ladder
+   entirely and are granted by the season's **free** track (`Season.POWER_AT`).
+   Free track only, and that is the monetisation wall, not a preference: the
+   premium track is bought with Robux and `Monetisation.violations()` now scans
+   it for powers and fails the build if it finds one.
+9. **The leaderboards face the room.** `board()` takes a point to look at
+   rather than a yaw, so the mistake is no longer expressible, and the harness
+   learned to represent facing at all (`CFrame.lookAt` keeps its direction).
+
+**Bugs this pass turned up that had nothing to do with the request:** the
+island disc registered as a 480-stud obstacle and shoved every bot to the
+shoreline; deflation drops were re-eaten instantly by the attacker once bodies
+got big (the comeback mechanic feeding the winner); `powerCooldown` in the
+snapshot quietly reported "always ready" after cooldowns moved per-slot; the
+monetisation wall never scanned the premium season track at all, so a paid
+power would have sailed through it; and `powers_test` — which exists because
+eleven of twelve powers had never executed — walked `Powers.LIST` and would
+have silently stopped covering the four that moved to other pools.
+
+Two of the suite's own assertions were also caught passing for the wrong
+reason: the SPLIT cost check was satisfied by the button's own price rather
+than by the pieces (a mutation that threw free globlets passed it), and the
+tether cooldown check watched mass over a window in which the victim was being
+eaten and the strand was flying away.
 
 **Deliver builds to the user with `SendUserFile`** — they open the `.rbxlx` in
 Studio directly. They are a solo dev testing in Studio, not reading the repo.
@@ -159,6 +221,7 @@ roblox/
     RollService.luau   the rolling body, cosmetics, anti-cheat, teleport
     GoobService.luau   digestion, income, gulping (delegates spawn to RollService)
     BotService.luau    bot bodies + steering; ArenaService owns every rule
+    GoopService.luau   globlets, tethers and spore pods (bodies only)
     TradeService.luau  the paranoid trade state machine
     PitService.luau    lobby, match loop, shoves, eliminations, payout
 
@@ -166,7 +229,7 @@ roblox/
     init.client.luau   input, proximity, feedback, dialogs, pit strip
     Roll.luau          the controller (velocity-driven, derived spin)
     Layout.luau        responsive: compact vs roomy, touch vs not
-    Hud.luau           toasts + the tutorial coach. Nothing else.
+    Hud.luau           toasts. Nothing else.
     Panels.luau        wardrobe / season / crew, rendered into ArenaHud's sheet
     TradeUi.luau       the trade window
     Theme.luau         every colour and corner radius
@@ -207,7 +270,7 @@ Do not undo these without understanding the reason.
 ## 4. The verification harness (`roblox/tools/`)
 
 There is no Roblox runtime in CI, so the game is verified four ways.
-`./run_all.sh` runs **14 suites**.
+`./run_all.sh` runs **15 suites**.
 
 1. **Compiles** — `check.mjs` uses a real **Luau v733 compiler** via
    `@luau-rs/luau` (WebAssembly, from npm).
@@ -453,7 +516,7 @@ deflates outside PLAYING.
   placement bonus.
 - **The lobby is a place**, 420 studs up, with a rail. Not a building.
 - **No buildings at all.** The Shack and plot pads are gone; every service is
-  a tap on the dock.
+  a tap on the menu.
 - **Food never spawns in the Shallows.** Pellets in the no-PvP ring let a
   player farm untouchable forever, which beats the whole game.
 
@@ -511,7 +574,7 @@ stand on. `integration.luau` checks built-vs-configured both ways.
 4. **One panel at a time.** Every dock tab routes through `ArenaHud.openSheet`,
    which closes whatever was open first.
 5. **The dock is one row of eight at the TOP on every platform.** Icons shrink
-   on compact rather than the dock colliding with the stat card.
+   on compact rather than the menu colliding with the stat card.
 6. **The right-hand column is spoken for twice**: jump button at the bottom,
    toast stack at the top. Anything centred must reserve whichever is wider.
 7. **Boards expose `Board -> Entries`** as a direct child. Burying it deeper is

@@ -31,10 +31,18 @@ local Blob = {}
 -- Logarithmic, matching GoobMath.size's reasoning: constant visual growth per
 -- order of magnitude, so a 10x gain is always a visible step. Arena numbers
 -- are small (tens to low thousands) so the constant is tuned for that band.
+-- A CUBE ROOT, not a logarithm. See Config.BLOB_RADIUS_EXP for the full
+-- reasoning; the short version is that a blob is a volume, so radius goes as
+-- mass^(1/3), and the log curve it replaced moved so little across a round's
+-- mass band that swallowing somebody your own size was invisible.
+--
+-- Clamped at SIZE_MAX for sanity only. At the exponent above that is not
+-- reached until roughly 1.4 million mass, which no round produces.
 function Blob.radius(mass: number): number
-    local m = math.max(1, mass)
-    return Config.BLOB_RADIUS_BASE
-        + Config.BLOB_RADIUS_K * math.log(m / Config.STARTING_MASS + 1)
+    local m = math.max(Config.STARTING_MASS, mass)
+    local r = Config.BLOB_RADIUS_BASE
+        * (m / Config.STARTING_MASS) ^ Config.BLOB_RADIUS_EXP
+    return math.min(Config.SIZE_MAX, r)
 end
 
 -- Bigger is SLOWER. This is the one place the arena deliberately contradicts

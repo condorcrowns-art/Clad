@@ -16,7 +16,6 @@ local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
 local Powers = require(game.ReplicatedStorage.GoobShared.Powers)
 local Trinkets = require(game.ReplicatedStorage.GoobShared.Trinkets)
-local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
 local Cosmetics = require(game.ReplicatedStorage.GoobShared.Cosmetics)
 local Season = require(game.ReplicatedStorage.GoobShared.Season)
 
@@ -54,7 +53,6 @@ function Data.blankProfile(userId: number)
         lastSeen = os.time(),
         stats = { caught = 0, gulps = 0, trades = 0, bestMass = Config.STARTING_MASS },
         discovered = {} :: { [string]: boolean },
-        tutorial = Tutorial.blank(),
         crests = 0,
         totalAscensions = 0,
         pitWins = 0,
@@ -72,6 +70,9 @@ function Data.blankProfile(userId: number)
         trinketSlots = {} :: { string },
         cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
         bestBank = 0,
+        -- Powers handed over by the season track rather than earned by
+        -- banking. See Season.POWER_AT: free track only, by construction.
+        powersGranted = {} :: { [string]: boolean },
         roundsPlayed = 0,                          -- earns eggs; never spent
         powerUses = {} :: { [string]: number },    -- mastery, per power
         streak = 0,
@@ -146,7 +147,9 @@ function Data.load(player: Player)
     profile.powerUses = profile.powerUses or {}
     profile.streak = profile.streak or 0
     profile.streakDay = profile.streakDay or 0
-    if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked) then
+    profile.powersGranted = profile.powersGranted or {}
+    if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked,
+        profile.powersGranted) then
         profile.powerId = Powers.DEFAULT
     end
     -- Drop equipped trinkets the player does not actually own. This runs on
@@ -173,15 +176,10 @@ function Data.load(player: Player)
 
     profile.season = profile.season or Season.blank()
     Season.rollIfNeeded(profile.season)
-    -- Players who joined before the tutorial existed already know the game, so
-    -- they get it marked complete rather than being walked through it.
-    if not profile.tutorial then
-        local t = Tutorial.blank()
-        t.done = true
-        t.dismissed = true
-        t.step = #Tutorial.STEPS
-        profile.tutorial = t
-    end
+    -- The first-run tutorial is gone, and so is the per-profile record it kept.
+    -- `profile.tutorial` is simply dropped on load rather than migrated: it is
+    -- a few bytes of dead weight in every saved profile and nothing reads it.
+    profile.tutorial = nil
     if not profile.activeGoobId and profile.goobs[1] then
         profile.activeGoobId = profile.goobs[1].id
     end

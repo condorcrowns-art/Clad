@@ -18,6 +18,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
 local Movement = require(Shared.Movement)
+local Config = require(Shared.Config)
 local Stick = require(script.Parent.Stick)
 
 local player = Players.LocalPlayer
@@ -54,6 +55,24 @@ end
 
 function Roll.setMass(newMass: number)
     mass = newMass
+end
+
+-- ── SNAGGED ON SOMEBODY'S TETHER ──────────────────────────────────────────
+--
+-- The server decides WHETHER you are snagged; the client has to be the one
+-- that acts on it, because the client owns this ball's physics. That split was
+-- the bug: the server set the flag, the tests asserted the flag was set, and
+-- nothing anywhere actually slowed the player down. Bots were slowed correctly
+-- because the server moves those itself, so the mechanic worked against
+-- everything except the people it was aimed at.
+local snagged = false
+
+function Roll.setSnagged(on: boolean)
+    snagged = on
+end
+
+function Roll.isSnagged(): boolean
+    return snagged
 end
 
 function Roll.setBall(newBall: BasePart?, newMass: number)
@@ -149,6 +168,9 @@ function Roll.step(dt: number)
     else
         local input = moveInput()
         local top = Movement.topSpeed(mass)
+        if snagged then
+            top *= Config.TETHER_SLOW
+        end
         if input.Magnitude > 0.05 then
             local accel = Movement.acceleration(mass)
             target = flat + input * accel * dt

@@ -198,7 +198,35 @@ Config.PLOT_SPACING = 130
 -- studs across and a blob at the ceiling is about 15 — a 3x visual difference,
 -- which is the largest range that still lets both fit on one screen during a
 -- chase. Any wider and the camera has to choose who to show.
+-- ── HOW BIG EATING SOMEBODY MAKES YOU ─────────────────────────────────────
+--
+-- This was a LOG curve: radius = BASE + K * ln(mass / STARTING). It was chosen
+-- when a run could reach 1e24 and every tenfold gain had to stay a visible
+-- step forever, and at that job it was correct.
+--
+-- It is wrong for a round. A round lasts three and a half minutes and tops out
+-- in the low thousands, and across that band a log curve barely moves:
+-- swallowing a blob your own size DOUBLES your mass and adds one and a half
+-- studs to your radius. The number on the HUD leaps and the thing on screen
+-- does not, which is exactly the complaint — you eat somebody and nothing
+-- happens.
+--
+-- A power law fixes it, and it is also the physically honest one: a blob is a
+-- volume, volume is proportional to mass, so radius goes as the CUBE ROOT.
+-- Doubling your mass now makes you 26% wider, which reads instantly, and the
+-- old saturation problem does not come back because nothing in a round gets
+-- near the clamp.
+--
+--   mass    10 ->  5.0 studs
+--          100 -> 10.8
+--        1,000 -> 23.2
+--       10,000 -> 50.0
+--      100,000 -> 107.7
 Config.BLOB_RADIUS_BASE = 5
+Config.BLOB_RADIUS_EXP = 1 / 3
+-- Kept because the harvest curve and its tests are written against it and the
+-- log form is the thing to reach for if the power law turns out to make the
+-- late round unreadable. Unused while BLOB_RADIUS_EXP is set.
 Config.BLOB_RADIUS_K = 2.2
 
 -- Bigger is slower, agar-style. A fresh blob (42) outruns a ceiling blob (~24)
@@ -225,7 +253,17 @@ Config.PELLET_VALUE = 9
 -- So the count is computed from the area it has to cover. Resize the island
 -- and the food supply follows automatically. tools/arena.luau asserts the two
 -- agree to within a couple of percent.
-Config.PELLET_RESPAWN_PER_SEC = 36   -- sized for a full server, not one player
+-- RAISED WITH THE BODIES. Blobs are physically bigger than they were — radius
+-- went from a logarithm to a cube root so that eating somebody is visible —
+-- and a wider body sweeps a wider corridor, so the same twelve contenders now
+-- clear the floor noticeably faster. Holding the old 36/s would have meant the
+-- change quietly starved the mid-round.
+--
+-- 48/s keeps the floor ahead of a full field up to about 2.5K mass each, which
+-- is past where a round's middle sits. Beyond that it deliberately falls
+-- behind: the back half of a round is supposed to turn from farming into
+-- hunting, and a floor that never thins is what stops that happening.
+Config.PELLET_RESPAWN_PER_SEC = 48
 Config.GOLDEN_CRUMB_MULT = 5
 
 -- ── Melting ────────────────────────────────────────────────────────────────
@@ -351,6 +389,65 @@ Config.ROUND_PLACE_BONUS = { 3.0, 1.8, 1.3 }   -- 1st, 2nd, 3rd multipliers
 Config.LOBBY_CENTRE = Vector3.new(0, 420, 0)
 Config.LOBBY_RADIUS = 120
 
+-- ── SPLIT, TETHERS AND PODS — the part that is not agar.io ────────────────
+--
+-- SPLIT alone is the genre's signature move and copying it outright would make
+-- this a worse agar with extra menus. So it is copied and then given one twist
+-- that changes what the move is FOR.
+--
+-- WHAT SPLIT DOES. You throw three globlets forward. They are not a second
+-- body you steer — that needs a second controller and a camera that can hold
+-- two things, and it is the reason most agar clones feel awful on a phone.
+-- They fly out, hoover up pellets, and come home. You stay one blob.
+--
+-- WHAT MAKES IT OURS: THE TETHER. Every globlet stays joined to you by a
+-- visible strand of goo, and ANY blob that crosses a strand is deflated and
+-- slowed. So a split is not just a lunge — it is three lines drawn across the
+-- floor that other players have to go around. Splitting past somebody fences
+-- them in. Splitting while running lays a wire behind you. Splitting into a
+-- crowd hits everyone in it at once.
+--
+-- That turns the genre's "commit half of yourself to reach something" into
+-- "commit part of yourself to CONTROL SPACE", which is a different decision
+-- and, as far as I can find, not a thing any blob game does.
+Config.SPLIT_PIECES = 3
+Config.SPLIT_SPREAD = 0.42        -- radians between the outer pieces
+Config.SPLIT_SPEED = 96           -- studs/sec outward
+Config.SPLIT_RANGE = 88           -- how far a globlet gets before it turns back
+Config.SPLIT_RETURN_FRACTION = 0.85  -- of what you threw, how much comes home
+Config.GLOBLET_PICKUP = 9         -- pellet reach of one globlet
+
+-- The tether. Deliberately weak per touch and generous on cooldown: it is
+-- area denial, not a damage engine. A blob that walks the length of one strand
+-- loses a noticeable slice; a blob that clips the end of one barely notices.
+Config.TETHER_WIDTH = 4.5         -- studs either side of the line
+Config.TETHER_DEFLATE = 0.045     -- fraction of the victim's own mass, per touch
+Config.TETHER_SLOW = 0.55         -- speed multiplier while snagged
+Config.TETHER_SLOW_TIME = 1.1     -- seconds the snag lasts
+Config.TETHER_COOLDOWN = 0.8      -- per victim, so a strand cannot chain-hit
+
+-- ── SPORE PODS ────────────────────────────────────────────────────────────
+--
+-- Standing hazards on the island. Touch one while you are big and it bursts
+-- you into a whole web of tethered globlets at once — you lose no mass to the
+-- pod itself, but for a few seconds you are a spread-out, obvious, tangled
+-- mess with your pieces scattered.
+--
+-- Agar's viruses punish the big by splitting them into edible chunks. Ours
+-- does not make you edible, it makes you COMMITTED: your tethers are suddenly
+-- everywhere, which is dangerous for everyone near you including the person
+-- who herded you into it. Being popped by a pod is as often an opportunity as
+-- a punishment, which is the difference between a hazard and a tax.
+--
+-- Only blobs over POD_MIN_MASS trigger them, so a small player can hide inside
+-- a pod field where the big ones dare not follow. That is the whole reason the
+-- things are on the map.
+Config.POD_COUNT = 14
+Config.POD_MIN_MASS = 140         -- below this you pass straight through
+Config.POD_RADIUS = 11
+Config.POD_PIECES = 7             -- how many globlets a burst throws
+Config.POD_RESPAWN = 25           -- seconds before a spent pod regrows
+
 -- ── Deflation ──────────────────────────────────────────────────────────────
 -- The catch-up mechanism, and the reason a leader cannot simply sit on the
 -- lead. Every deflating ability takes a FRACTION OF THE TARGET'S OWN MASS, so
@@ -464,16 +561,31 @@ Config.BOT_SKILLS = {
     { id = "feral",  name = "feral",  sight = 1.45, think = 0.45, greed = 1.05, weight = 6 },
 }
 
--- Names read as players, not as NPC_01. A board full of "Bot 4" tells a lone
--- player they are alone, which is the one thing this system exists to avoid.
--- They are tagged as bots in the UI all the same — pretending otherwise is a
--- lie the player will catch, and catching it costs more than it buys.
-Config.BOT_NAMES = {
-    "Blobbo", "Squish", "Gloop", "Mimsy", "Bubbo", "Nugget", "Pudge", "Wobble",
-    "Slurp", "Tadpole", "Custard", "Goober", "Snorkel", "Jellybean", "Plop",
-    "Mochi", "Dollop", "Gurgle", "Pip", "Marsh", "Splodge", "Bloop", "Tumble",
-    "Yolk", "Doodle", "Fizz", "Grub", "Puddle", "Noodle", "Squelch",
+-- ── BOT NAMES ─────────────────────────────────────────────────────────────
+--
+-- Generated to look like Roblox usernames, because that is what they are
+-- standing in for.
+--
+-- The first version used cute blob words — Gloop, Mochi, Squelch — and tagged
+-- every one with a robot emoji on the assumption that pretending otherwise was
+-- a lie the player would catch and resent. That was the wrong call twice over.
+-- A board reading "Gloop 🤖, Pudge 🤖, Custard 🤖" does not read as honesty, it
+-- reads as an EMPTY SERVER, which is precisely the feeling bots exist to
+-- prevent — and no blob game in the genre labels its fill, so the tag was
+-- announcing a weakness nobody else admits to.
+--
+-- A name like Kai8842 is not a lie about a person; it is the same shape as
+-- every other name on a Roblox leaderboard, and the player's honest reaction
+-- to it is "there are eleven other blobs here", which is true.
+Config.BOT_FIRST = {
+    "Kai", "Milo", "Zane", "Finn", "Rhys", "Theo", "Jax", "Cole", "Ash", "Reid",
+    "John", "Leo", "Max", "Nico", "Owen", "Ravi", "Sam", "Toby", "Vic", "Wren",
+    "Blaze", "Cypher", "Drift", "Echo", "Frost", "Ghost", "Hex", "Iris", "Jet",
+    "Koda", "Luna", "Mika", "Nova", "Onyx", "Pixel", "Quill", "Rune", "Sky",
 }
+Config.BOT_SUFFIX_MIN = 11
+Config.BOT_SUFFIX_MAX = 9987
+
 
 -- Derived last, because it depends on the radius above.
 -- The food field is the disc out to PELLET_OUTER, not to SHALLOWS_INNER. That

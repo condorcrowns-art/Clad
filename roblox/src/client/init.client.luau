@@ -41,8 +41,6 @@ TradeUi.build(gui)
 -- the coach; it stops drawing its own stat panel, age line and drawer button,
 -- which is where most of the old overlap came from.
 ArenaHud.build()
-Hud.setArenaMode(true)
-Hud.registerTarget("power", ArenaHud.powerButton())
 
 -- Sound and every other feel effect now live in Juice, which reads its ids
 -- from Config and stays silent when they are unset. This file used to keep a
@@ -73,10 +71,6 @@ Net.get("StateSync").OnClientEvent:Connect(function(snap)
     -- and every crate, trinket, power, skin and Goob renders locked or absent
     -- because the code behind each tab is reading fields off nothing.
     ArenaHud.setProfile(snap)
-    -- The two HUDs share one horizontal band on a phone. Hud owns the coach,
-    -- ArenaHud owns the status strip, and this is the wire that lets the strip
-    -- get out of the way while the tutorial is running. See ArenaHud.applyLayout.
-    ArenaHud.setCoachActive(snap.tutorial ~= nil)
 end)
 
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
@@ -101,10 +95,6 @@ end
 
 Hud.onOffer = function(goobId: string)
     Net.get("TradeOffer"):FireServer(goobId, true)
-end
-
-Hud.onDismissCoach = function()
-    Net.get("DismissTutorial"):FireServer()
 end
 
 -- Gulping is irreversible, so it gets a real two-step confirmation with the
@@ -477,6 +467,9 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     elseif kind == "bank" then Juice.onBank(a and a.glob)
     elseif kind == "power" then Juice.onPower(a and a.id, a)
     elseif kind == "slam" then Juice.shakeCamera(1.4)
+    elseif kind == "split" then Juice.shakeCamera(0.35)
+    elseif kind == "snagged" then Juice.shakeCamera(0.5)
+    elseif kind == "podBurst" then Juice.shakeCamera(1.8)
     elseif kind == "hook" then Juice.play("slam", 0.3)
     elseif kind == "siphon" then Juice.play("drip", 0.3)
     elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount)
@@ -636,24 +629,29 @@ local function aimVector(): Vector3?
 end
 
 local UsePower = Net.get("UsePower")
-local lastPower = 0
+local lastPower = { 0, 0, 0 }
 
-local function firePower()
-    -- Client-side rate limit. The server enforces the real cooldown; this only
-    -- stops a held key from filling the remote queue with requests the server
-    -- is going to refuse anyway.
+--- Press one hotbar slot. 1 = DASH, 2 = SPLIT, 3 = whatever you brought.
+local function firePower(slot: number?)
+    local index = math.clamp(math.floor(slot or 1), 1, 3)
+    -- Client-side rate limit, PER SLOT. It used to be one timer for the whole
+    -- blob, which was right when there was one button and is wrong now:
+    -- tapping DASH would have swallowed a SPLIT pressed a tenth of a second
+    -- later, and the player would have seen a dead button rather than a
+    -- cooldown. The server still enforces the real cooldowns; this only stops
+    -- a held key filling the remote queue.
     local now = os.clock()
-    if now - lastPower < 0.15 then return end
-    lastPower = now
-    UsePower:FireServer(aimVector())
+    if now - lastPower[index] < 0.15 then return end
+    lastPower[index] = now
+    UsePower:FireServer(index, aimVector())
 end
 
-ArenaHud.on.usePower = function() firePower() end
+ArenaHud.on.usePower = function(slot) firePower(slot) end
 ArenaHud.on.setPower = function(id) Net.get("SetPower"):FireServer(id) end
 ArenaHud.on.equipTrinket = function(id, slot) Net.get("EquipTrinket"):FireServer(id, slot) end
 ArenaHud.on.openCrate = function(id) Net.get("OpenCrate"):FireServer(id) end
 
--- The dock's three delegated tabs. They close the sheet before opening, and
+-- The menu's delegated tabs. They close the sheet before opening, and
 -- "close" shuts everything — so there is still never more than one panel up.
 ArenaHud.on.equipCosmetic = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
 ArenaHud.on.setActiveGoob = function(id) Net.get("SetActiveGoob"):FireServer(id) end
@@ -665,7 +663,7 @@ ArenaHud.on.setActiveGoob = function(id) Net.get("SetActiveGoob"):FireServer(id)
 --
 -- The live trade WINDOW stays as it is — rebuilding TradeUi would mean
 -- rebuilding the anti-scam confirmation reset, which is the most
--- safety-critical UI in the game and is already proven. The dock's trade tab
+-- safety-critical UI in the game and is already proven. The menu's trade row
 -- explains the rules and lists what you can offer; the window itself still
 -- opens when another player rolls up.
 ArenaHud.on.gulpGoob = function(id) Hud.onGulp(id) end
@@ -677,6 +675,11 @@ Net.get("ArenaSync").OnClientEvent:Connect(function(state)
     if state and state.mass then
         liveMass = state.mass
         Roll.setMass(liveMass)
+    end
+    -- The server decides whether a tether has you; the client owns this ball's
+    -- physics, so the client is the only thing that can act on it.
+    if state then
+        Roll.setSnagged(state.snagged == true)
     end
 end)
 
@@ -690,9 +693,19 @@ end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
-    if input.KeyCode == Enum.KeyCode.Q
-        or input.KeyCode == Enum.KeyCode.ButtonX then
-        firePower()
+    -- THREE SLOTS, THREE KEYS, and the digits as well.
+    --
+    -- Q/E/R sit under the fingers already on WASD, which is where a key you
+    -- press mid-chase has to be. 1/2/3 are there because every player who has
+    -- touched a game with a hotbar tries them first, and a control that does
+    -- nothing on the obvious key is a control the player decides is broken.
+    local k = input.KeyCode
+    if k == Enum.KeyCode.Q or k == Enum.KeyCode.One or k == Enum.KeyCode.ButtonX then
+        firePower(1)
+    elseif k == Enum.KeyCode.E or k == Enum.KeyCode.Two or k == Enum.KeyCode.ButtonY then
+        firePower(2)
+    elseif k == Enum.KeyCode.R or k == Enum.KeyCode.Three or k == Enum.KeyCode.ButtonB then
+        firePower(3)
     elseif input.KeyCode == Enum.KeyCode.Escape then
         ArenaHud.closeSheet()
     end
@@ -755,9 +768,15 @@ do
         local w = compact and math.min(300, u.X - 24) or 340
         local h = compact and 60 or 66
         strip.Size = UDim2.fromOffset(w, h)
-        -- Below the dock AND below the status strip. At y=90 it sat directly
-        -- on top of both, which is the overlap this whole pass exists to end.
-        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 176 or 206)
+        -- CENTRED IN THE GAP, clear of both columns. The stat column runs down
+        -- the left and the menu down the right, so this is placed between them
+        -- and below the status strip rather than at a fixed y that happened to
+        -- be free when the menu was a strip across the top.
+        local menuX = Layout.menuLeft()
+        local left = (compact and 8 or 14) * 2 + (compact and 116 or 220)
+        local x = math.floor((left + menuX) / 2 - w / 2)
+        strip.Position = UDim2.fromOffset(
+            Layout.fit(x, 8, math.max(8, u.X - w - 8)), compact and 150 or 190)
         line.Position = UDim2.fromOffset(12, 6)
         line.Size = UDim2.new(1, -140, 0, 20)
         sub.Position = UDim2.fromOffset(12, 28)
@@ -775,10 +794,9 @@ do
         if not ball then strip.Visible = false return end
         local d = (ball.Position - Pit.CENTRE).Magnitude
         nearPit = d < Pit.START_RADIUS + 140
-        -- Compact screens get the dock's Standoff tab instead. On a 320px-tall
+        -- Compact screens use the menu's Standoff row instead. On a 320px-tall
         -- phone there is no row left for a third banner that does not land on
-        -- the coach or the power button, and a duplicate entry point is not
-        -- worth an overlap.
+        -- the hotbar, and a duplicate entry point is not worth an overlap.
         strip.Visible = nearPit and not Layout.isCompact()
     end)
 

@@ -13,17 +13,32 @@
 --
 -- The screen is then divided into four regions that never intersect:
 --
---   top-left      the stat card: what you are holding and what it is worth
---   top-centre    the dock (six icons) and, under it, the status strip
---   top-right     Glob and your Beta Season tier
---   bottom-centre the power button, inside the only part of the bottom edge
---                 a phone player can actually reach
+--   top-left      the stat column: mass, what it is worth, Glob, season tier
+--   top-centre    the status strip — round clock, where you are, are you safe
+--   top-right     the ☰ MENU button, and the tab list it drops
+--   bottom-centre the three-slot hotbar, inside the only part of the bottom
+--                 edge a phone player can actually reach
 --
--- The dock lives at the TOP on every platform, desktop included. It is
--- tempting to put a dock along the bottom edge on a PC — but Roblox reserves
--- the bottom-left for a thumbstick and the bottom-right for a jump button on
--- touch, so a bottom dock needs two layouts, and two layouts is how elements
--- end up on top of each other. One position, everywhere.
+-- ── WHY THE MENU IS A NAMED VERTICAL LIST ON THE RIGHT ────────────────────
+--
+-- It was a horizontal strip of nine unlabelled icons across the top, and that
+-- is two problems at once. A row of pictograms is a memory test — nobody knows
+-- what 🔧 opens until they have opened it — and the top strip is the most
+-- contested space on the screen, wanted by the clock, the stat card and the
+-- Glob readout at the same time.
+--
+-- Down the right-hand edge every row carries its ICON AND ITS NAME, the list
+-- reads top-to-bottom like a menu, and it grows downward instead of squeezing
+-- everything else sideways. It is a DROPDOWN rather than a permanent rail
+-- because a menu covering a third of a 568-wide phone the moment you spawn is
+-- a menu the player closes before reading it: closed by default on touch, open
+-- by default where there is room.
+--
+-- On touch the list opens to the LEFT of its button rather than under it.
+-- Roblox reserves the bottom-right 160x160 for the jump button, which on a
+-- landscape phone is the entire right-hand column below y=160 — a list that
+-- dropped straight down would put most of its rows somewhere a thumb cannot
+-- reach. See Layout.menuMetrics.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -72,7 +87,7 @@ local ArenaHud = {}
 -- over the table rather than over a local that may not exist yet — the
 -- `local function` scoping trap that took down two earlier builds.
 ArenaHud.on = {
-    usePower = function(_aim: Vector3?) end,
+    usePower = function(_slot: number, _aim: Vector3?) end,
     setPower = function(_id: string) end,
     equipTrinket = function(_id: string?, _slot: number) end,
     openCrate = function(_id: string) end,
@@ -96,10 +111,25 @@ local statusStrip: Frame
 local statusLabel: TextLabel
 local bankBar: Frame
 local bankFill: Frame
-local dock: Frame
-local powerBtn: TextButton
-local powerCost: TextLabel
-local powerSweep: Frame
+local menu: Frame          -- the header button's frame
+local menuHeader: TextButton
+local menuList: ScrollingFrame
+local menuOpen = false
+
+-- THREE SLOTS, NOT ONE BUTTON.
+--
+-- The game used to carry exactly one power, on the argument that a nine-year-
+-- old has one thumb free. That argument still holds for the CHOSEN power — but
+-- two of the three are not choices. DASH and SPLIT are verbs the game is built
+-- out of: you cannot play agar-shaped without a lunge and a way to throw part
+-- of yourself at something. Making them compete for the one slot meant every
+-- player picked the same two and the "choice" was a formality.
+--
+-- So: slot 1 is DASH, slot 2 is SPLIT, slot 3 is yours. Fixed order, fixed
+-- position, every round — muscle memory is worth more than flexibility on a
+-- control you press under pressure.
+type Slot = { button: TextButton, sweep: Frame, cost: TextLabel, name: TextLabel }
+local slots: { Slot } = {}
 local sheet: Frame
 local sheetTitle: TextLabel
 local sheetBody: ScrollingFrame
@@ -109,7 +139,7 @@ local sheetBody: ScrollingFrame
 -- panel never moves, which is a bug you only find on hardware.
 local sheetHost: ScrollingFrame
 
-local dockButtons: { [string]: TextButton } = {}
+local menuButtons: { [string]: TextButton } = {}
 local openTab: string? = nil
 local latest: any = nil
 local profile: any = nil
@@ -307,7 +337,7 @@ local function renderTrinkets()
     end
 end
 
--- The Standoff is reachable from the dock, from anywhere on the island. There
+-- The Standoff is reachable from the menu, from anywhere on the island. There
 -- is a sign and a join pad out by the ring as well, because a physical thing
 -- you can roll onto is how a seven-year-old finds out a mode exists — but
 -- nobody should have to cross the map to press a button they can see.
@@ -359,21 +389,41 @@ local function renderPowers()
     local banked = (profile and profile.lifetimeBanked) or 0
     local current = (profile and profile.powerId) or Powers.DEFAULT
     local uses = (profile and profile.powerUses) or {}
+    local granted = (profile and profile.powersGranted) or {}
 
-    local nextPower, gap = Powers.nextLocked(banked)
-    local head = card(sheetBody, 0, 46)
+    -- ── THE TWO YOU ALWAYS HAVE ───────────────────────────────────────────
+    --
+    -- Listed first and marked as fixed, because a player who cannot see DASH
+    -- and SPLIT anywhere in this panel reasonably concludes they are not
+    -- powers — and then wonders why two of their three buttons are missing
+    -- from the list of powers.
+    local head = card(sheetBody, 0, 62)
     local hl = Theme.label({
-        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 30),
-        Text = nextPower
-            and ("Next: %s at 💧%s  —  %s to go"):format(nextPower.name,
-                Format.short(nextPower.unlockBanked), Format.short(gap))
-            or "Every power unlocked. Carry whichever suits the run.",
-        TextSize = 15, TextColor3 = Theme.GOLD, TextWrapped = true,
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 46),
+        Text = "Slot 1 is DASH and slot 2 is SPLIT — always, for everyone."
+            .. "\nThis list is slot 3.",
+        TextSize = 14, TextColor3 = Theme.TEXT, TextWrapped = true,
     })
     hl.Parent = head
 
-    for i, p in ipairs(Powers.LIST) do
-        local unlocked = banked >= p.unlockBanked
+    local nextPower, gap = Powers.nextLocked(banked)
+    local head2 = card(sheetBody, 1, 44)
+    local hl2 = Theme.label({
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 28),
+        Text = nextPower
+            and ("Next: %s at 💧%s  —  %s to go"):format(nextPower.name,
+                Format.short(nextPower.unlockBanked), Format.short(gap))
+            or "Every power on the banking ladder is unlocked.",
+        TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+    })
+    hl2.Parent = head2
+
+    -- The season powers are in here too, locked, on purpose: a prize nobody
+    -- knows exists is not a prize. Powers.catalogue is the one list that holds
+    -- both pools so this panel cannot drift out of step with the server.
+    for idx, p in ipairs(Powers.catalogue()) do
+        local i = idx + 1
+        local unlocked = granted[p.id] == true or banked >= p.unlockBanked
         local mine = uses[p.id] or 0
         local tier = Powers.masteryTier(mine)
         local r = card(sheetBody, i, 86, unlocked and "Common" or nil)
@@ -388,8 +438,13 @@ local function renderPowers()
             Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 30),
             Text = unlocked
                 and ("%s   ·   costs %d%% of you   ·   %ds"):format(p.blurb, p.cost * 100, p.cooldown)
-                or ("Unlocks at 💧%s banked  (you have 💧%s)")
-                    :format(Format.short(p.unlockBanked), Format.short(banked)),
+                -- A season power says so rather than quoting an unreachable
+                -- price. It is not on the banking ladder at any number, and
+                -- printing "unlocks at 💧inf" would be both wrong and cruel.
+                or (p.season
+                    and "⭐ BETA SEASON reward — earned on the free track. Cannot be bought."
+                    or ("Unlocks at 💧%s banked  (you have 💧%s)")
+                        :format(Format.short(p.unlockBanked), Format.short(banked))),
             TextSize = 13, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
         })
         blurb.Parent = r
@@ -624,20 +679,21 @@ local function renderTrade()
     end
 end
 
--- Set by init.client from the tutorial state. See applyLayout for why the
--- status strip cares.
-ArenaHud.coachActive = false
-function ArenaHud.setCoachActive(on: boolean)
-    if ArenaHud.coachActive == on then return end
-    ArenaHud.coachActive = on
+--- Open or close the tab list. Closed by default on a phone, where the screen
+--- is the scarce thing; open by default anywhere with room for it.
+function ArenaHud.setMenuOpen(open: boolean)
+    menuOpen = open
+    if menuHeader then
+        menuHeader.Text = open and "\u{2715}  MENU" or "\u{2630}  MENU"
+    end
     ArenaHud.applyLayout()
 end
 
 function ArenaHud.closeSheet()
     openTab = nil
     sheet.Visible = false
-    for _, b in pairs(dockButtons) do
-        b.BackgroundColor3 = Theme.BG_SOFT
+    for _, b in pairs(menuButtons) do
+        Theme.setButtonActive(b, false)
     end
 end
 
@@ -659,8 +715,13 @@ function ArenaHud.openSheet(tab: string)
 
     openTab = tab
     clearSheet()
-    for id, b in pairs(dockButtons) do
-        b.BackgroundColor3 = (id == tab) and Theme.ACCENT or Theme.BG_SOFT
+    -- The selected row INVERTS: white surface, black label. Setting only the
+    -- background left near-white text on a near-white fill — unreadable, and
+    -- the one row the player most needs to read. In a greyscale palette
+    -- brightness is the only emphasis axis there is, so it has to be used
+    -- properly rather than half-applied.
+    for id, b in pairs(menuButtons) do
+        Theme.setButtonActive(b, id == tab)
     end
 
     for _, entry in ipairs(TABS) do
@@ -703,91 +764,106 @@ function ArenaHud.applyLayout()
     local compact = Layout.isCompact()
     local pad = compact and 8 or 14
 
-    -- Dock: top-centre. One row when there is room, two on a phone — see
-    -- Layout.dockMetrics, which owns that arithmetic because Hud needs the same
-    -- numbers to place the coach and the toasts underneath.
-    -- Registered, not just consumed: Hud places the coach and the toast column
-    -- under this dock and has no other way to learn how tall it is.
-    Layout.setDockTabs(#TABS)
-    local m = Layout.dockMetrics(#TABS)
-    local iconSize = m.icon
-    local dockW = m.width
-    dock.Size = UDim2.fromOffset(dockW, m.height)
-    dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), m.top)
-    for i, entry in ipairs(TABS) do
-        local b = dockButtons[entry.id]
+    -- ── The menu ──────────────────────────────────────────────────────────
+    Layout.setMenuTabs(#TABS)
+    local m = Layout.menuMetrics(#TABS)
+    local menuX = Layout.menuLeft(#TABS)
+
+    menu.Size = UDim2.fromOffset(m.width, m.headerH)
+    menu.Position = UDim2.fromOffset(menuX, m.top)
+    menuHeader.Size = UDim2.fromOffset(m.width, m.headerH)
+    menuHeader.Position = UDim2.fromOffset(menuX, m.top)
+    menuHeader.TextSize = compact and 14 or 16
+
+    menuList.Size = UDim2.fromOffset(m.width, m.listH)
+    menuList.Position = UDim2.fromOffset(u.X - m.width - m.listRight, m.listTop)
+    menuList.Visible = menuOpen
+    menuList.ScrollingEnabled = m.scrolls
+    for _, entry in ipairs(TABS) do
+        local b = menuButtons[entry.id]
         if b then
-            local col = (i - 1) % m.perRow
-            local row = math.floor((i - 1) / m.perRow)
-            b.Size = UDim2.fromOffset(iconSize, iconSize)
-            b.Position = UDim2.fromOffset(
-                m.pad + col * (iconSize + m.gap),
-                m.pad + row * (iconSize + m.gap))
-            b.TextSize = compact and 22 or 26
+            b.Size = UDim2.new(1, 0, 0, m.rowH)
+            b.TextSize = compact and 13 or 15
         end
     end
 
-    -- Stat card: top-left, and never wider than the space left of the dock.
-    local cardW = Layout.fit(compact and 104 or 210, 88, math.floor((u.X - dockW) / 2) - pad)
-    statCard.Size = UDim2.fromOffset(cardW, compact and 74 or 92)
-    statCard.Position = UDim2.fromOffset(pad, 6)
-    massLabel.TextSize = compact and 22 or 32
-    worthLabel.TextSize = compact and 14 or 18
+    -- Stat card: top-left, and never allowed to reach the rail.
+    local cardW = Layout.fit(compact and 116 or 220, 96, menuX - pad * 2)
+    statCard.Size = UDim2.fromOffset(cardW, compact and 64 or 88)
+    statCard.Position = UDim2.fromOffset(pad, m.top)
+    massLabel.TextSize = compact and 24 or 34
+    worthLabel.TextSize = compact and 13 or 17
     meltLabel.TextSize = compact and 11 or 14
 
-    -- Glob + season: top-right, mirrored.
-    globLabel.Position = UDim2.fromOffset(u.X - cardW - pad, 10)
-    globLabel.Size = UDim2.fromOffset(cardW, compact and 26 or 32)
-    globLabel.TextSize = compact and 18 or 24
-    seasonLabel.Position = UDim2.fromOffset(u.X - cardW - pad, (compact and 36 or 44))
-    seasonLabel.Size = UDim2.fromOffset(cardW, compact and 20 or 24)
-    seasonLabel.TextSize = compact and 12 or 15
+    -- Glob + season: under the stat card, same column. They used to sit
+    -- top-right, which is exactly where the rail now lives.
+    -- Stacked with real gaps between them. The first pass put Glob at +66 with
+    -- a height of 20 and the season line at +84, which overlap by two pixels —
+    -- invisible to the eye and caught immediately by the geometry audit, which
+    -- is exactly the kind of thing that audit is for.
+    local cardH = statCard.Size.Y.Offset
+    local globY = m.top + cardH + (compact and 6 or 8)
+    local globH = compact and 20 or 26
+    globLabel.Position = UDim2.fromOffset(pad + 4, globY)
+    globLabel.Size = UDim2.fromOffset(cardW, globH)
+    globLabel.TextSize = compact and 15 or 20
+    seasonLabel.Position = UDim2.fromOffset(pad + 4, globY + globH + (compact and 2 or 4))
+    seasonLabel.Size = UDim2.fromOffset(cardW, compact and 16 or 20)
+    seasonLabel.TextSize = compact and 11 or 14
 
-    -- Status strip: directly under the dock, same width, so the two read as
-    -- one block instead of two floating things.
+    -- Status strip: top-centre, in the gap between the stat column and the
+    -- rail. Centred on that gap rather than on the screen, so it cannot drift
+    -- under either of them as the rail changes width.
+    local gapL = pad + cardW + pad
+    local gapR = menuX - pad
+    local stripW = math.max(140, math.min(compact and 260 or 420, gapR - gapL))
+    statusStrip.Visible = true
+    statusStrip.Size = UDim2.fromOffset(stripW, compact and 28 or 34)
+    statusStrip.Position = UDim2.fromOffset(
+        Layout.fit(math.floor((gapL + gapR) / 2 - stripW / 2), gapL, math.max(gapL, gapR - stripW)),
+        m.top)
+    statusLabel.TextSize = compact and 13 or 17
+
+    -- ── The hotbar: three slots, bottom-centre ────────────────────────────
     --
-    -- HIDDEN WHILE THE TUTORIAL COACH IS UP ON A PHONE, and that is not a
-    -- cosmetic choice. A 568x320 landscape phone has one free horizontal band
-    -- below the dock; the coach and this strip both want it, and stacking them
-    -- pushes the lower one into the jump-button zone where it cannot be read or
-    -- reached. During the tutorial the instruction matters more than the round
-    -- clock, so the strip yields. This file owns the strip's visibility and Hud
-    -- owns the coach's — one owner each, wired together in init.client.
-    statusStrip.Visible = not (compact and ArenaHud.coachActive)
-    statusStrip.Size = UDim2.fromOffset(dockW, compact and 30 or 36)
-    statusStrip.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2),
-        Layout.belowDock(#TABS))
-    statusLabel.TextSize = compact and 13 or 16
-
-    -- Power button: bottom-centre, inside the band between the thumbstick and
-    -- the jump button. That band is the only part of the bottom edge a phone
-    -- player's thumb can actually reach.
-    local size = compact and 76 or 92
+    -- In the band between the thumbstick and the jump button, which is the
+    -- only part of the bottom edge a phone player's thumb can reach. Three
+    -- buttons share it: DASH, SPLIT and whatever you chose to bring.
+    -- SIZED TO THE BAND, not to a nice round number. Three 62px buttons plus
+    -- gaps is 198px and the gap between the thumbstick and the jump button on
+    -- a 568-wide phone is 178 — so the outer two slots landed under the touch
+    -- controls, where a thumb cannot reach them. The width is derived from the
+    -- band so it cannot be wrong again.
     local left, right = Layout.bottomGap()
-    local x = math.floor((left + right) / 2 - size / 2)
-    x = Layout.fit(x, 8, math.max(8, u.X - size - 8))
-    powerBtn.Size = UDim2.fromOffset(size, size)
-    powerBtn.Position = UDim2.fromOffset(x, u.Y - size - (compact and 14 or 26))
-    powerBtn.TextSize = compact and 15 or 18
-    powerSweep.Size = UDim2.fromScale(1, 0)
-
-    -- The sheet: near-fullscreen on a phone, a centred panel on a desktop.
-    -- Either way it is the ONLY thing on top of the world.
-    -- On a phone the sheet starts directly under the DOCK, not under the
-    -- status strip: it is a panel the player is reading, the round clock is
-    -- the thing they are least interested in while reading it, and going from
-    -- belowStatus to belowDock is the difference between a 132px-tall sheet
-    -- and a 168px one on a 568x320 screen.
-    local sheetTop = compact and Layout.belowDock(#TABS) or Layout.belowStatus(#TABS)
-    local sheetSize = compact
-        and UDim2.fromOffset(u.X - 16, math.max(120, u.Y - sheetTop - 8))
-        or Layout.panel(660, 460)
-    sheet.Size = sheetSize
-    if compact then
-        sheet.Position = UDim2.fromOffset(8, sheetTop)
-    else
-        sheet.Position = Layout.centre(sheetSize)
+    local slotGap = compact and 5 or 10
+    local band = math.max(120, right - left - 12)
+    local slotW = math.min(compact and 62 or 84,
+        math.floor((band - slotGap * (#slots - 1)) / #slots))
+    local barW = #slots * slotW + (#slots - 1) * slotGap
+    local barX = math.floor((left + right) / 2 - barW / 2)
+    barX = Layout.fit(barX, 8, math.max(8, u.X - barW - 8))
+    for i, slot in ipairs(slots) do
+        slot.button.Size = UDim2.fromOffset(slotW, slotW)
+        slot.button.Position = UDim2.fromOffset(
+            barX + (i - 1) * (slotW + slotGap), u.Y - slotW - (compact and 12 or 24))
+        slot.button.TextSize = compact and 12 or 15
+        slot.sweep.Size = UDim2.fromScale(1, 0)
     end
+
+    -- ── The sheet ─────────────────────────────────────────────────────────
+    --
+    -- Anchored to the LEFT of the rail rather than centred, so opening a panel
+    -- never covers the menu you opened it from — you can see what is selected
+    -- and switch straight to the next tab without closing anything.
+    local sheetTop = m.top + (compact and 34 or 42)
+    local sheetW = math.max(200, (u.X - m.width - m.listRight) - pad * 2)
+    local sheetH = math.max(140, u.Y - sheetTop - (compact and 88 or 118))
+    if not compact then
+        sheetW = math.min(sheetW, 660)
+        sheetH = math.min(sheetH, 520)
+    end
+    sheet.Size = UDim2.fromOffset(sheetW, sheetH)
+    sheet.Position = UDim2.fromOffset(math.max(pad, menuX - pad - sheetW), sheetTop)
     if sheetHost then
         sheetHost.Position = sheetBody.Position
         sheetHost.Size = sheetBody.Size
@@ -801,7 +877,7 @@ function ArenaHud.build(): ScreenGui
     gui.Name = "ArenaHud"
     gui.ResetOnSpawn = false
     -- false: with IgnoreGuiInset on, Roblox's top bar covers the first ~36px,
-    -- which is exactly where the dock is.
+    -- which is exactly where the stat card and the menu button are.
     gui.IgnoreGuiInset = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.DisplayOrder = 12
@@ -857,38 +933,83 @@ function ArenaHud.build(): ScreenGui
     seasonLabel.Name = "Season"
     seasonLabel.Parent = gui
 
-    -- Dock.
-    dock = Instance.new("Frame")
-    dock.Name = "Dock"
-    dock.BackgroundColor3 = Theme.BG
-    dock.BackgroundTransparency = 0.18
-    dock.BorderSizePixel = 0
-    dock.Parent = gui
-    Theme.corner(dock, 16)
-    Theme.stroke(dock, Color3.fromRGB(18, 20, 26), 2)
+    -- ── The menu ──────────────────────────────────────────────────────────
+    --
+    -- A header button top-right, and a vertical list of named tabs that drops
+    -- out of it. Closed by default on a phone so the world keeps the screen;
+    -- open by default on a desktop, where there is room for it to just live
+    -- there.
+    menu = Instance.new("Frame")
+    menu.Name = "Menu"
+    menu.BackgroundTransparency = 1
+    menu.BorderSizePixel = 0
+    menu.Parent = gui
 
-    local dockLayout = Instance.new("UIListLayout")
-    dockLayout.FillDirection = Enum.FillDirection.Horizontal
-    dockLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    dockLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    dockLayout.Padding = UDim.new(0, 6)
-    dockLayout.Parent = dock
+    menuHeader = Instance.new("TextButton")
+    menuHeader.Name = "MenuButton"
+    menuHeader.Text = "\u{2630}  MENU"
+    menuHeader.Font = Theme.FONT
+    menuHeader.TextSize = 16
+    menuHeader.TextColor3 = Theme.TEXT
+    menuHeader.BackgroundColor3 = Theme.BG
+    menuHeader.BackgroundTransparency = 0.05
+    menuHeader.AutoButtonColor = true
+    menuHeader.BorderSizePixel = 0
+    menuHeader.Parent = gui
+    Theme.corner(menuHeader, 10)
+    Theme.stroke(menuHeader, Theme.LINE, 1)
+    menuHeader.Activated:Connect(function() ArenaHud.setMenuOpen(not menuOpen) end)
+
+    -- SCROLLING, because eight rows do not always fit above the jump button.
+    -- A list that silently clipped its last three tabs would make CREW and THE
+    -- STANDOFF unreachable on a phone with no error anywhere.
+    menuList = Instance.new("ScrollingFrame")
+    menuList.Name = "MenuList"
+    menuList.BackgroundColor3 = Theme.BG
+    menuList.BackgroundTransparency = 0.05
+    menuList.BorderSizePixel = 0
+    menuList.ScrollBarThickness = 3
+    menuList.ScrollBarImageColor3 = Theme.LINE
+    menuList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    menuList.CanvasSize = UDim2.new()
+    menuList.Visible = false
+    menuList.Parent = gui
+    Theme.corner(menuList, 10)
+    Theme.stroke(menuList, Theme.LINE, 1)
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.FillDirection = Enum.FillDirection.Vertical
+    listLayout.Padding = UDim.new(0, 3)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = menuList
+
+    local listPad = Instance.new("UIPadding")
+    listPad.PaddingTop = UDim.new(0, 6)
+    listPad.PaddingBottom = UDim.new(0, 6)
+    listPad.PaddingLeft = UDim.new(0, 6)
+    listPad.PaddingRight = UDim.new(0, 6)
+    listPad.Parent = menuList
 
     for i, entry in ipairs(TABS) do
         local b = Instance.new("TextButton")
+        -- Name kept as Dock_<id>: the mobile geometry audit walks the screen
+        -- for this prefix to open every panel in turn, and renaming it would
+        -- silently stop it auditing any of them.
         b.Name = "Dock_" .. entry.id
-        b.Text = entry.icon
+        b.Text = "  " .. entry.icon .. "   " .. entry.name
         b.Font = Theme.FONT
-        b.TextSize = 26
+        b.TextSize = 15
+        b.TextXAlignment = Enum.TextXAlignment.Left
         b.TextColor3 = Theme.TEXT
         b.BackgroundColor3 = Theme.BG_SOFT
         b.AutoButtonColor = true
         b.BorderSizePixel = 0
         b.LayoutOrder = i
-        b.Size = UDim2.fromOffset(Layout.MIN_TAP, Layout.MIN_TAP)
-        b.Parent = dock
-        Theme.corner(b, 12)
-        dockButtons[entry.id] = b
+        b.Size = UDim2.new(1, 0, 0, Layout.MIN_TAP)
+        b.Parent = menuList
+        Theme.corner(b, 8)
+        Theme.stroke(b, Theme.LINE, 1)
+        menuButtons[entry.id] = b
         b.Activated:Connect(function() ArenaHud.openSheet(entry.id) end)
     end
 
@@ -924,45 +1045,63 @@ function ArenaHud.build(): ScreenGui
     bankFill.BorderSizePixel = 0
     bankFill.Parent = bankBar
 
-    -- Power button.
-    powerBtn = Instance.new("TextButton")
-    powerBtn.Name = "PowerButton"
-    powerBtn.Text = "DASH"
-    powerBtn.Font = Theme.FONT
-    powerBtn.TextSize = 18
-    powerBtn.TextColor3 = Theme.TEXT
-    powerBtn.BackgroundColor3 = Theme.BG
-    powerBtn.BackgroundTransparency = 0.1
-    powerBtn.AutoButtonColor = true
-    powerBtn.BorderSizePixel = 0
-    powerBtn.ClipsDescendants = true
-    powerBtn.Parent = gui
-    Theme.corner(powerBtn, 999)
-    Theme.stroke(powerBtn, Theme.GOLD, 3)
+    -- ── The hotbar ────────────────────────────────────────────────────────
+    --
+    -- One button per slot, built from the same shape so the three read as a
+    -- set. The cooldown sweep fills from the bottom BEHIND the label, so the
+    -- name stays readable while it recharges — a button you cannot read is a
+    -- button you stop looking at.
+    for i = 1, 3 do
+        local b = Instance.new("TextButton")
+        b.Name = "Slot" .. i
+        b.Text = ""
+        b.Font = Theme.FONT
+        b.TextSize = 14
+        b.TextColor3 = Theme.TEXT
+        b.BackgroundColor3 = Theme.BG
+        b.BackgroundTransparency = 0.08
+        b.AutoButtonColor = true
+        b.BorderSizePixel = 0
+        b.ClipsDescendants = true
+        b.Parent = gui
+        Theme.corner(b, 14)
+        Theme.stroke(b, Theme.LINE, 2)
 
-    -- The cooldown sweep fills from the bottom. Behind the label, so the name
-    -- of the power stays readable while it recharges — a button you cannot
-    -- read is a button you stop looking at.
-    powerSweep = Instance.new("Frame")
-    powerSweep.AnchorPoint = Vector2.new(0, 1)
-    powerSweep.Position = UDim2.new(0, 0, 1, 0)
-    powerSweep.Size = UDim2.fromScale(1, 0)
-    powerSweep.BackgroundColor3 = Theme.ACCENT
-    powerSweep.BackgroundTransparency = 0.72
-    powerSweep.BorderSizePixel = 0
-    powerSweep.ZIndex = 0
-    powerSweep.Parent = powerBtn
+        local sweep = Instance.new("Frame")
+        sweep.Name = "Sweep"
+        sweep.AnchorPoint = Vector2.new(0, 1)
+        sweep.Position = UDim2.new(0, 0, 1, 0)
+        sweep.Size = UDim2.fromScale(1, 0)
+        sweep.BackgroundColor3 = Theme.TEXT
+        sweep.BackgroundTransparency = 0.82
+        sweep.BorderSizePixel = 0
+        sweep.ZIndex = 0
+        sweep.Parent = b
 
-    powerCost = Theme.label({
-        AnchorPoint = Vector2.new(0.5, 1),
-        Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.fromScale(1, 0.3),
-        Text = "", TextSize = 13, TextColor3 = Theme.TEXT_DIM,
-        TextXAlignment = Enum.TextXAlignment.Center,
-    })
-    powerCost.ZIndex = 2
-    powerCost.Parent = powerBtn
+        local nameLabel = Theme.label({
+            Name = "Label",
+            AnchorPoint = Vector2.new(0.5, 0),
+            Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.new(1, -8, 0, 34),
+            Text = "", TextSize = 14, TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Center,
+        })
+        nameLabel.ZIndex = 2
+        nameLabel.Parent = b
 
-    powerBtn.Activated:Connect(function() ArenaHud.on.usePower(nil) end)
+        local cost = Theme.label({
+            Name = "Cost",
+            AnchorPoint = Vector2.new(0.5, 1),
+            Position = UDim2.new(0.5, 0, 1, -6), Size = UDim2.new(1, -8, 0, 16),
+            Text = "", TextSize = 12, TextColor3 = Theme.TEXT_DIM,
+            TextXAlignment = Enum.TextXAlignment.Center,
+        })
+        cost.ZIndex = 2
+        cost.Parent = b
+
+        local index = i
+        b.Activated:Connect(function() ArenaHud.on.usePower(index, nil) end)
+        table.insert(slots, { button = b, sweep = sweep, cost = cost, name = nameLabel })
+    end
 
     -- The sheet.
     sheet = Instance.new("Frame")
@@ -1028,7 +1167,11 @@ function ArenaHud.build(): ScreenGui
     sheetHost.Visible = false
     sheetHost.Parent = sheet
 
-    ArenaHud.applyLayout()
+    -- Open on a desktop, closed on a phone. A menu that covers a third of a
+    -- 568-wide screen the moment you spawn is a menu the player closes before
+    -- they have read it.
+    menuOpen = not Layout.isCompact()
+    ArenaHud.setMenuOpen(menuOpen)
     Layout.changed.Event:Connect(ArenaHud.applyLayout)
     return gui
 end
@@ -1132,18 +1275,42 @@ function ArenaHud.setArena(state: any)
     bankFill.Size = UDim2.fromScale(
         math.clamp(state.banking / math.max(0.01, state.bankNeeds), 0, 1), 1)
 
-    local power = Powers.get(state.powerId)
-    powerBtn.Text = (power and power.name or "—")
-        .. ((state.mastery or 0) > 0 and ("\n" .. string.rep("★", state.mastery)) or "")
-    if state.powerCooldown > 0.05 then
-        powerCost.Text = ("%.1fs"):format(state.powerCooldown)
-        powerSweep.Size = UDim2.fromScale(1,
-            math.clamp(state.powerCooldown / math.max(0.1, power and power.cooldown or 1), 0, 1))
-        powerBtn.TextColor3 = Theme.TEXT_DIM
-    else
-        powerCost.Text = "-" .. Format.short(state.powerCost)
-        powerSweep.Size = UDim2.fromScale(1, 0)
-        powerBtn.TextColor3 = Theme.TEXT
+    -- ── The hotbar, live ──────────────────────────────────────────────────
+    --
+    -- Driven entirely off `state.slots`, which the server sends. The client
+    -- never decides what is in a slot, what it costs, or whether it is ready —
+    -- the third slot depends on what the player owns, and "the button said I
+    -- could and the server said I could not" is the worst failure a control
+    -- can have.
+    for i, slot in ipairs(slots) do
+        local info = (state.slots or {})[i]
+        if info then
+            slot.button.Visible = true
+            slot.name.Text = (info.name or "—")
+                .. ((info.mastery or 0) > 0 and ("\n" .. string.rep("*", info.mastery)) or "")
+            if (info.cooldown or 0) > 0.05 then
+                slot.cost.Text = ("%.1fs"):format(info.cooldown)
+                slot.sweep.Size = UDim2.fromScale(1,
+                    math.clamp(info.cooldown / math.max(0.1, info.cooldownMax or 1), 0, 1))
+                slot.name.TextColor3 = Theme.TEXT_DIM
+            elseif info.locked then
+                slot.cost.Text = "LOCKED"
+                slot.sweep.Size = UDim2.fromScale(1, 1)
+                slot.name.TextColor3 = Theme.TEXT_DIM
+            else
+                slot.cost.Text = "-" .. Format.short(info.cost or 0)
+                slot.sweep.Size = UDim2.fromScale(1, 0)
+                slot.name.TextColor3 = Theme.TEXT
+            end
+            local st = slot.button:FindFirstChildOfClass("UIStroke")
+            if st then
+                -- Mastery tints a slot WHITE, not a colour: brightness is the
+                -- palette's one emphasis axis.
+                st.Color = (info.mastery or 0) > 0 and Theme.TEXT or Theme.LINE
+            end
+        else
+            slot.button.Visible = false
+        end
     end
 end
 
@@ -1242,11 +1409,13 @@ function ArenaHud.runEnded(s: any)
     end)
 end
 
--- Handed to Hud so the tutorial coach can pulse it. The coach pointing at the
--- button beats describing where it is, especially for a player who cannot read
--- quickly yet — which is most of this game's audience.
-function ArenaHud.powerButton(): TextButton?
-    return powerBtn
+--- The hotbar buttons, for anything that needs to point at them.
+function ArenaHud.slotButtons(): { TextButton }
+    local out = {}
+    for _, slot in ipairs(slots) do
+        table.insert(out, slot.button)
+    end
+    return out
 end
 
 function ArenaHud.isSheetOpen(): boolean

@@ -26,14 +26,17 @@ trinkets, powers, trading.
 
 | Where | What |
 |---|---|
-| Top-centre | The **dock** — nine icons. Everything in the game is behind one of them. |
-| Under the dock | The **status strip** — the round clock, where you are standing, and whether you are safe |
-| Top-left | Your **mass**, what it is worth, and your best this round |
-| Top-right | 💧 **Glob**, and your Beta Season tier |
-| Bottom-centre | Your **power button**, between the thumbstick and the jump button |
-| Top of the screen, during your first run | The **coach** — one instruction at a time |
+| Top-right | **☰ MENU** — everything in the game is behind it, by name |
+| Top-left | Your **mass**, what it is worth, 💧 Glob and your season tier |
+| Top-centre | The **status strip** — round clock, where you are standing, whether you are safe |
+| Bottom-centre | The **hotbar** — three buttons, between the thumbstick and the jump button |
 
-There is exactly **one panel at a time**. Tapping a dock icon opens its sheet
+The whole interface is **black, grey and white** on purpose. The only colour on
+screen is meaning — a red warning, a green confirmation, a rarity border — and
+the blobs, which are the only saturated thing in the world. A neon skin should
+be the brightest thing you can see.
+
+There is exactly **one panel at a time**. Tapping a menu row opens its sheet
 and closes whatever was up. If you ever see two panels overlapping, that is a
 bug — screenshot it.
 
@@ -45,7 +48,9 @@ bug — screenshot it.
 |---|---|---|
 | Move | WASD or arrows | thumbstick |
 | Jump | Space | the jump button |
-| Power | E, or the ⚡ button | the ⚡ button |
+| **Slot 1 — DASH** | Q or 1 | first hotbar button |
+| **Slot 2 — SPLIT** | E or 2 | second hotbar button |
+| **Slot 3 — yours** | R or 3 | third hotbar button |
 
 **Mass is handling.** A fresh blob is quick and twitchy; a huge one has a lower
 top speed and takes much longer to stop. That gap is what makes a chase
@@ -70,15 +75,36 @@ Every round is played by **twelve contenders**. However many humans are on the
 server, bots make up the rest — one human means eleven bots, and an empty
 server still runs a real round.
 
-Bots are **tagged with 🤖** above their heads and marked on the results board.
+They have ordinary-looking names — `Kai8842`, `Milo471` — and no label, because
+a board reading "Gloop 🤖, Pudge 🤖" makes a full island look like an empty one.
 They are not props: they eat the floor, they eat each other, they will eat you,
 and your powers deflate them exactly like they deflate a player.
 
-**What to check:** can you beat them? Can they beat you? Does the board list
-them with distinct names? Does anything about them feel like it is cheating —
-if a bot ever reacts instantly or catches you when it should not have, say so.
+**What to check:** can you beat them? Can they beat you? Do they walk around
+rocks now instead of through them? Does anything about them feel like it is
+cheating — if one ever reacts instantly or catches you when it should not have,
+say so.
 
-### 3. Powers deflate — that is the catch-up mechanic
+### 3. SPLIT, tethers and spore pods — the bit that is ours
+
+Press **SPLIT** and three pieces of you fly out, eat whatever they pass over,
+and come back. You stay one blob — you are never steering two things.
+
+The part that is not agar.io: **every piece stays joined to you by a strand of
+goo, and anything that crosses a strand gets deflated and slowed.** A split is
+three lines drawn across the floor. Split past somebody and you have fenced
+them in; split while running and you have laid a wire behind you.
+
+**Spore pods** are the white spiky balls. Touch one while you are big and it
+bursts you into a web of seven pieces at once — you do not lose the mass, it
+comes back, but for a few seconds your tethers are everywhere. Small blobs pass
+straight through them, so a pod field is somewhere to hide from something huge.
+
+**What to check:** do the strands show up? Does walking through one hurt? Does
+your OWN strand ever hurt you (it must not)? Is baiting a big blob into a pod
+something you can actually pull off?
+
+### 4. Powers deflate — that is the catch-up mechanic
 
 Every power costs a slice of your own mass, and that slice **lands on the floor
 as food**. Most of them also knock size *off* whoever you hit, in proportion to
@@ -91,7 +117,7 @@ grows, and each one gets quicker and cheaper the more you use it.
 **What to check:** SLAM into a crowd. Does everybody near you visibly shrink?
 Does food appear where they were?
 
-### 4. The edge is food, not a hiding place
+### 5. The edge is food, not a hiding place
 
 The outer rim of the island used to be a permanent no-PvP ring, which is why
 nothing grew out there. It is not permanent anymore. Standing on the rim spends
@@ -106,7 +132,7 @@ still gives you a proper look at the island first.
 count down where you can see it? Does anything eat you *while the strip still
 says SAFE*? (That last one would be a real bug.)
 
-### 5. The waiting room
+### 6. The waiting room
 
 Between rounds. Nothing can touch you. Every dock tab works here:
 
@@ -115,10 +141,10 @@ Between rounds. Nothing can touch you. Every dock tab works here:
 | 🎁 CRATES | The gacha. Glob only — Robux never buys a roll. Hard pity, counter on the button. |
 | 👕 WARDROBE | Skins, trails, crowns |
 | 🔧 TRINKETS | Passive modifiers, two slots |
-| ⚡ POWERS | Pick the one button you carry |
+| ⚡ POWERS | Pick your **third** slot. DASH and SPLIT are always slots 1 and 2. |
 | 🫧 YOUR GOOBS | Your collection. CARRY one, or GULP one into another. |
 | 🤝 TRADE | The rules, and what you can offer |
-| ⭐ BETA SEASON | The pass. Claim earned tiers. |
+| ⭐ BETA SEASON | The pass. Two **powers** are in here — HOOK at tier 22 and SPIKE at tier 40 — on the free side, and they are the only way to get either. No amount of Glob or Robux buys them. |
 | 🛡️ YOUR CREW | Found or join one; shared weekly goal |
 | 🥊 THE STANDOFF | Queue for a 1v1 |
 
@@ -149,6 +175,9 @@ If you see any of these, it is a regression:
 - **The Egg Stand** — a `🥚 HATCH A GOOB` button with a price.
 - **A "MY GOOBS" drawer** sliding in from the left, especially with a shop
   rendered on top of a season list.
+- **A tutorial banner** across the top of the screen. It is deleted, not
+  hidden.
+- **A leaderboard you have to walk behind to read.**
 
 ---
 
@@ -173,7 +202,9 @@ Open the **Output** window in Studio (View → Output) and copy anything red.
 The server prints one line at boot that tells you the build is healthy:
 
 ```
-[GULP A GOOB] ready. one island, 1424 pellets, 12 powers, 8 trinkets, 3 crates.
+[GULP A GOOB] ready. one island, 1424 pellets, 14 powers, 8 trinkets, 3 crates.
 ```
 
-No line, or a different pellet count, means the world did not finish building.
+No line means the world did not finish building. The power count is everything
+that exists: the two fixed hotbar slots, the ones on the banking ladder, and
+the two that only the BETA SEASON's free track hands out.

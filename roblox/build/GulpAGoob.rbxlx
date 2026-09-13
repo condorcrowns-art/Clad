@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000041"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000042"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000043"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000019"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX000041"><Properties><string name="Name">Workspace</string></Properties></Item><Item class="Lighting" referent="RBX000042"><Properties><string name="Name">Lighting</string></Properties></Item><Item class="ReplicatedStorage" referent="RBX000043"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX000018"><Properties><string name="Name">GoobShared</string></Properties><Item class="ModuleScript" referent="RBX000001"><Properties><string name="Name">Ascension</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Ascension.luau — the terminus.
 --
 -- Numbers that only ever rise have no end, so nothing is ever an achievement.
@@ -84,10 +84,18 @@ local Blob = {}
 -- Logarithmic, matching GoobMath.size's reasoning: constant visual growth per
 -- order of magnitude, so a 10x gain is always a visible step. Arena numbers
 -- are small (tens to low thousands) so the constant is tuned for that band.
+-- A CUBE ROOT, not a logarithm. See Config.BLOB_RADIUS_EXP for the full
+-- reasoning; the short version is that a blob is a volume, so radius goes as
+-- mass^(1/3), and the log curve it replaced moved so little across a round's
+-- mass band that swallowing somebody your own size was invisible.
+--
+-- Clamped at SIZE_MAX for sanity only. At the exponent above that is not
+-- reached until roughly 1.4 million mass, which no round produces.
 function Blob.radius(mass: number): number
-    local m = math.max(1, mass)
-    return Config.BLOB_RADIUS_BASE
-        + Config.BLOB_RADIUS_K * math.log(m / Config.STARTING_MASS + 1)
+    local m = math.max(Config.STARTING_MASS, mass)
+    local r = Config.BLOB_RADIUS_BASE
+        * (m / Config.STARTING_MASS) ^ Config.BLOB_RADIUS_EXP
+    return math.min(Config.SIZE_MAX, r)
 end
 
 -- Bigger is SLOWER. This is the one place the arena deliberately contradicts
@@ -422,7 +430,35 @@ Config.PLOT_SPACING = 130
 -- studs across and a blob at the ceiling is about 15 — a 3x visual difference,
 -- which is the largest range that still lets both fit on one screen during a
 -- chase. Any wider and the camera has to choose who to show.
+-- ── HOW BIG EATING SOMEBODY MAKES YOU ─────────────────────────────────────
+--
+-- This was a LOG curve: radius = BASE + K * ln(mass / STARTING). It was chosen
+-- when a run could reach 1e24 and every tenfold gain had to stay a visible
+-- step forever, and at that job it was correct.
+--
+-- It is wrong for a round. A round lasts three and a half minutes and tops out
+-- in the low thousands, and across that band a log curve barely moves:
+-- swallowing a blob your own size DOUBLES your mass and adds one and a half
+-- studs to your radius. The number on the HUD leaps and the thing on screen
+-- does not, which is exactly the complaint — you eat somebody and nothing
+-- happens.
+--
+-- A power law fixes it, and it is also the physically honest one: a blob is a
+-- volume, volume is proportional to mass, so radius goes as the CUBE ROOT.
+-- Doubling your mass now makes you 26% wider, which reads instantly, and the
+-- old saturation problem does not come back because nothing in a round gets
+-- near the clamp.
+--
+--   mass    10 ->  5.0 studs
+--          100 -> 10.8
+--        1,000 -> 23.2
+--       10,000 -> 50.0
+--      100,000 -> 107.7
 Config.BLOB_RADIUS_BASE = 5
+Config.BLOB_RADIUS_EXP = 1 / 3
+-- Kept because the harvest curve and its tests are written against it and the
+-- log form is the thing to reach for if the power law turns out to make the
+-- late round unreadable. Unused while BLOB_RADIUS_EXP is set.
 Config.BLOB_RADIUS_K = 2.2
 
 -- Bigger is slower, agar-style. A fresh blob (42) outruns a ceiling blob (~24)
@@ -449,7 +485,17 @@ Config.PELLET_VALUE = 9
 -- So the count is computed from the area it has to cover. Resize the island
 -- and the food supply follows automatically. tools/arena.luau asserts the two
 -- agree to within a couple of percent.
-Config.PELLET_RESPAWN_PER_SEC = 36   -- sized for a full server, not one player
+-- RAISED WITH THE BODIES. Blobs are physically bigger than they were — radius
+-- went from a logarithm to a cube root so that eating somebody is visible —
+-- and a wider body sweeps a wider corridor, so the same twelve contenders now
+-- clear the floor noticeably faster. Holding the old 36/s would have meant the
+-- change quietly starved the mid-round.
+--
+-- 48/s keeps the floor ahead of a full field up to about 2.5K mass each, which
+-- is past where a round's middle sits. Beyond that it deliberately falls
+-- behind: the back half of a round is supposed to turn from farming into
+-- hunting, and a floor that never thins is what stops that happening.
+Config.PELLET_RESPAWN_PER_SEC = 48
 Config.GOLDEN_CRUMB_MULT = 5
 
 -- ── Melting ────────────────────────────────────────────────────────────────
@@ -575,6 +621,65 @@ Config.ROUND_PLACE_BONUS = { 3.0, 1.8, 1.3 }   -- 1st, 2nd, 3rd multipliers
 Config.LOBBY_CENTRE = Vector3.new(0, 420, 0)
 Config.LOBBY_RADIUS = 120
 
+-- ── SPLIT, TETHERS AND PODS — the part that is not agar.io ────────────────
+--
+-- SPLIT alone is the genre's signature move and copying it outright would make
+-- this a worse agar with extra menus. So it is copied and then given one twist
+-- that changes what the move is FOR.
+--
+-- WHAT SPLIT DOES. You throw three globlets forward. They are not a second
+-- body you steer — that needs a second controller and a camera that can hold
+-- two things, and it is the reason most agar clones feel awful on a phone.
+-- They fly out, hoover up pellets, and come home. You stay one blob.
+--
+-- WHAT MAKES IT OURS: THE TETHER. Every globlet stays joined to you by a
+-- visible strand of goo, and ANY blob that crosses a strand is deflated and
+-- slowed. So a split is not just a lunge — it is three lines drawn across the
+-- floor that other players have to go around. Splitting past somebody fences
+-- them in. Splitting while running lays a wire behind you. Splitting into a
+-- crowd hits everyone in it at once.
+--
+-- That turns the genre's "commit half of yourself to reach something" into
+-- "commit part of yourself to CONTROL SPACE", which is a different decision
+-- and, as far as I can find, not a thing any blob game does.
+Config.SPLIT_PIECES = 3
+Config.SPLIT_SPREAD = 0.42        -- radians between the outer pieces
+Config.SPLIT_SPEED = 96           -- studs/sec outward
+Config.SPLIT_RANGE = 88           -- how far a globlet gets before it turns back
+Config.SPLIT_RETURN_FRACTION = 0.85  -- of what you threw, how much comes home
+Config.GLOBLET_PICKUP = 9         -- pellet reach of one globlet
+
+-- The tether. Deliberately weak per touch and generous on cooldown: it is
+-- area denial, not a damage engine. A blob that walks the length of one strand
+-- loses a noticeable slice; a blob that clips the end of one barely notices.
+Config.TETHER_WIDTH = 4.5         -- studs either side of the line
+Config.TETHER_DEFLATE = 0.045     -- fraction of the victim's own mass, per touch
+Config.TETHER_SLOW = 0.55         -- speed multiplier while snagged
+Config.TETHER_SLOW_TIME = 1.1     -- seconds the snag lasts
+Config.TETHER_COOLDOWN = 0.8      -- per victim, so a strand cannot chain-hit
+
+-- ── SPORE PODS ────────────────────────────────────────────────────────────
+--
+-- Standing hazards on the island. Touch one while you are big and it bursts
+-- you into a whole web of tethered globlets at once — you lose no mass to the
+-- pod itself, but for a few seconds you are a spread-out, obvious, tangled
+-- mess with your pieces scattered.
+--
+-- Agar's viruses punish the big by splitting them into edible chunks. Ours
+-- does not make you edible, it makes you COMMITTED: your tethers are suddenly
+-- everywhere, which is dangerous for everyone near you including the person
+-- who herded you into it. Being popped by a pod is as often an opportunity as
+-- a punishment, which is the difference between a hazard and a tax.
+--
+-- Only blobs over POD_MIN_MASS trigger them, so a small player can hide inside
+-- a pod field where the big ones dare not follow. That is the whole reason the
+-- things are on the map.
+Config.POD_COUNT = 14
+Config.POD_MIN_MASS = 140         -- below this you pass straight through
+Config.POD_RADIUS = 11
+Config.POD_PIECES = 7             -- how many globlets a burst throws
+Config.POD_RESPAWN = 25           -- seconds before a spent pod regrows
+
 -- ── Deflation ──────────────────────────────────────────────────────────────
 -- The catch-up mechanism, and the reason a leader cannot simply sit on the
 -- lead. Every deflating ability takes a FRACTION OF THE TARGET'S OWN MASS, so
@@ -688,16 +793,31 @@ Config.BOT_SKILLS = {
     { id = "feral",  name = "feral",  sight = 1.45, think = 0.45, greed = 1.05, weight = 6 },
 }
 
--- Names read as players, not as NPC_01. A board full of "Bot 4" tells a lone
--- player they are alone, which is the one thing this system exists to avoid.
--- They are tagged as bots in the UI all the same — pretending otherwise is a
--- lie the player will catch, and catching it costs more than it buys.
-Config.BOT_NAMES = {
-    "Blobbo", "Squish", "Gloop", "Mimsy", "Bubbo", "Nugget", "Pudge", "Wobble",
-    "Slurp", "Tadpole", "Custard", "Goober", "Snorkel", "Jellybean", "Plop",
-    "Mochi", "Dollop", "Gurgle", "Pip", "Marsh", "Splodge", "Bloop", "Tumble",
-    "Yolk", "Doodle", "Fizz", "Grub", "Puddle", "Noodle", "Squelch",
+-- ── BOT NAMES ─────────────────────────────────────────────────────────────
+--
+-- Generated to look like Roblox usernames, because that is what they are
+-- standing in for.
+--
+-- The first version used cute blob words — Gloop, Mochi, Squelch — and tagged
+-- every one with a robot emoji on the assumption that pretending otherwise was
+-- a lie the player would catch and resent. That was the wrong call twice over.
+-- A board reading "Gloop 🤖, Pudge 🤖, Custard 🤖" does not read as honesty, it
+-- reads as an EMPTY SERVER, which is precisely the feeling bots exist to
+-- prevent — and no blob game in the genre labels its fill, so the tag was
+-- announcing a weakness nobody else admits to.
+--
+-- A name like Kai8842 is not a lie about a person; it is the same shape as
+-- every other name on a Roblox leaderboard, and the player's honest reaction
+-- to it is "there are eleven other blobs here", which is true.
+Config.BOT_FIRST = {
+    "Kai", "Milo", "Zane", "Finn", "Rhys", "Theo", "Jax", "Cole", "Ash", "Reid",
+    "John", "Leo", "Max", "Nico", "Owen", "Ravi", "Sam", "Toby", "Vic", "Wren",
+    "Blaze", "Cypher", "Drift", "Echo", "Frost", "Ghost", "Hex", "Iris", "Jet",
+    "Koda", "Luna", "Mika", "Nova", "Onyx", "Pixel", "Quill", "Rune", "Sky",
 }
+Config.BOT_SUFFIX_MIN = 11
+Config.BOT_SUFFIX_MAX = 9987
+
 
 -- Derived last, because it depends on the radius above.
 -- The food field is the disc out to PELLET_OUTER, not to SHALLOWS_INNER. That
@@ -734,6 +854,10 @@ export type Item = {
     beta: boolean?,      -- BETA SEASON exclusive, retired when Season 0 closes
     colour: Color3?,
     material: Enum.Material?,
+    -- Rare and above get one. Named rather than described so the catalogue
+    -- stays data and RollService stays the only place that knows how to build
+    -- a ParticleEmitter — see RollService.applyCosmetics.
+    particle: string?,
     emoji: string?,
 }
 
@@ -752,28 +876,57 @@ local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
 
 Cosmetics.ITEMS = {
     -- ── Skins: the body itself ─────────────────────────────────────────────
-    -- No colour: the default skin keeps the Goob's own hue, which is its
-    -- identity. Transparency is set by RollService, not here.
+    --
+    -- NEON, AND LOUD ON PURPOSE. The whole interface is greyscale now — black
+    -- panels, white text, colour reserved for meaning — and that was done for
+    -- this: the blobs are the only saturated thing in the world, so a skin has
+    -- nothing to compete with and reads from across the island.
+    --
+    -- `glow` sets how hard a skin emits. `particle` names a shape that
+    -- RollService attaches at Rare and above, so the difference between a
+    -- Common and a Legendary is visible in motion and not only in a menu — a
+    -- rare skin that just sits there is a rare skin nobody can tell you own.
     { id = "skin_default", name = "Classic Goo",   kind = "skin", rarity = "Common",
       source = "starter", material = Enum.Material.Glass },
     { id = "skin_jelly",   name = "Jelly",         kind = "skin", rarity = "Common",
-      source = "season", tier = 3, material = Enum.Material.Glass, colour = rgb(224, 123, 158) },
+      source = "season", tier = 3, material = Enum.Material.Neon, colour = rgb(255, 92, 168) },
+    { id = "skin_slime",   name = "Toxic Slime",   kind = "skin", rarity = "Common",
+      source = "crate_goop", material = Enum.Material.Neon, colour = rgb(148, 255, 64) },
     { id = "skin_bubble",  name = "Soap Bubble",   kind = "skin", rarity = "Uncommon",
-      source = "season", tier = 8, material = Enum.Material.ForceField },
-    { id = "skin_stone",   name = "Boulder",       kind = "skin", rarity = "Uncommon",
-      source = "shop", material = Enum.Material.Slate, colour = rgb(130, 128, 122) },
+      source = "season", tier = 8, material = Enum.Material.ForceField, colour = rgb(120, 232, 255) },
+    { id = "skin_magma",   name = "Magma",         kind = "skin", rarity = "Uncommon",
+      source = "shop", material = Enum.Material.Neon, colour = rgb(255, 122, 26),
+      particle = "ember" },
     { id = "skin_chrome",  name = "Chrome",        kind = "skin", rarity = "Rare",
-      source = "season", tier = 18, material = Enum.Material.Metal, colour = rgb(209, 215, 224) },
+      source = "season", tier = 18, material = Enum.Material.Metal, colour = rgb(226, 232, 240),
+      particle = "spark" },
+    { id = "skin_cyber",   name = "Cyber Grid",    kind = "skin", rarity = "Rare",
+      source = "crate_goop", material = Enum.Material.Neon, colour = rgb(0, 255, 214),
+      particle = "grid" },
     { id = "skin_lava",    name = "Molten",        kind = "skin", rarity = "Epic",
-      source = "season", tier = 28, premium = true, material = Enum.Material.Neon, colour = rgb(224, 155, 121) },
+      source = "season", tier = 28, premium = true, material = Enum.Material.Neon,
+      colour = rgb(255, 74, 46), particle = "ember" },
     { id = "skin_void",    name = "Void",          kind = "skin", rarity = "Epic",
-      source = "shop", material = Enum.Material.Neon, colour = rgb( 27,  22,  41) },
+      source = "shop", material = Enum.Material.Neon, colour = rgb(88, 24, 214),
+      particle = "void" },
+    { id = "skin_plasma",  name = "Plasma",        kind = "skin", rarity = "Epic",
+      source = "crate_deep", material = Enum.Material.Neon, colour = rgb(196, 64, 255),
+      particle = "spark" },
     { id = "skin_prism",   name = "Prism",         kind = "skin", rarity = "Legendary",
-      source = "season", tier = 45, premium = true, material = Enum.Material.Glass, colour = rgb(158, 194, 224) },
+      source = "season", tier = 45, premium = true, material = Enum.Material.Glass,
+      colour = rgb(120, 200, 255), particle = "prism" },
     { id = "skin_ancient", name = "Ancient Amber", kind = "skin", rarity = "Legendary",
-      source = "ascend", material = Enum.Material.Glass, colour = rgb(224, 184, 121) },
+      source = "ascend", material = Enum.Material.Neon, colour = rgb(255, 186, 48),
+      particle = "ember" },
+    { id = "skin_ultra",   name = "Ultraviolet",   kind = "skin", rarity = "Legendary",
+      source = "crate_deep", material = Enum.Material.Neon, colour = rgb(150, 40, 255),
+      particle = "void" },
     { id = "skin_goldleaf",name = "Gold Leaf",     kind = "skin", rarity = "Mythic",
-      source = "achievement", material = Enum.Material.Foil, colour = rgb(224, 196, 121) },
+      source = "achievement", material = Enum.Material.Neon, colour = rgb(255, 214, 92),
+      particle = "prism" },
+    { id = "skin_singular",name = "Event Horizon", kind = "skin", rarity = "Mythic",
+      source = "beta", beta = true, material = Enum.Material.Neon, colour = rgb(12, 12, 16),
+      particle = "void" },
 
     -- ── Trails ─────────────────────────────────────────────────────────────
     { id = "trail_none",   name = "No Trail",      kind = "trail", rarity = "Common", source = "starter" },
@@ -1768,7 +1921,13 @@ Monetisation.GAMEPASSES = {
 
 Monetisation.PRODUCTS = {
     { id = "skin_void",  assetId = 0, name = "Void Skin",   cosmetic = "skin_void",   affects = "cosmetic" },
-    { id = "skin_stone", assetId = 0, name = "Boulder Skin",cosmetic = "skin_stone",  affects = "cosmetic" },
+    -- Was "skin_stone", a grey Boulder, which no longer exists: the skin
+    -- catalogue went neon so that the greyscale interface has something to
+    -- frame. Magma replaces it on the shelf. The check in systems.luau caught
+    -- this the moment the catalogue changed, which is exactly what a shelf
+    -- pointing at a missing item should do — an unconfigured purchase prompt
+    -- fails silently in Studio and reads to the player as a scam.
+    { id = "skin_magma", assetId = 0, name = "Magma Skin",  cosmetic = "skin_magma",  affects = "cosmetic" },
     { id = "trail_frost",assetId = 0, name = "Frost Trail", cosmetic = "trail_frost", affects = "cosmetic" },
     { id = "eyes_star",  assetId = 0, name = "Starstruck",  cosmetic = "eyes_star",   affects = "cosmetic" },
     { id = "crown_cap",  assetId = 0, name = "Cap",         cosmetic = "crown_cap",   affects = "cosmetic" },
@@ -1816,6 +1975,37 @@ function Monetisation.violations(): { string }
     end
     scan(Monetisation.GAMEPASSES, "gamepass")
     scan(Monetisation.PRODUCTS, "product")
+
+    -- ── THE PREMIUM SEASON TRACK IS PURCHASABLE, SO IT IS INSIDE THE WALL ──
+    --
+    -- This was a hole. The wall scanned gamepasses and products and stopped,
+    -- but the premium season track is bought with Robux too — so a power
+    -- placed on it would have been money buying a button nobody else has, and
+    -- nothing here would have said a word.
+    --
+    -- It is now structurally hard to do (Season.powerAt takes no premium
+    -- argument, so there is nowhere to put one) and checked anyway. Structure
+    -- stops the accident; this stops somebody deciding to add the argument.
+    local okSeason, Season = pcall(function()
+        return require(script.Parent.Season)
+    end)
+    local okPowers, Powers = pcall(function()
+        return require(script.Parent.Powers)
+    end)
+    if okSeason and okPowers and Season and Powers then
+        local isPower = {}
+        for _, pool in ipairs({ Powers.FIXED, Powers.LIST, Powers.SEASON }) do
+            for _, power in ipairs(pool or {}) do isPower[power.id] = true end
+        end
+        for tier = 1, (Season.TIERS or 0) do
+            local paid = Season.rewardAt(tier, true)
+            if paid and isPower[paid] then
+                table.insert(bad,
+                    ("season/premium tier %d grants the power %q"):format(tier, paid))
+            end
+        end
+    end
+
     return bad
 end
 
@@ -1972,7 +2162,6 @@ Net.EVENTS = {
     "FeedGoob",       -- C->S  push stomach items (auto, but kept explicit)
     "RenameGoob",     -- C->S
     "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
-    "DismissTutorial",-- C->S  stop showing the first-run guide
     "Ascend",         -- C->S  consume a Colossal Goob for a permanent Crest
     "Dashed",         -- C->S  cosmetic: tell the server a dash happened
     "EquipCosmetic",  -- C->S  wear something you own
@@ -2160,19 +2349,57 @@ export type Power = {
     cooldown: number,    -- seconds
     duration: number,    -- seconds of effect, 0 for instant
     unlockBanked: number,-- lifetime banked glob needed to own it
+    fixed: boolean?,     -- always in the hotbar; not a choice
+    season: boolean?,    -- granted by the season's free track, never by banking
     color: Color3,
 }
 
--- Ordered by unlock, which is also roughly ordered by how much thinking each
--- one asks for. DASH first because it is legible in a quarter of a second.
-Powers.LIST = {
+-- ── THE TWO YOU ALWAYS HAVE ───────────────────────────────────────────────
+--
+-- DASH and SPLIT are not choices, they are verbs the game is built out of. A
+-- game in this shape needs a lunge and a way to throw part of yourself at
+-- something out of reach; without both, half the situations on the island have
+-- no answer at all.
+--
+-- They used to sit in the same pool as everything else, competing for the one
+-- carried slot — and SPLIT was pinned near the top of the unlock ladder, which
+-- meant the mechanic the whole genre is named for was invisible for the first
+-- ten hours. Now they are slots 1 and 2, owned from the first second, and the
+-- chosen power is slot 3.
+--
+-- They still cost mass like everything else. That is the balance model and it
+-- does not get an exception: a free button is a button that gets held down.
+Powers.FIXED = {
     {
         id = "dash", name = "DASH",
         blurb = "Shove yourself forward, fast.",
-        cost = 0.08, cooldown = 3.5, duration = 0.22,
-        unlockBanked = 0,
-        color = Color3.fromRGB(150, 205, 225),
+        cost = 0.05, cooldown = 3.0, duration = 0.22,
+        unlockBanked = 0, fixed = true,
+        color = Color3.fromRGB(210, 210, 214),
     },
+    {
+        id = "split", name = "SPLIT",
+        blurb = "Throw three pieces of yourself forward, tethered to you.",
+        -- Cheaper and far quicker than the old one-shot 50% lunge. SPLIT is
+        -- meant to be a move you make several times a round — to reach food,
+        -- to fence somebody off, to commit to a kill — not a once-a-minute
+        -- gamble with half your body.
+        cost = 0.22, cooldown = 9, duration = 6,
+        unlockBanked = 0, fixed = true,
+        color = Color3.fromRGB(180, 180, 186),
+    },
+} :: { Power }
+
+-- ── THE ONE YOU CHOOSE ────────────────────────────────────────────────────
+--
+-- ORDERED BY UNLOCK, and it must stay that way: nextLocked() walks this array
+-- and returns the first thing the player cannot afford, so an out-of-order
+-- entry points them at a target that is not actually next. Four powers were
+-- appended to the end of this list when they were written and it did exactly
+-- that until a test caught it.
+--
+-- Roughly ordered by how much thinking each one asks for, too.
+Powers.LIST = {
     {
         id = "magnet", name = "MAGNET",
         blurb = "Yank every loose pellet nearby straight into you.",
@@ -2208,14 +2435,7 @@ Powers.LIST = {
         unlockBanked = 52000,
         color = Color3.fromRGB(206, 186, 132),
     },
-    {
-        id = "hook", name = "HOOK",
-        blurb = "Grab the nearest blob and reel. Bigger pulls, smaller gets pulled.",
-        cost = 0.10, cooldown = 13, duration = 1.2,
-        unlockBanked = 74000,
-        color = Color3.fromRGB(190, 180, 145),
-    },
-    {
+        {
         id = "siphon", name = "SIPHON",
         blurb = "Drain the nearest blob bigger than you.",
         cost = 0.09, cooldown = 19, duration = 3,
@@ -2230,25 +2450,43 @@ Powers.LIST = {
         color = Color3.fromRGB(175, 200, 200),
     },
     {
-        id = "split", name = "SPLIT",
-        blurb = "Throw half of yourself at them. It comes back.",
-        cost = 0.50, cooldown = 18, duration = 8,
-        unlockBanked = 170000,
-        color = Color3.fromRGB(195, 165, 195),
-    },
-    {
         id = "blink", name = "BLINK",
         blurb = "Vanish and reappear ahead. Straight through anything.",
         cost = 0.18, cooldown = 17, duration = 0,
         unlockBanked = 215000,
         color = Color3.fromRGB(186, 170, 206),
     },
+    } :: { Power }
+
+-- ── EARNED FROM THE BETA SEASON, NOT FROM BANKING ─────────────────────────
+--
+-- These are not on the ladder and no amount of Glob reaches them. The only way
+-- in is playing far enough into the season's FREE track (Season.POWER_AT), and
+-- that is deliberate on two counts.
+--
+-- It makes the season pass worth finishing with something a skin cannot be:
+-- a button nobody who skipped the season has. And it keeps the monetisation
+-- wall intact, because the free track is the one thing in this game that
+-- cannot be bought at any price — `Monetisation.violations()` fails the build
+-- if a purchasable item carries a gameplay number, and a power is the most
+-- gameplay-carrying thing there is.
+--
+-- They are kept OUT of Powers.LIST so that `nextLocked` never points a player
+-- at a target no amount of play on the banking ladder will reach.
+Powers.SEASON = {
+    {
+        id = "hook", name = "HOOK",
+        blurb = "Grab the nearest blob and reel. Bigger pulls, smaller gets pulled.",
+        cost = 0.10, cooldown = 13, duration = 1.2,
+        unlockBanked = math.huge, season = true,
+        color = Color3.fromRGB(214, 214, 218),
+    },
     {
         id = "spike", name = "SPIKE",
         blurb = "For three seconds, anything that eats you pops instead.",
         cost = 0.20, cooldown = 24, duration = 3,
-        unlockBanked = 265000,
-        color = Color3.fromRGB(205, 150, 155),
+        unlockBanked = math.huge, season = true,
+        color = Color3.fromRGB(226, 106, 106),
     },
 } :: { Power }
 
@@ -2299,41 +2537,96 @@ end
 -- progress bar.
 function Powers.masteryNext(uses: number?): (number?, number?)
     local n = uses or 0
-    for i, need in ipairs(-- ORDERED BY UNLOCK, and it must stay that way: nextLocked() walks the array
--- and returns the first thing the player cannot afford, so an out-of-order
--- entry points them at a target that is not actually next. Four powers were
--- appended to the end of this list when they were written and it did exactly
--- that until a test caught it.
-Powers.MASTERY_TIERS) do
+    for i, need in ipairs(Powers.MASTERY_TIERS) do
         if n < need then return i, need - n end
     end
     return nil, nil
 end
 
+-- Both pools, by id. FIXED first so that if a power ever appeared in both by
+-- mistake the fixed definition is the one that loses — a duplicate should show
+-- up as the CHOSEN version being unreachable, which is visible, rather than as
+-- the hotbar quietly using different numbers from the wardrobe.
 local byId: { [string]: Power } = {}
+for _, p in ipairs(Powers.FIXED) do
+    byId[p.id] = p
+end
+for _, p in ipairs(Powers.SEASON) do
+    byId[p.id] = p
+end
 for _, p in ipairs(Powers.LIST) do
     byId[p.id] = p
 end
 
-Powers.DEFAULT = "dash"
+-- The default CHOSEN power — slot 3. Not dash: dash is slot 1 and always has
+-- been since the hotbar existed, so defaulting the choice to it would hand a
+-- new player a duplicate and an empty-feeling third button.
+Powers.DEFAULT = "magnet"
+
+--- What is in each hotbar slot, given what the player owns and what they chose.
+--- ONE function, server and client both read it, so "what is in slot 3" cannot
+--- have two answers.
+function Powers.hotbar(chosenId: string?, lifetimeBanked: number,
+    granted: { [string]: boolean }?): { Power }
+    local out = { Powers.FIXED[1], Powers.FIXED[2] }
+    local chosen = byId[chosenId or ""]
+    -- A chosen power that is fixed, unknown, or not yet unlocked falls back to
+    -- the default rather than leaving a hole: an empty slot reads as a bug,
+    -- and this happens legitimately every time the ladder is rebalanced under
+    -- a saved profile.
+    local haveIt = chosen ~= nil
+        and (lifetimeBanked >= chosen.unlockBanked
+            or (granted ~= nil and granted[chosen.id] == true))
+    if not chosen or chosen.fixed or not haveIt then
+        chosen = byId[Powers.DEFAULT]
+    end
+    if chosen then
+        out[3] = chosen
+    end
+    return out
+end
 
 function Powers.get(id: string): Power?
     return byId[id]
 end
 
-function Powers.owned(lifetimeBanked: number): { Power }
+-- TWO WAYS TO OWN A POWER, and `granted` is the second one.
+--
+-- Most are earned on the banking ladder. Two are not on that ladder at all and
+-- arrive from the BETA SEASON's free track instead — see Season.POWER_AT. They
+-- live in `profile.powersGranted`, and the important property is that there is
+-- no third way in: the season's paid track cannot reach them, because
+-- Season.powerAt takes no premium argument.
+function Powers.owned(lifetimeBanked: number, granted: { [string]: boolean }?): { Power }
     local out = {}
     for _, p in ipairs(Powers.LIST) do
-        if lifetimeBanked >= p.unlockBanked then
+        if lifetimeBanked >= p.unlockBanked or (granted and granted[p.id]) then
+            out[#out + 1] = p
+        end
+    end
+    for _, p in ipairs(Powers.SEASON) do
+        if granted and granted[p.id] then
             out[#out + 1] = p
         end
     end
     return out
 end
 
-function Powers.isOwned(id: string, lifetimeBanked: number): boolean
+--- Every power a player could ever choose from, owned or not — the wardrobe
+--- needs to show the locked ones or nobody learns they exist.
+function Powers.catalogue(): { Power }
+    local out = {}
+    for _, p in ipairs(Powers.LIST) do out[#out + 1] = p end
+    for _, p in ipairs(Powers.SEASON) do out[#out + 1] = p end
+    return out
+end
+
+function Powers.isOwned(id: string, lifetimeBanked: number,
+    granted: { [string]: boolean }?): boolean
     local p = byId[id]
-    return p ~= nil and lifetimeBanked >= p.unlockBanked
+    if not p then return false end
+    if granted and granted[id] then return true end
+    return lifetimeBanked >= p.unlockBanked
 end
 
 -- What using it actually costs right now, in mass. Floored at a flat minimum
@@ -2476,6 +2769,34 @@ function Season.rewards(): { [number]: { free: string?, premium: string? } }
     return out
 end
 
+-- ── POWERS ON THE SEASON TRACK ────────────────────────────────────────────
+--
+-- The player asked for rare skills to come out of the Beta Pass. They do — but
+-- only on the FREE track, and that is not a detail, it is the monetisation
+-- wall.
+--
+-- The premium track is bought with Robux. `Monetisation.violations()` fails
+-- the build if anything purchasable carries a gameplay number, and a POWER is
+-- the most gameplay-carrying thing in the game. Putting one on the paid side
+-- would mean money buying a button nobody else has, which is the exact failure
+-- every rule in that file exists to prevent.
+--
+-- On the free side it is the opposite: a power that cannot be bought at any
+-- price and only arrives by playing far enough into the season. That is a
+-- better prize than a skin precisely BECAUSE it cannot be bought, and it is
+-- the only way into these two powers — neither is on the banking ladder.
+Season.POWER_AT = {
+    [22] = "hook",
+    [40] = "spike",
+}
+
+--- Which power, if any, tier `t` grants. Free track only, by construction:
+--- this function does not take a `premium` argument, so there is nowhere to
+--- put a paid one even by accident.
+function Season.powerAt(tier: number): string?
+    return Season.POWER_AT[tier]
+end
+
 function Season.rewardAt(tier: number, premium: boolean): string?
     local row = Season.rewards()[tier]
     if not row then return nil end
@@ -2508,15 +2829,18 @@ function Season.award(state: any, source: string, now: number?): (number, boolea
 end
 
 -- Which tiers are earned but unclaimed, per track.
-function Season.claimable(state: any): { { tier: number, premium: boolean, cosmetic: string } }
+function Season.claimable(state: any): { any }
     local out = {}
     if not state then return out end
     local tier = Season.tierOf(state.xp)
     for t = 1, tier do
         local key = tostring(t)
         local free = Season.rewardAt(t, false)
-        if free and not (state.claimedFree or {})[key] then
-            table.insert(out, { tier = t, premium = false, cosmetic = free })
+        local freePower = Season.powerAt(t)
+        if (free or freePower) and not (state.claimedFree or {})[key] then
+            table.insert(out, {
+                tier = t, premium = false, cosmetic = free, power = freePower,
+            })
         end
         if state.premium then
             local prem = Season.rewardAt(t, true)
@@ -2725,159 +3049,6 @@ function Trinkets.axisMagnitude(t: Trinket): number
 end
 
 return Trinkets
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000018"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source"><![CDATA[--!strict
--- Tutorial.luau — the first-run guided loop.
---
--- WHY THIS IS NOT OPTIONAL. A new player spawns next to a blob with some junk
--- floating around it. Nothing on screen says that running into the junk feeds
--- the blob, and nothing at all hints that the central mechanic — destroying one
--- Goob to grow another — exists. The entire design thesis is invisible until
--- somebody tells you about it.
---
--- So this walks a new player through the whole loop in about two minutes:
--- eat → melt → bank → power → trade. Each step is a single sentence with one
--- verb, and it advances on the player actually DOING the thing rather than on
--- a timer or a "Next" button.
---
--- THE STEP THAT MATTERS IS "melt". Every other mechanic here is one a kid can
--- guess: run into food, get bigger. Melting is the one thing in this game that
--- is not guessable and is not like any other game they have played, and if
--- they learn it by watching their number fall for no visible reason they will
--- read it as the game being broken rather than as the game being tense. So it
--- gets its own step, in plain words, at the exact moment it starts happening.
-
-local Tutorial = {}
-
-export type Step = {
-    id: string,
-    text: string,
-    hint: string?,
-    -- Which control to pulse while this step is up, or nil for none.
-    --
-    -- Resolved through Hud.targets, a registry that other modules write into —
-    -- NOT a hardcoded list in Hud. The list used to be exactly "snack" and
-    -- "drawer", both of which belonged to a screen that has since been deleted,
-    -- so the one step that genuinely needs a pointer ("press your power
-    -- button") had nothing to point at. Any id here must be registered by
-    -- whichever module owns the control, or the step simply will not pulse.
-    target: string?,
-    goal: number?,     -- for counted steps
-}
-
-Tutorial.STEPS = {
-    {
-        id = "eat",
-        text = "Roll into the blobs of goo to eat them!",
-        hint = "No clicking — just touch them.",
-        goal = 12,
-    },
-    {
-        id = "grow",
-        -- Counted, because the lesson is that it KEEPS going. A single frame
-        -- of "you got bigger" teaches nothing; watching the number climb for
-        -- a few seconds is the whole promise of the game.
-        goal = 30,
-        text = "Keep going — there's no size limit.",
-        hint = "Whoever is biggest when the clock runs out wins the round.",
-    },
-    {
-        id = "power",
-        target = "power",
-        text = "Press your power button.",
-        hint = "One button, and it costs a slice of you. That slice lands on the floor as food.",
-    },
-    {
-        id = "deflate",
-        text = "Powers knock size OFF whoever you hit.",
-        hint = "The bigger they are the more comes off — and it drops as food for everyone nearby. That's how you catch up.",
-    },
-    {
-        id = "done",
-        text = "That's the whole game. Eat, get huge, drag the leader down.",
-        hint = "Between rounds you're in the waiting room — trade and dress up there.",
-    },
-}
-
-local byId: { [string]: number } = {}
-for i, step in ipairs(Tutorial.STEPS) do
-    byId[step.id] = i
-end
-
-function Tutorial.indexOf(id: string): number?
-    return byId[id]
-end
-
-function Tutorial.step(index: number): Step?
-    return Tutorial.STEPS[index]
-end
-
-function Tutorial.isLast(index: number): boolean
-    return index >= #Tutorial.STEPS
-end
-
--- A fresh tutorial record. `caught` counts only toward the first step.
-function Tutorial.blank()
-    return { step = 1, caught = 0, done = false, dismissed = false }
-end
-
--- Advance if `event` is what the current step is waiting for. Returns the new
--- state and whether it moved, so the caller can decide whether to notify.
-function Tutorial.advance(state: any, event: string): (any, boolean)
-    if not state or state.done or state.dismissed then return state, false end
-
-    local step = Tutorial.STEPS[state.step]
-    if not step then
-        state.done = true
-        return state, false
-    end
-
-    if step.id ~= event then return state, false end
-
-    -- Counted steps need `goal` occurrences before moving on.
-    if step.goal then
-        state.caught = (state.caught or 0) + 1
-        if state.caught < step.goal then return state, false end
-    end
-
-    -- Reset the counter. It was shared across every counted step, so a second
-    -- one inherited the first's total and completed instantly — which is how
-    -- the melt lesson flashed past before anyone could read it.
-    state.caught = 0
-    state.step += 1
-    -- `>=`, not `>`. The final entry is a closing message with no event of its
-    -- own, so the index can never go past it — with `>` the tutorial stayed
-    -- flagged as in-progress forever once a player reached the end.
-    if state.step >= #Tutorial.STEPS then
-        state.step = #Tutorial.STEPS
-        state.done = true
-    end
-    return state, true
-end
-
--- What the HUD should show right now, or nil once it's finished.
-function Tutorial.display(state: any)
-    if not state or state.dismissed then return nil end
-    local step = Tutorial.STEPS[state.step]
-    if not step then return nil end
-
-    local progress = nil
-    if step.goal then
-        progress = ("%d / %d"):format(math.min(state.caught or 0, step.goal), step.goal)
-    end
-
-    return {
-        id = step.id,
-        index = state.step,
-        total = #Tutorial.STEPS,
-        text = step.text,
-        hint = step.hint,
-        target = step.target,
-        progress = progress,
-        done = state.done == true,
-    }
-end
-
-return Tutorial
 ]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX000044"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Script" referent="RBX000030"><Properties><string name="Name">GoobServer</string><ProtectedString name="Source"><![CDATA[--!strict
 -- init.server.luau — the single entry point. Wires every service together and
 -- owns all the RemoteEvent handlers, so there is exactly one file to read to
@@ -2894,7 +3065,6 @@ local GoobMath = require(Shared.GoobMath)
 local Format = require(Shared.Format)
 local Names = require(Shared.Names)
 local Feedstock = require(Shared.Feedstock)
-local Tutorial = require(Shared.Tutorial)
 local Ascension = require(Shared.Ascension)
 local Movement = require(Shared.Movement)
 local Cosmetics = require(Shared.Cosmetics)
@@ -2978,7 +3148,6 @@ local function snapshot(player: Player)
         })
     end
 
-    local tutorial = Tutorial.display(profile.tutorial)
     local crests = profile.crests or 0
     local canAsc, ascReason = false, nil
     if active then canAsc, ascReason = Ascension.canAscend(active, crests) end
@@ -3003,13 +3172,18 @@ local function snapshot(player: Player)
         activeGoobId = profile.activeGoobId,
         stats = profile.stats,
         discovered = profile.discovered,
-        tutorial = tutorial,
         crests = crests,
         foodMultiplier = Ascension.foodMultiplier(crests),
         canAscend = canAsc,
         ascendReason = ascReason,
         ascendPreview = (active and canAsc) and Ascension.preview(active, crests) or nil,
         colossalMass = Config.COLOSSAL_MASS,
+        -- READ BY THE POWERS PANEL, so it has to be here. A power owned via
+        -- the season track is owned for no reason the client could derive from
+        -- lifetimeBanked, so without this the panel shows HOOK and SPIKE
+        -- locked to a player who has them — a screen that renders perfectly
+        -- and lies.
+        powersGranted = profile.powersGranted or {},
         pitWins = profile.pitWins or 0,
         cosmeticsOwned = profile.cosmeticsOwned,
         loadout = profile.loadout,
@@ -3053,18 +3227,21 @@ local function snapshot(player: Player)
     }
 end
 
--- Nudge the tutorial forward when the player does the thing it asked for.
-local function teach(player: Player, event: string)
-    local profile = Data.get(player)
-    if not profile or not profile.tutorial then return end
-    local _, moved = Tutorial.advance(profile.tutorial, event)
-    if moved then
-        local shown = Tutorial.display(profile.tutorial)
-        if shown then
-            notify(player, "✅ " .. shown.text, "good")
-        end
-    end
-end
+-- WHAT `teach` WAS.
+--
+-- The first-run tutorial is gone — five coached steps, a banner across the top
+-- of the screen, and a per-profile record of which step you were on. It was
+-- removed because it did not earn its space: the game is "eat the little ones,
+-- run from the big ones", which a player understands from one round without
+-- being told, and on a landscape phone the banner was competing for the only
+-- free band on the screen with the round clock.
+--
+-- `teach` is kept as a no-op rather than deleted outright ONLY because
+-- ArenaService calls it from a dozen places in its hot loop and threading a
+-- nil-check through all of them buys nothing. It is an empty function, and the
+-- deps entry below is the single line to change if a coached mode ever comes
+-- back. It costs one dead call per event and nothing else.
+local function teach(_player: Player, _event: string) end
 
 local function push(player: Player)
     local snap = snapshot(player)
@@ -3399,6 +3576,16 @@ ArenaService.start({
         push(player)
     end,
 
+    banked = function(player)
+        local profile = Data.get(player)
+        return (profile and profile.lifetimeBanked) or 0
+    end,
+
+    granted = function(player)
+        local profile = Data.get(player)
+        return (profile and profile.powersGranted) or {}
+    end,
+
     powerUses = function(player)
         local profile = Data.get(player)
         return (profile and profile.powerUses) or {}
@@ -3424,25 +3611,39 @@ ArenaService.start({
 
 -- One button. The client sends where it is aiming; the server decides
 -- everything else, including whether the player can afford the press.
-Net.get("UsePower").OnServerEvent:Connect(function(player, aim)
+Net.get("UsePower").OnServerEvent:Connect(function(player, slot, aim)
+    -- The client sends WHICH SLOT and where it is aiming. It does not send
+    -- which power that slot holds — slot 3's contents depend on what the
+    -- profile has unlocked, and letting the client name a power is letting it
+    -- name any power.
+    local index = tonumber(slot)
     local dir = typeof(aim) == "Vector3" and aim or nil
     -- Never trust a client vector's magnitude: a 10,000-stud "aim" is a
-    -- launch exploit, and normalising here costs nothing.
-    if dir and dir.Magnitude > 0.01 then
-        dir = dir.Unit
-    else
-        dir = nil
+    -- teleport request wearing a direction's clothes.
+    if dir then
+        local flat = Vector3.new(dir.X, 0, dir.Z)
+        dir = flat.Magnitude > 0.01 and flat.Unit or nil
     end
-    local ok, why = ArenaService.usePower(player, dir)
-    if not ok and why then
-        notify(player, "⏳ " .. why, "warn")
+    local ok, reason = ArenaService.usePower(player, index, dir)
+    if not ok and reason then
+        notify(player, reason, "warn")
     end
 end)
 
 Net.get("SetPower").OnServerEvent:Connect(function(player, id)
     local profile = Data.get(player)
     if not profile or typeof(id) ~= "string" then return end
-    if not Powers.isOwned(id, profile.lifetimeBanked or 0) then
+    -- DASH and SPLIT are slots 1 and 2, not choices. Accepting one here would
+    -- hand the player a hotbar with a duplicate and an empty third button, and
+    -- the fallback in Powers.hotbar would silently give them the default
+    -- instead — a setting that appears to take and then does not.
+    local wanted = Powers.get(id)
+    if wanted and wanted.fixed then
+        notify(player, ("%s is always in your hotbar — slot 3 is the choice.")
+            :format(wanted.name), "warn")
+        return
+    end
+    if not Powers.isOwned(id, profile.lifetimeBanked or 0, profile.powersGranted) then
         local power = Powers.get(id)
         notify(player, power
             and ("🔒 %s unlocks at 💧%s banked."):format(power.name, Format.short(power.unlockBanked))
@@ -3753,7 +3954,21 @@ Net.get("ClaimSeason").OnServerEvent:Connect(function(player: Player, tier: numb
     for _, entry in ipairs(Season.claimable(profile.season)) do
         if entry.tier == tier and entry.premium == premium then
             Season.markClaimed(profile.season, tier, premium)
-            grantCosmetic(player, entry.cosmetic, ("Season tier %d"):format(tier))
+            if entry.cosmetic then
+                grantCosmetic(player, entry.cosmetic, ("Season tier %d"):format(tier))
+            end
+            -- A POWER, on the free track only. Season.powerAt has no premium
+            -- argument at all, so there is nowhere for a paid one to go even
+            -- by accident — see the wall in Monetisation.luau.
+            if entry.power then
+                profile.powersGranted = profile.powersGranted or {}
+                if not profile.powersGranted[entry.power] then
+                    profile.powersGranted[entry.power] = true
+                    local power = Powers.get(entry.power)
+                    notify(player, ("\u{2B50} BETA SEASON tier %d: %s unlocked. It is not on the banking ladder and it cannot be bought.")
+                        :format(tier, power and power.name or entry.power), "good")
+                end
+            end
             push(player)
             return
         end
@@ -3892,13 +4107,6 @@ Net.get("Dashed").OnServerEvent:Connect(function(player: Player)
     ball:SetAttribute("DashAt", os.clock())
 end)
 
-Net.get("DismissTutorial").OnServerEvent:Connect(function(player: Player)
-    local profile = Data.get(player)
-    if not profile or not profile.tutorial then return end
-    profile.tutorial.dismissed = true
-    push(player)
-end)
-
 Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: string)
     local profile = Data.get(player)
     if not profile or typeof(goobId) ~= "string" then return end
@@ -3951,8 +4159,10 @@ TradeService.onNotify.Event:Connect(function(player, msg, kind)
 end)
 
 print(("[%s] ready. one island, %d pellets, %d powers, %d trinkets, %d crates.")
-    :format(Config.GAME_NAME, Config.PELLET_TARGET, #Powers.LIST, #Trinkets.LIST, #Crates.LIST))
-]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">ArenaService</string><ProtectedString name="Source"><![CDATA[--!strict
+    :format(Config.GAME_NAME, Config.PELLET_TARGET,
+        #Powers.FIXED + #Powers.LIST + #Powers.SEASON,
+        #Trinkets.LIST, #Crates.LIST))
+]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000019"><Properties><string name="Name">ArenaService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- ArenaService.luau — the island, running.
 --
 -- Everything the player feels happens in one fixed-step loop: eat, melt, bank,
@@ -3982,6 +4192,7 @@ local Format = require(Shared.Format)
 local RollService = require(script.Parent.RollService)
 local WorldBuilder = require(script.Parent.WorldBuilder)
 local BotService = require(script.Parent.BotService)
+local GoopService = require(script.Parent.GoopService)
 
 local ArenaService = {}
 
@@ -4007,6 +4218,12 @@ local DECOY_LIFETIME = 7
 export type Run = {
     mass: number,
     powerId: string,
+    -- ONE COOLDOWN PER SLOT, not one for the blob. The hotbar is three
+    -- buttons; a shared cooldown would make pressing DASH disable SPLIT, which
+    -- is not a trade anybody would choose to make and reads as a bug.
+    slotReadyAt: { number },
+    globlets: { any },      -- live SPLIT pieces, each tethered back to the body
+    snagUntil: number,      -- slowed by somebody's tether
     powerReadyAt: number,
     powerUntil: number,
     activeEffect: string?,
@@ -4045,7 +4262,21 @@ local rng = Random.new(os.clock() * 1e6 // 1)
 -- A dropped pellet is now untouchable BY ITS DROPPER for a few seconds, and
 -- lands outside their body as well. Belt and braces, because this one is not
 -- allowed to come back.
-type Pellet = { part: BasePart, value: number, key: string, owner: number?, ownerUntil: number }
+-- TWO owners, not one. The second is the blob that CAUSED the drop.
+--
+-- Deflation scatters what it knocks off, and the whole point of that is to
+-- feed whoever is standing nearby — but the blob standing nearest is always
+-- the one that just landed the hit, and once bodies got physically bigger
+-- (radius went from a logarithm to a cube root) its pickup reach covered the
+-- entire scatter ring. The attacker vacuumed up its own deflation before
+-- anybody else could move, which turns a comeback mechanic into a feeding
+-- mechanic for whoever is already winning.
+--
+-- Same shape as the original fix for a blob eating its own drips: the food is
+-- real, it is on the floor, and for a few seconds it belongs to everybody
+-- except the two blobs that produced it.
+type Pellet = { part: BasePart, value: number, key: string,
+    owner: number?, owner2: number?, ownerUntil: number }
 local pellets: { [BasePart]: Pellet } = {}
 local grid: { [string]: { [BasePart]: Pellet } } = {}
 local pelletCount = 0
@@ -4062,6 +4293,15 @@ type Deps = {
     loadout: (player: Player) -> ({ string }, string),   -- trinket ids, power id
     sync: (player: Player, state: any) -> (),
     teach: (player: Player, event: string) -> (),
+    -- Lifetime banked Glob, which is what decides whether the power in slot 3
+    -- is actually unlocked. Read through deps rather than cached on the run:
+    -- it can cross an unlock threshold mid-round, and a hotbar that only
+    -- refreshed on respawn would show a power the server then refuses.
+    banked: (player: Player) -> number,
+    -- Powers handed over by the BETA SEASON's free track rather than earned on
+    -- the banking ladder. A second way to own a power, and the only way into
+    -- the two that are not on the ladder at all.
+    granted: (player: Player) -> { [string]: boolean },
     powerUses: (player: Player) -> { [string]: number },
     notePowerUse: (player: Player, id: string) -> (),
     -- Everything a finished round owes the PROFILE rather than the wallet:
@@ -4099,7 +4339,8 @@ end
 -- Seconds a dropper cannot re-eat what it just shed.
 local OWNER_LOCKOUT = 4
 
-local function spawnPellet(at: Vector3?, value: number?, golden: boolean?, owner: number?)
+local function spawnPellet(at: Vector3?, value: number?, golden: boolean?,
+    owner: number?, owner2: number?)
     if pelletCount >= Config.PELLET_TARGET + 260 then
         return -- the floor is already carpeted; dropping more helps nobody
     end
@@ -4133,7 +4374,8 @@ local function spawnPellet(at: Vector3?, value: number?, golden: boolean?, owner
         value = worth,
         key = cellKey(pos.X, pos.Z),
         owner = owner,
-        ownerUntil = owner and (os.clock() + OWNER_LOCKOUT) or 0,
+        owner2 = owner2,
+        ownerUntil = (owner or owner2) and (os.clock() + OWNER_LOCKOUT) or 0,
     }
     pellets[part] = p
     gridAdd(p)
@@ -4265,7 +4507,8 @@ end
 -- standing nearby. That is the entire comeback loop in one function.
 --
 -- Returns how much was removed, so a thief (SIPHON) can keep it instead.
-local function deflate(target: Player, targetRun: Run, fraction: number, scatterIt: boolean): number
+local function deflate(target: Player, targetRun: Run, fraction: number,
+    scatterIt: boolean, byUserId: number?): number
     if fraction <= 0 then
         return 0
     end
@@ -4286,7 +4529,7 @@ local function deflate(target: Player, targetRun: Run, fraction: number, scatter
             local a = math.rad((360 / n) * i + rng:NextNumber(-12, 12))
             local d = radius * 1.6 + rng:NextNumber(3, 18)
             spawnPellet(Vector3.new(at.X + math.cos(a) * d, at.Y, at.Z + math.sin(a) * d),
-                food / n, false, target.UserId)
+                food / n, false, target.UserId, byUserId)
         end
     end
 
@@ -4302,7 +4545,8 @@ end
 --- What must NOT diverge is the fraction and the fact that what comes off
 --- lands as food — both come straight from Config here, same as for a player,
 --- so deflating the leader feeds the island whether the leader is human or not.
-local function deflateBot(bot: any, fraction: number, scatterIt: boolean): number
+local function deflateBot(bot: any, fraction: number, scatterIt: boolean,
+    byUserId: number?): number
     local taken = bot.mass * math.clamp(fraction, 0, 0.9)
     if taken <= 0 then
         return 0
@@ -4316,7 +4560,7 @@ local function deflateBot(bot: any, fraction: number, scatterIt: boolean): numbe
             local a = math.rad((360 / drops) * i) + rng:NextNumber(-0.3, 0.3)
             local d = r * 1.8 + rng:NextNumber(3, 14)
             spawnPellet(Vector3.new(bot.pos.X + math.cos(a) * d, 2,
-                bot.pos.Z + math.sin(a) * d), back / drops, false)
+                bot.pos.Z + math.sin(a) * d), back / drops, false, nil, byUserId)
         end
     end
     return taken
@@ -4396,6 +4640,8 @@ local function sendToArena(player: Player, index: number)
         run.activeEffect = nil
         run.powerUntil = 0
         run.ateThisRun = 0
+        run.snagUntil = 0
+        run.slotReadyAt = { 0, 0, 0 }
         run.startedAt = os.clock()
         run.safeUntil = os.clock() + POP_INVULN
         RollService.setRadius(player, Blob.radius(run.mass))
@@ -4411,6 +4657,9 @@ local function newRun(player: Player): Run
     return {
         mass = Config.STARTING_MASS,
         powerId = Powers.get(powerId) and powerId or Powers.DEFAULT,
+        slotReadyAt = { 0, 0, 0 },
+        globlets = {},
+        snagUntil = 0,
         powerReadyAt = 0,
         powerUntil = 0,
         activeEffect = nil,
@@ -4562,6 +4811,10 @@ end
 -- ── Popping ────────────────────────────────────────────────────────────────
 
 local function pop(player: Player, at: Vector3, killer: Player?)
+    -- Your tethers die with you. A fence still standing after its builder has
+    -- been eaten is a wire to nowhere, and it would let a dead player keep
+    -- shaping the fight from the respawn queue.
+    GoopService.clearOwner(player.UserId)
     local run = runs[player.UserId]
     if not run then
         return
@@ -4638,7 +4891,15 @@ end
 
 -- ── Powers ─────────────────────────────────────────────────────────────────
 
-function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?)
+--- THE HOTBAR, resolved. Slot 1 is DASH, slot 2 is SPLIT, slot 3 is the power
+--- the player chose. One function, so "what is in slot 3" has a single answer
+--- on the server and the client reads the same one off the snapshot.
+function ArenaService.hotbarFor(player: Player): { any }
+    local run = runs[player.UserId]
+    return Powers.hotbar(run and run.powerId, deps.banked(player), deps.granted(player))
+end
+
+function ArenaService.usePower(player: Player, slot: number?, aim: Vector3?): (boolean, string?)
     local run = runs[player.UserId]
     if not run then
         return false, "You're not in the arena."
@@ -4646,16 +4907,25 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if phase ~= "PLAYING" then
         return false, "Wait for the round to start."
     end
-    local now = os.clock()
-    if now < run.powerReadyAt then
-        return false, ("%.1fs"):format(run.powerReadyAt - now)
-    end
-    local power = Powers.get(run.powerId)
+    -- Defaulting to slot 1 rather than rejecting a missing slot: an old client
+    -- that has not been reloaded still sends the one-button shape, and having
+    -- its DASH silently stop working would be a much worse failure than having
+    -- it press the first slot.
+    local index = math.clamp(math.floor(tonumber(slot) or 1), 1, 3)
+    local bar = Powers.hotbar(run.powerId, deps.banked(player), deps.granted(player))
+    local power = bar[index]
     if not power then
-        return false, "No power equipped."
+        return false, "Nothing in that slot."
     end
-    local uses = usesOf(player, run.powerId)
-    local cost = Powers.massCost(run.powerId, run.mass, uses)
+
+    local now = os.clock()
+    run.slotReadyAt = run.slotReadyAt or { 0, 0, 0 }
+    if now < (run.slotReadyAt[index] or 0) then
+        return false, ("%.1fs"):format(run.slotReadyAt[index] - now)
+    end
+
+    local uses = usesOf(player, power.id)
+    local cost = Powers.massCost(power.id, run.mass, uses)
     if run.mass - cost < Config.STARTING_MASS * 0.5 then
         return false, "Too small to pay for that."
     end
@@ -4665,8 +4935,13 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     end
 
     run.mass -= cost
-    run.powerReadyAt = now + Powers.cooldown(run.powerId, run.trinkets.powerHaste, uses)
-    deps.notePowerUse(player, run.powerId)
+    run.slotReadyAt[index] = now + Powers.cooldown(power.id, run.trinkets.powerHaste, uses)
+    deps.notePowerUse(player, power.id)
+    -- `activePower` is what the rest of this function branches on. It used to
+    -- read run.powerId directly, which was correct when the blob carried one
+    -- power and is wrong now: pressing DASH would have run the chosen power's
+    -- effect while charging DASH's cooldown.
+    local activePower = power.id
     -- Settle any outstanding SPLIT first. activeEffect is overwritten below,
     -- so without this the thrown half is orphaned the moment you press any
     -- other power and its mass is silently deleted — you pay half of yourself
@@ -4677,7 +4952,7 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     end
 
     run.powerUntil = now + math.max(0.05, power.duration)
-    run.activeEffect = run.powerId
+    run.activeEffect = activePower
 
     -- The mass you spend is not deleted: it lands on the floor as food. Powers
     -- feeding the island is what stops a lobby full of dashing from starving
@@ -4697,18 +4972,28 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     dir = Vector3.new(dir.X, 0, dir.Z)
     dir = dir.Magnitude > 0.01 and dir.Unit or Vector3.new(0, 0, 1)
 
-    if run.powerId == "dash" then
+    if activePower == "dash" then
         ball.AssemblyLinearVelocity = dir * 110 + Vector3.new(0, 8, 0)
-    elseif run.powerId == "slam" then
+    elseif activePower == "slam" then
         ball.AssemblyLinearVelocity = Vector3.new(0, 74, 0) + dir * 24
         -- The impact is not instant: it lands when you do. tickPlayer watches
         -- slamUntil and fires the shockwave at the bottom of the arc, which is
         -- the only timing that reads as a slam rather than a shrug.
         run.slamUntil = now + SLAM_AIRTIME
-    elseif run.powerId == "split" then
-        ball.AssemblyLinearVelocity = dir * 128
-        run.splitOwed = cost
-    elseif run.powerId == "hook" then
+    elseif activePower == "split" then
+        -- THROW, don't lunge. The old SPLIT shoved your whole body forward at
+        -- 128 studs/sec and booked half your mass to be refunded later, which
+        -- is a dash with a bill attached — it looked like nothing had split.
+        -- Now it actually splits: pieces leave the body, fly out on their own,
+        -- eat, and come back, each one trailing a tether that other blobs have
+        -- to respect.
+        local each = math.max(Config.LEAK_PELLET_MASS, run.mass * 0.06)
+        local thrown = GoopService.split(player.UserId, ball.Position, dir,
+            each, Config.SPLIT_PIECES, ball.Color, false)
+        run.mass = math.max(Config.STARTING_MASS, run.mass - thrown)
+        ball.AssemblyLinearVelocity = dir * 42 + Vector3.new(0, 6, 0)
+        deps.effect(player, "split", { pieces = Config.SPLIT_PIECES })
+    elseif activePower == "hook" then
         -- Reel. Bigger drags smaller toward it; smaller drags ITSELF toward
         -- bigger, which is what makes HOOK a chase tool for the hunter and an
         -- escape-the-open-ground tool for the hunted with the same button.
@@ -4744,7 +5029,7 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 else
                     ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
                 end
-                deflateBot(hookBot, Config.DEFLATE.hook, true)
+                deflateBot(hookBot, Config.DEFLATE.hook, true, player.UserId)
                 deps.teach(player, "deflate")
                 deps.effect(player, "hook", { to = hookBot.name })
             end
@@ -4762,13 +5047,13 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                     else
                         ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
                     end
-                    deflate(target, tr, Config.DEFLATE.hook, true)
+                    deflate(target, tr, Config.DEFLATE.hook, true, player.UserId)
                     deps.teach(player, "deflate")
                     deps.effect(player, "hook", { to = target.DisplayName })
                 end
             end
         end
-    elseif run.powerId == "blink" then
+    elseif activePower == "blink" then
         -- A teleport, not a shove. It goes THROUGH blobs and lumps, which is
         -- the only thing DASH cannot do, and is why it costs more than twice
         -- as much. Routed through RollService.teleport so the anti-cheat is
@@ -4782,10 +5067,10 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         end
         RollService.teleport(player, to + Vector3.new(0, 4, 0))
 
-    elseif run.powerId == "decoy" then
+    elseif activePower == "decoy" then
         spawnDecoy(player, run, ball.Position - dir * (radius * 2.2))
 
-    elseif run.powerId == "siphon" then
+    elseif activePower == "siphon" then
         -- Drains the nearest blob BIGGER than you. The only power in the game
         -- that works exclusively upward: it is the comeback tool, so it has to
         -- be useless to whoever is already winning.
@@ -4830,11 +5115,11 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
             deps.effect(target, "siphoned", { by = player.DisplayName, amount = drained })
         end
 
-    elseif run.powerId == "magnet" or run.powerId == "beacon" then
+    elseif activePower == "magnet" or activePower == "beacon" then
         -- handled in tick while powerUntil holds
     end
 
-    deps.effect(player, "power", { id = run.powerId, cost = cost })
+    deps.effect(player, "power", { id = activePower, cost = cost, slot = index })
     deps.teach(player, "power")
     return true, nil
 end
@@ -4904,7 +5189,9 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
             if bucket then
                 for part, pellet in pairs(bucket) do
                     if part.Parent then
-                        local mine = pellet.owner == player.UserId and now < pellet.ownerUntil
+                        local mine = now < pellet.ownerUntil
+                            and (pellet.owner == player.UserId
+                                or pellet.owner2 == player.UserId)
                         local d = (part.Position - pos)
                         if not mine and d.Magnitude <= reach then
                             local worth = pellet.value * run.trinkets.pelletMult
@@ -4959,7 +5246,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                         + Vector3.new(0, 26 * falloff, 0)
                     -- Scaled by how central the hit was, so a clean slam on
                     -- the leader is worth lining up.
-                    deflate(other, orun, Config.DEFLATE.slam * falloff, true)
+                    deflate(other, orun, Config.DEFLATE.slam * falloff, true, player.UserId)
                     deps.teach(player, "deflate")
                     hits += 1
                 end
@@ -4976,7 +5263,7 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                     local falloff = 1 - (flat.Magnitude / SLAM_RADIUS)
                     bot.pos += flat.Unit * (SLAM_RADIUS * 0.5 * falloff)
                     bot.goal = bot.pos
-                    deflateBot(bot, Config.DEFLATE.slam * falloff, true)
+                    deflateBot(bot, Config.DEFLATE.slam * falloff, true, player.UserId)
                     hits += 1
                 end
             end
@@ -5071,6 +5358,151 @@ local function tickCombat(list: { Player }, now: number)
                                 end
                             end
                         end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ── Goop: globlets, tethers and pods ──────────────────────────────────────
+
+--- Where a given owner's body is, for GoopService to reel its pieces home.
+--- Negative ids are bots; positive are players. One function so the tether
+--- system never has to know which it is dealing with.
+local function bodyPosFor(ownerId: number): Vector3?
+    if ownerId < 0 then
+        for _, bot in ipairs(BotService.living()) do
+            if -bot.id == ownerId then
+                return bot.pos
+            end
+        end
+        return nil
+    end
+    local player = Players:GetPlayerByUserId(ownerId)
+    local run = player and runs[player.UserId]
+    local ball = run and RollService.ballFor(player)
+    return (ball and ball.Parent) and ball.Position or nil
+end
+
+--- Pay a returning globlet's mass back to whoever threw it.
+local function payBack(ownerId: number, mass: number)
+    local back = mass * Config.SPLIT_RETURN_FRACTION
+    if ownerId < 0 then
+        for _, bot in ipairs(BotService.living()) do
+            if -bot.id == ownerId then
+                bot.mass += back
+                return
+            end
+        end
+        return
+    end
+    local player = Players:GetPlayerByUserId(ownerId)
+    local run = player and runs[player.UserId]
+    if run then
+        run.mass += back
+    end
+end
+
+--- Everything the goop layer does in one tick: move the pieces, let them eat,
+--- bite anybody crossing a strand, and burst anybody big who walked into a pod.
+---
+--- ALL the mass rules live here rather than in GoopService, for the same
+--- reason they live here rather than in BotService: "how much does this take
+--- off you" must have exactly one answer for players and bots alike.
+local function tickGoop(dt: number, now: number, list: { Player })
+    -- Pieces move, then eat off the floor at their own small reach.
+    local returned = GoopService.step(dt, now, bodyPosFor)
+    for _, g in ipairs(returned) do
+        payBack(g.ownerId, g.mass)
+    end
+    for _, g in ipairs(GoopService.list()) do
+        g.mass += harvestAt(g.pos, Config.GLOBLET_PICKUP + Blob.radius(g.mass) * 0.5)
+    end
+
+    -- ── Tethers ───────────────────────────────────────────────────────────
+    --
+    -- Deliberately weak per touch and on a per-victim cooldown: this is area
+    -- denial, not a damage engine. Walking the length of a strand costs you a
+    -- noticeable slice; clipping the end of one barely registers.
+    local live = GoopService.list()
+    if #live > 0 then
+        for _, g in ipairs(live) do
+            local home = bodyPosFor(g.ownerId)
+            if home then
+                for _, player in ipairs(list) do
+                    local run = runs[player.UserId]
+                    local ball = run and RollService.ballFor(player)
+                    -- NEVER YOUR OWN. A fence that cut its own builder would
+                    -- make splitting strictly self-harming, which is the one
+                    -- way to guarantee nobody ever presses the button.
+                    if run and ball and ball.Parent and g.ownerId ~= player.UserId
+                        and not protected(player, run, now) then
+                        local d = GoopService.distanceToStrand(g, home, ball.Position)
+                        if d <= Config.TETHER_WIDTH + Blob.radius(run.mass)
+                            and GoopService.canHit(g, "p" .. player.UserId, now) then
+                            deflate(player, run, Config.TETHER_DEFLATE, true,
+                                g.ownerId > 0 and g.ownerId or nil)
+                            run.snagUntil = now + Config.TETHER_SLOW_TIME
+                            deps.effect(player, "snagged", {})
+                        end
+                    end
+                end
+                for _, bot in ipairs(BotService.living()) do
+                    if g.ownerId ~= -bot.id and not botProtected(bot) then
+                        local d = GoopService.distanceToStrand(g, home, bot.pos)
+                        if d <= Config.TETHER_WIDTH + Blob.radius(bot.mass)
+                            and GoopService.canHit(g, "b" .. bot.id, now) then
+                            deflateBot(bot, Config.TETHER_DEFLATE, true,
+                                g.ownerId > 0 and g.ownerId or nil)
+                            bot.snagUntil = now + Config.TETHER_SLOW_TIME
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- ── Spore pods ────────────────────────────────────────────────────────
+    --
+    -- Only blobs over POD_MIN_MASS set one off, which is the whole reason the
+    -- things are on the map: a pod field is ground a small player can hide in
+    -- and a big one cannot follow into.
+    GoopService.regrowPods(now)
+    for _, pod in ipairs(GoopService.pods()) do
+        if pod.readyAt == 0 then
+            for _, player in ipairs(list) do
+                local run = runs[player.UserId]
+                local ball = run and RollService.ballFor(player)
+                if run and ball and ball.Parent and run.mass >= Config.POD_MIN_MASS then
+                    local flat = Vector3.new(ball.Position.X - pod.pos.X, 0,
+                        ball.Position.Z - pod.pos.Z)
+                    if flat.Magnitude <= Config.POD_RADIUS + Blob.radius(run.mass) then
+                        -- A BURST, NOT A TAX. The mass is not destroyed and it
+                        -- is not handed to anybody — it leaves as globlets and
+                        -- comes back. What the pod costs you is CONTROL: for a
+                        -- few seconds your tethers are everywhere at once,
+                        -- which is dangerous for everyone nearby, including
+                        -- whoever herded you into it.
+                        local each = math.max(Config.LEAK_PELLET_MASS,
+                            run.mass * 0.05)
+                        local thrown = GoopService.split(player.UserId, ball.Position,
+                            ball.CFrame.LookVector, each, Config.POD_PIECES,
+                            ball.Color, true)
+                        run.mass = math.max(Config.STARTING_MASS, run.mass - thrown)
+                        -- SHOVED CLEAR. Without this a blob that stops on a
+                        -- pod re-bursts the instant it regrows, forever: the
+                        -- pod is permanently useless to everybody else and the
+                        -- blob is permanently scattered. The shove is outward
+                        -- from the pod along the approach, which also reads
+                        -- correctly — the thing exploded underneath you.
+                        local away = flat.Magnitude > 0.01 and flat.Unit
+                            or Vector3.new(0, 0, 1)
+                        ball.AssemblyLinearVelocity = away * 70 + Vector3.new(0, 26, 0)
+                        GoopService.spendPod(pod, now)
+                        deps.effect(player, "podBurst", { pieces = Config.POD_PIECES })
+                        deps.notify(player, "\u{1F4A5} A spore pod burst you open!", "warn")
+                        break
                     end
                 end
             end
@@ -5250,6 +5682,10 @@ local function beginLobby()
     -- nobody is in costs a Heartbeat's worth of work per bot for an empty
     -- stage, and it makes the lobby's "round starts in" clock read as a lie.
     BotService.clear()
+    -- Strands with nothing on either end of them, and a hazard field nobody is
+    -- standing in. Both go with the round.
+    GoopService.clear()
+    GoopService.clearPods()
     phase = "LOBBY"
     phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
     local i = 0
@@ -5279,6 +5715,12 @@ local function beginRound()
     for _ = 1, Config.PELLET_TARGET do
         spawnPellet(nil, nil, rng:NextNumber() < 0.012)
     end
+    -- Pods are re-scattered every round rather than placed once at boot: their
+    -- positions are most of a round's terrain knowledge, and a map whose
+    -- hazards never move is one where the regulars always know where the small
+    -- players are hiding.
+    GoopService.clear()
+    GoopService.seedPods()
 
     local humans = #Players:GetPlayers()
 
@@ -5410,6 +5852,9 @@ function ArenaService.start(injected: Deps)
                 -- walked into you is eaten on the tick it arrives rather than
                 -- appearing to phase through and get you on the next one.
                 tickBots(dt, now, active)
+                -- Goop before combat: a globlet that just arrived should bite
+                -- on the tick it lands, not the one after.
+                tickGoop(dt, now, active)
                 tickCombat(active, now)
                 tickBotCombat(active, now)
                 topUpPellets(dt)
@@ -5437,7 +5882,35 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         banking = run.banking,
         bankNeeds = Blob.bankSeconds(run.trinkets.bankHaste),
         powerId = run.powerId,
-        powerCooldown = math.max(0, run.powerReadyAt - now),
+        -- ── THE HOTBAR ────────────────────────────────────────────────────
+        -- Three slots, resolved server-side. The client draws exactly what is
+        -- in here and decides nothing: the third slot depends on what the
+        -- player owns, and a button that offers something the server will
+        -- refuse is the worst kind of control.
+        slots = (function()
+            local bar = Powers.hotbar(run.powerId, deps.banked(player), deps.granted(player))
+            local out = {}
+            for i, power in ipairs(bar) do
+                local uses = usesOf(player, power.id)
+                table.insert(out, {
+                    id = power.id,
+                    name = power.name,
+                    cost = Powers.massCost(power.id, run.mass, uses),
+                    cooldown = math.max(0, (run.slotReadyAt[i] or 0) - now),
+                    cooldownMax = Powers.cooldown(power.id, run.trinkets.powerHaste, uses),
+                    mastery = Powers.masteryTier(uses),
+                    locked = false,
+                })
+            end
+            return out
+        end)(),
+        globlets = GoopService.countFor(player.UserId),
+        snagged = now < run.snagUntil,
+        -- KEPT, and now derived from slot 3 rather than from a field nothing
+        -- writes. `run.powerReadyAt` stopped being set when cooldowns moved
+        -- per-slot, so this quietly reported "always ready" for the chosen
+        -- power to anything still reading it.
+        powerCooldown = math.max(0, (run.slotReadyAt[3] or 0) - now),
         powerCost = Powers.massCost(run.powerId, run.mass, usesOf(player, run.powerId)),
         mastery = Powers.masteryTier(usesOf(player, run.powerId)),
         lit = run.activeEffect == "beacon" and now < run.powerUntil,
@@ -5469,6 +5942,24 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
     }
 end
 
+--- Who a crumb is locked against, and until when.
+---
+--- Exposed because the lock is invisible from outside and therefore untestable
+--- from outside: deflation drops belong to nobody for a few seconds except the
+--- two blobs that made them, and the only way to tell one of those crumbs from
+--- the fourteen hundred ambient pellets on the floor is to ask. A test that
+--- guessed — "the newest part near the victim is probably a drop" — would be
+--- wrong roughly as often as the respawn rate, which is forty-eight a second.
+---
+--- Read-only, and it returns nothing for a part that is not a live pellet.
+function ArenaService.pelletLock(part: BasePart): (number?, number?, number)
+    local p = pellets[part]
+    if not p then
+        return nil, nil, 0
+    end
+    return p.owner, p.owner2, p.ownerUntil
+end
+
 -- Exposed for tests: the island's live contents.
 function ArenaService.stats()
     return {
@@ -5480,7 +5971,7 @@ function ArenaService.stats()
 end
 
 return ArenaService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">BotService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">BotService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- BotService.luau — the rest of the field.
 --
 -- WHY THIS EXISTS. An arena game with three people in it is not a small
@@ -5534,6 +6025,7 @@ export type Bot = {
     nextThink: number,
     respawnAt: number,     -- 0 when alive
     rimGrace: number,
+    snagUntil: number,     -- slowed by somebody's tether; see GoopService
     committed: boolean,    -- has it ever left the rim; see Config.SHALLOWS_GRACE
     part: BasePart?,
     label: TextLabel?,
@@ -5603,9 +6095,9 @@ local function makeBody(bot: Bot)
     p.Position = bot.pos
     p.Parent = parent
 
-    -- Named, and openly tagged as a bot. Pretending otherwise is a lie the
-    -- player catches the first time one walks into a wall, and being caught
-    -- lying costs more trust than the illusion was ever worth.
+    -- Just the name, the same way a player's nameplate reads. The robot tag
+    -- that used to hang here made a full island look like an empty one — see
+    -- Config.BOT_FIRST.
     local gui = Instance.new("BillboardGui")
     gui.Name = "Tag"
     gui.Size = UDim2.fromScale(9, 2)
@@ -5619,7 +6111,7 @@ local function makeBody(bot: Bot)
     tl.TextScaled = true
     tl.TextStrokeTransparency = 0.35
     tl.TextColor3 = Color3.fromRGB(226, 232, 240)
-    tl.Text = bot.name .. " 🤖"
+    tl.Text = bot.name
     tl.Parent = gui
     gui.Parent = p
 
@@ -5652,24 +6144,30 @@ local function pickSkill()
     return Config.BOT_SKILLS[1]
 end
 
--- Names must be unique within a round. A board with two "Gloop" rows on it
+-- Names must be unique within a round. A board with two identical rows on it
 -- looks like a bug even when it is not, and the player cannot tell which one
 -- just ate them.
+--
+-- Shaped like a Roblox username — a name and some digits — rather than like a
+-- blob pet. See Config.BOT_FIRST for why the cute names and the robot tags
+-- both went.
 local function pickName(): string
     local taken: { [string]: boolean } = {}
     for _, b in ipairs(bots) do
         taken[b.name] = true
     end
-    local pool = {}
-    for _, n in ipairs(Config.BOT_NAMES) do
+    for _ = 1, 40 do
+        local stem = Config.BOT_FIRST[rng:NextInteger(1, #Config.BOT_FIRST)]
+        local n = stem .. tostring(rng:NextInteger(
+            Config.BOT_SUFFIX_MIN, Config.BOT_SUFFIX_MAX))
         if not taken[n] then
-            table.insert(pool, n)
+            return n
         end
     end
-    if #pool == 0 then
-        return "Blob " .. nextId
-    end
-    return pool[rng:NextInteger(1, #pool)]
+    -- Forty collisions against a pool of tens of thousands means the generator
+    -- is broken, not unlucky. A guaranteed-unique fallback beats a loop that
+    -- could spin forever on a server that has been up for a week.
+    return "Blob" .. nextId
 end
 
 local function spawnPos(): Vector3
@@ -5693,6 +6191,7 @@ local function newBot(): Bot
         nextThink = 0,
         respawnAt = 0,
         rimGrace = Config.SHALLOWS_GRACE,
+        snagUntil = 0,
         committed = false,
         part = nil,
         label = nil,
@@ -5858,6 +6357,7 @@ function BotService.step(dt: number, now: number, field: { Contender },
                 bot.mode = "wander"
                 bot.nextThink = 0
                 bot.rimGrace = Config.SHALLOWS_GRACE
+                bot.snagUntil = 0
                 bot.committed = false
                 makeBody(bot)
             end
@@ -5898,7 +6398,31 @@ function BotService.step(dt: number, now: number, field: { Contender },
                 bot.heading = (bot.heading:Lerp(to.Unit, math.clamp(dt * 4, 0, 1))).Unit
             end
             local speed = Blob.speed(bot.mass) * Config.BOT_SPEED_MULT
-            bot.pos = clampToIsland(bot.pos + bot.heading * speed * dt)
+            -- Tethers slow bots exactly as they slow players. A fence the AI
+            -- could walk through at full speed would make splitting useless in
+            -- the games that are mostly bots, which is most games.
+            if now < bot.snagUntil then
+                speed *= Config.TETHER_SLOW
+            end
+            -- MOVE, THEN GET PUSHED OUT OF ANYTHING SOLID.
+            --
+            -- A kinematic body is not in the physics world, so CanCollide on a
+            -- boulder means nothing to it — which is why bots walked straight
+            -- through every rock and ramp on the island, the single most
+            -- obvious tell that a thing is not a player. WorldBuilder keeps a
+            -- footprint for every solid prop; this resolves against it.
+            local wanted = clampToIsland(bot.pos + bot.heading * speed * dt)
+            local r0 = Blob.radius(bot.mass)
+            local resolved, blocked = WorldBuilder.pushOut(wanted, r0 * 0.9)
+            bot.pos = clampToIsland(resolved)
+            if blocked then
+                -- Turn along the wall rather than grinding into it. Without
+                -- this a bot that walked into a rock stayed pressed against it
+                -- for the rest of its think interval, vibrating.
+                local slide = Vector3.new(-bot.heading.Z, 0, bot.heading.X)
+                bot.heading = (bot.heading * 0.35 + slide * 0.65).Unit
+                bot.goal = bot.pos + bot.heading * 60
+            end
 
             local r = Blob.radius(bot.mass)
             bot.pos = Vector3.new(bot.pos.X, 2 + r, bot.pos.Z)
@@ -5919,7 +6443,7 @@ function BotService.step(dt: number, now: number, field: { Contender },
 end
 
 return BotService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">CensusService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">CensusService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CensusService.luau — how many of each thing still exist, worldwide.
 --
 -- WHY THIS IS THE MOST IMPORTANT SCREEN IN THE GAME:
@@ -6110,7 +6634,7 @@ function CensusService.start()
 end
 
 return CensusService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CrewStore.luau — crews live in their own DataStore because they are shared
 -- between players and between servers. A crew read here may have been written
 -- by a different server thirty seconds ago, so every mutation goes through
@@ -6214,7 +6738,7 @@ function CrewStore.isEnabled(): boolean
 end
 
 return CrewStore
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000024"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Data.luau — profile persistence.
 --
 -- Uses DataStore with session locking, retry/backoff and a bind-to-close
@@ -6232,7 +6756,6 @@ local Config = require(game.ReplicatedStorage.GoobShared.Config)
 local Names = require(game.ReplicatedStorage.GoobShared.Names)
 local Powers = require(game.ReplicatedStorage.GoobShared.Powers)
 local Trinkets = require(game.ReplicatedStorage.GoobShared.Trinkets)
-local Tutorial = require(game.ReplicatedStorage.GoobShared.Tutorial)
 local Cosmetics = require(game.ReplicatedStorage.GoobShared.Cosmetics)
 local Season = require(game.ReplicatedStorage.GoobShared.Season)
 
@@ -6270,7 +6793,6 @@ function Data.blankProfile(userId: number)
         lastSeen = os.time(),
         stats = { caught = 0, gulps = 0, trades = 0, bestMass = Config.STARTING_MASS },
         discovered = {} :: { [string]: boolean },
-        tutorial = Tutorial.blank(),
         crests = 0,
         totalAscensions = 0,
         pitWins = 0,
@@ -6288,6 +6810,9 @@ function Data.blankProfile(userId: number)
         trinketSlots = {} :: { string },
         cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
         bestBank = 0,
+        -- Powers handed over by the season track rather than earned by
+        -- banking. See Season.POWER_AT: free track only, by construction.
+        powersGranted = {} :: { [string]: boolean },
         roundsPlayed = 0,                          -- earns eggs; never spent
         powerUses = {} :: { [string]: number },    -- mastery, per power
         streak = 0,
@@ -6362,7 +6887,9 @@ function Data.load(player: Player)
     profile.powerUses = profile.powerUses or {}
     profile.streak = profile.streak or 0
     profile.streakDay = profile.streakDay or 0
-    if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked) then
+    profile.powersGranted = profile.powersGranted or {}
+    if not Powers.isOwned(profile.powerId or "", profile.lifetimeBanked,
+        profile.powersGranted) then
         profile.powerId = Powers.DEFAULT
     end
     -- Drop equipped trinkets the player does not actually own. This runs on
@@ -6389,15 +6916,10 @@ function Data.load(player: Player)
 
     profile.season = profile.season or Season.blank()
     Season.rollIfNeeded(profile.season)
-    -- Players who joined before the tutorial existed already know the game, so
-    -- they get it marked complete rather than being walked through it.
-    if not profile.tutorial then
-        local t = Tutorial.blank()
-        t.done = true
-        t.dismissed = true
-        t.step = #Tutorial.STEPS
-        profile.tutorial = t
-    end
+    -- The first-run tutorial is gone, and so is the per-profile record it kept.
+    -- `profile.tutorial` is simply dropped on load rather than migrated: it is
+    -- a few bytes of dead weight in every saved profile and nothing reads it.
+    profile.tutorial = nil
     if not profile.activeGoobId and profile.goobs[1] then
         profile.activeGoobId = profile.goobs[1].id
     end
@@ -6442,7 +6964,7 @@ function Data.isEnabled(): boolean
 end
 
 return Data
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000025"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000024"><Properties><string name="Name">GoobService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- GoobService.luau — spawns, renders and simulates the Goobs sitting on plots.
 --
 -- The visual gimmick of the whole game lives here: a Goob is a translucent
@@ -6879,6 +7401,434 @@ function GoobService.applyOffline(player: Player)
 end
 
 return GoobService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000025"><Properties><string name="Name">GoopService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- GoopService.luau — globlets, tethers and spore pods.
+--
+-- THE PART OF THIS GAME THAT IS NOT AGAR.IO.
+--
+-- Splitting is the genre's signature move, and copying it outright would make
+-- this a worse agar with extra menus. So it is copied and then given one twist
+-- that changes what the move is for.
+--
+-- A SPLIT throws three globlets forward. They are not a second body you steer
+-- — that needs a second controller and a camera that can hold two things, and
+-- it is most of why blob clones feel terrible on a phone. They fly out, hoover
+-- pellets, and come home. You stay one blob, with one camera, on one thumb.
+--
+-- THE TETHER IS THE TWIST. Every globlet stays joined to you by a visible
+-- strand of goo, and any blob that crosses a strand is deflated and slowed. A
+-- split is therefore not only a lunge — it is three lines drawn across the
+-- floor that everybody else has to go around. Split past someone and you have
+-- fenced them in. Split while running and you have laid a wire behind you.
+-- Split into a crowd and you hit all of it at once.
+--
+-- That turns "commit half of yourself to reach something" into "commit part of
+-- yourself to CONTROL SPACE", which is a different decision, and one I cannot
+-- find in any other blob game.
+--
+-- SPORE PODS are the hazard built on top of it. Touch one while you are big
+-- and it bursts you into a whole web at once. You lose nothing to the pod
+-- itself — the point is not a tax, it is that for a few seconds your tethers
+-- are suddenly everywhere, which is dangerous for everyone nearby including
+-- whoever herded you into it. Small blobs pass straight through, so a pod
+-- field is somewhere the little ones can hide and the big ones cannot follow.
+--
+-- ── WHAT THIS MODULE OWNS ─────────────────────────────────────────────────
+--
+-- Positions and parts. It owns where a globlet is, where a pod is, and which
+-- strands exist. It owns NO rule about mass: how much a tether takes, who it
+-- may take from, and what happens to what it takes are all ArenaService's,
+-- which resolves them for players and bots through the same code. The same
+-- split that keeps BotService honest keeps this honest.
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local Blob = require(Shared.Blob)
+
+local WorldBuilder = require(script.Parent.WorldBuilder)
+
+local GoopService = {}
+
+export type Globlet = {
+    id: number,
+    ownerId: number,       -- UserId, or a negative id for a bot
+    mass: number,
+    pos: Vector3,
+    dir: Vector3,
+    travelled: number,
+    returning: boolean,
+    bornAt: number,
+    part: BasePart?,
+    strand: BasePart?,
+}
+
+export type Pod = {
+    id: number,
+    pos: Vector3,
+    readyAt: number,       -- 0 when standing; a timestamp while regrowing
+    part: BasePart?,
+}
+
+local globlets: { Globlet } = {}
+local pods: { Pod } = {}
+local nextId = 1
+local rng = Random.new(os.clock() * 1e6 // 1 + 31)
+local folder: Folder?
+
+-- Per (globlet, victim) so one strand cannot chain-hit the same blob every
+-- tick. Keyed by globlet id and victim key; swept when a globlet dies.
+local tetherHits: { [string]: number } = {}
+
+-- ── Parts ──────────────────────────────────────────────────────────────────
+
+local function ensureFolder(): Folder?
+    if folder and folder.Parent then
+        return folder
+    end
+    local arena = WorldBuilder.arenaFolder()
+    local world = arena and arena.Parent
+    if not world then
+        return nil
+    end
+    local f = Instance.new("Folder")
+    f.Name = "Goop"
+    f.Parent = world
+    folder = f
+    return f
+end
+
+local function makeGlobletParts(g: Globlet, tint: Color3)
+    local parent = ensureFolder()
+    if not parent then
+        return
+    end
+    local r = math.max(2, Blob.radius(g.mass) * 0.55)
+
+    local p = Instance.new("Part")
+    p.Name = "Globlet"
+    p.Shape = Enum.PartType.Ball
+    p.Size = Vector3.new(1, 1, 1) * (r * 2)
+    p.Anchored = true
+    -- Resolved by distance in ArenaService, never by a touch event. A globlet
+    -- that could be physically shoved would be a second, contradictory answer
+    -- to "what happens when we meet".
+    p.CanCollide = false
+    p.CanTouch = false
+    p.CanQuery = false
+    p.Material = Enum.Material.Neon
+    p.Color = tint
+    p.Position = g.pos
+    p.Parent = parent
+    g.part = p
+
+    -- THE STRAND. One thin neon box stretched between the body and the
+    -- globlet, re-aimed every tick. A Beam would look better and cannot be
+    -- used: the hit test has to agree with what the player sees, and a Beam's
+    -- curve has no server-side geometry to test against. A straight box is
+    -- exactly the segment the maths uses, so what looks like a wire IS the
+    -- wire.
+    local strand = Instance.new("Part")
+    strand.Name = "Strand"
+    strand.Anchored = true
+    strand.CanCollide = false
+    strand.CanTouch = false
+    strand.CanQuery = false
+    strand.Material = Enum.Material.Neon
+    strand.Color = tint
+    strand.Transparency = 0.25
+    strand.Size = Vector3.new(1, 1, 1)
+    strand.Parent = parent
+    g.strand = strand
+end
+
+local function destroyGloblet(g: Globlet)
+    if g.part then g.part:Destroy() end
+    if g.strand then g.strand:Destroy() end
+    g.part = nil
+    g.strand = nil
+    for key in pairs(tetherHits) do
+        if key:sub(1, #tostring(g.id) + 1) == tostring(g.id) .. ":" then
+            tetherHits[key] = nil
+        end
+    end
+end
+
+-- ── Globlets ───────────────────────────────────────────────────────────────
+
+--- Throw `count` globlets out of a body. Returns the total mass committed, so
+--- the caller — which owns mass — can take it off the thrower.
+---
+--- `spreadScale` widens the fan for a pod burst, which throws in every
+--- direction rather than in a cone.
+function GoopService.split(ownerId: number, from: Vector3, facing: Vector3,
+    massEach: number, count: number, tint: Color3, fullCircle: boolean?): number
+
+    if massEach <= 0 or count <= 0 then
+        return 0
+    end
+    local flat = Vector3.new(facing.X, 0, facing.Z)
+    flat = flat.Magnitude > 0.01 and flat.Unit or Vector3.new(0, 0, 1)
+
+    local committed = 0
+    for i = 1, count do
+        local angle
+        if fullCircle then
+            angle = (math.pi * 2 / count) * (i - 1) + rng:NextNumber(-0.12, 0.12)
+        else
+            -- Centred fan. With three pieces that is one straight ahead and
+            -- one to each side, which is the shape that both reaches furthest
+            -- and draws the widest fence.
+            local mid = (count + 1) / 2
+            angle = (i - mid) * Config.SPLIT_SPREAD
+        end
+        local dir = Vector3.new(
+            flat.X * math.cos(angle) - flat.Z * math.sin(angle), 0,
+            flat.X * math.sin(angle) + flat.Z * math.cos(angle)).Unit
+
+        local g: Globlet = {
+            id = nextId,
+            ownerId = ownerId,
+            mass = massEach,
+            pos = from + dir * 4,
+            dir = dir,
+            travelled = 0,
+            returning = false,
+            bornAt = os.clock(),
+            part = nil,
+            strand = nil,
+        }
+        nextId += 1
+        makeGlobletParts(g, tint)
+        table.insert(globlets, g)
+        committed += massEach
+    end
+    return committed
+end
+
+function GoopService.list(): { Globlet }
+    return globlets
+end
+
+function GoopService.countFor(ownerId: number): number
+    local n = 0
+    for _, g in ipairs(globlets) do
+        if g.ownerId == ownerId then n += 1 end
+    end
+    return n
+end
+
+--- Drop every globlet belonging to one owner without paying anything back.
+--- Used when its body dies: a tether with nothing on the end of it is a wire
+--- to nowhere, and leaving them alive would let a dead player keep fencing.
+function GoopService.clearOwner(ownerId: number)
+    for i = #globlets, 1, -1 do
+        if globlets[i].ownerId == ownerId then
+            destroyGloblet(globlets[i])
+            table.remove(globlets, i)
+        end
+    end
+end
+
+function GoopService.clear()
+    for _, g in ipairs(globlets) do
+        destroyGloblet(g)
+    end
+    table.clear(globlets)
+    table.clear(tetherHits)
+end
+
+--- Has this strand already hit this victim recently?
+function GoopService.canHit(g: Globlet, victimKey: string, now: number): boolean
+    local key = g.id .. ":" .. victimKey
+    if (tetherHits[key] or 0) > now then
+        return false
+    end
+    tetherHits[key] = now + Config.TETHER_COOLDOWN
+    return true
+end
+
+--- Distance from a point to the strand segment (body -> globlet), in the
+--- ground plane. Height is ignored on purpose: a tether is a fence, and a
+--- fence you could hop by being briefly airborne would be a fence nobody
+--- respects.
+function GoopService.distanceToStrand(g: Globlet, bodyPos: Vector3, at: Vector3): number
+    local a = Vector2.new(bodyPos.X, bodyPos.Z)
+    local b = Vector2.new(g.pos.X, g.pos.Z)
+    local p = Vector2.new(at.X, at.Z)
+    local ab = b - a
+    local len2 = ab.X * ab.X + ab.Y * ab.Y
+    if len2 < 1e-4 then
+        return (p - a).Magnitude
+    end
+    local t = math.clamp(((p.X - a.X) * ab.X + (p.Y - a.Y) * ab.Y) / len2, 0, 1)
+    local closest = a + ab * t
+    return (p - closest).Magnitude
+end
+
+--- Advance every globlet. `bodyOf` hands back where a given owner's body is,
+--- or nil if it no longer has one. Returns a list of globlets that came home,
+--- so the caller can pay their mass back.
+function GoopService.step(dt: number, now: number,
+    bodyOf: (number) -> Vector3?): { Globlet }
+
+    local returned = {}
+    for i = #globlets, 1, -1 do
+        local g = globlets[i]
+        local home = bodyOf(g.ownerId)
+        if not home then
+            -- Its body is gone. The mass goes with it; ArenaService has
+            -- already scattered whatever a death owes the floor.
+            destroyGloblet(g)
+            table.remove(globlets, i)
+        else
+            local speed = Config.SPLIT_SPEED
+            if g.returning then
+                local toHome = Vector3.new(home.X - g.pos.X, 0, home.Z - g.pos.Z)
+                if toHome.Magnitude <= speed * dt + 4 then
+                    table.insert(returned, g)
+                    destroyGloblet(g)
+                    table.remove(globlets, i)
+                    continue
+                end
+                g.dir = toHome.Unit
+            else
+                g.travelled += speed * dt
+                if g.travelled >= Config.SPLIT_RANGE then
+                    g.returning = true
+                end
+            end
+
+            local nextPos = g.pos + g.dir * speed * dt
+            local flat = Vector3.new(nextPos.X, 0, nextPos.Z)
+            -- Never off the island, and never through the Vault plinth.
+            if flat.Magnitude > Config.PELLET_OUTER then
+                flat = flat.Unit * Config.PELLET_OUTER
+                g.returning = true
+            end
+            local r = math.max(2, Blob.radius(g.mass) * 0.55)
+            g.pos = Vector3.new(flat.X, 2 + r, flat.Z)
+
+            local part = g.part
+            local strand = g.strand
+            if part then
+                part.Size = Vector3.new(1, 1, 1) * (r * 2)
+                part.Position = g.pos
+            end
+            if strand then
+                local mid = (home + g.pos) / 2
+                local span = g.pos - home
+                local len = span.Magnitude
+                if len > 0.5 then
+                    strand.Size = Vector3.new(Config.TETHER_WIDTH * 0.8, 1.2, len)
+                    strand.CFrame = CFrame.lookAt(mid, g.pos)
+                else
+                    strand.Size = Vector3.new(0.1, 0.1, 0.1)
+                end
+            end
+        end
+    end
+    return returned
+end
+
+-- ── Spore pods ─────────────────────────────────────────────────────────────
+
+local function makePodPart(pod: Pod)
+    local parent = ensureFolder()
+    if not parent then
+        return
+    end
+    local p = Instance.new("Part")
+    p.Name = "SporePod"
+    p.Shape = Enum.PartType.Ball
+    p.Size = Vector3.new(1, 1, 1) * (Config.POD_RADIUS * 2)
+    p.Anchored = true
+    p.CanCollide = false
+    p.CanTouch = false
+    p.CanQuery = false
+    p.Material = Enum.Material.Neon
+    -- WHITE, like everything else that is not a player. The island's palette
+    -- is greyscale so that the blobs — which are the only saturated things in
+    -- the world — read instantly against it.
+    p.Color = Color3.fromRGB(238, 238, 240)
+    p.Transparency = 0.15
+    p.Position = pod.pos
+    p.Parent = parent
+
+    -- Spikes, so it reads as "do not touch" from across the island rather than
+    -- as a big friendly pellet.
+    for i = 1, 10 do
+        local a = (math.pi * 2 / 10) * i
+        local spike = Instance.new("Part")
+        spike.Name = "Spike"
+        spike.Size = Vector3.new(1.6, 1.6, Config.POD_RADIUS * 0.9)
+        spike.Anchored = true
+        spike.CanCollide = false
+        spike.CanTouch = false
+        spike.CanQuery = false
+        spike.Material = Enum.Material.Neon
+        spike.Color = Color3.fromRGB(238, 238, 240)
+        spike.CFrame = CFrame.new(pod.pos)
+            * CFrame.Angles(0, a, 0)
+            * CFrame.new(0, 0, -Config.POD_RADIUS)
+        spike.Parent = p
+    end
+    pod.part = p
+end
+
+function GoopService.seedPods()
+    for _, pod in ipairs(pods) do
+        if pod.part then pod.part:Destroy() end
+    end
+    table.clear(pods)
+    for i = 1, Config.POD_COUNT do
+        -- Well inside the Flats: a pod on the rim would be unreachable for the
+        -- big blobs it exists to threaten, since their rim meter runs out.
+        local pos = WorldBuilder.randomSurfacePoint(rng,
+            Config.VAULT_RADIUS + 60, Config.SHALLOWS_INNER - 40)
+        local pod: Pod = {
+            id = i,
+            pos = Vector3.new(pos.X, 2 + Config.POD_RADIUS, pos.Z),
+            readyAt = 0,
+            part = nil,
+        }
+        makePodPart(pod)
+        table.insert(pods, pod)
+    end
+end
+
+function GoopService.pods(): { Pod }
+    return pods
+end
+
+--- Mark a pod as spent. It regrows in POD_RESPAWN seconds, in the same place:
+--- a hazard that moved would be impossible to play around, and playing around
+--- them is the whole point of putting them there.
+function GoopService.spendPod(pod: Pod, now: number)
+    pod.readyAt = now + Config.POD_RESPAWN
+    if pod.part then
+        pod.part:Destroy()
+        pod.part = nil
+    end
+end
+
+function GoopService.regrowPods(now: number)
+    for _, pod in ipairs(pods) do
+        if pod.readyAt > 0 and now >= pod.readyAt then
+            pod.readyAt = 0
+            makePodPart(pod)
+        end
+    end
+end
+
+function GoopService.clearPods()
+    for _, pod in ipairs(pods) do
+        if pod.part then pod.part:Destroy() end
+        pod.part = nil
+    end
+    table.clear(pods)
+end
+
+return GoopService
 ]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000026"><Properties><string name="Name">PitService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- PitService.luau — runs Sumo Pit matches.
 --
@@ -7388,6 +8338,76 @@ function RollService.applyCosmetics(player: Player, loadout: { [string]: string 
         if skin.colour then ball.Color = skin.colour end
         -- The default skin keeps the Goob's own hue, which is its identity.
         ball:SetAttribute("Skin", skin.id)
+    end
+
+    -- ── PARTICLES, FOR THE RARE ONES ──────────────────────────────────────
+    --
+    -- Rebuilt rather than edited, for the same reason the trail below is: an
+    -- emitter carries half a dozen sequences and changing one leaves the rest
+    -- describing the previous skin.
+    --
+    -- WHY THESE EXIST AT ALL. A rare skin that is only a different colour is a
+    -- rare skin nobody can tell you own — the difference between Common and
+    -- Legendary has to be visible from across the island, in motion, without a
+    -- menu. Only Rare and above get one: if everything sparkles, nothing does,
+    -- and twelve emitting blobs on a phone is a framerate problem.
+    local oldFx = ball:FindFirstChild("SkinFx")
+    if oldFx then oldFx:Destroy() end
+    if skin and skin.particle then
+        local tint = skin.colour or ball.Color
+        local fx = Instance.new("Attachment")
+        fx.Name = "SkinFx"
+        fx.Parent = ball
+
+        local e = Instance.new("ParticleEmitter")
+        e.Name = "Fx"
+        e.Color = ColorSequence.new(tint)
+        e.LightEmission = 1
+        e.LightInfluence = 0
+        e.Speed = NumberRange.new(2, 7)
+        e.Lifetime = NumberRange.new(0.5, 1.1)
+        e.Rate = 14
+        e.SpreadAngle = Vector2.new(180, 180)
+        e.Transparency = NumberSequence.new(0.15, 1)
+        -- Emitted from a SHELL, not from the centre: EmissionDirection plus a
+        -- wide spread on a ball attachment puts the whole cloud inside the
+        -- body, where a translucent skin hides it entirely.
+        e.EmissionDirection = Enum.NormalId.Top
+
+        -- One shape per name. Deliberately a small vocabulary — four looks the
+        -- player can learn to recognise — rather than a bespoke emitter per
+        -- skin, which is how a cosmetic catalogue becomes unmaintainable.
+        if skin.particle == "ember" then
+            e.Size = NumberSequence.new(1.6, 0)
+            e.Rate = 22
+            e.Acceleration = Vector3.new(0, 14, 0)
+        elseif skin.particle == "spark" then
+            e.Size = NumberSequence.new(0.9, 0)
+            e.Speed = NumberRange.new(10, 18)
+            e.Lifetime = NumberRange.new(0.25, 0.5)
+            e.Rate = 26
+        elseif skin.particle == "grid" then
+            e.Size = NumberSequence.new(2.4, 0)
+            e.Speed = NumberRange.new(0.5, 2)
+            e.Lifetime = NumberRange.new(0.8, 1.4)
+            e.Rate = 10
+        elseif skin.particle == "void" then
+            e.Size = NumberSequence.new(0, 3.2)
+            e.Speed = NumberRange.new(-9, -4)   -- inward: it falls into you
+            e.Lifetime = NumberRange.new(0.6, 1.0)
+            e.Rate = 18
+        elseif skin.particle == "prism" then
+            e.Size = NumberSequence.new(1.2, 0)
+            e.Rate = 20
+            -- The one place a colour ramp is allowed to be a rainbow, because
+            -- the skin is literally called Prism.
+            e.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 96, 96)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(96, 255, 200)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 120, 255)),
+            })
+        end
+        e.Parent = fx
     end
 
     -- Trail. Rebuilt rather than tweaked because Trail needs two attachments
@@ -8009,6 +9029,55 @@ WorldBuilder.ZONES = {
     ISLAND = { name = "The Island", centre = Vector3.new(0, 0, 0), radius = Config.ISLAND_RADIUS },
 }
 
+-- ── OBSTACLES, AND WHY BOTS WALKED THROUGH THEM ───────────────────────────
+--
+-- Bot movement is kinematic: a position integrated by hand, not a physics
+-- body. That is the right call — twelve unanchored balls network-owned by the
+-- server is a real cost, and a bot does not need momentum to be convincing —
+-- but it has one consequence nobody accounted for. A kinematic body is not in
+-- the physics world, so `CanCollide` on a rock means nothing to it. Bots
+-- walked through every boulder, ramp and signpost on the island, which is the
+-- single most obvious way a thing announces that it is not a player.
+--
+-- The fix is a list. Every solid, standing prop registers its footprint here
+-- as a circle, and BotService resolves against it. A circle rather than the
+-- real shape because it is one distance test, the props are all roughly round
+-- in plan, and being twenty percent too generous costs a bot a slightly wider
+-- berth — where being wrong the other way costs the illusion.
+WorldBuilder.OBSTACLES = {} :: { { pos: Vector3, radius: number } }
+
+-- A PROP IS SMALL. Anything huge is ground.
+--
+-- The first version filtered only on height — "flat things are floors" — and
+-- the island disc is SIX studs thick, which is not flat. So the island itself
+-- registered as a 480-stud obstacle centred on the origin, and every bot was
+-- shoved to the shoreline on the first tick of every round. Nothing errored;
+-- the bots simply stopped being anywhere near the game, and four separate
+-- assertions failed with symptoms that pointed at eating, at SLAM and at
+-- tethers rather than at this.
+--
+-- Two gates now, and the upper one is the load-bearing one: a thing you walk
+-- around is a rock or a ramp or a signpost, and none of those are sixty studs
+-- wide. Anything bigger is terrain the bot is meant to be standing on.
+local OBSTACLE_MIN_RADIUS = 2
+local OBSTACLE_MAX_RADIUS = 60
+local OBSTACLE_MIN_HEIGHT = 6
+
+local function noteObstacle(p: BasePart)
+    -- Flat things are floors, not walls. A bot standing ON something is fine;
+    -- it is standing IN something that looks wrong.
+    if p.Size.Y < OBSTACLE_MIN_HEIGHT then
+        return
+    end
+    -- Radius from the wider footprint axis, so a long ramp is covered along
+    -- its length rather than only at its centre.
+    local r = math.max(p.Size.X, p.Size.Z) * 0.5
+    if r < OBSTACLE_MIN_RADIUS or r > OBSTACLE_MAX_RADIUS then
+        return
+    end
+    table.insert(WorldBuilder.OBSTACLES, { pos = p.Position, radius = r })
+end
+
 local function part(props: { [string]: any }): BasePart
     local p = Instance.new("Part")
     p.Anchored = true
@@ -8017,6 +9086,12 @@ local function part(props: { [string]: any }): BasePart
     p.TopSurface = Enum.SurfaceType.Smooth
     p.BottomSurface = Enum.SurfaceType.Smooth
     for k, v in pairs(props) do (p :: any)[k] = v end
+    -- Registered from the ONE constructor every prop goes through, rather than
+    -- from a list maintained by hand. A hand-maintained list is a list that is
+    -- missing whatever was added last.
+    if p.CanCollide then
+        noteObstacle(p)
+    end
     return p
 end
 
@@ -8026,6 +9101,9 @@ local function wedge(props: { [string]: any }): BasePart
     p.CanCollide = true
     p.Material = Enum.Material.SmoothPlastic
     for k, v in pairs(props) do (p :: any)[k] = v end
+    if p.CanCollide then
+        noteObstacle(p)
+    end
     return p
 end
 
@@ -8214,13 +9292,30 @@ end
 -- deleted along with the Shack when that block was cut out, and the result was
 -- not a compile error — `board(...)` simply became a call to a nil GLOBAL and
 -- the server died on boot. Same trap, fourth time.
-local function board(parent: Instance, name: string, position: Vector3, facing: number,
+-- IT TAKES A POINT TO LOOK AT, NOT AN ANGLE.
+--
+-- It used to take a yaw in degrees, and both boards in the waiting room were
+-- given one that pointed their text AWAY from the floor players stand on — you
+-- walked up to two blank slate slabs and read the leaderboard by walking off
+-- the edge behind them. That is the bug reported as "the leaderboards are on
+-- the wrong way", and it was not a typo so much as an interface that made the
+-- mistake easy: nothing about the number 24 says which way a face ends up
+-- pointing, so the only way to get it right was to build it and look.
+--
+-- `lookAt` makes it impossible to state wrongly. CFrame.lookAt aims a part's
+-- -Z at the target, and SurfaceGui's Front face IS -Z, so a board built to
+-- look at the middle of the room has its text facing the middle of the room,
+-- by construction rather than by arithmetic.
+local function board(parent: Instance, name: string, position: Vector3, lookAt: Vector3,
                     size: Vector2, tint: Color3)
+    -- Levelled: lookAt with a target at a different height would tip the slab
+    -- back, and a leaderboard leaning over the room reads as damaged.
+    local target = Vector3.new(lookAt.X, position.Y, lookAt.Z)
     local slab = part({
         Name = name,
         Size = Vector3.new(size.X, size.Y, 3),
-        CFrame = CFrame.new(position) * CFrame.Angles(0, math.rad(facing), 0),
-        Color = Color3.fromRGB(58, 58, 62),
+        CFrame = CFrame.lookAt(position, target),
+        Color = Color3.fromRGB(24, 24, 27),
         Material = Enum.Material.Slate,
     })
     slab.Parent = parent
@@ -8234,7 +9329,7 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
 
     local pad = Instance.new("Frame")
     pad.Size = UDim2.fromScale(1, 1)
-    pad.BackgroundColor3 = Color3.fromRGB(34, 35, 39)
+    pad.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
     pad.BorderSizePixel = 0
     pad.ZIndex = 1
     pad.Parent = surface
@@ -8253,7 +9348,7 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     entries.TextWrapped = true
     entries.TextXAlignment = Enum.TextXAlignment.Left
     entries.TextYAlignment = Enum.TextYAlignment.Top
-    entries.TextColor3 = Color3.fromRGB(226, 224, 216)
+    entries.TextColor3 = Color3.fromRGB(242, 242, 244)
     -- Set here, not at first refresh: a TextLabel's default Text is the
     -- literal string "Label", and an empty board reading "Label" in half-metre
     -- letters is how that bug shipped once already.
@@ -8267,43 +9362,140 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     return slab
 end
 
+-- ── THE WAITING ROOM ──────────────────────────────────────────────────────
+--
+-- Thirty-five seconds between rounds, spent somewhere nothing can eat you.
+-- It used to be a grey disc, a rail, and two boards facing the wrong way, and
+-- it read as a holding pen — which is a waste of the one moment in the loop
+-- where the player is standing still and willing to look at something.
+--
+-- MONOCHROME, BY RULE. Black, grey and white, the same palette as the
+-- interface, and for the same reason: the blobs are the only saturated things
+-- in this game, and everything else being greyscale is what makes a neon skin
+-- land. A player walking in wearing Ultraviolet should be the brightest thing
+-- in the room by a mile.
+--
+-- Built out of a few shapes repeated with rhythm rather than a lot of
+-- different props: concentric rings, a ribbed colonnade, a stepped dais, and
+-- floor bands that point at the middle. Repetition with variation is what
+-- reads as designed; a scatter of unrelated objects reads as clutter, and I
+-- am not going to out-detail a real artist so the answer is to out-order one.
 local function buildLobby(world: Instance)
     local c = Config.LOBBY_CENTRE
+    local R = Config.LOBBY_RADIUS
 
-    local floor = disc(world, c, Config.LOBBY_RADIUS, 6,
-        Color3.fromRGB(128, 130, 136), Enum.Material.Concrete, "LobbyFloor")
+    local floor = disc(world, c, R, 6,
+        Color3.fromRGB(26, 26, 29), Enum.Material.Concrete, "LobbyFloor")
     floor.Name = "LobbyFloor"
 
-    local inlay = disc(world, c + Vector3.new(0, 3.2, 0), Config.LOBBY_RADIUS - 18, 1,
-        Color3.fromRGB(146, 140, 126), Enum.Material.Marble, "LobbyInlay")
-    inlay.CanCollide = false
+    -- Two inlaid rings, lighter toward the middle, so the eye is walked
+    -- inward to the dais instead of out to the rail.
+    local ring1 = disc(world, c + Vector3.new(0, 3.2, 0), R - 16, 1,
+        Color3.fromRGB(38, 38, 42), Enum.Material.Marble, "LobbyRingOuter")
+    ring1.CanCollide = false
+    local ring2 = disc(world, c + Vector3.new(0, 3.4, 0), R - 52, 1,
+        Color3.fromRGB(52, 52, 57), Enum.Material.Marble, "LobbyRingInner")
+    ring2.CanCollide = false
 
-    -- A rail all the way round. Falling off a lobby while waiting for a round
-    -- is pure frustration: nothing is gained by making the floor dangerous.
-    for i = 0, 35 do
-        local a = math.rad(i * 10)
+    -- Floor bands radiating from the centre. Thin, white, and flush — the
+    -- cheapest possible thing that makes a flat disc look composed.
+    for i = 0, 23 do
+        local a = math.rad(i * 15)
+        local bandLen = R - 20
+        local band = part({
+            Name = "LobbyBand",
+            Size = Vector3.new(1.6, 0.4, bandLen),
+            CFrame = CFrame.new(c + Vector3.new(
+                math.cos(a) * (bandLen / 2 + 14), 3.6, math.sin(a) * (bandLen / 2 + 14)))
+                * CFrame.Angles(0, -a + math.pi / 2, 0),
+            Color = Color3.fromRGB(86, 86, 92),
+            Material = Enum.Material.Neon,
+        })
+        band.CanCollide = false
+        band.Parent = world
+    end
+
+    -- A stepped dais in the middle. Somewhere to stand, something to orbit,
+    -- and the thing the floor bands point at.
+    for step = 1, 3 do
+        local d = disc(world, c + Vector3.new(0, 3.6 + (step - 1) * 2.4, 0),
+            34 - (step - 1) * 9, 2.4,
+            Color3.fromRGB(30 + step * 10, 30 + step * 10, 34 + step * 10),
+            Enum.Material.Concrete, "Dais" .. step)
+        d.CanCollide = false
+    end
+
+    -- A colonnade: tall ribs around the inner ring, alternating heights so the
+    -- silhouette has a rhythm instead of a fence's flat line.
+    for i = 0, 17 do
+        local a = math.rad(i * 20)
+        local tall = (i % 2 == 0)
+        local h = tall and 46 or 30
+        local rib = part({
+            Name = "LobbyRib",
+            Size = Vector3.new(5, h, 5),
+            CFrame = CFrame.new(c + Vector3.new(
+                math.cos(a) * (R - 34), 4 + h / 2, math.sin(a) * (R - 34)))
+                * CFrame.Angles(0, -a, 0),
+            Color = tall and Color3.fromRGB(18, 18, 21) or Color3.fromRGB(46, 46, 51),
+            Material = Enum.Material.Slate,
+        })
+        rib.CanCollide = false
+        rib.Parent = world
+
+        -- A white cap on the tall ones. One bright accent per rib, at the same
+        -- height all the way round, is what turns a ring of posts into a room.
+        if tall then
+            local cap = part({
+                Name = "LobbyRibCap",
+                Size = Vector3.new(6.5, 1.2, 6.5),
+                CFrame = CFrame.new(c + Vector3.new(
+                    math.cos(a) * (R - 34), 4 + h + 0.6, math.sin(a) * (R - 34))),
+                Color = Color3.fromRGB(236, 236, 240),
+                Material = Enum.Material.Neon,
+            })
+            cap.CanCollide = false
+            cap.Parent = world
+        end
+    end
+
+    -- The rail. Falling off a lobby while waiting for a round is pure
+    -- frustration: nothing is gained by making this floor dangerous.
+    for i = 0, 47 do
+        local a = math.rad(i * 7.5)
         local post = part({
             Name = "LobbyRail",
-            Size = Vector3.new(9, 14, 5),
+            Size = Vector3.new(7, 11, 4),
             CFrame = CFrame.new(c + Vector3.new(
-                math.cos(a) * (Config.LOBBY_RADIUS + 2), 7, math.sin(a) * (Config.LOBBY_RADIUS + 2)))
+                math.cos(a) * (R + 2), 6, math.sin(a) * (R + 2)))
                 * CFrame.Angles(0, -a, 0),
-            Color = Color3.fromRGB(108, 110, 116),
+            Color = Color3.fromRGB(16, 16, 19),
             Material = Enum.Material.Metal,
         })
         post.Parent = world
     end
 
-    board(world, "Leaderboard", c + Vector3.new(-58, 22, -Config.LOBBY_RADIUS + 26), 24,
-        Vector2.new(52, 32), Color3.fromRGB(198, 174, 118))
-    board(world, "Archive", c + Vector3.new(58, 22, -Config.LOBBY_RADIUS + 26), -24,
-        Vector2.new(52, 32), Color3.fromRGB(150, 170, 186))
+    -- ── The boards ────────────────────────────────────────────────────────
+    --
+    -- Flanking the dais and FACING IT — which is to say, facing the middle of
+    -- the floor, where players actually stand. They are given a point to look
+    -- at rather than an angle, because the previous pair were given angles and
+    -- both ended up pointing their text off the edge of the world.
+    local eye = c + Vector3.new(0, 22, 0)
+    board(world, "Leaderboard", c + Vector3.new(-64, 22, -46), eye,
+        Vector2.new(52, 30), Color3.fromRGB(236, 236, 240))
+    board(world, "Archive", c + Vector3.new(64, 22, -46), eye,
+        Vector2.new(52, 30), Color3.fromRGB(236, 236, 240))
 
-    signpost(world, c + Vector3.new(0, 3, Config.LOBBY_RADIUS - 30), "\u{1F6CB}\u{FE0F}", "THE WAITING ROOM",
-        "trade, dress up, get ready", Color3.fromRGB(198, 174, 118))
+    signpost(world, c + Vector3.new(0, 12, 26), "\u{1F6CB}\u{FE0F}", "THE WAITING ROOM",
+        "trade, dress up, pick your third power", Color3.fromRGB(236, 236, 240))
 end
 
 function WorldBuilder.build()
+    -- Rebuilt from scratch, not appended to. The harness boots the world more
+    -- than once in a single process and a growing obstacle list would make
+    -- bots progressively more claustrophobic across a test run.
+    table.clear(WorldBuilder.OBSTACLES)
     buildAmbience()
 
     local rng = Random.new(20260913)
@@ -8935,6 +10127,37 @@ function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: n
     return pos
 end
 
+--- Push a point out of any obstacle it is standing inside. Returns the
+--- corrected point and whether anything moved.
+---
+--- Used by the kinematic movers — bots — which are not in the physics world
+--- and so get nothing from CanCollide. Only props ON THE ISLAND count: the
+--- lobby is 420 studs up with its own floor and rail, and nothing kinematic
+--- moves around up there.
+function WorldBuilder.pushOut(at: Vector3, bodyRadius: number): (Vector3, boolean)
+    local moved = false
+    local x, z = at.X, at.Z
+    for _, o in ipairs(WorldBuilder.OBSTACLES) do
+        if math.abs(o.pos.Y - Config.LOBBY_CENTRE.Y) > 120 then
+            local dx, dz = x - o.pos.X, z - o.pos.Z
+            local d = math.sqrt(dx * dx + dz * dz)
+            local need = o.radius + bodyRadius
+            if d < need then
+                if d < 0.01 then
+                    -- Dead centre. Any direction will do; a fixed one would
+                    -- make every bot that clipped this prop leave it the same
+                    -- way, which looks like a conveyor belt.
+                    dx, dz, d = 1, 0, 1
+                end
+                x = o.pos.X + (dx / d) * need
+                z = o.pos.Z + (dz / d) * need
+                moved = true
+            end
+        end
+    end
+    return Vector3.new(x, at.Y, z), moved
+end
+
 function WorldBuilder.arenaFolder(): Folder
     local world = Workspace:FindFirstChild("GoobWorld")
     return (world and world:FindFirstChild("Arena")) :: Folder
@@ -9016,8 +10239,6 @@ TradeUi.build(gui)
 -- the coach; it stops drawing its own stat panel, age line and drawer button,
 -- which is where most of the old overlap came from.
 ArenaHud.build()
-Hud.setArenaMode(true)
-Hud.registerTarget("power", ArenaHud.powerButton())
 
 -- Sound and every other feel effect now live in Juice, which reads its ids
 -- from Config and stays silent when they are unset. This file used to keep a
@@ -9048,10 +10269,6 @@ Net.get("StateSync").OnClientEvent:Connect(function(snap)
     -- and every crate, trinket, power, skin and Goob renders locked or absent
     -- because the code behind each tab is reading fields off nothing.
     ArenaHud.setProfile(snap)
-    -- The two HUDs share one horizontal band on a phone. Hud owns the coach,
-    -- ArenaHud owns the status strip, and this is the wire that lets the strip
-    -- get out of the way while the tutorial is running. See ArenaHud.applyLayout.
-    ArenaHud.setCoachActive(snap.tutorial ~= nil)
 end)
 
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
@@ -9076,10 +10293,6 @@ end
 
 Hud.onOffer = function(goobId: string)
     Net.get("TradeOffer"):FireServer(goobId, true)
-end
-
-Hud.onDismissCoach = function()
-    Net.get("DismissTutorial"):FireServer()
 end
 
 -- Gulping is irreversible, so it gets a real two-step confirmation with the
@@ -9452,6 +10665,9 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     elseif kind == "bank" then Juice.onBank(a and a.glob)
     elseif kind == "power" then Juice.onPower(a and a.id, a)
     elseif kind == "slam" then Juice.shakeCamera(1.4)
+    elseif kind == "split" then Juice.shakeCamera(0.35)
+    elseif kind == "snagged" then Juice.shakeCamera(0.5)
+    elseif kind == "podBurst" then Juice.shakeCamera(1.8)
     elseif kind == "hook" then Juice.play("slam", 0.3)
     elseif kind == "siphon" then Juice.play("drip", 0.3)
     elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount)
@@ -9611,24 +10827,29 @@ local function aimVector(): Vector3?
 end
 
 local UsePower = Net.get("UsePower")
-local lastPower = 0
+local lastPower = { 0, 0, 0 }
 
-local function firePower()
-    -- Client-side rate limit. The server enforces the real cooldown; this only
-    -- stops a held key from filling the remote queue with requests the server
-    -- is going to refuse anyway.
+--- Press one hotbar slot. 1 = DASH, 2 = SPLIT, 3 = whatever you brought.
+local function firePower(slot: number?)
+    local index = math.clamp(math.floor(slot or 1), 1, 3)
+    -- Client-side rate limit, PER SLOT. It used to be one timer for the whole
+    -- blob, which was right when there was one button and is wrong now:
+    -- tapping DASH would have swallowed a SPLIT pressed a tenth of a second
+    -- later, and the player would have seen a dead button rather than a
+    -- cooldown. The server still enforces the real cooldowns; this only stops
+    -- a held key filling the remote queue.
     local now = os.clock()
-    if now - lastPower < 0.15 then return end
-    lastPower = now
-    UsePower:FireServer(aimVector())
+    if now - lastPower[index] < 0.15 then return end
+    lastPower[index] = now
+    UsePower:FireServer(index, aimVector())
 end
 
-ArenaHud.on.usePower = function() firePower() end
+ArenaHud.on.usePower = function(slot) firePower(slot) end
 ArenaHud.on.setPower = function(id) Net.get("SetPower"):FireServer(id) end
 ArenaHud.on.equipTrinket = function(id, slot) Net.get("EquipTrinket"):FireServer(id, slot) end
 ArenaHud.on.openCrate = function(id) Net.get("OpenCrate"):FireServer(id) end
 
--- The dock's three delegated tabs. They close the sheet before opening, and
+-- The menu's delegated tabs. They close the sheet before opening, and
 -- "close" shuts everything — so there is still never more than one panel up.
 ArenaHud.on.equipCosmetic = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
 ArenaHud.on.setActiveGoob = function(id) Net.get("SetActiveGoob"):FireServer(id) end
@@ -9640,7 +10861,7 @@ ArenaHud.on.setActiveGoob = function(id) Net.get("SetActiveGoob"):FireServer(id)
 --
 -- The live trade WINDOW stays as it is — rebuilding TradeUi would mean
 -- rebuilding the anti-scam confirmation reset, which is the most
--- safety-critical UI in the game and is already proven. The dock's trade tab
+-- safety-critical UI in the game and is already proven. The menu's trade row
 -- explains the rules and lists what you can offer; the window itself still
 -- opens when another player rolls up.
 ArenaHud.on.gulpGoob = function(id) Hud.onGulp(id) end
@@ -9652,6 +10873,11 @@ Net.get("ArenaSync").OnClientEvent:Connect(function(state)
     if state and state.mass then
         liveMass = state.mass
         Roll.setMass(liveMass)
+    end
+    -- The server decides whether a tether has you; the client owns this ball's
+    -- physics, so the client is the only thing that can act on it.
+    if state then
+        Roll.setSnagged(state.snagged == true)
     end
 end)
 
@@ -9665,9 +10891,19 @@ end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
-    if input.KeyCode == Enum.KeyCode.Q
-        or input.KeyCode == Enum.KeyCode.ButtonX then
-        firePower()
+    -- THREE SLOTS, THREE KEYS, and the digits as well.
+    --
+    -- Q/E/R sit under the fingers already on WASD, which is where a key you
+    -- press mid-chase has to be. 1/2/3 are there because every player who has
+    -- touched a game with a hotbar tries them first, and a control that does
+    -- nothing on the obvious key is a control the player decides is broken.
+    local k = input.KeyCode
+    if k == Enum.KeyCode.Q or k == Enum.KeyCode.One or k == Enum.KeyCode.ButtonX then
+        firePower(1)
+    elseif k == Enum.KeyCode.E or k == Enum.KeyCode.Two or k == Enum.KeyCode.ButtonY then
+        firePower(2)
+    elseif k == Enum.KeyCode.R or k == Enum.KeyCode.Three or k == Enum.KeyCode.ButtonB then
+        firePower(3)
     elseif input.KeyCode == Enum.KeyCode.Escape then
         ArenaHud.closeSheet()
     end
@@ -9730,9 +10966,15 @@ do
         local w = compact and math.min(300, u.X - 24) or 340
         local h = compact and 60 or 66
         strip.Size = UDim2.fromOffset(w, h)
-        -- Below the dock AND below the status strip. At y=90 it sat directly
-        -- on top of both, which is the overlap this whole pass exists to end.
-        strip.Position = UDim2.fromOffset(math.floor((u.X - w) / 2), compact and 176 or 206)
+        -- CENTRED IN THE GAP, clear of both columns. The stat column runs down
+        -- the left and the menu down the right, so this is placed between them
+        -- and below the status strip rather than at a fixed y that happened to
+        -- be free when the menu was a strip across the top.
+        local menuX = Layout.menuLeft()
+        local left = (compact and 8 or 14) * 2 + (compact and 116 or 220)
+        local x = math.floor((left + menuX) / 2 - w / 2)
+        strip.Position = UDim2.fromOffset(
+            Layout.fit(x, 8, math.max(8, u.X - w - 8)), compact and 150 or 190)
         line.Position = UDim2.fromOffset(12, 6)
         line.Size = UDim2.new(1, -140, 0, 20)
         sub.Position = UDim2.fromOffset(12, 28)
@@ -9750,10 +10992,9 @@ do
         if not ball then strip.Visible = false return end
         local d = (ball.Position - Pit.CENTRE).Magnitude
         nearPit = d < Pit.START_RADIUS + 140
-        -- Compact screens get the dock's Standoff tab instead. On a 320px-tall
+        -- Compact screens use the menu's Standoff row instead. On a 320px-tall
         -- phone there is no row left for a third banner that does not land on
-        -- the coach or the power button, and a duplicate entry point is not
-        -- worth an overlap.
+        -- the hotbar, and a duplicate entry point is not worth an overlap.
         strip.Visible = nearPit and not Layout.isCompact()
     end)
 
@@ -9886,17 +11127,32 @@ print("[GULP A GOOB] client ready")
 --
 -- The screen is then divided into four regions that never intersect:
 --
---   top-left      the stat card: what you are holding and what it is worth
---   top-centre    the dock (six icons) and, under it, the status strip
---   top-right     Glob and your Beta Season tier
---   bottom-centre the power button, inside the only part of the bottom edge
---                 a phone player can actually reach
+--   top-left      the stat column: mass, what it is worth, Glob, season tier
+--   top-centre    the status strip — round clock, where you are, are you safe
+--   top-right     the ☰ MENU button, and the tab list it drops
+--   bottom-centre the three-slot hotbar, inside the only part of the bottom
+--                 edge a phone player can actually reach
 --
--- The dock lives at the TOP on every platform, desktop included. It is
--- tempting to put a dock along the bottom edge on a PC — but Roblox reserves
--- the bottom-left for a thumbstick and the bottom-right for a jump button on
--- touch, so a bottom dock needs two layouts, and two layouts is how elements
--- end up on top of each other. One position, everywhere.
+-- ── WHY THE MENU IS A NAMED VERTICAL LIST ON THE RIGHT ────────────────────
+--
+-- It was a horizontal strip of nine unlabelled icons across the top, and that
+-- is two problems at once. A row of pictograms is a memory test — nobody knows
+-- what 🔧 opens until they have opened it — and the top strip is the most
+-- contested space on the screen, wanted by the clock, the stat card and the
+-- Glob readout at the same time.
+--
+-- Down the right-hand edge every row carries its ICON AND ITS NAME, the list
+-- reads top-to-bottom like a menu, and it grows downward instead of squeezing
+-- everything else sideways. It is a DROPDOWN rather than a permanent rail
+-- because a menu covering a third of a 568-wide phone the moment you spawn is
+-- a menu the player closes before reading it: closed by default on touch, open
+-- by default where there is room.
+--
+-- On touch the list opens to the LEFT of its button rather than under it.
+-- Roblox reserves the bottom-right 160x160 for the jump button, which on a
+-- landscape phone is the entire right-hand column below y=160 — a list that
+-- dropped straight down would put most of its rows somewhere a thumb cannot
+-- reach. See Layout.menuMetrics.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -9945,7 +11201,7 @@ local ArenaHud = {}
 -- over the table rather than over a local that may not exist yet — the
 -- `local function` scoping trap that took down two earlier builds.
 ArenaHud.on = {
-    usePower = function(_aim: Vector3?) end,
+    usePower = function(_slot: number, _aim: Vector3?) end,
     setPower = function(_id: string) end,
     equipTrinket = function(_id: string?, _slot: number) end,
     openCrate = function(_id: string) end,
@@ -9969,10 +11225,25 @@ local statusStrip: Frame
 local statusLabel: TextLabel
 local bankBar: Frame
 local bankFill: Frame
-local dock: Frame
-local powerBtn: TextButton
-local powerCost: TextLabel
-local powerSweep: Frame
+local menu: Frame          -- the header button's frame
+local menuHeader: TextButton
+local menuList: ScrollingFrame
+local menuOpen = false
+
+-- THREE SLOTS, NOT ONE BUTTON.
+--
+-- The game used to carry exactly one power, on the argument that a nine-year-
+-- old has one thumb free. That argument still holds for the CHOSEN power — but
+-- two of the three are not choices. DASH and SPLIT are verbs the game is built
+-- out of: you cannot play agar-shaped without a lunge and a way to throw part
+-- of yourself at something. Making them compete for the one slot meant every
+-- player picked the same two and the "choice" was a formality.
+--
+-- So: slot 1 is DASH, slot 2 is SPLIT, slot 3 is yours. Fixed order, fixed
+-- position, every round — muscle memory is worth more than flexibility on a
+-- control you press under pressure.
+type Slot = { button: TextButton, sweep: Frame, cost: TextLabel, name: TextLabel }
+local slots: { Slot } = {}
 local sheet: Frame
 local sheetTitle: TextLabel
 local sheetBody: ScrollingFrame
@@ -9982,7 +11253,7 @@ local sheetBody: ScrollingFrame
 -- panel never moves, which is a bug you only find on hardware.
 local sheetHost: ScrollingFrame
 
-local dockButtons: { [string]: TextButton } = {}
+local menuButtons: { [string]: TextButton } = {}
 local openTab: string? = nil
 local latest: any = nil
 local profile: any = nil
@@ -10180,7 +11451,7 @@ local function renderTrinkets()
     end
 end
 
--- The Standoff is reachable from the dock, from anywhere on the island. There
+-- The Standoff is reachable from the menu, from anywhere on the island. There
 -- is a sign and a join pad out by the ring as well, because a physical thing
 -- you can roll onto is how a seven-year-old finds out a mode exists — but
 -- nobody should have to cross the map to press a button they can see.
@@ -10232,21 +11503,41 @@ local function renderPowers()
     local banked = (profile and profile.lifetimeBanked) or 0
     local current = (profile and profile.powerId) or Powers.DEFAULT
     local uses = (profile and profile.powerUses) or {}
+    local granted = (profile and profile.powersGranted) or {}
 
-    local nextPower, gap = Powers.nextLocked(banked)
-    local head = card(sheetBody, 0, 46)
+    -- ── THE TWO YOU ALWAYS HAVE ───────────────────────────────────────────
+    --
+    -- Listed first and marked as fixed, because a player who cannot see DASH
+    -- and SPLIT anywhere in this panel reasonably concludes they are not
+    -- powers — and then wonders why two of their three buttons are missing
+    -- from the list of powers.
+    local head = card(sheetBody, 0, 62)
     local hl = Theme.label({
-        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 30),
-        Text = nextPower
-            and ("Next: %s at 💧%s  —  %s to go"):format(nextPower.name,
-                Format.short(nextPower.unlockBanked), Format.short(gap))
-            or "Every power unlocked. Carry whichever suits the run.",
-        TextSize = 15, TextColor3 = Theme.GOLD, TextWrapped = true,
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 46),
+        Text = "Slot 1 is DASH and slot 2 is SPLIT — always, for everyone."
+            .. "\nThis list is slot 3.",
+        TextSize = 14, TextColor3 = Theme.TEXT, TextWrapped = true,
     })
     hl.Parent = head
 
-    for i, p in ipairs(Powers.LIST) do
-        local unlocked = banked >= p.unlockBanked
+    local nextPower, gap = Powers.nextLocked(banked)
+    local head2 = card(sheetBody, 1, 44)
+    local hl2 = Theme.label({
+        Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -24, 0, 28),
+        Text = nextPower
+            and ("Next: %s at 💧%s  —  %s to go"):format(nextPower.name,
+                Format.short(nextPower.unlockBanked), Format.short(gap))
+            or "Every power on the banking ladder is unlocked.",
+        TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
+    })
+    hl2.Parent = head2
+
+    -- The season powers are in here too, locked, on purpose: a prize nobody
+    -- knows exists is not a prize. Powers.catalogue is the one list that holds
+    -- both pools so this panel cannot drift out of step with the server.
+    for idx, p in ipairs(Powers.catalogue()) do
+        local i = idx + 1
+        local unlocked = granted[p.id] == true or banked >= p.unlockBanked
         local mine = uses[p.id] or 0
         local tier = Powers.masteryTier(mine)
         local r = card(sheetBody, i, 86, unlocked and "Common" or nil)
@@ -10261,8 +11552,13 @@ local function renderPowers()
             Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -150, 0, 30),
             Text = unlocked
                 and ("%s   ·   costs %d%% of you   ·   %ds"):format(p.blurb, p.cost * 100, p.cooldown)
-                or ("Unlocks at 💧%s banked  (you have 💧%s)")
-                    :format(Format.short(p.unlockBanked), Format.short(banked)),
+                -- A season power says so rather than quoting an unreachable
+                -- price. It is not on the banking ladder at any number, and
+                -- printing "unlocks at 💧inf" would be both wrong and cruel.
+                or (p.season
+                    and "⭐ BETA SEASON reward — earned on the free track. Cannot be bought."
+                    or ("Unlocks at 💧%s banked  (you have 💧%s)")
+                        :format(Format.short(p.unlockBanked), Format.short(banked))),
             TextSize = 13, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
         })
         blurb.Parent = r
@@ -10497,20 +11793,21 @@ local function renderTrade()
     end
 end
 
--- Set by init.client from the tutorial state. See applyLayout for why the
--- status strip cares.
-ArenaHud.coachActive = false
-function ArenaHud.setCoachActive(on: boolean)
-    if ArenaHud.coachActive == on then return end
-    ArenaHud.coachActive = on
+--- Open or close the tab list. Closed by default on a phone, where the screen
+--- is the scarce thing; open by default anywhere with room for it.
+function ArenaHud.setMenuOpen(open: boolean)
+    menuOpen = open
+    if menuHeader then
+        menuHeader.Text = open and "\u{2715}  MENU" or "\u{2630}  MENU"
+    end
     ArenaHud.applyLayout()
 end
 
 function ArenaHud.closeSheet()
     openTab = nil
     sheet.Visible = false
-    for _, b in pairs(dockButtons) do
-        b.BackgroundColor3 = Theme.BG_SOFT
+    for _, b in pairs(menuButtons) do
+        Theme.setButtonActive(b, false)
     end
 end
 
@@ -10532,8 +11829,13 @@ function ArenaHud.openSheet(tab: string)
 
     openTab = tab
     clearSheet()
-    for id, b in pairs(dockButtons) do
-        b.BackgroundColor3 = (id == tab) and Theme.ACCENT or Theme.BG_SOFT
+    -- The selected row INVERTS: white surface, black label. Setting only the
+    -- background left near-white text on a near-white fill — unreadable, and
+    -- the one row the player most needs to read. In a greyscale palette
+    -- brightness is the only emphasis axis there is, so it has to be used
+    -- properly rather than half-applied.
+    for id, b in pairs(menuButtons) do
+        Theme.setButtonActive(b, id == tab)
     end
 
     for _, entry in ipairs(TABS) do
@@ -10576,91 +11878,106 @@ function ArenaHud.applyLayout()
     local compact = Layout.isCompact()
     local pad = compact and 8 or 14
 
-    -- Dock: top-centre. One row when there is room, two on a phone — see
-    -- Layout.dockMetrics, which owns that arithmetic because Hud needs the same
-    -- numbers to place the coach and the toasts underneath.
-    -- Registered, not just consumed: Hud places the coach and the toast column
-    -- under this dock and has no other way to learn how tall it is.
-    Layout.setDockTabs(#TABS)
-    local m = Layout.dockMetrics(#TABS)
-    local iconSize = m.icon
-    local dockW = m.width
-    dock.Size = UDim2.fromOffset(dockW, m.height)
-    dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), m.top)
-    for i, entry in ipairs(TABS) do
-        local b = dockButtons[entry.id]
+    -- ── The menu ──────────────────────────────────────────────────────────
+    Layout.setMenuTabs(#TABS)
+    local m = Layout.menuMetrics(#TABS)
+    local menuX = Layout.menuLeft(#TABS)
+
+    menu.Size = UDim2.fromOffset(m.width, m.headerH)
+    menu.Position = UDim2.fromOffset(menuX, m.top)
+    menuHeader.Size = UDim2.fromOffset(m.width, m.headerH)
+    menuHeader.Position = UDim2.fromOffset(menuX, m.top)
+    menuHeader.TextSize = compact and 14 or 16
+
+    menuList.Size = UDim2.fromOffset(m.width, m.listH)
+    menuList.Position = UDim2.fromOffset(u.X - m.width - m.listRight, m.listTop)
+    menuList.Visible = menuOpen
+    menuList.ScrollingEnabled = m.scrolls
+    for _, entry in ipairs(TABS) do
+        local b = menuButtons[entry.id]
         if b then
-            local col = (i - 1) % m.perRow
-            local row = math.floor((i - 1) / m.perRow)
-            b.Size = UDim2.fromOffset(iconSize, iconSize)
-            b.Position = UDim2.fromOffset(
-                m.pad + col * (iconSize + m.gap),
-                m.pad + row * (iconSize + m.gap))
-            b.TextSize = compact and 22 or 26
+            b.Size = UDim2.new(1, 0, 0, m.rowH)
+            b.TextSize = compact and 13 or 15
         end
     end
 
-    -- Stat card: top-left, and never wider than the space left of the dock.
-    local cardW = Layout.fit(compact and 104 or 210, 88, math.floor((u.X - dockW) / 2) - pad)
-    statCard.Size = UDim2.fromOffset(cardW, compact and 74 or 92)
-    statCard.Position = UDim2.fromOffset(pad, 6)
-    massLabel.TextSize = compact and 22 or 32
-    worthLabel.TextSize = compact and 14 or 18
+    -- Stat card: top-left, and never allowed to reach the rail.
+    local cardW = Layout.fit(compact and 116 or 220, 96, menuX - pad * 2)
+    statCard.Size = UDim2.fromOffset(cardW, compact and 64 or 88)
+    statCard.Position = UDim2.fromOffset(pad, m.top)
+    massLabel.TextSize = compact and 24 or 34
+    worthLabel.TextSize = compact and 13 or 17
     meltLabel.TextSize = compact and 11 or 14
 
-    -- Glob + season: top-right, mirrored.
-    globLabel.Position = UDim2.fromOffset(u.X - cardW - pad, 10)
-    globLabel.Size = UDim2.fromOffset(cardW, compact and 26 or 32)
-    globLabel.TextSize = compact and 18 or 24
-    seasonLabel.Position = UDim2.fromOffset(u.X - cardW - pad, (compact and 36 or 44))
-    seasonLabel.Size = UDim2.fromOffset(cardW, compact and 20 or 24)
-    seasonLabel.TextSize = compact and 12 or 15
+    -- Glob + season: under the stat card, same column. They used to sit
+    -- top-right, which is exactly where the rail now lives.
+    -- Stacked with real gaps between them. The first pass put Glob at +66 with
+    -- a height of 20 and the season line at +84, which overlap by two pixels —
+    -- invisible to the eye and caught immediately by the geometry audit, which
+    -- is exactly the kind of thing that audit is for.
+    local cardH = statCard.Size.Y.Offset
+    local globY = m.top + cardH + (compact and 6 or 8)
+    local globH = compact and 20 or 26
+    globLabel.Position = UDim2.fromOffset(pad + 4, globY)
+    globLabel.Size = UDim2.fromOffset(cardW, globH)
+    globLabel.TextSize = compact and 15 or 20
+    seasonLabel.Position = UDim2.fromOffset(pad + 4, globY + globH + (compact and 2 or 4))
+    seasonLabel.Size = UDim2.fromOffset(cardW, compact and 16 or 20)
+    seasonLabel.TextSize = compact and 11 or 14
 
-    -- Status strip: directly under the dock, same width, so the two read as
-    -- one block instead of two floating things.
+    -- Status strip: top-centre, in the gap between the stat column and the
+    -- rail. Centred on that gap rather than on the screen, so it cannot drift
+    -- under either of them as the rail changes width.
+    local gapL = pad + cardW + pad
+    local gapR = menuX - pad
+    local stripW = math.max(140, math.min(compact and 260 or 420, gapR - gapL))
+    statusStrip.Visible = true
+    statusStrip.Size = UDim2.fromOffset(stripW, compact and 28 or 34)
+    statusStrip.Position = UDim2.fromOffset(
+        Layout.fit(math.floor((gapL + gapR) / 2 - stripW / 2), gapL, math.max(gapL, gapR - stripW)),
+        m.top)
+    statusLabel.TextSize = compact and 13 or 17
+
+    -- ── The hotbar: three slots, bottom-centre ────────────────────────────
     --
-    -- HIDDEN WHILE THE TUTORIAL COACH IS UP ON A PHONE, and that is not a
-    -- cosmetic choice. A 568x320 landscape phone has one free horizontal band
-    -- below the dock; the coach and this strip both want it, and stacking them
-    -- pushes the lower one into the jump-button zone where it cannot be read or
-    -- reached. During the tutorial the instruction matters more than the round
-    -- clock, so the strip yields. This file owns the strip's visibility and Hud
-    -- owns the coach's — one owner each, wired together in init.client.
-    statusStrip.Visible = not (compact and ArenaHud.coachActive)
-    statusStrip.Size = UDim2.fromOffset(dockW, compact and 30 or 36)
-    statusStrip.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2),
-        Layout.belowDock(#TABS))
-    statusLabel.TextSize = compact and 13 or 16
-
-    -- Power button: bottom-centre, inside the band between the thumbstick and
-    -- the jump button. That band is the only part of the bottom edge a phone
-    -- player's thumb can actually reach.
-    local size = compact and 76 or 92
+    -- In the band between the thumbstick and the jump button, which is the
+    -- only part of the bottom edge a phone player's thumb can reach. Three
+    -- buttons share it: DASH, SPLIT and whatever you chose to bring.
+    -- SIZED TO THE BAND, not to a nice round number. Three 62px buttons plus
+    -- gaps is 198px and the gap between the thumbstick and the jump button on
+    -- a 568-wide phone is 178 — so the outer two slots landed under the touch
+    -- controls, where a thumb cannot reach them. The width is derived from the
+    -- band so it cannot be wrong again.
     local left, right = Layout.bottomGap()
-    local x = math.floor((left + right) / 2 - size / 2)
-    x = Layout.fit(x, 8, math.max(8, u.X - size - 8))
-    powerBtn.Size = UDim2.fromOffset(size, size)
-    powerBtn.Position = UDim2.fromOffset(x, u.Y - size - (compact and 14 or 26))
-    powerBtn.TextSize = compact and 15 or 18
-    powerSweep.Size = UDim2.fromScale(1, 0)
-
-    -- The sheet: near-fullscreen on a phone, a centred panel on a desktop.
-    -- Either way it is the ONLY thing on top of the world.
-    -- On a phone the sheet starts directly under the DOCK, not under the
-    -- status strip: it is a panel the player is reading, the round clock is
-    -- the thing they are least interested in while reading it, and going from
-    -- belowStatus to belowDock is the difference between a 132px-tall sheet
-    -- and a 168px one on a 568x320 screen.
-    local sheetTop = compact and Layout.belowDock(#TABS) or Layout.belowStatus(#TABS)
-    local sheetSize = compact
-        and UDim2.fromOffset(u.X - 16, math.max(120, u.Y - sheetTop - 8))
-        or Layout.panel(660, 460)
-    sheet.Size = sheetSize
-    if compact then
-        sheet.Position = UDim2.fromOffset(8, sheetTop)
-    else
-        sheet.Position = Layout.centre(sheetSize)
+    local slotGap = compact and 5 or 10
+    local band = math.max(120, right - left - 12)
+    local slotW = math.min(compact and 62 or 84,
+        math.floor((band - slotGap * (#slots - 1)) / #slots))
+    local barW = #slots * slotW + (#slots - 1) * slotGap
+    local barX = math.floor((left + right) / 2 - barW / 2)
+    barX = Layout.fit(barX, 8, math.max(8, u.X - barW - 8))
+    for i, slot in ipairs(slots) do
+        slot.button.Size = UDim2.fromOffset(slotW, slotW)
+        slot.button.Position = UDim2.fromOffset(
+            barX + (i - 1) * (slotW + slotGap), u.Y - slotW - (compact and 12 or 24))
+        slot.button.TextSize = compact and 12 or 15
+        slot.sweep.Size = UDim2.fromScale(1, 0)
     end
+
+    -- ── The sheet ─────────────────────────────────────────────────────────
+    --
+    -- Anchored to the LEFT of the rail rather than centred, so opening a panel
+    -- never covers the menu you opened it from — you can see what is selected
+    -- and switch straight to the next tab without closing anything.
+    local sheetTop = m.top + (compact and 34 or 42)
+    local sheetW = math.max(200, (u.X - m.width - m.listRight) - pad * 2)
+    local sheetH = math.max(140, u.Y - sheetTop - (compact and 88 or 118))
+    if not compact then
+        sheetW = math.min(sheetW, 660)
+        sheetH = math.min(sheetH, 520)
+    end
+    sheet.Size = UDim2.fromOffset(sheetW, sheetH)
+    sheet.Position = UDim2.fromOffset(math.max(pad, menuX - pad - sheetW), sheetTop)
     if sheetHost then
         sheetHost.Position = sheetBody.Position
         sheetHost.Size = sheetBody.Size
@@ -10674,7 +11991,7 @@ function ArenaHud.build(): ScreenGui
     gui.Name = "ArenaHud"
     gui.ResetOnSpawn = false
     -- false: with IgnoreGuiInset on, Roblox's top bar covers the first ~36px,
-    -- which is exactly where the dock is.
+    -- which is exactly where the stat card and the menu button are.
     gui.IgnoreGuiInset = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.DisplayOrder = 12
@@ -10730,38 +12047,83 @@ function ArenaHud.build(): ScreenGui
     seasonLabel.Name = "Season"
     seasonLabel.Parent = gui
 
-    -- Dock.
-    dock = Instance.new("Frame")
-    dock.Name = "Dock"
-    dock.BackgroundColor3 = Theme.BG
-    dock.BackgroundTransparency = 0.18
-    dock.BorderSizePixel = 0
-    dock.Parent = gui
-    Theme.corner(dock, 16)
-    Theme.stroke(dock, Color3.fromRGB(18, 20, 26), 2)
+    -- ── The menu ──────────────────────────────────────────────────────────
+    --
+    -- A header button top-right, and a vertical list of named tabs that drops
+    -- out of it. Closed by default on a phone so the world keeps the screen;
+    -- open by default on a desktop, where there is room for it to just live
+    -- there.
+    menu = Instance.new("Frame")
+    menu.Name = "Menu"
+    menu.BackgroundTransparency = 1
+    menu.BorderSizePixel = 0
+    menu.Parent = gui
 
-    local dockLayout = Instance.new("UIListLayout")
-    dockLayout.FillDirection = Enum.FillDirection.Horizontal
-    dockLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    dockLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    dockLayout.Padding = UDim.new(0, 6)
-    dockLayout.Parent = dock
+    menuHeader = Instance.new("TextButton")
+    menuHeader.Name = "MenuButton"
+    menuHeader.Text = "\u{2630}  MENU"
+    menuHeader.Font = Theme.FONT
+    menuHeader.TextSize = 16
+    menuHeader.TextColor3 = Theme.TEXT
+    menuHeader.BackgroundColor3 = Theme.BG
+    menuHeader.BackgroundTransparency = 0.05
+    menuHeader.AutoButtonColor = true
+    menuHeader.BorderSizePixel = 0
+    menuHeader.Parent = gui
+    Theme.corner(menuHeader, 10)
+    Theme.stroke(menuHeader, Theme.LINE, 1)
+    menuHeader.Activated:Connect(function() ArenaHud.setMenuOpen(not menuOpen) end)
+
+    -- SCROLLING, because eight rows do not always fit above the jump button.
+    -- A list that silently clipped its last three tabs would make CREW and THE
+    -- STANDOFF unreachable on a phone with no error anywhere.
+    menuList = Instance.new("ScrollingFrame")
+    menuList.Name = "MenuList"
+    menuList.BackgroundColor3 = Theme.BG
+    menuList.BackgroundTransparency = 0.05
+    menuList.BorderSizePixel = 0
+    menuList.ScrollBarThickness = 3
+    menuList.ScrollBarImageColor3 = Theme.LINE
+    menuList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    menuList.CanvasSize = UDim2.new()
+    menuList.Visible = false
+    menuList.Parent = gui
+    Theme.corner(menuList, 10)
+    Theme.stroke(menuList, Theme.LINE, 1)
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.FillDirection = Enum.FillDirection.Vertical
+    listLayout.Padding = UDim.new(0, 3)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = menuList
+
+    local listPad = Instance.new("UIPadding")
+    listPad.PaddingTop = UDim.new(0, 6)
+    listPad.PaddingBottom = UDim.new(0, 6)
+    listPad.PaddingLeft = UDim.new(0, 6)
+    listPad.PaddingRight = UDim.new(0, 6)
+    listPad.Parent = menuList
 
     for i, entry in ipairs(TABS) do
         local b = Instance.new("TextButton")
+        -- Name kept as Dock_<id>: the mobile geometry audit walks the screen
+        -- for this prefix to open every panel in turn, and renaming it would
+        -- silently stop it auditing any of them.
         b.Name = "Dock_" .. entry.id
-        b.Text = entry.icon
+        b.Text = "  " .. entry.icon .. "   " .. entry.name
         b.Font = Theme.FONT
-        b.TextSize = 26
+        b.TextSize = 15
+        b.TextXAlignment = Enum.TextXAlignment.Left
         b.TextColor3 = Theme.TEXT
         b.BackgroundColor3 = Theme.BG_SOFT
         b.AutoButtonColor = true
         b.BorderSizePixel = 0
         b.LayoutOrder = i
-        b.Size = UDim2.fromOffset(Layout.MIN_TAP, Layout.MIN_TAP)
-        b.Parent = dock
-        Theme.corner(b, 12)
-        dockButtons[entry.id] = b
+        b.Size = UDim2.new(1, 0, 0, Layout.MIN_TAP)
+        b.Parent = menuList
+        Theme.corner(b, 8)
+        Theme.stroke(b, Theme.LINE, 1)
+        menuButtons[entry.id] = b
         b.Activated:Connect(function() ArenaHud.openSheet(entry.id) end)
     end
 
@@ -10797,45 +12159,63 @@ function ArenaHud.build(): ScreenGui
     bankFill.BorderSizePixel = 0
     bankFill.Parent = bankBar
 
-    -- Power button.
-    powerBtn = Instance.new("TextButton")
-    powerBtn.Name = "PowerButton"
-    powerBtn.Text = "DASH"
-    powerBtn.Font = Theme.FONT
-    powerBtn.TextSize = 18
-    powerBtn.TextColor3 = Theme.TEXT
-    powerBtn.BackgroundColor3 = Theme.BG
-    powerBtn.BackgroundTransparency = 0.1
-    powerBtn.AutoButtonColor = true
-    powerBtn.BorderSizePixel = 0
-    powerBtn.ClipsDescendants = true
-    powerBtn.Parent = gui
-    Theme.corner(powerBtn, 999)
-    Theme.stroke(powerBtn, Theme.GOLD, 3)
+    -- ── The hotbar ────────────────────────────────────────────────────────
+    --
+    -- One button per slot, built from the same shape so the three read as a
+    -- set. The cooldown sweep fills from the bottom BEHIND the label, so the
+    -- name stays readable while it recharges — a button you cannot read is a
+    -- button you stop looking at.
+    for i = 1, 3 do
+        local b = Instance.new("TextButton")
+        b.Name = "Slot" .. i
+        b.Text = ""
+        b.Font = Theme.FONT
+        b.TextSize = 14
+        b.TextColor3 = Theme.TEXT
+        b.BackgroundColor3 = Theme.BG
+        b.BackgroundTransparency = 0.08
+        b.AutoButtonColor = true
+        b.BorderSizePixel = 0
+        b.ClipsDescendants = true
+        b.Parent = gui
+        Theme.corner(b, 14)
+        Theme.stroke(b, Theme.LINE, 2)
 
-    -- The cooldown sweep fills from the bottom. Behind the label, so the name
-    -- of the power stays readable while it recharges — a button you cannot
-    -- read is a button you stop looking at.
-    powerSweep = Instance.new("Frame")
-    powerSweep.AnchorPoint = Vector2.new(0, 1)
-    powerSweep.Position = UDim2.new(0, 0, 1, 0)
-    powerSweep.Size = UDim2.fromScale(1, 0)
-    powerSweep.BackgroundColor3 = Theme.ACCENT
-    powerSweep.BackgroundTransparency = 0.72
-    powerSweep.BorderSizePixel = 0
-    powerSweep.ZIndex = 0
-    powerSweep.Parent = powerBtn
+        local sweep = Instance.new("Frame")
+        sweep.Name = "Sweep"
+        sweep.AnchorPoint = Vector2.new(0, 1)
+        sweep.Position = UDim2.new(0, 0, 1, 0)
+        sweep.Size = UDim2.fromScale(1, 0)
+        sweep.BackgroundColor3 = Theme.TEXT
+        sweep.BackgroundTransparency = 0.82
+        sweep.BorderSizePixel = 0
+        sweep.ZIndex = 0
+        sweep.Parent = b
 
-    powerCost = Theme.label({
-        AnchorPoint = Vector2.new(0.5, 1),
-        Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.fromScale(1, 0.3),
-        Text = "", TextSize = 13, TextColor3 = Theme.TEXT_DIM,
-        TextXAlignment = Enum.TextXAlignment.Center,
-    })
-    powerCost.ZIndex = 2
-    powerCost.Parent = powerBtn
+        local nameLabel = Theme.label({
+            Name = "Label",
+            AnchorPoint = Vector2.new(0.5, 0),
+            Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.new(1, -8, 0, 34),
+            Text = "", TextSize = 14, TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Center,
+        })
+        nameLabel.ZIndex = 2
+        nameLabel.Parent = b
 
-    powerBtn.Activated:Connect(function() ArenaHud.on.usePower(nil) end)
+        local cost = Theme.label({
+            Name = "Cost",
+            AnchorPoint = Vector2.new(0.5, 1),
+            Position = UDim2.new(0.5, 0, 1, -6), Size = UDim2.new(1, -8, 0, 16),
+            Text = "", TextSize = 12, TextColor3 = Theme.TEXT_DIM,
+            TextXAlignment = Enum.TextXAlignment.Center,
+        })
+        cost.ZIndex = 2
+        cost.Parent = b
+
+        local index = i
+        b.Activated:Connect(function() ArenaHud.on.usePower(index, nil) end)
+        table.insert(slots, { button = b, sweep = sweep, cost = cost, name = nameLabel })
+    end
 
     -- The sheet.
     sheet = Instance.new("Frame")
@@ -10901,7 +12281,11 @@ function ArenaHud.build(): ScreenGui
     sheetHost.Visible = false
     sheetHost.Parent = sheet
 
-    ArenaHud.applyLayout()
+    -- Open on a desktop, closed on a phone. A menu that covers a third of a
+    -- 568-wide screen the moment you spawn is a menu the player closes before
+    -- they have read it.
+    menuOpen = not Layout.isCompact()
+    ArenaHud.setMenuOpen(menuOpen)
     Layout.changed.Event:Connect(ArenaHud.applyLayout)
     return gui
 end
@@ -11005,18 +12389,42 @@ function ArenaHud.setArena(state: any)
     bankFill.Size = UDim2.fromScale(
         math.clamp(state.banking / math.max(0.01, state.bankNeeds), 0, 1), 1)
 
-    local power = Powers.get(state.powerId)
-    powerBtn.Text = (power and power.name or "—")
-        .. ((state.mastery or 0) > 0 and ("\n" .. string.rep("★", state.mastery)) or "")
-    if state.powerCooldown > 0.05 then
-        powerCost.Text = ("%.1fs"):format(state.powerCooldown)
-        powerSweep.Size = UDim2.fromScale(1,
-            math.clamp(state.powerCooldown / math.max(0.1, power and power.cooldown or 1), 0, 1))
-        powerBtn.TextColor3 = Theme.TEXT_DIM
-    else
-        powerCost.Text = "-" .. Format.short(state.powerCost)
-        powerSweep.Size = UDim2.fromScale(1, 0)
-        powerBtn.TextColor3 = Theme.TEXT
+    -- ── The hotbar, live ──────────────────────────────────────────────────
+    --
+    -- Driven entirely off `state.slots`, which the server sends. The client
+    -- never decides what is in a slot, what it costs, or whether it is ready —
+    -- the third slot depends on what the player owns, and "the button said I
+    -- could and the server said I could not" is the worst failure a control
+    -- can have.
+    for i, slot in ipairs(slots) do
+        local info = (state.slots or {})[i]
+        if info then
+            slot.button.Visible = true
+            slot.name.Text = (info.name or "—")
+                .. ((info.mastery or 0) > 0 and ("\n" .. string.rep("*", info.mastery)) or "")
+            if (info.cooldown or 0) > 0.05 then
+                slot.cost.Text = ("%.1fs"):format(info.cooldown)
+                slot.sweep.Size = UDim2.fromScale(1,
+                    math.clamp(info.cooldown / math.max(0.1, info.cooldownMax or 1), 0, 1))
+                slot.name.TextColor3 = Theme.TEXT_DIM
+            elseif info.locked then
+                slot.cost.Text = "LOCKED"
+                slot.sweep.Size = UDim2.fromScale(1, 1)
+                slot.name.TextColor3 = Theme.TEXT_DIM
+            else
+                slot.cost.Text = "-" .. Format.short(info.cost or 0)
+                slot.sweep.Size = UDim2.fromScale(1, 0)
+                slot.name.TextColor3 = Theme.TEXT
+            end
+            local st = slot.button:FindFirstChildOfClass("UIStroke")
+            if st then
+                -- Mastery tints a slot WHITE, not a colour: brightness is the
+                -- palette's one emphasis axis.
+                st.Color = (info.mastery or 0) > 0 and Theme.TEXT or Theme.LINE
+            end
+        else
+            slot.button.Visible = false
+        end
     end
 end
 
@@ -11115,11 +12523,13 @@ function ArenaHud.runEnded(s: any)
     end)
 end
 
--- Handed to Hud so the tutorial coach can pulse it. The coach pointing at the
--- button beats describing where it is, especially for a player who cannot read
--- quickly yet — which is most of this game's audience.
-function ArenaHud.powerButton(): TextButton?
-    return powerBtn
+--- The hotbar buttons, for anything that needs to point at them.
+function ArenaHud.slotButtons(): { TextButton }
+    local out = {}
+    for _, slot in ipairs(slots) do
+        table.insert(out, slot.button)
+    end
+    return out
 end
 
 function ArenaHud.isSheetOpen(): boolean
@@ -11128,41 +12538,32 @@ end
 
 return ArenaHud
 ]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000032"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
--- Hud.luau — toasts, the first-run coach, and the client's copy of the profile.
+-- Hud.luau — toasts, and the client's copy of the profile.
 --
--- WHAT THIS FILE USED TO BE, AND WHY IT IS NOT ANYMORE.
+-- THIS FILE KEEPS SHRINKING, AND THAT IS THE POINT.
 --
--- This was a 900-line screen: a stat panel, a Snack Stand, an egg button, a
--- sliding "MY GOOBS" drawer, and a four-tab strip inside it. All of it was
--- built for the game that existed before the arena — one where you stood on a
--- plot, watched an income number, and spent it at a shop.
+-- It was 912 lines: a stat panel, a Snack Stand, an egg button, a sliding "MY
+-- GOOBS" drawer and a four-tab strip inside it — the entire screen of the
+-- collection game the arena replaced. That went when the shops did. What was
+-- left was toasts and a first-run tutorial coach; the coach has now gone too.
 --
--- The arena replaced that game and ArenaHud replaced that screen. What did not
--- happen is the deletion. Both screens stayed, and the dock's SEASON tab still
--- reached back through `openLegacy` to open this drawer — which meant pressing
--- "BETA SEASON" rendered the season track INSIDE the old drawer, with the
--- Snack Stand reparented on top of it, because `applyLayout` moved the stand
--- into the drawer whenever arena mode was on. That is the overlapping panel in
--- the bug report: a season list with "Snack 💧113 / Feast 💧564 / Banquet
--- 💧2.26K" sitting across it. Not a layout bug. Two games sharing a screen.
+-- WHY THE COACH WENT. It was five steps in a banner across the top of the
+-- screen, and on a landscape phone it competed for the one free horizontal
+-- band with the round clock — the two took turns hiding each other, which is
+-- what the player saw as "the tutorial is overlapping weirdly". The deeper
+-- problem is that it was explaining a game that explains itself: eat the small
+-- ones, run from the big ones, biggest at the buzzer wins. A player learns
+-- that from one round. A banner that teaches what the first thirty seconds
+-- teach anyway is pure cost.
 --
--- So the drawer is gone, the shops are gone with the systems that fed them,
--- and ArenaHud's sheet is now the only panel in the game. What is left here is
--- the part that was never duplicated:
+-- What is left is the one thing that was never duplicated anywhere else:
 --
---   * TOASTS — the notification column, top-right.
---   * THE COACH — the first-run tutorial banner, which points at controls
---     other modules own through Hud.targets.
+--   * TOASTS — the notification column.
 --   * THE STATE — one client-side copy of the last profile push, which
 --     ArenaHud, TradeUi and the gulp confirmation all read.
---
--- There is deliberately no stat panel here. ArenaHud draws mass, worth and
--- Glob; a second HUD drawing the same numbers a tick out of step is how you
--- get two readouts disagreeing on screen.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 
 local Shared = game.ReplicatedStorage.GoobShared
 local Format = require(Shared.Format)
@@ -11175,30 +12576,22 @@ local Hud = {}
 
 local gui: ScreenGui
 local toastHolder: Frame
-local coach: Frame
-local coachText: TextLabel
-local coachHint: TextLabel
-local coachStep: TextLabel
-local pulseTarget: GuiObject? = nil
-local pulseClock = 0
 
 local state: any = nil
 
 -- ── Toasts ─────────────────────────────────────────────────────────────────
 
 local TOAST_COLOR = {
-    info = Theme.ACCENT, good = Theme.GOOD, warn = Theme.WARN, bad = Theme.WARN,
-    trade = Theme.GOLD, secret = Color3.fromRGB(255, 255, 255),
+    info = Theme.ACCENT, good = Theme.GOOD, warn = Theme.WARN, bad = Theme.BAD,
+    trade = Theme.GOLD, secret = Theme.TEXT,
 }
 
 -- How many toasts may be stacked at once.
 --
 -- The holder is a fixed-height column with a list layout, so nothing stopped
 -- the stack growing past the bottom of the screen — and on a 568x320 phone
--- three toasts ran 200px off it. Nobody caught it because the geometry audit
--- had never generated a toast; it measured a HUD that happened to be quiet.
--- Oldest goes when a new one arrives, which is also the right behaviour: the
--- newest message is the one you need.
+-- three toasts ran 200px off it. Oldest goes when a new one arrives, which is
+-- also the right behaviour: the newest message is the one you need.
 Hud.MAX_TOASTS = 3
 
 function Hud.toast(message: string, kind: string?)
@@ -11209,41 +12602,35 @@ function Hud.toast(message: string, kind: string?)
         for _, child in ipairs(toastHolder:GetChildren()) do
             if child:IsA("Frame") then table.insert(live, child) end
         end
-        -- ONE on compact. The band above the power button is a single row
-        -- tall; a second toast rendered straight over the button.
-        local allowed = Layout.isCompact() and 1 or Hud.MAX_TOASTS
+        local allowed = Layout.isCompact() and 2 or Hud.MAX_TOASTS
         while #live >= allowed do
             local oldest = table.remove(live, 1)
             if oldest then oldest:Destroy() end
         end
     end
 
+    local compact = Layout.isCompact()
     local frame = Instance.new("Frame")
-    -- Shorter on compact. The band between the coach and the power button is
-    -- about 70px on a landscape phone; two 46px cards do not fit in it and the
-    -- second one landed on the power button.
-    frame.Size = UDim2.new(1, 0, 0, Layout.isCompact() and 32 or 46)
+    frame.Size = UDim2.new(1, 0, 0, compact and 34 or 46)
     frame.BackgroundColor3 = Theme.PANEL
-    frame.BackgroundTransparency = 0.06
-    Theme.corner(frame)
-    Theme.stroke(frame, color, 3)
+    frame.BackgroundTransparency = 0.02
+    Theme.corner(frame, 10)
+    Theme.stroke(frame, color, 2)
 
     local text = Theme.label({
         Size = UDim2.new(1, -20, 1, 0),
         Position = UDim2.fromOffset(12, 0),
         Text = message,
         TextColor3 = color,
-        TextSize = Layout.isCompact() and 14 or 19,
+        TextSize = compact and 15 or 19,
         TextWrapped = true,
         TextYAlignment = Enum.TextYAlignment.Center,
     })
     text.Parent = frame
     frame.Parent = toastHolder
 
-    -- Slide in, hold, fade out. A Secret announcement holds longer because it
-    -- is a call to action, not a receipt.
     frame.Position = UDim2.new(1, 40, 0, 0)
-    TweenService:Create(frame, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    TweenService:Create(frame, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
         Position = UDim2.new(0, 0, 0, 0),
     }):Play()
 
@@ -11260,86 +12647,21 @@ end
 
 -- ── Layout ─────────────────────────────────────────────────────────────────
 --
--- Two things to place. The toast column hangs off the top-right under the Glob
--- readout ArenaHud owns; the coach sits below ArenaHud's dock, never on it.
+-- One thing to place now. The toast column hangs under the top-left stat card,
+-- on the OPPOSITE side of the screen from ArenaHud's menu — which lives down
+-- the right-hand edge — so the two can never collide however many tabs the
+-- menu grows or however long a notification is.
 
 function Hud.applyLayout()
     if not gui then return end
     local u = Layout.usable()
     local compact = Layout.isCompact()
+    local pad = compact and 8 or 14
 
-    -- ── THE ONE FREE COLUMN ON A PHONE ────────────────────────────────────
-    --
-    -- A 568x320 landscape phone has the dock and stat card across the top, the
-    -- power button at the bottom, and Roblox's own thumbstick and jump button
-    -- claiming the bottom-left and bottom-right corners outright. What is left
-    -- is a single vertical column between those two touch zones — the same
-    -- column the power button already lives in, and the only place a transient
-    -- panel can go without landing somewhere a thumb is or cannot reach.
-    --
-    -- So on compact BOTH the coach and the toast column are constrained to it,
-    -- stacked: coach directly under the dock, toasts directly above the power
-    -- button. Off a phone there is room for the usual thing — coach centred,
-    -- toasts down the right-hand side.
-    local gapL, gapR = Layout.bottomGap()
-    local colW = math.max(120, gapR - gapL - 8)
-    local colX = gapL + 4
-    local powerTop = u.Y - (compact and 76 or 92) - (compact and 14 or 26)
-
-    -- ── The coach ──────────────────────────────────────────────────────────
-    --
-    -- ArenaHud hides its status strip while this is up on compact, so the two
-    -- are never both trying to occupy the band under the dock.
-    local coachTop = Layout.belowDock()
-    local coachH = compact and 48 or 84
-    if coach then
-        local cw = compact and math.min(300, colW) or 460
-        coach.Size = UDim2.fromOffset(cw, coachH)
-        local x = compact and (colX + math.floor((colW - cw) / 2))
-            or math.floor((u.X - cw) / 2)
-        coach.Position = UDim2.fromOffset(Layout.fit(x, 8, math.max(8, u.X - cw - 8)), coachTop)
-
-        -- On compact the step counter goes: three stacked lines do not fit in
-        -- 48px, and "STEP 2 OF 5" is the least useful of the three.
-        coachStep.Visible = not compact
-        coachStep.Position = UDim2.fromOffset(14, 6)
-        coachStep.Size = UDim2.new(1, -60, 0, 16)
-        coachText.Position = UDim2.fromOffset(10, compact and 3 or 22)
-        coachText.Size = UDim2.new(1, -(compact and 62 or 28), 0, compact and 22 or 30)
-        coachText.TextSize = compact and 13 or 20
-        coachHint.Position = UDim2.fromOffset(10, compact and 25 or 54)
-        coachHint.Size = UDim2.new(1, -(compact and 62 or 28), 0, compact and 18 or 26)
-        coachHint.TextSize = compact and 10 or 14
-
-        local skip = coach:FindFirstChild("SkipCoach") :: TextButton?
-        if skip then
-            -- FULL SIZE, even though it is only a dismiss button. It was
-            -- 28x28, under the 34px floor a thumb needs, and the audit flagged
-            -- it: a control a player cannot press is not a smaller control, it
-            -- is an absent one.
-            local tap = Layout.MIN_TAP
-            skip.Size = UDim2.fromOffset(tap, tap)
-            skip.Position = UDim2.fromOffset(cw - tap - 6,
-                math.max(2, math.floor((coachH - tap) / 2)))
-        end
-    end
-
-    -- ── Toasts ─────────────────────────────────────────────────────────────
-    --
-    -- The old position was a fixed 76px from the top, which on a phone put the
-    -- column straight through ArenaHud's status strip and, further down, across
-    -- the power button. Bottom-anchored above the power button on compact, so
-    -- the stack grows AWAY from the one control the player is holding.
-    local toastW = compact and math.min(240, colW) or 340
-    local toastH = compact and 32 or 200
-    local toastTop = compact
-        and math.max(Layout.belowDock() + coachH + 6, powerTop - toastH - 4)
-        or math.max(Layout.belowStatus(), coachTop + coachH + 8)
+    local toastW = compact and math.min(230, math.floor(u.X * 0.42)) or 330
+    local toastH = compact and 80 or 200
     toastHolder.Size = UDim2.fromOffset(toastW, toastH)
-    toastHolder.Position = UDim2.fromOffset(
-        compact and (colX + math.floor((colW - toastW) / 2))
-            or (u.X - toastW - 14),
-        toastTop)
+    toastHolder.Position = UDim2.fromOffset(pad, Layout.belowStatCard())
 end
 
 -- ── Build ──────────────────────────────────────────────────────────────────
@@ -11357,78 +12679,15 @@ function Hud.build(): ScreenGui
     gui.DisplayOrder = 10
     gui.Parent = player:WaitForChild("PlayerGui")
 
-    -- The first-run coach. One instruction at a time, and deliberately NOT a
-    -- modal: the player should be doing the thing while reading it, not
-    -- dismissing a wall of text before they can move.
-    coach = Instance.new("Frame")
-    coach.Name = "Coach"
-    coach.BackgroundColor3 = Theme.BG
-    coach.BackgroundTransparency = 0.05
-    coach.Visible = false
-    coach.ZIndex = 20
-    coach.Parent = gui
-    Theme.corner(coach, 16)
-    Theme.stroke(coach, Theme.GOLD, 3)
-
-    coachStep = Theme.label({
-        Name = "Step", Text = "", TextSize = 13,
-        TextColor3 = Theme.GOLD, ZIndex = 21,
-    })
-    coachStep.Parent = coach
-
-    coachText = Theme.label({
-        Name = "Line", Text = "", TextSize = 20, ZIndex = 21,
-        TextWrapped = true,
-    })
-    coachText.Parent = coach
-
-    coachHint = Theme.label({
-        Name = "Hint", Text = "", TextSize = 14,
-        TextColor3 = Theme.TEXT_DIM, TextWrapped = true, ZIndex = 21,
-    })
-    coachHint.Parent = coach
-
-    local skip = Theme.button("✖", Theme.BG_SOFT, UDim2.fromOffset(28, 28))
-    skip.Name = "SkipCoach"
-    skip.TextColor3 = Theme.TEXT_DIM
-    skip.TextSize = 14
-    skip.ZIndex = 21
-    skip.Parent = coach
-    skip.Activated:Connect(function() Hud.onDismissCoach() end)
-
-    -- Toast column, top-right.
     toastHolder = Instance.new("Frame")
     toastHolder.Name = "Toasts"
     toastHolder.BackgroundTransparency = 1
     toastHolder.Parent = gui
 
     local toastLayout = Instance.new("UIListLayout")
-    toastLayout.Padding = UDim.new(0, 8)
+    toastLayout.Padding = UDim.new(0, 6)
     toastLayout.VerticalAlignment = Enum.VerticalAlignment.Top
     toastLayout.Parent = toastHolder
-
-    RunService.RenderStepped:Connect(function(dt)
-        -- Pulse the coached control, and restore the stroke on whatever was
-        -- pulsing before so a button never stays stuck mid-glow. The registry
-        -- is walked rather than a hardcoded list of this file's own buttons —
-        -- which is what broke the last version: the only controls it knew how
-        -- to point at were the Snack Stand and the drawer, and by then the
-        -- steps that needed a pointer were all on ArenaHud.
-        pulseClock += dt
-        for _, control in pairs(Hud.targets) do
-            if control ~= pulseTarget and control.Parent then
-                local st = control:FindFirstChildOfClass("UIStroke")
-                if st then st.Thickness = 3 end
-            end
-        end
-        if pulseTarget then
-            local st = pulseTarget:FindFirstChildOfClass("UIStroke")
-            if st then
-                st.Color = Theme.GOLD
-                st.Thickness = 3 + math.abs(math.sin(pulseClock * 3)) * 4
-            end
-        end
-    end)
 
     Layout.start()
     Hud.applyLayout()
@@ -11441,29 +12700,10 @@ end
 
 function Hud.update(snap: any)
     state = snap
-
-    local tut = snap.tutorial
-    if coach then
-        if tut then
-            coach.Visible = true
-            coachStep.Text = ("STEP %d OF %d"):format(tut.index, tut.total)
-                .. (tut.progress and ("   ·   " .. tut.progress) or "")
-            coachText.Text = tut.text
-            coachHint.Text = tut.hint or ""
-            -- Resolved through the registry ONLY. There is no fallback chain
-            -- anymore, because every control a step can name now belongs to
-            -- ArenaHud and registers itself.
-            pulseTarget = Hud.targets[tut.target or ""]
-        else
-            coach.Visible = false
-            pulseTarget = nil
-        end
-    end
 end
 
 --- Formatted Glob, for anything that wants to print it without re-deriving the
---- format. Kept because two callers used to do this by hand and disagreed on
---- whether to round.
+--- format.
 function Hud.globText(): string
     return state and Format.short(state.glob) or "0"
 end
@@ -11473,24 +12713,8 @@ end
 Hud.tradeOpen = false
 Hud.onGulp = function(_: string) end
 Hud.onOffer = function(_: string) end
-Hud.onDismissCoach = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
-
--- Controls other modules own, which the tutorial coach may point at. ArenaHud
--- registers its power button here; anything else that a tutorial step names
--- must register too, or the step simply will not pulse anything.
-Hud.targets = {} :: { [string]: GuiObject }
-
-function Hud.registerTarget(name: string, control: GuiObject?)
-    Hud.targets[name] = control
-end
-
--- Kept as a no-op so the boot sequence reads the same and nothing has to know
--- that there is no longer a second screen to switch off. There is only one
--- HUD now; "arena mode" is the only mode.
-Hud.arenaMode = true
-function Hud.setArenaMode(_: boolean) end
 
 function Hud.getState() return state end
 
@@ -12085,72 +13309,111 @@ function Layout.centre(size: UDim2): UDim2
     )
 end
 
--- ── The top band: the dock, and everything that has to sit under it ────────
+-- ── The menu rail, and everything that has to stay clear of it ────────────
 --
--- ONE OWNER FOR A NUMBER TWO FILES BOTH NEED.
+-- ONE OWNER FOR NUMBERS TWO FILES BOTH NEED.
 --
--- ArenaHud draws the dock. Hud draws the tutorial coach and the toast column,
--- and both of those have to go BELOW the dock — which means Hud has to know how
--- tall the dock is. The obvious answers are both wrong: duplicating the icon
--- arithmetic in Hud leaves two copies to drift the moment a tab is added, and
--- having Hud require ArenaHud points the small module at the big one for a
--- single integer. So the arithmetic lives here, where both already look.
+-- ArenaHud draws the menu. Hud draws the toast column and has to stay out of
+-- its way. Duplicating the arithmetic leaves two copies to drift the moment a
+-- tab is added; having Hud require ArenaHud points the small module at the big
+-- one for a couple of integers. So it lives here, where both already look.
 --
--- WHY THE DOCK WRAPS ON A PHONE. Nine tabs in one row is 390px at a 38px icon.
--- On a 568-wide screen that leaves 89px either side, and the stat card alone
--- wants 104 — so the card ran under the dock and the Glob readout ran under the
--- other end of it. Two rows is 222px wide and 96 tall, which fits between the
--- card and the Glob readout with room to spare, and keeps every icon at 38px
--- rather than shrinking them under the 34px a thumb needs.
--- How many tabs the dock has. REGISTERED BY THE MODULE THAT OWNS THE DOCK,
--- rather than passed in by every caller — because the callers are ArenaHud
--- (which knows) and Hud (which does not, and would have to keep a copy of the
--- number in sync forever). A stale copy in Hud puts the tutorial coach on top
--- of the dock the first time a tab is added, which is a bug nobody would think
--- to look for in the file that does not draw tabs.
-local dockTabs = 8
+-- WHY THE MENU IS A VERTICAL RAIL ON THE RIGHT.
+--
+-- It was a horizontal strip of nine unlabelled icons across the top, and two
+-- things were wrong with that. A row of pictograms is a memory test — 🔧 and
+-- 🎁 and 🛡️ mean nothing until you have opened each one — and across the top
+-- it was competing with the round clock, the stat card and the Glob readout
+-- for the most valuable strip of screen there is. Down the right-hand edge
+-- there is room for the ICON AND ITS NAME on every row, the list reads
+-- top-to-bottom like a menu should, and it grows downward without pushing
+-- anything sideways.
+local menuTabs = 8
 
-function Layout.setDockTabs(n: number)
-    if n == dockTabs then return end
-    dockTabs = n
+function Layout.setMenuTabs(n: number)
+    if n == menuTabs then return end
+    menuTabs = n
     Layout.changed:Fire(current)
 end
 
-function Layout.dockMetrics(tabCount: number?)
-    local count = tabCount or dockTabs
+--- Geometry of the right-hand menu: a header button, and the list it drops.
+---
+--- ── WHY THE LIST DOES NOT SIT UNDER THE BUTTON ON A PHONE ────────────────
+---
+--- Roblox reserves the bottom-right 160x160 of a touch screen for the jump
+--- button. On a 568x320 landscape phone that is the entire right-hand column
+--- below y=160 — which is exactly where a right-anchored dropdown wants to go.
+--- Eight labelled rows need about 400px of height and there are only ~120
+--- above the jump zone, so a list that dropped straight down would put six of
+--- its eight rows somewhere a thumb physically cannot reach.
+---
+--- So on touch the list opens to the LEFT of its button, into the middle of
+--- the screen, which is the one large region nothing else claims. The button
+--- stays top-right where the request put it, the list is still a vertical
+--- column of names, and every row is reachable. On a desktop there are no
+--- reserved zones and it simply drops underneath.
+function Layout.menuMetrics(tabCount: number?)
+    local count = tabCount or menuTabs
     local compact = current.compact
-    local icon = compact and 38 or 52
-    local gap = compact and 4 or 7
-    local pad = compact and 8 or 14
-    local perRow = compact and math.ceil(count / 2) or count
-    local rows = compact and 2 or 1
-    if count <= 5 then
-        perRow, rows = count, 1
+    local touch = current.touch
+    local u = Layout.usable()
+
+    local rowH = compact and 34 or 42
+    local gap = compact and 3 or 5
+    local pad = compact and 6 or 9
+    local width = math.min(compact and 158 or 210, math.floor(u.X * 0.36))
+    local headerH = Layout.MIN_TAP
+    local top = compact and 6 or 12
+    local right = compact and 6 or 12
+
+    -- Where the list may start, and how much room it has.
+    local listTop = top + headerH + (compact and 4 or 6)
+    local listRight = right
+    if touch then
+        -- Clear of the jump column entirely.
+        listRight = math.max(right, Layout.JUMP_BUTTON.X + 10)
     end
+    -- STOPS ABOVE THE HOTBAR. The three power buttons live on the bottom edge
+    -- and are the controls a player is actually holding; a dropdown that ran
+    -- over them would cover the game to show a menu.
+    local hotbarBand = (compact and 62 or 84) + (compact and 12 or 24) + 10
+    local avail = u.Y - listTop - hotbarBand
+    if touch and not compact then
+        -- An iPad: the thumbstick and jump button are still reserved, but
+        -- there is height to spare, so the list drops normally and simply
+        -- stops above the jump zone.
+        avail = math.min(avail, u.Y - Layout.JUMP_BUTTON.Y - listTop - 10)
+    end
+    local wanted = count * rowH + (count - 1) * gap + pad * 2
+    local listH = math.max(rowH * 2, math.min(wanted, avail))
+
     return {
-        icon = icon,
+        rowH = rowH,
         gap = gap,
         pad = pad,
-        perRow = perRow,
-        rows = rows,
-        width = perRow * icon + (perRow - 1) * gap + pad * 2,
-        height = rows * icon + (rows - 1) * gap + pad * 2,
-        top = 6,
+        width = width,
+        headerH = headerH,
+        top = top,
+        right = right,
+        listTop = listTop,
+        listRight = listRight,
+        listH = listH,
+        -- True when the list had to be shortened, so it needs to scroll.
+        scrolls = wanted > listH + 1,
     }
 end
 
---- Y coordinate of the first free pixel under the dock.
-function Layout.belowDock(tabCount: number?): number
-    local m = Layout.dockMetrics(tabCount)
-    return m.top + m.height + (current.compact and 6 or 10)
+--- X of the first pixel the menu HEADER occupies. Nothing persistent may be
+--- drawn at or past it.
+function Layout.menuLeft(tabCount: number?): number
+    local m = Layout.menuMetrics(tabCount)
+    return Layout.usable().X - m.width - m.right
 end
 
---- Y coordinate of the first free pixel under the dock AND the status strip
---- that sits beneath it. Anything drawn from here down is clear of the whole
---- top block.
-function Layout.belowStatus(tabCount: number?): number
-    local strip = current.compact and 30 or 36
-    return Layout.belowDock(tabCount) + strip + (current.compact and 6 or 10)
+--- Y of the first free pixel under the top-left stat column — the stat card,
+--- the Glob readout and the season line, which stack there.
+function Layout.belowStatCard(): number
+    return current.compact and 118 or 162
 end
 
 -- The horizontal band between the thumbstick and the jump button — the only
@@ -12628,6 +13891,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = game.ReplicatedStorage:WaitForChild("GoobShared")
 local Movement = require(Shared.Movement)
+local Config = require(Shared.Config)
 local Stick = require(script.Parent.Stick)
 
 local player = Players.LocalPlayer
@@ -12664,6 +13928,24 @@ end
 
 function Roll.setMass(newMass: number)
     mass = newMass
+end
+
+-- ── SNAGGED ON SOMEBODY'S TETHER ──────────────────────────────────────────
+--
+-- The server decides WHETHER you are snagged; the client has to be the one
+-- that acts on it, because the client owns this ball's physics. That split was
+-- the bug: the server set the flag, the tests asserted the flag was set, and
+-- nothing anywhere actually slowed the player down. Bots were slowed correctly
+-- because the server moves those itself, so the mechanic worked against
+-- everything except the people it was aimed at.
+local snagged = false
+
+function Roll.setSnagged(on: boolean)
+    snagged = on
+end
+
+function Roll.isSnagged(): boolean
+    return snagged
 end
 
 function Roll.setBall(newBall: BasePart?, newMass: number)
@@ -12759,6 +14041,9 @@ function Roll.step(dt: number)
     else
         local input = moveInput()
         local top = Movement.topSpeed(mass)
+        if snagged then
+            top *= Config.TETHER_SLOW
+        end
         if input.Magnitude > 0.05 then
             local accel = Movement.acceleration(mass)
             target = flat + input * accel * dt
@@ -13032,27 +14317,47 @@ return Stick
 
 local Theme = {}
 
-Theme.FONT = Enum.Font.FredokaOne
--- PALETTE: muted and low-chroma on purpose.
+Theme.FONT = Enum.Font.GothamBold
+Theme.FONT_BODY = Enum.Font.Gotham
+
+-- ── MONOCHROME. Black, grey, white, and nothing else. ─────────────────────
 --
--- The first pass was neon — electric cyan on near-black navy, saturated gold,
--- pure-white text — and on screen it read as loud rather than lively. These are
--- the same hues pulled well down in saturation and up in lightness, so panels
--- sit back and only the numbers that matter carry colour.
+-- Two earlier passes over this palette: the first was neon (electric cyan on
+-- near-black), which read as loud; the second pulled everything down to muted
+-- slate-blues and sages, which read as muddy. Both were trying to make the UI
+-- itself interesting, and the UI is not the interesting part — the blobs are.
 --
--- Rule of thumb kept here: nothing above ~55% saturation, text is warm
--- off-white rather than #FFFFFF, and "accent" is a desaturated slate-blue that
--- can sit next to the sky without fighting it.
-Theme.BG        = Color3.fromRGB(38, 40, 46)   -- warm charcoal, not navy
-Theme.BG_SOFT   = Color3.fromRGB(54, 57, 65)
-Theme.PANEL     = Color3.fromRGB(46, 49, 56)
-Theme.ACCENT    = Color3.fromRGB(138, 172, 190) -- dusty slate blue
-Theme.GOOD      = Color3.fromRGB(142, 178, 134) -- sage
-Theme.WARN      = Color3.fromRGB(206, 168, 108) -- muted ochre
-Theme.BAD       = Color3.fromRGB(190, 124, 112) -- clay
-Theme.GOLD      = Color3.fromRGB(198, 174, 118) -- brass, not yellow
-Theme.TEXT      = Color3.fromRGB(232, 229, 222) -- warm off-white
-Theme.TEXT_DIM  = Color3.fromRGB(150, 154, 160)
+-- So the interface is now greyscale by rule: every panel, every label, every
+-- border is black, grey or white. The ONLY chroma anywhere on screen is
+-- meaning: a rarity stroke on a card, a red warning, a green confirmation. A
+-- neon skin has nothing to compete with, which is the point — this is a game
+-- whose whole visual promise is a glowing blob, and a grey frame around it is
+-- what makes it glow.
+--
+-- The greys are very slightly warm (R and G a shade above B). Perfectly
+-- neutral greys read as blue-ish on most phone panels; two or three points of
+-- warmth reads as black rather than as a colour.
+Theme.BLACK     = Color3.fromRGB(10, 10, 11)
+Theme.BG        = Color3.fromRGB(20, 20, 22)
+Theme.PANEL     = Color3.fromRGB(28, 28, 31)
+Theme.BG_SOFT   = Color3.fromRGB(42, 42, 46)
+Theme.LINE      = Color3.fromRGB(62, 62, 68)
+Theme.TEXT      = Color3.fromRGB(245, 245, 246)
+Theme.TEXT_DIM  = Color3.fromRGB(158, 158, 164)
+
+-- "Accent" is white. Where the old palette used a colour to mean "this is the
+-- live one", the monochrome answer is brightness: selected rows are white on
+-- black, everything else is grey on near-black. That is a stronger signal than
+-- hue on a small screen and it survives being colourblind.
+Theme.ACCENT    = Color3.fromRGB(245, 245, 246)
+Theme.GOLD      = Color3.fromRGB(226, 226, 228)
+
+-- The three exceptions, kept as desaturated as they can be while still
+-- reading instantly. These are STATE, not decoration: something worked,
+-- something is about to go wrong, something is dangerous.
+Theme.GOOD      = Color3.fromRGB(126, 214, 150)
+Theme.WARN      = Color3.fromRGB(226, 186, 104)
+Theme.BAD       = Color3.fromRGB(226, 106, 106)
 
 function Theme.corner(parent: Instance, radius: number?)
     local c = Instance.new("UICorner")
@@ -13063,7 +14368,7 @@ end
 
 function Theme.stroke(parent: Instance, color: Color3?, thickness: number?)
     local s = Instance.new("UIStroke")
-    s.Color = color or Color3.fromRGB(24, 26, 30)
+    s.Color = color or Theme.LINE
     s.Thickness = thickness or 2
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.Parent = parent
@@ -13093,18 +14398,38 @@ function Theme.label(props: { [string]: any }): TextLabel
     return t
 end
 
+-- A button reads as a SURFACE with a bright label, not as a slab of colour.
+--
+-- The old style filled the button with the accent colour and printed dark text
+-- on it, which in a monochrome palette means a white rectangle — the loudest
+-- thing on the screen, on every button at once. Inverting it puts the emphasis
+-- on the text: dark surface, near-white label, and `color` becomes the BORDER,
+-- which is where the one permitted piece of chroma (a rarity, a warning) can
+-- live without shouting.
 function Theme.button(text: string, color: Color3, size: UDim2): TextButton
     local b = Instance.new("TextButton")
     b.Text = text
     b.Size = size
-    b.BackgroundColor3 = color
+    b.BackgroundColor3 = Theme.BG_SOFT
     b.Font = Theme.FONT
-    b.TextColor3 = Color3.fromRGB(28, 30, 34)
-    b.TextSize = 20
+    b.TextColor3 = Theme.TEXT
+    b.TextSize = 18
     b.AutoButtonColor = true
-    Theme.corner(b, 12)
-    Theme.stroke(b)
+    Theme.corner(b, 10)
+    Theme.stroke(b, color, 2)
     return b
+end
+
+--- A button that is currently ON. White surface, black label — the only place
+--- in the interface that inverts, which is what makes "this one is live"
+--- unmissable without using a colour to say it.
+function Theme.setButtonActive(b: TextButton, on: boolean)
+    b.BackgroundColor3 = on and Theme.TEXT or Theme.BG_SOFT
+    b.TextColor3 = on and Theme.BLACK or Theme.TEXT
+    local st = b:FindFirstChildOfClass("UIStroke")
+    if st then
+        st.Color = on and Theme.TEXT or Theme.LINE
+    end
 end
 
 return Theme

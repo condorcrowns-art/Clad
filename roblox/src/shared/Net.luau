@@ -15,7 +15,6 @@ Net.EVENTS = {
     "FeedGoob",       -- C->S  push stomach items (auto, but kept explicit)
     "RenameGoob",     -- C->S
     "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
-    "DismissTutorial",-- C->S  stop showing the first-run guide
     "Ascend",         -- C->S  consume a Colossal Goob for a permanent Crest
     "Dashed",         -- C->S  cosmetic: tell the server a dash happened
     "EquipCosmetic",  -- C->S  wear something you own

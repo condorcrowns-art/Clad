@@ -258,7 +258,26 @@ for _, p in ipairs(Powers.LIST) do
     last = p.unlockBanked
 end
 check("the ladder is strictly ordered", #outOfOrder == 0, table.concat(outOfOrder, ", "))
-check("the first power is free", Powers.LIST[1].unlockBanked == 0)
+-- THE FREE ONES ARE THE FIXED ONES NOW. DASH and SPLIT are slots 1 and 2 of
+-- the hotbar, owned from the first second, and are not in Powers.LIST at all —
+-- they are not choices. So "the first power is free" moved to them, and what
+-- LIST[1] has to be instead is REACHABLE: the first thing a player can choose
+-- must arrive inside a session, or slot 3 is a locked box for a week.
+check("both fixed powers are free and owned from the start",
+    #Powers.FIXED == 2
+        and Powers.FIXED[1].unlockBanked == 0
+        and Powers.FIXED[2].unlockBanked == 0)
+check("and neither of them is also in the choosable list",
+    (function()
+        for _, fixedPower in ipairs(Powers.FIXED) do
+            for _, p in ipairs(Powers.LIST) do
+                if p.id == fixedPower.id then return false end
+            end
+        end
+        return true
+    end)())
+check("the first CHOOSABLE power is reachable in one session",
+    Powers.LIST[1].unlockBanked <= 5000, tostring(Powers.LIST[1].unlockBanked))
 check("something new arrives inside the first hour",
     Powers.LIST[2].unlockBanked < 25000, tostring(Powers.LIST[2].unlockBanked))
 check("but the last one is a long-term goal",
@@ -275,9 +294,16 @@ check("full mastery is worth under 20% of cooldown",
     ("%.2f vs %.2f"):format(Powers.cooldown("dash", 0, 1e9), Powers.cooldown("dash", 0, 0)))
 check("and under 15% of cost",
     Powers.massCost("split", 1000, 1e9) > Powers.massCost("split", 1000, 0) * 0.85)
+-- ASKED OF THE POWER BEING TESTED, not of whatever happens to be first in the
+-- list. This compared dash's clamped cooldown against `Powers.LIST[1].cooldown`
+-- — which WAS dash, and is now MAGNET, since dash moved to the fixed hotbar.
+-- The check went on running and started measuring one power against another's
+-- baseline, which is the same "ask the code under test for the answer" trap
+-- the invariants warn about, wearing a different hat.
+local dashBase = Powers.get("dash").cooldown
 check("trinkets and mastery are clamped TOGETHER",
-    Powers.cooldown("dash", 0.35, 1e9) >= Powers.LIST[1].cooldown * 0.55,
-    tostring(Powers.cooldown("dash", 0.35, 1e9)))
+    Powers.cooldown("dash", 0.35, 1e9) >= dashBase * 0.55,
+    ("%.2f vs base %.2f"):format(Powers.cooldown("dash", 0.35, 1e9), dashBase))
 check("mastery progress always has a next target, until it does not",
     (function()
         local tier, togo = Powers.masteryNext(0)

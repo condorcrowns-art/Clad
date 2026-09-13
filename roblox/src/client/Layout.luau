@@ -95,72 +95,111 @@ function Layout.centre(size: UDim2): UDim2
     )
 end
 
--- ── The top band: the dock, and everything that has to sit under it ────────
+-- ── The menu rail, and everything that has to stay clear of it ────────────
 --
--- ONE OWNER FOR A NUMBER TWO FILES BOTH NEED.
+-- ONE OWNER FOR NUMBERS TWO FILES BOTH NEED.
 --
--- ArenaHud draws the dock. Hud draws the tutorial coach and the toast column,
--- and both of those have to go BELOW the dock — which means Hud has to know how
--- tall the dock is. The obvious answers are both wrong: duplicating the icon
--- arithmetic in Hud leaves two copies to drift the moment a tab is added, and
--- having Hud require ArenaHud points the small module at the big one for a
--- single integer. So the arithmetic lives here, where both already look.
+-- ArenaHud draws the menu. Hud draws the toast column and has to stay out of
+-- its way. Duplicating the arithmetic leaves two copies to drift the moment a
+-- tab is added; having Hud require ArenaHud points the small module at the big
+-- one for a couple of integers. So it lives here, where both already look.
 --
--- WHY THE DOCK WRAPS ON A PHONE. Nine tabs in one row is 390px at a 38px icon.
--- On a 568-wide screen that leaves 89px either side, and the stat card alone
--- wants 104 — so the card ran under the dock and the Glob readout ran under the
--- other end of it. Two rows is 222px wide and 96 tall, which fits between the
--- card and the Glob readout with room to spare, and keeps every icon at 38px
--- rather than shrinking them under the 34px a thumb needs.
--- How many tabs the dock has. REGISTERED BY THE MODULE THAT OWNS THE DOCK,
--- rather than passed in by every caller — because the callers are ArenaHud
--- (which knows) and Hud (which does not, and would have to keep a copy of the
--- number in sync forever). A stale copy in Hud puts the tutorial coach on top
--- of the dock the first time a tab is added, which is a bug nobody would think
--- to look for in the file that does not draw tabs.
-local dockTabs = 8
+-- WHY THE MENU IS A VERTICAL RAIL ON THE RIGHT.
+--
+-- It was a horizontal strip of nine unlabelled icons across the top, and two
+-- things were wrong with that. A row of pictograms is a memory test — 🔧 and
+-- 🎁 and 🛡️ mean nothing until you have opened each one — and across the top
+-- it was competing with the round clock, the stat card and the Glob readout
+-- for the most valuable strip of screen there is. Down the right-hand edge
+-- there is room for the ICON AND ITS NAME on every row, the list reads
+-- top-to-bottom like a menu should, and it grows downward without pushing
+-- anything sideways.
+local menuTabs = 8
 
-function Layout.setDockTabs(n: number)
-    if n == dockTabs then return end
-    dockTabs = n
+function Layout.setMenuTabs(n: number)
+    if n == menuTabs then return end
+    menuTabs = n
     Layout.changed:Fire(current)
 end
 
-function Layout.dockMetrics(tabCount: number?)
-    local count = tabCount or dockTabs
+--- Geometry of the right-hand menu: a header button, and the list it drops.
+---
+--- ── WHY THE LIST DOES NOT SIT UNDER THE BUTTON ON A PHONE ────────────────
+---
+--- Roblox reserves the bottom-right 160x160 of a touch screen for the jump
+--- button. On a 568x320 landscape phone that is the entire right-hand column
+--- below y=160 — which is exactly where a right-anchored dropdown wants to go.
+--- Eight labelled rows need about 400px of height and there are only ~120
+--- above the jump zone, so a list that dropped straight down would put six of
+--- its eight rows somewhere a thumb physically cannot reach.
+---
+--- So on touch the list opens to the LEFT of its button, into the middle of
+--- the screen, which is the one large region nothing else claims. The button
+--- stays top-right where the request put it, the list is still a vertical
+--- column of names, and every row is reachable. On a desktop there are no
+--- reserved zones and it simply drops underneath.
+function Layout.menuMetrics(tabCount: number?)
+    local count = tabCount or menuTabs
     local compact = current.compact
-    local icon = compact and 38 or 52
-    local gap = compact and 4 or 7
-    local pad = compact and 8 or 14
-    local perRow = compact and math.ceil(count / 2) or count
-    local rows = compact and 2 or 1
-    if count <= 5 then
-        perRow, rows = count, 1
+    local touch = current.touch
+    local u = Layout.usable()
+
+    local rowH = compact and 34 or 42
+    local gap = compact and 3 or 5
+    local pad = compact and 6 or 9
+    local width = math.min(compact and 158 or 210, math.floor(u.X * 0.36))
+    local headerH = Layout.MIN_TAP
+    local top = compact and 6 or 12
+    local right = compact and 6 or 12
+
+    -- Where the list may start, and how much room it has.
+    local listTop = top + headerH + (compact and 4 or 6)
+    local listRight = right
+    if touch then
+        -- Clear of the jump column entirely.
+        listRight = math.max(right, Layout.JUMP_BUTTON.X + 10)
     end
+    -- STOPS ABOVE THE HOTBAR. The three power buttons live on the bottom edge
+    -- and are the controls a player is actually holding; a dropdown that ran
+    -- over them would cover the game to show a menu.
+    local hotbarBand = (compact and 62 or 84) + (compact and 12 or 24) + 10
+    local avail = u.Y - listTop - hotbarBand
+    if touch and not compact then
+        -- An iPad: the thumbstick and jump button are still reserved, but
+        -- there is height to spare, so the list drops normally and simply
+        -- stops above the jump zone.
+        avail = math.min(avail, u.Y - Layout.JUMP_BUTTON.Y - listTop - 10)
+    end
+    local wanted = count * rowH + (count - 1) * gap + pad * 2
+    local listH = math.max(rowH * 2, math.min(wanted, avail))
+
     return {
-        icon = icon,
+        rowH = rowH,
         gap = gap,
         pad = pad,
-        perRow = perRow,
-        rows = rows,
-        width = perRow * icon + (perRow - 1) * gap + pad * 2,
-        height = rows * icon + (rows - 1) * gap + pad * 2,
-        top = 6,
+        width = width,
+        headerH = headerH,
+        top = top,
+        right = right,
+        listTop = listTop,
+        listRight = listRight,
+        listH = listH,
+        -- True when the list had to be shortened, so it needs to scroll.
+        scrolls = wanted > listH + 1,
     }
 end
 
---- Y coordinate of the first free pixel under the dock.
-function Layout.belowDock(tabCount: number?): number
-    local m = Layout.dockMetrics(tabCount)
-    return m.top + m.height + (current.compact and 6 or 10)
+--- X of the first pixel the menu HEADER occupies. Nothing persistent may be
+--- drawn at or past it.
+function Layout.menuLeft(tabCount: number?): number
+    local m = Layout.menuMetrics(tabCount)
+    return Layout.usable().X - m.width - m.right
 end
 
---- Y coordinate of the first free pixel under the dock AND the status strip
---- that sits beneath it. Anything drawn from here down is clear of the whole
---- top block.
-function Layout.belowStatus(tabCount: number?): number
-    local strip = current.compact and 30 or 36
-    return Layout.belowDock(tabCount) + strip + (current.compact and 6 or 10)
+--- Y of the first free pixel under the top-left stat column — the stat card,
+--- the Glob readout and the season line, which stack there.
+function Layout.belowStatCard(): number
+    return current.compact and 118 or 162
 end
 
 -- The horizontal band between the thumbstick and the jump button — the only

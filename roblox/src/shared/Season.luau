@@ -97,6 +97,34 @@ function Season.rewards(): { [number]: { free: string?, premium: string? } }
     return out
 end
 
+-- ── POWERS ON THE SEASON TRACK ────────────────────────────────────────────
+--
+-- The player asked for rare skills to come out of the Beta Pass. They do — but
+-- only on the FREE track, and that is not a detail, it is the monetisation
+-- wall.
+--
+-- The premium track is bought with Robux. `Monetisation.violations()` fails
+-- the build if anything purchasable carries a gameplay number, and a POWER is
+-- the most gameplay-carrying thing in the game. Putting one on the paid side
+-- would mean money buying a button nobody else has, which is the exact failure
+-- every rule in that file exists to prevent.
+--
+-- On the free side it is the opposite: a power that cannot be bought at any
+-- price and only arrives by playing far enough into the season. That is a
+-- better prize than a skin precisely BECAUSE it cannot be bought, and it is
+-- the only way into these two powers — neither is on the banking ladder.
+Season.POWER_AT = {
+    [22] = "hook",
+    [40] = "spike",
+}
+
+--- Which power, if any, tier `t` grants. Free track only, by construction:
+--- this function does not take a `premium` argument, so there is nowhere to
+--- put a paid one even by accident.
+function Season.powerAt(tier: number): string?
+    return Season.POWER_AT[tier]
+end
+
 function Season.rewardAt(tier: number, premium: boolean): string?
     local row = Season.rewards()[tier]
     if not row then return nil end
@@ -129,15 +157,18 @@ function Season.award(state: any, source: string, now: number?): (number, boolea
 end
 
 -- Which tiers are earned but unclaimed, per track.
-function Season.claimable(state: any): { { tier: number, premium: boolean, cosmetic: string } }
+function Season.claimable(state: any): { any }
     local out = {}
     if not state then return out end
     local tier = Season.tierOf(state.xp)
     for t = 1, tier do
         local key = tostring(t)
         local free = Season.rewardAt(t, false)
-        if free and not (state.claimedFree or {})[key] then
-            table.insert(out, { tier = t, premium = false, cosmetic = free })
+        local freePower = Season.powerAt(t)
+        if (free or freePower) and not (state.claimedFree or {})[key] then
+            table.insert(out, {
+                tier = t, premium = false, cosmetic = free, power = freePower,
+            })
         end
         if state.premium then
             local prem = Season.rewardAt(t, true)

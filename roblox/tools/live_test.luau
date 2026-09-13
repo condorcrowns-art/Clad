@@ -316,7 +316,7 @@ local function nearby()
 end
 local beforeNear = nearby()
 
-svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+svc.fireAs("UsePower", alice, 3, V3.new(0, 0, 1))
 tick(0.35)
 local afterMass = (arenaOf(alice) or {}).mass or 0
 local paid = beforeMass - afterMass
@@ -334,7 +334,14 @@ check("it costs what the power says it costs",
 check("and what it cost landed on the floor beside you, not deleted",
     nearby() > beforeNear, ("%d -> %d nearby"):format(beforeNear, nearby()))
 check("the power goes on cooldown",
-    (arenaOf(alice) or {}).powerCooldown > 0, tostring((arenaOf(alice) or {}).powerCooldown))
+    -- READ OFF THE SLOT, not off the blob. Cooldowns used to be one number on
+    -- the run, which was right when the blob carried one power and is wrong
+    -- now: three buttons with a shared cooldown would mean pressing DASH
+    -- disabled SPLIT. `powerCooldown` still exists for the chosen power, but
+    -- the authoritative answer is per-slot and that is what the HUD draws.
+    (((arenaOf(alice) or {}).slots or {})[3] or {}).cooldown ~= nil
+        and ((arenaOf(alice) or {}).slots or {})[3].cooldown > 0,
+    tostring((((arenaOf(alice) or {}).slots or {})[3] or {}).cooldown))
 
 -- A power you cannot afford must be refused rather than taking you negative.
 svc.fireAs("SetPower", alice, "spike")
@@ -351,7 +358,7 @@ local before = arenaOf(alice) or {}
 local startTier = before.mastery or 0
 for _ = 1, 30 do
     feed(alice, 4)
-    svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+    svc.fireAs("UsePower", alice, 3, V3.new(0, 0, 1))
     tick(4)
 end
 local after = arenaOf(alice) or {}

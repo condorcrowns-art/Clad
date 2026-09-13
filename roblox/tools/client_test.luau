@@ -193,7 +193,7 @@ local joined = table.concat(labels, " | ")
 -- readout, three Snack Stand buttons and a "MY GOOBS" drawer button. All of
 -- those belonged to the second screen that used to sit behind ArenaHud — the
 -- one whose Snack Stand rendered on top of the season track. There is one HUD
--- now, and what is left in this ScreenGui is toasts and the tutorial coach.
+-- now, and what is left in this ScreenGui is toasts. Nothing else.
 --
 -- So the assertion is inverted: the legacy screen must NOT be drawing any of
 -- it. An inverted assertion is weak on its own — an empty ScreenGui passes
@@ -210,6 +210,38 @@ check("no Snack Stand survives on the legacy HUD", btnJoined:find("Snack") == ni
     btnJoined:sub(1, 140))
 check("no egg button survives on the legacy HUD", btnJoined:find("HATCH") == nil)
 check("no MY GOOBS drawer button survives", btnJoined:find("GOOBS") == nil)
+-- ── THE TUTORIAL IS GONE, AND HAS TO STAY GONE ────────────────────────────
+--
+-- Five coached steps in a banner across the top of the screen. It was removed
+-- because it explained a game that explains itself — eat the small ones, run
+-- from the big ones — and because on a landscape phone its banner competed
+-- with the round clock for the one free horizontal band, which is what the
+-- player saw as "the tutorial is overlapping weirdly".
+--
+-- Asserted rather than assumed, for the same reason the critter and Snack
+-- Stand absences are: a deletion that nothing checks comes back.
+check("no tutorial coach is left on screen",
+    hud:FindFirstChild("Coach") == nil)
+check("no skip button either",
+    (function()
+        for _, d in ipairs(hud:GetDescendants()) do
+            if tostring(d.Name) == "SkipCoach" then return false end
+        end
+        return true
+    end)())
+check("the DismissTutorial remote is gone",
+    svc.ReplicatedStorage:FindFirstChild("GoobNet"):FindFirstChild("DismissTutorial") == nil)
+do
+    local snap
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "StateSync" and t.player ~= "ALL" then snap = t.args[1] break end
+    end
+    check("and no tutorial field is pushed to the client",
+        snap ~= nil and snap.tutorial == nil,
+        snap and tostring(snap.tutorial))
+end
+
 check("and no drawer frame is left behind at all",
     hud:FindFirstChild("Drawer") == nil and hud:FindFirstChild("SnackStand") == nil)
 
@@ -322,7 +354,7 @@ check("a profile snapshot reached the client", snap ~= nil)
 
 local REQUIRED = {
     "glob", "goobs", "activeGoobId", "cosmeticsOwned", "loadout", "season",
-    "lifetimeBanked", "bestBank", "powerId", "powerUses",
+    "lifetimeBanked", "bestBank", "powerId", "powerUses", "powersGranted",
     "trinketsOwned", "trinketSlots", "cratePity", "streak",
 }
 local absent = {}

@@ -290,3 +290,72 @@ escape. Duck out, breathe, get back in.
 With nothing left to exploit, food goes all the way to the shoreline, and the
 edge becomes the most exposed ground on the map instead of the safest. Which is
 what an edge should be.
+
+---
+
+## 10. Split, tethers and pods — the part that is not agar.io
+
+Splitting is the genre's signature move. Copying it outright would make this a
+worse agar with extra menus, so it is copied and then given one twist that
+changes what the move is *for*.
+
+### SPLIT
+
+Three globlets leave your body and fly forward. They are **not** a second body
+you steer — that needs a second controller and a camera that can hold two
+things, and it is most of why blob clones feel terrible on a phone. They fly
+out, hoover pellets, and come home. You stay one blob, one camera, one thumb.
+
+The previous SPLIT shoved your whole body forward and booked half your mass for
+a refund. That is a dash with a bill attached: nothing ever actually split.
+
+### The tether — the twist
+
+Every globlet stays joined to you by a visible strand of goo, and **any blob
+that crosses a strand is deflated and slowed**.
+
+So a split is not only a lunge. It is three lines drawn across the floor that
+everybody else has to go around:
+
+- Split **past** someone and you have fenced them in.
+- Split **while running** and you have laid a wire behind you.
+- Split **into a crowd** and you hit all of it at once.
+
+That turns *"commit half of yourself to reach something"* into *"commit part of
+yourself to **control space**"*, which is a different decision, and one I
+cannot find in any other blob game.
+
+The strand is deliberately weak per touch and on a per-victim cooldown. It is
+area denial, not a damage engine: walking the length of one costs you a
+noticeable slice, clipping the end of one barely registers. And it never cuts
+its own builder — a fence that hurt the person who made it is a button nobody
+would ever press.
+
+### Spore pods
+
+Standing hazards. Touch one while you are **big** and it bursts you into a
+whole web of tethered globlets at once.
+
+You lose nothing to the pod itself. That is the point: agar's viruses punish
+the big by splitting them into edible chunks, and ours does not make you
+edible, it makes you **committed**. For a few seconds your tethers are
+everywhere, which is dangerous for everyone nearby — including whoever herded
+you into it. Being popped by a pod is as often an opportunity as a punishment,
+which is the difference between a hazard and a tax.
+
+Below `POD_MIN_MASS` you pass straight through, so a pod field is ground a
+small player can hide in and a big one cannot follow into. That is the whole
+reason they are on the map.
+
+### The hotbar
+
+Three slots, fixed order, every round:
+
+| Slot | What | Why it is not a choice |
+|---|---|---|
+| 1 | **DASH** | A game in this shape needs a lunge. Without one, half the situations on the island have no answer. |
+| 2 | **SPLIT** | The mechanic the genre is named for. It used to sit near the top of the unlock ladder, which made it invisible for the first ten hours of play. |
+| 3 | **Yours** | Earned by banking, or handed out by the Beta Season. This is the choice. |
+
+Both fixed powers still cost mass, like everything else. A free button is a
+button that gets held down.

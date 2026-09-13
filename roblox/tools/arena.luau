@@ -124,12 +124,18 @@ check("there is room for a full server", perPlayer > 18000,
 check("but not so big that nobody can see anybody",
     Config.ISLAND_RADIUS <= 560, tostring(Config.ISLAND_RADIUS))
 
--- A server must be able to replace what a full lobby eats. Twenty-four
--- players harvesting at the top of the curve is the worst case.
-local fullServerDrain = 24 * Blob.harvestPerSecond(Blob.ceiling(0.8)) / Config.PELLET_VALUE
-check("respawn can feed a full server",
-    Config.PELLET_RESPAWN_PER_SEC > fullServerDrain * 0.7,
-    ("%d/s vs %.0f/s eaten"):format(Config.PELLET_RESPAWN_PER_SEC, fullServerDrain))
+-- THIS CHECK IS GONE, AND ON PURPOSE. It read:
+--
+--   24 * Blob.harvestPerSecond(Blob.ceiling(0.8)) / PELLET_VALUE
+--
+-- Two of its three inputs stopped describing the game. `Blob.ceiling` is
+-- derived from the leak curve, and leak is OFF during a round — nothing caps
+-- growth, so "the top of the curve" is not a mass anybody ends at. And 24 was
+-- a guess at a full server, when the field size is now a guarantee.
+--
+-- Left as a check it would have gone on passing or failing for reasons
+-- unconnected to play. It is replaced by the sweep below, which asks the
+-- question the round actually poses at the sizes a round actually reaches.
 
 emit("")
 emit("── Round mode: does the floor keep up with a guaranteed full field? ──")
@@ -186,6 +192,40 @@ check("melting starts only above the grace mass",
 -- park in a corner and win.
 check("AFK at size is a net loss", Blob.netPerSecond(600, 0) < -2,
     Blob.netPerSecond(600, 0))
+
+-- ── EATING SOMEBODY HAS TO BE VISIBLE ─────────────────────────────────────
+--
+-- THE BUG THIS CATCHES. Radius used to be a LOGARITHM of mass, which was the
+-- right call for a game that reached 1e24 and needed every tenfold gain to
+-- stay a visible step forever. It is the wrong call for a round, which lasts
+-- three and a half minutes and tops out in the low thousands: across that band
+-- a log curve barely moves, and swallowing a blob your own size — which nearly
+-- doubles your mass — added about one and a half studs. The number on the HUD
+-- leapt and the thing on screen did not. The player's words were "size should
+-- scale better when you eat blobs".
+--
+-- Asserted as a RATIO across the band a round actually uses, not against the
+-- constant that produces it, so the check survives a retune of the exponent
+-- and fails on a change of shape.
+do
+    local worst, worstAt = math.huge, 0
+    for _, mass in ipairs({ 20, 60, 200, 600, 1800, 5000 }) do
+        -- What you weigh after swallowing somebody your own size: their mass
+        -- at the transfer rate, on top of your own.
+        local after = mass + Blob.eatGain(mass, mass * 0.95)
+        local growth = Blob.radius(after) / Blob.radius(mass)
+        if growth < worst then worst, worstAt = growth, mass end
+    end
+    check("swallowing an equal is a visible jump in size, at every scale",
+        worst > 1.15, ("worst %.3fx at mass %d"):format(worst, worstAt))
+end
+
+-- And the curve must still be sub-linear, or a big blob fills the screen and
+-- the camera has nowhere to go. Radius over a hundredfold mass gain must be
+-- well under a hundredfold.
+check("but size is still far sub-linear in mass",
+    Blob.radius(100000) / Blob.radius(1000) < 12,
+    ("%.1fx radius for 100x mass"):format(Blob.radius(100000) / Blob.radius(1000)))
 
 -- Chases have to be winnable by the prey.
 check("small outruns large", Blob.speed(10) > Blob.speed(1200) * 1.5,

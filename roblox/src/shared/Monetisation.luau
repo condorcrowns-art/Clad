@@ -43,7 +43,13 @@ Monetisation.GAMEPASSES = {
 
 Monetisation.PRODUCTS = {
     { id = "skin_void",  assetId = 0, name = "Void Skin",   cosmetic = "skin_void",   affects = "cosmetic" },
-    { id = "skin_stone", assetId = 0, name = "Boulder Skin",cosmetic = "skin_stone",  affects = "cosmetic" },
+    -- Was "skin_stone", a grey Boulder, which no longer exists: the skin
+    -- catalogue went neon so that the greyscale interface has something to
+    -- frame. Magma replaces it on the shelf. The check in systems.luau caught
+    -- this the moment the catalogue changed, which is exactly what a shelf
+    -- pointing at a missing item should do — an unconfigured purchase prompt
+    -- fails silently in Studio and reads to the player as a scam.
+    { id = "skin_magma", assetId = 0, name = "Magma Skin",  cosmetic = "skin_magma",  affects = "cosmetic" },
     { id = "trail_frost",assetId = 0, name = "Frost Trail", cosmetic = "trail_frost", affects = "cosmetic" },
     { id = "eyes_star",  assetId = 0, name = "Starstruck",  cosmetic = "eyes_star",   affects = "cosmetic" },
     { id = "crown_cap",  assetId = 0, name = "Cap",         cosmetic = "crown_cap",   affects = "cosmetic" },
@@ -91,6 +97,37 @@ function Monetisation.violations(): { string }
     end
     scan(Monetisation.GAMEPASSES, "gamepass")
     scan(Monetisation.PRODUCTS, "product")
+
+    -- ── THE PREMIUM SEASON TRACK IS PURCHASABLE, SO IT IS INSIDE THE WALL ──
+    --
+    -- This was a hole. The wall scanned gamepasses and products and stopped,
+    -- but the premium season track is bought with Robux too — so a power
+    -- placed on it would have been money buying a button nobody else has, and
+    -- nothing here would have said a word.
+    --
+    -- It is now structurally hard to do (Season.powerAt takes no premium
+    -- argument, so there is nowhere to put one) and checked anyway. Structure
+    -- stops the accident; this stops somebody deciding to add the argument.
+    local okSeason, Season = pcall(function()
+        return require(script.Parent.Season)
+    end)
+    local okPowers, Powers = pcall(function()
+        return require(script.Parent.Powers)
+    end)
+    if okSeason and okPowers and Season and Powers then
+        local isPower = {}
+        for _, pool in ipairs({ Powers.FIXED, Powers.LIST, Powers.SEASON }) do
+            for _, power in ipairs(pool or {}) do isPower[power.id] = true end
+        end
+        for tier = 1, (Season.TIERS or 0) do
+            local paid = Season.rewardAt(tier, true)
+            if paid and isPower[paid] then
+                table.insert(bad,
+                    ("season/premium tier %d grants the power %q"):format(tier, paid))
+            end
+        end
+    end
+
     return bad
 end
 

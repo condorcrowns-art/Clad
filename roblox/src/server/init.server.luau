@@ -14,7 +14,6 @@ local GoobMath = require(Shared.GoobMath)
 local Format = require(Shared.Format)
 local Names = require(Shared.Names)
 local Feedstock = require(Shared.Feedstock)
-local Tutorial = require(Shared.Tutorial)
 local Ascension = require(Shared.Ascension)
 local Movement = require(Shared.Movement)
 local Cosmetics = require(Shared.Cosmetics)
@@ -98,7 +97,6 @@ local function snapshot(player: Player)
         })
     end
 
-    local tutorial = Tutorial.display(profile.tutorial)
     local crests = profile.crests or 0
     local canAsc, ascReason = false, nil
     if active then canAsc, ascReason = Ascension.canAscend(active, crests) end
@@ -123,13 +121,18 @@ local function snapshot(player: Player)
         activeGoobId = profile.activeGoobId,
         stats = profile.stats,
         discovered = profile.discovered,
-        tutorial = tutorial,
         crests = crests,
         foodMultiplier = Ascension.foodMultiplier(crests),
         canAscend = canAsc,
         ascendReason = ascReason,
         ascendPreview = (active and canAsc) and Ascension.preview(active, crests) or nil,
         colossalMass = Config.COLOSSAL_MASS,
+        -- READ BY THE POWERS PANEL, so it has to be here. A power owned via
+        -- the season track is owned for no reason the client could derive from
+        -- lifetimeBanked, so without this the panel shows HOOK and SPIKE
+        -- locked to a player who has them — a screen that renders perfectly
+        -- and lies.
+        powersGranted = profile.powersGranted or {},
         pitWins = profile.pitWins or 0,
         cosmeticsOwned = profile.cosmeticsOwned,
         loadout = profile.loadout,
@@ -173,18 +176,21 @@ local function snapshot(player: Player)
     }
 end
 
--- Nudge the tutorial forward when the player does the thing it asked for.
-local function teach(player: Player, event: string)
-    local profile = Data.get(player)
-    if not profile or not profile.tutorial then return end
-    local _, moved = Tutorial.advance(profile.tutorial, event)
-    if moved then
-        local shown = Tutorial.display(profile.tutorial)
-        if shown then
-            notify(player, "✅ " .. shown.text, "good")
-        end
-    end
-end
+-- WHAT `teach` WAS.
+--
+-- The first-run tutorial is gone — five coached steps, a banner across the top
+-- of the screen, and a per-profile record of which step you were on. It was
+-- removed because it did not earn its space: the game is "eat the little ones,
+-- run from the big ones", which a player understands from one round without
+-- being told, and on a landscape phone the banner was competing for the only
+-- free band on the screen with the round clock.
+--
+-- `teach` is kept as a no-op rather than deleted outright ONLY because
+-- ArenaService calls it from a dozen places in its hot loop and threading a
+-- nil-check through all of them buys nothing. It is an empty function, and the
+-- deps entry below is the single line to change if a coached mode ever comes
+-- back. It costs one dead call per event and nothing else.
+local function teach(_player: Player, _event: string) end
 
 local function push(player: Player)
     local snap = snapshot(player)
@@ -519,6 +525,16 @@ ArenaService.start({
         push(player)
     end,
 
+    banked = function(player)
+        local profile = Data.get(player)
+        return (profile and profile.lifetimeBanked) or 0
+    end,
+
+    granted = function(player)
+        local profile = Data.get(player)
+        return (profile and profile.powersGranted) or {}
+    end,
+
     powerUses = function(player)
         local profile = Data.get(player)
         return (profile and profile.powerUses) or {}
@@ -544,25 +560,39 @@ ArenaService.start({
 
 -- One button. The client sends where it is aiming; the server decides
 -- everything else, including whether the player can afford the press.
-Net.get("UsePower").OnServerEvent:Connect(function(player, aim)
+Net.get("UsePower").OnServerEvent:Connect(function(player, slot, aim)
+    -- The client sends WHICH SLOT and where it is aiming. It does not send
+    -- which power that slot holds — slot 3's contents depend on what the
+    -- profile has unlocked, and letting the client name a power is letting it
+    -- name any power.
+    local index = tonumber(slot)
     local dir = typeof(aim) == "Vector3" and aim or nil
     -- Never trust a client vector's magnitude: a 10,000-stud "aim" is a
-    -- launch exploit, and normalising here costs nothing.
-    if dir and dir.Magnitude > 0.01 then
-        dir = dir.Unit
-    else
-        dir = nil
+    -- teleport request wearing a direction's clothes.
+    if dir then
+        local flat = Vector3.new(dir.X, 0, dir.Z)
+        dir = flat.Magnitude > 0.01 and flat.Unit or nil
     end
-    local ok, why = ArenaService.usePower(player, dir)
-    if not ok and why then
-        notify(player, "⏳ " .. why, "warn")
+    local ok, reason = ArenaService.usePower(player, index, dir)
+    if not ok and reason then
+        notify(player, reason, "warn")
     end
 end)
 
 Net.get("SetPower").OnServerEvent:Connect(function(player, id)
     local profile = Data.get(player)
     if not profile or typeof(id) ~= "string" then return end
-    if not Powers.isOwned(id, profile.lifetimeBanked or 0) then
+    -- DASH and SPLIT are slots 1 and 2, not choices. Accepting one here would
+    -- hand the player a hotbar with a duplicate and an empty third button, and
+    -- the fallback in Powers.hotbar would silently give them the default
+    -- instead — a setting that appears to take and then does not.
+    local wanted = Powers.get(id)
+    if wanted and wanted.fixed then
+        notify(player, ("%s is always in your hotbar — slot 3 is the choice.")
+            :format(wanted.name), "warn")
+        return
+    end
+    if not Powers.isOwned(id, profile.lifetimeBanked or 0, profile.powersGranted) then
         local power = Powers.get(id)
         notify(player, power
             and ("🔒 %s unlocks at 💧%s banked."):format(power.name, Format.short(power.unlockBanked))
@@ -873,7 +903,21 @@ Net.get("ClaimSeason").OnServerEvent:Connect(function(player: Player, tier: numb
     for _, entry in ipairs(Season.claimable(profile.season)) do
         if entry.tier == tier and entry.premium == premium then
             Season.markClaimed(profile.season, tier, premium)
-            grantCosmetic(player, entry.cosmetic, ("Season tier %d"):format(tier))
+            if entry.cosmetic then
+                grantCosmetic(player, entry.cosmetic, ("Season tier %d"):format(tier))
+            end
+            -- A POWER, on the free track only. Season.powerAt has no premium
+            -- argument at all, so there is nowhere for a paid one to go even
+            -- by accident — see the wall in Monetisation.luau.
+            if entry.power then
+                profile.powersGranted = profile.powersGranted or {}
+                if not profile.powersGranted[entry.power] then
+                    profile.powersGranted[entry.power] = true
+                    local power = Powers.get(entry.power)
+                    notify(player, ("\u{2B50} BETA SEASON tier %d: %s unlocked. It is not on the banking ladder and it cannot be bought.")
+                        :format(tier, power and power.name or entry.power), "good")
+                end
+            end
             push(player)
             return
         end
@@ -1012,13 +1056,6 @@ Net.get("Dashed").OnServerEvent:Connect(function(player: Player)
     ball:SetAttribute("DashAt", os.clock())
 end)
 
-Net.get("DismissTutorial").OnServerEvent:Connect(function(player: Player)
-    local profile = Data.get(player)
-    if not profile or not profile.tutorial then return end
-    profile.tutorial.dismissed = true
-    push(player)
-end)
-
 Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: string)
     local profile = Data.get(player)
     if not profile or typeof(goobId) ~= "string" then return end
@@ -1071,4 +1108,6 @@ TradeService.onNotify.Event:Connect(function(player, msg, kind)
 end)
 
 print(("[%s] ready. one island, %d pellets, %d powers, %d trinkets, %d crates.")
-    :format(Config.GAME_NAME, Config.PELLET_TARGET, #Powers.LIST, #Trinkets.LIST, #Crates.LIST))
+    :format(Config.GAME_NAME, Config.PELLET_TARGET,
+        #Powers.FIXED + #Powers.LIST + #Powers.SEASON,
+        #Trinkets.LIST, #Crates.LIST))
