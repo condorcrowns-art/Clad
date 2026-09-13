@@ -196,9 +196,32 @@ window.PARLA = window.PARLA || {};
   /* Something they actually said, handed back. Not comprehension — but
    * repeating a real word from their sentence is the difference between a
    * partner who is listening and a recording. */
-  function echoWord(text) {
+  /* Nouns that are part of a courtesy, not a thing anyone is talking about.
+   * "¿La gracias?" is not a question a person asks. */
+  var NOT_WORTH_ECHOING = {};
+  (// courtesies
+   'gracias favor hola adios buenas buenos dias tardes noches perdon perdona ' +
+   'disculpe vale ' +
+   // how you address someone, which is not what you are talking about
+   'senor senora senorita don dona doctor doctora profesor profesora jefe ' +
+   'camarero camarera ' +
+   // time, which every sentence has and no sentence is about
+   'vez veces tiempo momento hora minuto ano anos mes meses dia semana ' +
+   'enero febrero marzo abril mayo junio julio agosto septiembre octubre ' +
+   'noviembre diciembre lunes martes miercoles jueves viernes sabado domingo ' +
+   // placeholders
+   'cosa cosas algo nada todo parte manera forma modo tipo lado caso punto ' +
+   'hecho persona personas gente sitio lugar vida mundo pregunta respuesta'
+  ).split(' ').forEach(function (w) { NOT_WORTH_ECHOING[w] = 1; });
+
+  function echoWord(text, avoid) {
     if (!PARLA.dict || !PARLA.dict.ready() || !PARLA.morph) return null;
-    var ws = words(text).filter(function (w) { return w.length >= 4; });
+    var already = words(avoid || '');
+    var ws = words(text).filter(function (w) {
+      // Something they introduced: a word the partner just said back at them
+      // is not news, and a courtesy is not a subject.
+      return w.length >= 4 && !NOT_WORTH_ECHOING[w] && already.indexOf(w) === -1;
+    });
     for (var i = ws.length - 1; i >= 0; i--) {
       var a = PARLA.morph.analyse(ws[i]);
       if (!a.length) continue;
@@ -369,10 +392,26 @@ window.PARLA = window.PARLA || {};
       };
     }
 
-    // The scenario's own lines first, then the shared pool — and never the
-    // same one twice running, which is what made the old single fallback
-    // unbearable.
-    var pool = (sc.fallback || []).concat(KEEP_GOING);
+    // The scenario's own repair lines first, then its scene-specific
+    // continuations, then the shared pool — and never the same one twice
+    // running, which is what made the old single fallback unbearable.
+    //
+    // The middle tier matters most: nearly every script is four beats and the
+    // sixty-day plan asks for up to ten turns, so from turn five onwards the
+    // partner was reaching for something generic in every scenario. A waiter
+    // who asks "¿y de segundo?" is still a waiter; one who says "cuéntame más"
+    // has left the café.
+    //
+    // The continuations go first and the repair lines last, because a repair
+    // line assumes the conversation has not started: "¿Un café entonces?
+    // Dígame qué quiere tomar" is a reasonable thing to say to someone who has
+    // not ordered, and nonsense to someone who has already paid.
+    // KEEP_GOING is the backstop, not part of the rotation: once the scene has
+    // its own lines the partner should cycle those and stay where it is. A
+    // waiter asking "¿para aquí o para llevar?" a second time is a waiter with
+    // a queue; a waiter saying "cuéntame más" has left the café.
+    var scene = (sc.more || []).concat(sc.fallback || []);
+    var pool = scene.length ? scene : KEEP_GOING;
     var fb = null;
     for (var f = 0; f < pool.length; f++) {
       var cand = pool[(st.fb + f) % pool.length];
@@ -384,7 +423,12 @@ window.PARLA = window.PARLA || {};
     // If they said something with a real noun in it, open with that noun. It
     // is not comprehension, but it is the difference between a partner who was
     // listening and one reading from a card.
-    var echo = echoWord(ctx.text);
+    var lastSaid = (ctx.history || []).slice().reverse()
+      .filter(function (h) { return h.role === 'partner'; })[0];
+    // Avoid the line about to be said as well as the last one: "¿La pregunta?
+    // ¿Tiene alguna pregunta para nosotros?" is the echo tripping over the
+    // reply it is introducing.
+    var echo = echoWord(ctx.text, fb.es + ' ' + ((lastSaid && lastSaid.text) || ''));
     return {
       es: (echo ? '¿' + echo.word.charAt(0).toUpperCase() + echo.word.slice(1) + '? ' : '') + fb.es,
       en: (echo ? echo.lemma + '? ' : '') + fb.en,
@@ -471,7 +515,11 @@ window.PARLA = window.PARLA || {};
    * cannot avoid using, and it needs no model - so the offline partner catches
    * it too.
    */
-  var EN_WORDS = /\b(the|and|is|are|was|were|am|be|been|i|you|he|she|it|we|they|to|of|in|on|at|for|with|from|what|how|why|when|where|who|do|does|did|can|could|would|should|will|my|your|his|her|our|their|this|that|these|those|there|here|not|dont|cant|want|wanted|need|needed|like|liked|have|has|had|about|because|but|if|so|just|really|very|please|sorry|thanks|thank|yes|no|okay|ok)\b/g;
+  /* "he" is the Spanish auxiliary and "no" is the Spanish negative, so both
+   * had to come out: "no he tomado nada" is impeccable Spanish and was being
+   * classified as English on the strength of those two words alone, then
+   * answered with "in Spanish, please". */
+  var EN_WORDS = /\b(the|and|is|are|was|were|am|be|been|i|you|she|it|we|they|to|of|in|on|at|for|with|from|what|how|why|when|where|who|do|does|did|can|could|would|should|will|my|your|his|her|our|their|this|that|these|those|there|here|not|dont|cant|want|wanted|need|needed|like|liked|have|has|had|about|because|but|if|so|just|really|very|please|sorry|thanks|thank|yes|okay|ok)\b/g;
 
   var ES_WORDS = /\b(el|la|los|las|un|una|unos|unas|de|del|al|que|y|o|es|son|soy|eres|somos|estoy|esta|estas|estan|estamos|no|si|por|para|con|sin|me|te|se|nos|le|les|mi|tu|su|sus|mis|tus|como|donde|cuando|cuanto|quien|quiero|quieres|quiere|necesito|tengo|tiene|hay|muy|mas|menos|pero|porque|tambien|gracias|hola|adios|bien|mal|aqui|alli|ahora|hoy|manana|ayer|puedo|puede|voy|vas|va|hacer|ser|estar|senor|senora|favor|vale|pues|claro)\b/g;
 

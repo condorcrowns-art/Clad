@@ -857,6 +857,35 @@ each of which is now a rule:
   urinating. The morphology was right; it was asked the wrong question. Common
   English words are no longer candidates for a Spanish lookup.
 
+### Four beats, ten turns
+
+Nearly every scenario's script is four beats, and the sixty-day plan asks for
+up to ten turns — day 60 asks for ten. So from turn five onwards the partner
+was reaching for something generic *in every scene*. A waiter who asks "¿y de
+segundo?" is still a waiter; one who says "cuéntame más" has left the café.
+
+Every scenario now carries five continuations of its own — 115 lines, each a
+question, each inside its scene — and the shared pool is only a backstop for
+a scenario that has none. The rotation prefers the scene's own words and
+cycles them rather than drifting out; asking "¿para aquí o para llevar?" twice
+is a waiter with a queue, which is a thing that happens.
+
+Order matters too: the continuations come before the repair lines, because a
+repair line assumes the conversation has not started. "¿Un café entonces?
+Dígame qué quiere tomar" is reasonable to someone who has not ordered and
+nonsense to someone who has already paid.
+
+The check is per-scenario: all twenty-three stay inside their own scene for at
+least seven of ten turns, and none repeats itself twice running.
+
+Three more things the sweep caught. "¿La gracias?" is not a question a person
+asks, so courtesies, titles, months and placeholders are out of the echo. "¿La
+pregunta? ¿Tiene alguna pregunta para nosotros?" is the echo tripping over the
+line it introduces, so it avoids the reply it is about to give. And **"no he
+tomado nada" was being answered with "in Spanish, please"** — *he* is the
+Spanish auxiliary and *no* is the Spanish negative, and on the strength of
+those two words alone impeccable Spanish was classified as English.
+
 ### And the morphology bug underneath it
 
 `trabajas` came back as *the feminine plural of trabajo* — and beat the tú-form

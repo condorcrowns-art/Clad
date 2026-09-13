@@ -98,6 +98,69 @@ function talk(scenarioId, turns) {
     tail.some(line => /fútbol|hermano|español|oficina/i.test(line)),
     tail.join('  //  '));
 
+  console.log('\nTen turns in every scenario\n');
+  // Nearly every script is four beats and the sixty-day plan asks for up to
+  // ten turns, so from turn five onwards the partner was reaching for
+  // something generic in every scene. A waiter who asks "¿y de segundo?" is
+  // still a waiter; one who says "cuéntame más" has left the café.
+  const filler = ['hola', 'sí', 'no, gracias', 'claro', 'vale', 'no sé',
+                  'creo que sí', 'perfecto', 'muy bien', 'hasta luego'];
+  const offenders = [];
+  const generic = [];
+  for (const sc of ctx.PARLA.data.es.scenarios) {
+    const lines = (await talk(sc.id, filler)).map(x => x.es);
+    lines.forEach((line, i) => {
+      if (i > 0 && line === lines[i - 1]) offenders.push(sc.id + ' repeated: ' + line);
+    });
+    // The scene's own words: its beats, its continuations, its repair lines,
+    // and the question it re-asks when greeted. Everything else is the shared
+    // pool, which is fine at the very end of a long conversation and wrong in
+    // the middle of one.
+    const own = (sc.script || []).map(b => b.say.es)
+      .concat((sc.more || []).map(m => m.es))
+      .concat((sc.fallback || []).map(m => m.es))
+      .concat([(sc.opener && sc.opener.es) || '']).filter(Boolean);
+    const mine = lines.filter(l => own.some(o => l.indexOf(o) !== -1 ||
+      (o.length > 12 && l.indexOf(o.slice(-12)) !== -1)));
+    if (mine.length < 7) generic.push(sc.id + ': only ' + mine.length + ' of 10 in scene');
+  }
+  check('no scenario ever repeats itself two turns running',
+    offenders.length === 0, offenders.slice(0, 3).join(' | '));
+  // Before this, every scenario had four beats and one fallback line, so six
+  // of ten turns were the same generic sentence.
+  check('and all twenty-three stay in scene for at least seven of ten turns',
+    generic.length === 0, generic.slice(0, 4).join(' | '));
+
+  console.log('\nWhat it hands back\n');
+  // "¿La gracias?" is not a question a person asks, and "¿La pregunta? ¿Tiene
+  // alguna pregunta para nosotros?" is the echo tripping over the line it is
+  // introducing.
+  r = await talk('cafe', ['un café', 'para aquí', 'y una tostada', 'con tomate',
+                          'muchas gracias', 'perfecto']);
+  const said = r.map(x => x.es).join(' // ');
+  check('a courtesy is never echoed back as a subject', !/¿(La|El) gracias/i.test(said), said);
+  check('nor a word the reply is about to use itself',
+    !r.some(x => {
+      const m = x.es.match(/^¿(?:El|La) ([a-zá-ú]+)\?\s+(.*)$/i);
+      return m && m[2].toLowerCase().indexOf(m[1].toLowerCase()) !== -1;
+    }), said);
+
+  console.log('\nSpanish that only looks English\n');
+  // "he" is the Spanish auxiliary and "no" is the Spanish negative. On the
+  // strength of those two, "no he tomado nada" was answered with "in Spanish,
+  // please".
+  for (const line of ['no he tomado nada', 'no he comido', 'no entiendo',
+                      'me llamo Ana', 'no soy de aquí']) {
+    const one = await talk('presentarse', [line]);
+    check('“' + line + '” is treated as Spanish',
+      !/en español si puedes/.test(one[0].es), one[0].es);
+  }
+  for (const line of ['what does this mean', 'I do not understand', 'can you say that again']) {
+    const one = await talk('presentarse', [line]);
+    check('“' + line + '” is still treated as English',
+      /en español si puedes/.test(one[0].es), one[0].es);
+  }
+
   console.log('\nAsking a question in English\n');
   r = await talk('presentarse', ['What does "de dónde" mean?']);
   check('an English question is recognised as English even when it quotes Spanish',

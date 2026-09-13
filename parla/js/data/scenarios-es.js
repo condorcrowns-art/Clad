@@ -34,6 +34,16 @@ PARLA.data.es.scenarios = [
       { match: ['cuanto', 'tarjeta', 'efectivo', 'euros', 'pagar', 'aqui tiene', 'toma'],
         say: { es: 'Gracias. Aquí tiene su cambio. ¡Que aproveche!', en: 'Thanks. Here is your change. Enjoy!' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Para tomar aquí o para llevar?', en: 'To have here or take away?' },
+      { es: '¿Le pongo algo de comer? Tenemos tostadas.', en: 'Shall I get you something to eat? We have toast.' },
+      { es: '¿Con leche fría o caliente?', en: 'With cold or hot milk?' },
+      { es: 'Son dos con cuarenta. ¿Paga con tarjeta?', en: 'That is two forty. Are you paying by card?' },
+      { es: '¿Es la primera vez que viene por aquí?', en: 'Is this your first time here?' }
+    ],
     fallback: [
       { es: 'Perdone, ¿me lo repite? Hay mucho ruido aquí.', en: 'Sorry, could you repeat that? It is noisy in here.' },
       { es: '¿Un café entonces? Dígame qué quiere tomar.', en: 'A coffee then? Tell me what you would like to drink.' }
@@ -60,6 +70,16 @@ PARLA.data.es.scenarios = [
       { match: ['cuenta', 'pagar', 'cobrar', 'tarjeta', 'propina'],
         say: { es: 'Claro, ahora mismo se la traigo. ¿Todo ha estado bien?', en: 'Of course, I will bring it right away. Was everything all right?' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Y de segundo, qué le apetece?', en: 'And for the main course, what do you fancy?' },
+      { es: '¿Quiere ver la carta de postres?', en: 'Would you like to see the dessert menu?' },
+      { es: '¿Le traigo agua del grifo o embotellada?', en: 'Shall I bring you tap water or bottled?' },
+      { es: '¿Está todo bien por aquí?', en: 'Is everything all right here?' },
+      { es: '¿Le pongo la cuenta o desea algo más?', en: 'Shall I bring the bill or do you want anything else?' }
+    ],
     fallback: [
       { es: 'Disculpe, no le he entendido bien. ¿Me lo repite?', en: 'Sorry, I did not quite catch that. Could you repeat it?' },
       { es: '¿Quiere que le explique algún plato de la carta?', en: 'Would you like me to explain any dish on the menu?' }
@@ -81,6 +101,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'Muy bien. Son cuatro con cincuenta en total.', en: 'Very good. That is four fifty in total.' } },
       { match: ['cuanto', 'precio', 'euros', 'esta el kilo', 'pagar', 'aqui tiene'],
         say: { es: 'Aquí tiene. ¡Gracias y hasta la próxima!', en: 'Here you go. Thanks and see you next time!' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Cuánto le pongo? ¿Medio kilo?', en: 'How much shall I give you? Half a kilo?' },
+      { es: 'Estos están muy buenos hoy. ¿Los quiere?', en: 'These are very good today. Do you want them?' },
+      { es: '¿Algo más? Tengo tomates muy maduros.', en: 'Anything else? I have very ripe tomatoes.' },
+      { es: 'Son cuatro euros con veinte. ¿Necesita una bolsa?', en: 'That is four twenty. Do you need a bag?' },
+      { es: '¿Y para qué lo va a cocinar?', en: 'And what are you going to cook it for?' }
     ],
     fallback: [
       { es: 'Perdone, ¿cuánto quiere? ¿Un kilo, medio kilo?', en: 'Sorry, how much would you like? A kilo, half a kilo?' }
@@ -106,6 +136,16 @@ PARLA.data.es.scenarios = [
       { match: ['gracias', 'vale', 'perfecto', 'muy amable', 'entendido'],
         say: { es: 'De nada. ¡Que tenga buen día!', en: 'You are welcome. Have a good day!' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Va andando o en metro?', en: 'Are you going on foot or by metro?' },
+      { es: '¿Sabe dónde está la plaza mayor?', en: 'Do you know where the main square is?' },
+      { es: 'Está lejos. ¿Tiene prisa?', en: 'It is far. Are you in a hurry?' },
+      { es: '¿Quiere que se lo apunte en un papel?', en: 'Do you want me to write it down for you?' },
+      { es: '¿Ha mirado el mapa del móvil?', en: 'Have you looked at the map on your phone?' }
+    ],
     fallback: [
       { es: '¿Qué está buscando exactamente?', en: 'What exactly are you looking for?' }
     ]
@@ -128,6 +168,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'El desayuno es de siete a diez, y la contraseña del wifi está en la tarjeta.', en: 'Breakfast is from seven to ten, and the wifi password is on the card.' } },
       { match: ['salida', 'checkout', 'irme', 'dejar', 'maleta', 'gracias'],
         say: { es: 'La salida es a las doce. Si necesita algo, estamos aquí. ¡Que disfrute!', en: 'Checkout is at twelve. If you need anything, we are here. Enjoy your stay!' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿A nombre de quién está la reserva?', en: 'What name is the booking under?' },
+      { es: '¿Cuántas noches se queda?', en: 'How many nights are you staying?' },
+      { es: 'El desayuno es de siete a diez. ¿Le va bien?', en: 'Breakfast is from seven to ten. Does that work for you?' },
+      { es: '¿Necesita ayuda con las maletas?', en: 'Do you need help with the suitcases?' },
+      { es: '¿Quiere una habitación con vistas a la calle?', en: 'Would you like a room facing the street?' }
     ],
     fallback: [
       { es: '¿Me puede dar su nombre, por favor?', en: 'Could you give me your name, please?' }
@@ -152,6 +202,16 @@ PARLA.data.es.scenarios = [
       { match: ['gracias', 'vale', 'perfecto', 'entendido'],
         say: { es: 'A usted. ¡Buen viaje!', en: 'Thank you. Have a good trip!' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Ida y vuelta o solo ida?', en: 'Return or one way?' },
+      { es: 'Hay uno a las nueve y otro a las once. ¿Cuál prefiere?', en: 'There is one at nine and another at eleven. Which do you prefer?' },
+      { es: '¿Ventanilla o pasillo?', en: 'Window or aisle?' },
+      { es: 'Sale del andén cinco. ¿Lo ha encontrado?', en: 'It leaves from platform five. Have you found it?' },
+      { es: '¿Lleva mucho equipaje?', en: 'Are you carrying much luggage?' }
+    ],
     fallback: [
       { es: 'Perdone, ¿adónde quiere ir?', en: 'Sorry, where do you want to go?' }
     ]
@@ -174,6 +234,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'La compañía le cubre el hotel y la cena. Aquí tiene los vales.', en: 'The airline covers your hotel and dinner. Here are the vouchers.' } },
       { match: ['maleta', 'equipaje', 'gracias', 'vale', 'entiendo'],
         say: { es: 'Su equipaje sigue facturado hasta destino. Lamento las molestias.', en: 'Your luggage stays checked through to your destination. Sorry for the inconvenience.' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Tiene el número de reserva a mano?', en: 'Do you have the booking number to hand?' },
+      { es: 'Puedo ponerle en el de mañana. ¿Le sirve?', en: 'I can put you on tomorrow\'s. Does that work?' },
+      { es: '¿Va a facturar alguna maleta?', en: 'Are you going to check a bag?' },
+      { es: '¿Quiere que le busque un hotel para esta noche?', en: 'Do you want me to find you a hotel for tonight?' },
+      { es: '¿Viaja solo o acompañado?', en: 'Are you travelling alone or with someone?' }
     ],
     fallback: [
       { es: '¿Me puede explicar cuál es el problema exactamente?', en: 'Can you explain exactly what the problem is?' }
@@ -199,6 +269,16 @@ PARLA.data.es.scenarios = [
       { match: ['llevo', 'compro', 'gusta', 'no', 'grande', 'pequeno', 'aprieta', 'cuanto'],
         say: { es: 'Muy bien. Pase por caja cuando quiera. Son veintinueve noventa.', en: 'Very good. Come to the till whenever you like. That is twenty-nine ninety.' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Qué talla usa normalmente?', en: 'What size do you normally take?' },
+      { es: '¿Se lo quiere probar? El probador está al fondo.', en: 'Do you want to try it on? The fitting room is at the back.' },
+      { es: 'Lo tenemos también en azul. ¿Se lo enseño?', en: 'We also have it in blue. Shall I show you?' },
+      { es: '¿Le queda bien de largo?', en: 'Is the length right for you?' },
+      { es: '¿Es para usted o es un regalo?', en: 'Is it for you or is it a gift?' }
+    ],
     fallback: [
       { es: '¿Está buscando algo en concreto?', en: 'Are you looking for anything in particular?' }
     ]
@@ -221,6 +301,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'Perfecto. Le hago la devolución a la misma tarjeta. Tarda unos días.', en: 'Perfect. I will refund it to the same card. It takes a few days.' } },
       { match: ['gracias', 'vale', 'cuando', 'dias', 'perfecto'],
         say: { es: 'A usted. Que tenga buen día.', en: 'Thank you. Have a good day.' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Tiene el tique de compra?', en: 'Do you have the receipt?' },
+      { es: '¿Lo quiere cambiar o prefiere el dinero?', en: 'Do you want to exchange it or would you rather have the money?' },
+      { es: '¿Cuándo lo compró exactamente?', en: 'When exactly did you buy it?' },
+      { es: '¿Qué problema ha tenido con él?', en: 'What problem have you had with it?' },
+      { es: 'Puedo darle un vale. ¿Le parece bien?', en: 'I can give you a voucher. Is that all right?' }
     ],
     fallback: [
       { es: '¿Qué problema ha tenido con el artículo?', en: 'What problem did you have with the item?' }
@@ -246,6 +336,16 @@ PARLA.data.es.scenarios = [
       { match: ['ana', 'amigo', 'trabajo', 'conozco', 'hermana', 'clase', 'y tu'],
         say: { es: 'Ah, mira qué casualidad. Oye, ¿quieres algo de beber?', en: 'Ah, what a coincidence. Hey, do you want something to drink?' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Y llevas mucho tiempo aquí?', en: 'And have you been here long?' },
+      { es: '¿Qué te está pareciendo la ciudad?', en: 'What do you think of the city so far?' },
+      { es: '¿Hablas otros idiomas además del español?', en: 'Do you speak other languages besides Spanish?' },
+      { es: '¿Y qué haces los fines de semana?', en: 'And what do you do at weekends?' },
+      { es: '¿Conoces a mucha gente aquí?', en: 'Do you know many people here?' }
+    ],
     fallback: [
       { es: 'Perdona, con la música no te oigo bien. ¿Cómo te llamas?', en: 'Sorry, I cannot hear you over the music. What is your name?' }
     ]
@@ -269,6 +369,16 @@ PARLA.data.es.scenarios = [
       { match: ['plaza', 'casa', 'alli', 'buscar', 'vemos', 'vale', 'perfecto'],
         say: { es: '¡Genial! Nos vemos el sábado entonces. ¡Un beso!', en: 'Great! See you Saturday then. Take care!' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Te va bien el sábado por la tarde?', en: 'Does Saturday afternoon work for you?' },
+      { es: '¿Dónde quedamos, en la plaza?', en: 'Where shall we meet, in the square?' },
+      { es: '¿A qué hora te viene bien?', en: 'What time suits you?' },
+      { es: '¿Y si vamos al cine en vez de eso?', en: 'And what if we go to the cinema instead?' },
+      { es: '¿Invitamos a alguien más?', en: 'Shall we invite anyone else?' }
+    ],
     fallback: [
       { es: 'Bueno, ¿tú qué quieres hacer? Yo me apunto a lo que sea.', en: 'Well, what do you want to do? I am up for anything.' }
     ]
@@ -289,6 +399,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'Me alegro. Si necesita cualquier cosa, estoy en el tercero.', en: 'I am glad. If you need anything, I am on the third floor.' } },
       { match: ['gracias', 'amable', 'vale', 'muy', 'igualmente'],
         say: { es: 'De nada, hija. Bueno, aquí me bajo. ¡Que tenga buen día!', en: 'You are welcome, dear. Well, this is my floor. Have a good day!' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: 'Vaya calor hace hoy, ¿no?', en: 'It is so hot today, isn\'t it?' },
+      { es: '¿Vives en este edificio desde hace mucho?', en: 'Have you lived in this building long?' },
+      { es: '¿Has visto que han abierto una tienda abajo?', en: 'Have you seen they have opened a shop downstairs?' },
+      { es: '¿Sube o baja?', en: 'Going up or down?' },
+      { es: '¿Qué tal el fin de semana?', en: 'How was the weekend?' }
     ],
     fallback: [
       { es: 'Perdone, ¿cómo dice? Estoy un poco sorda.', en: 'Sorry, what was that? I am a little hard of hearing.' }
@@ -314,6 +434,16 @@ PARLA.data.es.scenarios = [
       { match: ['receta', 'tomar', 'cuando', 'cuantas', 'veces', 'gracias', 'mejor'],
         say: { es: 'Una pastilla cada ocho horas, con comida. Y descanse. Si empeora, vuelva.', en: 'One tablet every eight hours, with food. And rest. If it gets worse, come back.' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Desde cuándo le pasa?', en: 'How long has this been going on?' },
+      { es: '¿Le duele cuando respira hondo?', en: 'Does it hurt when you breathe deeply?' },
+      { es: '¿Toma alguna medicación?', en: 'Are you taking any medication?' },
+      { es: '¿Ha tenido fiebre?', en: 'Have you had a fever?' },
+      { es: '¿Es alérgico a algo?', en: 'Are you allergic to anything?' }
+    ],
     fallback: [
       { es: 'Dígame qué síntomas tiene exactamente.', en: 'Tell me exactly what symptoms you have.' }
     ]
@@ -336,6 +466,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'Cada ocho horas, después de las comidas. No más de tres al día.', en: 'Every eight hours, after meals. No more than three a day.' } },
       { match: ['gracias', 'vale', 'perfecto', 'entendido'],
         say: { es: 'A usted. Que se mejore.', en: 'You are welcome. Get well soon.' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Es para usted?', en: 'Is it for you?' },
+      { es: '¿Tiene receta o lo quiere sin ella?', en: 'Do you have a prescription or do you want it without?' },
+      { es: 'Este se toma cada ocho horas. ¿Le va bien?', en: 'This one is taken every eight hours. Is that all right?' },
+      { es: '¿Ha probado algo ya?', en: 'Have you tried anything already?' },
+      { es: '¿Quiere el genérico? Es más barato.', en: 'Would you like the generic? It is cheaper.' }
     ],
     fallback: [
       { es: '¿Para qué lo necesita exactamente?', en: 'What exactly do you need it for?' }
@@ -360,6 +500,16 @@ PARLA.data.es.scenarios = [
       { match: ['gracias', 'vale', 'perfecto', 'disculpe'],
         say: { es: 'Nada, hasta luego.', en: 'No worries, goodbye.' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Me puede repetir el número del portal?', en: 'Can you repeat the building number?' },
+      { es: 'Estoy en la puerta. ¿Bajo o sube usted?', en: 'I am at the door. Shall I go down or will you come up?' },
+      { es: '¿Hay alguien en casa a esta hora?', en: 'Is anyone home at this time?' },
+      { es: '¿Se lo dejo al vecino?', en: 'Shall I leave it with the neighbour?' },
+      { es: '¿Le viene mejor esta tarde?', en: 'Would this afternoon be better for you?' }
+    ],
     fallback: [
       { es: 'Perdone, no le oigo bien. ¿Me lo repite más alto?', en: 'Sorry, I cannot hear you well. Could you repeat that louder?' }
     ]
@@ -382,6 +532,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'Agua y comunidad van aparte. La fianza es de dos meses.', en: 'Water and building fees are separate. The deposit is two months.' } },
       { match: ['pensar', 'aviso', 'interesa', 'gracias', 'llamo', 'decidir'],
         say: { es: 'Claro, tómese su tiempo. Pero hay más gente interesada, eh.', en: 'Of course, take your time. But there are other interested people, mind you.' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Cuánto es el alquiler al mes?', en: 'How much is the rent a month?' },
+      { es: '¿Están incluidos los gastos?', en: 'Are the bills included?' },
+      { es: '¿Hay ascensor en el edificio?', en: 'Is there a lift in the building?' },
+      { es: '¿Cuándo estaría libre?', en: 'When would it be available?' },
+      { es: '¿Le parece bien la cocina?', en: 'Do you like the kitchen?' }
     ],
     fallback: [
       { es: '¿Tiene alguna pregunta sobre el piso?', en: 'Do you have any questions about the flat?' }
@@ -406,6 +566,16 @@ PARLA.data.es.scenarios = [
       { match: ['pregunta', 'dia', 'horario', 'equipo', 'sueldo', 'empezar', 'cuando', 'si'],
         say: { es: 'Buena pregunta. Le contamos todo en la segunda entrevista. Le llamamos esta semana.', en: 'Good question. We will explain everything in the second interview. We will call you this week.' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Por qué le interesa este puesto?', en: 'Why are you interested in this job?' },
+      { es: '¿Qué hacía en su trabajo anterior?', en: 'What did you do in your previous job?' },
+      { es: '¿Cómo se lleva trabajando en equipo?', en: 'How do you get on working in a team?' },
+      { es: '¿Tiene alguna pregunta para nosotros?', en: 'Do you have any questions for us?' },
+      { es: '¿Cuándo podría empezar?', en: 'When could you start?' }
+    ],
     fallback: [
       { es: 'Tómese su tiempo. Cuénteme lo que quiera destacar de su perfil.', en: 'Take your time. Tell me whatever you would like to highlight about your background.' }
     ]
@@ -428,6 +598,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'Me gusta. Lo llevamos a la próxima reunión. ¿Lo preparas tú?', en: 'I like it. We will take it to the next meeting. Will you prepare it?' } },
       { match: ['si', 'claro', 'vale', 'preparo', 'puedo', 'sin problema'],
         say: { es: 'Genial, gracias. Pasamos al siguiente punto.', en: 'Great, thanks. Let us move to the next item.' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Qué opinas tú de esto?', en: 'What do you think about this?' },
+      { es: '¿Y cómo lo harías tú?', en: 'And how would you do it?' },
+      { es: '¿Estamos todos de acuerdo entonces?', en: 'Are we all agreed then?' },
+      { es: '¿Quién se encarga de eso?', en: 'Who is taking care of that?' },
+      { es: '¿Lo dejamos para la próxima reunión?', en: 'Shall we leave it for the next meeting?' }
     ],
     fallback: [
       { es: '¿Alguna idea? Cualquier opinión vale.', en: 'Any thoughts? Any opinion is welcome.' }
@@ -453,6 +633,16 @@ PARLA.data.es.scenarios = [
       { match: ['gracias', 'vale', 'perfecto', 'amable'],
         say: { es: 'Gracias a usted por la paciencia.', en: 'Thank you for your patience.' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Con quién ha hablado antes?', en: 'Who have you spoken to before?' },
+      { es: '¿Qué solución le parecería justa?', en: 'What solution would seem fair to you?' },
+      { es: 'Déjeme mirarlo. ¿Tiene el número de pedido?', en: 'Let me look into it. Do you have the order number?' },
+      { es: 'Lo siento mucho. ¿Cuándo ocurrió?', en: 'I am very sorry. When did it happen?' },
+      { es: '¿Quiere hablar con el encargado?', en: 'Would you like to speak to the manager?' }
+    ],
     fallback: [
       { es: 'Explíqueme qué ha pasado exactamente, por favor.', en: 'Explain to me exactly what happened, please.' }
     ]
@@ -476,6 +666,16 @@ PARLA.data.es.scenarios = [
       { match: ['tarda', 'cuando', 'cuanto', 'listo', 'gracias', 'vale'],
         say: { es: 'Entre tres y cinco días hábiles. Le avisamos por mensaje.', en: 'Between three and five working days. We will notify you by message.' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Me enseña un documento de identidad?', en: 'Can you show me some identification?' },
+      { es: '¿Es una cuenta suya o compartida?', en: 'Is it your account or a joint one?' },
+      { es: 'Tarda unos tres días. ¿Le corre prisa?', en: 'It takes about three days. Are you in a hurry?' },
+      { es: '¿Quiere que se lo mande por correo?', en: 'Would you like me to send it to you by post?' },
+      { es: '¿Ha mirado la aplicación del banco?', en: 'Have you looked at the bank\'s app?' }
+    ],
     fallback: [
       { es: '¿Me puede explicar un poco mejor qué necesita?', en: 'Could you explain a bit more clearly what you need?' }
     ]
@@ -498,6 +698,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'No la mueva. Quédese con ella y hable con ella. Llegamos en cinco minutos.', en: 'Do not move them. Stay with them and keep talking to them. We arrive in five minutes.' } },
       { match: ['vale', 'entendido', 'gracias', 'aqui', 'espero'],
         say: { es: 'Bien. No cuelgue, por favor, sigo con usted.', en: 'Good. Do not hang up, please, I am staying on with you.' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Dónde está usted exactamente?', en: 'Where are you exactly?' },
+      { es: '¿Hay alguien herido?', en: 'Is anyone hurt?' },
+      { es: '¿Está en un sitio seguro?', en: 'Are you somewhere safe?' },
+      { es: 'No cuelgue. ¿Me oye bien?', en: 'Do not hang up. Can you hear me clearly?' },
+      { es: '¿Me da su nombre, por favor?', en: 'Can you give me your name, please?' }
     ],
     fallback: [
       { es: 'Necesito que me diga qué ha pasado y dónde está.', en: 'I need you to tell me what happened and where you are.' }
@@ -523,6 +733,16 @@ PARLA.data.es.scenarios = [
       { match: [],
         say: { es: 'Tiene sentido. Cambiando de tema, ¿qué tal tu semana?', en: 'That makes sense. Changing the subject, how has your week been?' } }
     ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Y eso cómo empezó?', en: 'And how did that start?' },
+      { es: '¿Te pasa a menudo?', en: 'Does that happen to you often?' },
+      { es: '¿Y qué harías tú en mi lugar?', en: 'And what would you do in my place?' },
+      { es: '¿Desde cuándo te interesa eso?', en: 'How long have you been interested in that?' },
+      { es: '¿Me lo cuentas otra vez? Me ha gustado.', en: 'Tell me again? I liked it.' }
+    ],
     fallback: [
       { es: 'Puedes hablarme de tu día, de tus planes, de lo que quieras.', en: 'You can tell me about your day, your plans, whatever you like.' }
     ]
@@ -545,6 +765,16 @@ PARLA.data.es.scenarios = [
         say: { es: 'Buen argumento. ¿Y hay algo que te haría cambiar de opinión?', en: 'Good argument. And is there anything that would change your mind?' } },
       { match: [],
         say: { es: 'Me convences a medias. Resúmeme tu postura en una frase.', en: 'You half convince me. Sum up your position in one sentence.' } }
+    ],
+    /* Scene-specific continuations, used once the script's beats are spent.
+     * Each one is a question, because a reply the learner cannot answer ends
+     * the conversation. */
+    more: [
+      { es: '¿Y no crees que sea al revés?', en: 'And do you not think it is the other way round?' },
+      { es: 'Dame un ejemplo, a ver.', en: 'Give me an example, let\'s see.' },
+      { es: 'Vale, pero ¿qué pasa con la otra parte?', en: 'All right, but what about the other side?' },
+      { es: '¿En qué te basas para decir eso?', en: 'What are you basing that on?' },
+      { es: '¿Cambiarías de opinión con más datos?', en: 'Would you change your mind with more information?' }
     ],
     fallback: [
       { es: 'Da igual la postura, defiéndela. ¿Qué prefieres tú?', en: 'The position does not matter, just defend it. Which do you prefer?' }
