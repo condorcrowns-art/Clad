@@ -72,6 +72,7 @@ function Data.blankProfile(userId: number)
         trinketSlots = {} :: { string },
         cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
         bestBank = 0,
+        roundsPlayed = 0,                          -- earns eggs; never spent
         powerUses = {} :: { [string]: number },    -- mastery, per power
         streak = 0,
         streakDay = 0,
@@ -138,6 +139,7 @@ function Data.load(player: Player)
     -- only migration that is safe without asking the player anything.
     profile.lifetimeBanked = profile.lifetimeBanked or 0
     profile.bestBank = profile.bestBank or 0
+    profile.roundsPlayed = profile.roundsPlayed or 0
     profile.trinketsOwned = profile.trinketsOwned or {}
     profile.trinketSlots = profile.trinketSlots or {}
     profile.cratePity = profile.cratePity or {}

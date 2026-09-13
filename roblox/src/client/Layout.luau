@@ -95,6 +95,74 @@ function Layout.centre(size: UDim2): UDim2
     )
 end
 
+-- ── The top band: the dock, and everything that has to sit under it ────────
+--
+-- ONE OWNER FOR A NUMBER TWO FILES BOTH NEED.
+--
+-- ArenaHud draws the dock. Hud draws the tutorial coach and the toast column,
+-- and both of those have to go BELOW the dock — which means Hud has to know how
+-- tall the dock is. The obvious answers are both wrong: duplicating the icon
+-- arithmetic in Hud leaves two copies to drift the moment a tab is added, and
+-- having Hud require ArenaHud points the small module at the big one for a
+-- single integer. So the arithmetic lives here, where both already look.
+--
+-- WHY THE DOCK WRAPS ON A PHONE. Nine tabs in one row is 390px at a 38px icon.
+-- On a 568-wide screen that leaves 89px either side, and the stat card alone
+-- wants 104 — so the card ran under the dock and the Glob readout ran under the
+-- other end of it. Two rows is 222px wide and 96 tall, which fits between the
+-- card and the Glob readout with room to spare, and keeps every icon at 38px
+-- rather than shrinking them under the 34px a thumb needs.
+-- How many tabs the dock has. REGISTERED BY THE MODULE THAT OWNS THE DOCK,
+-- rather than passed in by every caller — because the callers are ArenaHud
+-- (which knows) and Hud (which does not, and would have to keep a copy of the
+-- number in sync forever). A stale copy in Hud puts the tutorial coach on top
+-- of the dock the first time a tab is added, which is a bug nobody would think
+-- to look for in the file that does not draw tabs.
+local dockTabs = 8
+
+function Layout.setDockTabs(n: number)
+    if n == dockTabs then return end
+    dockTabs = n
+    Layout.changed:Fire(current)
+end
+
+function Layout.dockMetrics(tabCount: number?)
+    local count = tabCount or dockTabs
+    local compact = current.compact
+    local icon = compact and 38 or 52
+    local gap = compact and 4 or 7
+    local pad = compact and 8 or 14
+    local perRow = compact and math.ceil(count / 2) or count
+    local rows = compact and 2 or 1
+    if count <= 5 then
+        perRow, rows = count, 1
+    end
+    return {
+        icon = icon,
+        gap = gap,
+        pad = pad,
+        perRow = perRow,
+        rows = rows,
+        width = perRow * icon + (perRow - 1) * gap + pad * 2,
+        height = rows * icon + (rows - 1) * gap + pad * 2,
+        top = 6,
+    }
+end
+
+--- Y coordinate of the first free pixel under the dock.
+function Layout.belowDock(tabCount: number?): number
+    local m = Layout.dockMetrics(tabCount)
+    return m.top + m.height + (current.compact and 6 or 10)
+end
+
+--- Y coordinate of the first free pixel under the dock AND the status strip
+--- that sits beneath it. Anything drawn from here down is clear of the whole
+--- top block.
+function Layout.belowStatus(tabCount: number?): number
+    local strip = current.compact and 30 or 36
+    return Layout.belowDock(tabCount) + strip + (current.compact and 6 or 10)
+end
+
 -- The horizontal band between the thumbstick and the jump button — the only
 -- part of the bottom edge a phone player can actually press.
 function Layout.bottomGap(): (number, number)

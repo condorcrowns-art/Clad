@@ -117,20 +117,18 @@ end
 -- Expressed as "N seconds of your own income", so the stand stays exactly as
 -- affordable at 1e12 mass as it was at 100. Shared with the client so the
 -- price on the button is always the price the server charges.
-function GoobMath.snackPrice(goob: Goob, tier: any, now: number?): number
-    return GoobMath.incomePerSecond(goob, now) * tier.seconds * Config.SNACK_MARKUP
-end
-
--- Price of the next Goob egg, in Glob.
+-- WHAT USED TO BE HERE. `snackPrice` and `eggPrice` both priced a purchase in
+-- SECONDS OF THE OWNER'S INCOME, so a snack cost roughly the same amount of
+-- waiting at every scale. It was a good idea for the game it was written for
+-- and it has no customer left: the Snack Stand and the Egg Stand are gone, and
+-- feeding and eggs both come out of finishing rounds now. Deleting them rather
+-- than leaving them unreferenced, because an unreferenced pricing function is
+-- an invitation to reintroduce the shop it priced.
 --
--- Anchored to income like the Snack Stand (so it stays meaningful at every
--- scale) but multiplied by EGG_PRICE_GROWTH for each Goob already held. At the
--- default 2.5x that is 15 minutes of income for your second Goob and roughly
--- 25 hours for your eighth.
-function GoobMath.eggPrice(goob: Goob, ownedCount: number, now: number?): number
-    local base = GoobMath.incomePerSecond(goob, now) * Config.EGG_BASE_SECONDS
-    return base * (Config.EGG_PRICE_GROWTH ^ math.max(0, ownedCount - 1))
-end
+-- The replacement rules live in Config: ROUND_FEED_PER_GLOB scales a payout
+-- into feedstock rolls, ROUND_FEED_LUCK makes first place a better table, and
+-- EGG_EVERY_ROUNDS hatches the slot. None of them need an income curve,
+-- because none of them are bought.
 
 function GoobMath.generation(goob: Goob): number
     return #goob.lineage + 1

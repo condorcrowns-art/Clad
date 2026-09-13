@@ -303,51 +303,41 @@ Config.GULP_MASS_TRANSFER = 0.75
 Config.GULP_AGE_TRANSFER = 0.35   -- you inherit 35% of the eaten Goob's age
 Config.GULP_MIN_MASS_RATIO = 0.02 -- can't gulp something >50x your size
 
--- ── The Snack Stand: what Glob is actually FOR ─────────────────────────────
+-- ── How your Goob is fed now ───────────────────────────────────────────────
 --
--- Without this, idle income is decorative. You earn Glob, and there is nothing
--- to do with it — which severs the offline pillar from progression entirely.
--- That is the exact pillar that made Grow a Garden the biggest new game on the
--- platform, so it cannot be an afterthought.
+-- WHAT THIS REPLACED, AND WHY. There used to be three separate ways to put
+-- mass into a Goob: a Snack Stand that spent idle income on feedstock rolls,
+-- an Egg Stand that sold you empty vessels, and physical critters that roamed
+-- the island to be chased down. All three predate the arena. They were built
+-- for a game where you stood on a plot and watched a number rise, and they
+-- survived the rework only because nothing ever forced them to justify
+-- themselves.
 --
--- The stand closes the loop:  idle → Glob → snack rolls → stomach → mass.
+-- Keeping them was not free. Critters spawned junk into the ROUND — a "RARE
+-- Anvil" bobbing past two players mid-chase, belonging to a loop that no
+-- longer exists. The Snack Stand needed a shop panel, and that panel was the
+-- thing overlapping the season track on screen. Two visible bugs, one root
+-- cause: dead systems still running.
 --
--- Prices scale with your CURRENT income rather than being flat, so a snack
--- always costs roughly the same number of SECONDS of income no matter how big
--- you are. A flat price would be unaffordable on day one and free by day ten.
-Config.SNACK_TIERS = {
-    { id = "snack",    name = "Snack",    emoji = "🍪", seconds =   60, rolls = 3,  luck = 1 },
-    { id = "feast",    name = "Feast",    emoji = "🍗", seconds =  300, rolls = 12, luck = 2 },
-    { id = "banquet",  name = "Banquet",  emoji = "👑", seconds = 1200, rolls = 40, luck = 4 },
-}
--- A small markup so buying is never strictly better than playing actively.
--- Catching is the intended primary loop; the stand is what your AFK time buys.
-Config.SNACK_MARKUP = 1.35
+-- So feeding now hangs off the only loop there is. A round pays out Glob AND
+-- feeds your Goob, scaled by what you actually did out there, and eggs hatch
+-- on a count of rounds finished rather than being bought. There is exactly one
+-- source of mass in the world again, and it is playing.
+Config.ROUND_FEED_PER_GLOB = 1 / 420   -- payout -> number of feedstock rolls
+Config.ROUND_FEED_MIN = 1
+Config.ROUND_FEED_MAX = 26
+-- Luck by finishing place. Winning buys a better table, not just more of the
+-- same one, because "more rolls" stops reading as a prize very quickly.
+Config.ROUND_FEED_LUCK = { 4, 2.5, 1.8 }
+Config.ROUND_FEED_LUCK_DEFAULT = 1
 
--- ── The Egg Stand: how you ever get a SECOND Goob ─────────────────────────
+-- ── How you ever get a SECOND Goob ─────────────────────────────────────────
 --
--- Without this the game has no core loop at all. `newGoob` was only ever
--- called once, at account creation, and trading is zero-sum — so no player
--- could ever hold two Goobs, the `#goobs <= 1` guard in GoobService.gulp was
--- permanently true, and gulping (the sink the entire design rests on) was
--- unreachable dead code.
---
--- Eggs hatch a Goob at STARTING_MASS with age zero, so they are NOT a way to
--- buy power: gulping a fresh egg returns 7.5 mass for a price worth hundreds.
--- What an egg buys is a SLOT — somewhere to hold a Goob you traded for, and
--- stock a new player can actually bring to the trade zone on day one.
---
--- Price is a steeply rising function of how many Goobs you already hold, so a
--- stable is a genuine investment and nobody floods the world with vessels.
-Config.EGG_BASE_SECONDS = 900   -- first extra egg = 15 minutes of your income
-Config.EGG_PRICE_GROWTH = 2.5   -- each additional Goob multiplies the price
+-- An egg is a SLOT — somewhere to keep something you traded for. Gating it on
+-- rounds finished means a stable is evidence that you played, which is the one
+-- thing in the game that cannot be bought, botted or transferred.
+Config.EGG_EVERY_ROUNDS = 5
 Config.MAX_GOOBS = 8            -- hard cap; also bounds the DataStore payload
-
--- ── Critters (the active loop) ─────────────────────────────────────────────
-Config.CRITTER_MAX_ALIVE = 26
-Config.CRITTER_SPAWN_INTERVAL = 3.5
-Config.CRITTER_LIFETIME = 90
-Config.CRITTER_CATCH_RADIUS = 9
 
 -- ── Trading ────────────────────────────────────────────────────────────────
 Config.TRADE_RANGE = 24
@@ -516,8 +506,41 @@ Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
 -- you stop being able to see anybody, which kills the thing the whole design
 -- rests on: always being able to see somebody bigger and somebody smaller.
 Config.ISLAND_RADIUS = 480
-Config.SHALLOWS_INNER = 395   -- outside this radius is no-PvP
+Config.SHALLOWS_INNER = 395   -- outside this radius is the rim
 Config.VAULT_RADIUS = 48
+
+-- ── WHY THERE IS NOW FOOD OUT AT THE EDGE ──────────────────────────────────
+--
+-- There was not, and it was deliberate, and it was wrong.
+--
+-- Pellets used to stop at SHALLOWS_INNER - 8, because the rim outside it is a
+-- no-PvP ring and food in a place nothing can touch you is not a strategy, it
+-- is an exploit that beats the whole game: stand still, eat forever, win. So
+-- the rim was left bare. What that actually produced was a 93-stud dead band
+-- around the entire island — over a THIRD of its area — with nothing in it and
+-- no reason to walk there. The island read as smaller than it is, and the
+-- outer third of a map built for 16+ players was decoration.
+--
+-- The fix is not "spawn food there anyway". It is to stop the rim being a
+-- place you can live. Safety out there is now a BUDGET, not a property of the
+-- ground: see SHALLOWS_GRACE below. Once you have spent it you are edible on
+-- the rim like anywhere else, so food can be scattered right out to the
+-- shoreline and the edge becomes the most exposed ground on the map instead of
+-- the safest. Which is what an edge should be.
+Config.PELLET_OUTER = Config.ISLAND_RADIUS - 26   -- 454: out to the shoreline
+
+-- ── Safety is a budget ─────────────────────────────────────────────────────
+--
+-- Standing on the rim buys you SHALLOWS_GRACE seconds of being untouchable.
+-- The meter drains while you are out there and refills at RECHARGE seconds of
+-- real time per second of grace, only while you are inside the Flats. So the
+-- rim is a fire escape — duck out, breathe, get back in — and never a home.
+--
+-- A fresh spawn is handed a full meter, which is what makes spawning out here
+-- still the right answer for a new player: you get a real look at the island
+-- before anything is allowed to touch you.
+Config.SHALLOWS_GRACE = 12        -- seconds of protection per full meter
+Config.SHALLOWS_RECHARGE = 3.0    -- seconds in the Flats per second refunded
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ROUNDS
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -618,9 +641,71 @@ Config.SPAWN_RING = 435
 Config.SPAWN_CLEARANCE = 46    -- no scenery may be placed within this of a spawn
 Config.SPAWN_POINTS = 20       -- enough that a full server does not stack up
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BOTS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- An arena game with three people in it is not a small version of the game.
+-- It is a different, worse game: nobody to run from, nobody to gang up on, and
+-- a leader who is never brought down because deflation needs a crowd. Every
+-- system in GOOP — the catch-up loop, the board, the 1v1s — assumes a FIELD.
+--
+-- So the field is guaranteed. Every round is played by ROUND_FIELD_SIZE
+-- contenders and bots make up whatever the humans do not: twelve humans means
+-- no bots, one human means eleven, and nobody at all still runs a real round
+-- with a real board. A player joining mid-round does not push anyone out —
+-- the bot count is recomputed at the top of each round, so the field size is
+-- exact at the start and only ever grows during play.
+--
+-- Bots are NOT a scoreboard prop. They eat pellets, they eat each other, they
+-- eat you, you eat them, and they are deflated by your abilities on exactly
+-- the same terms as a player, because a bot that cannot be beaten the normal
+-- way teaches the wrong thing about the game.
+Config.ROUND_FIELD_SIZE = 12
+Config.BOTS_ENABLED = true
+
+-- Bots are deliberately beatable. A bot re-decides what it is doing every
+-- THINK seconds rather than every frame, which is what gives a human the
+-- opening to cut one off — a perfect-information chaser reacting at 60Hz is
+-- unloseable and reads as cheating.
+Config.BOT_THINK = 0.45
+Config.BOT_SIGHT = 170          -- studs; it cannot act on what it cannot see
+Config.BOT_PELLET_SIGHT = 90
+-- Fear and greed. A bot runs from anything EAT_RATIO * FEAR times its size and
+-- chases anything under GREED of it. Below 1.0 greed means it only commits to
+-- prey it can comfortably swallow, which leaves room for a human to bait one.
+Config.BOT_FEAR = 1.0
+Config.BOT_GREED = 0.86
+Config.BOT_SPEED_MULT = 0.94    -- a shade slower than a player of equal size
+Config.BOT_WANDER = 0.35        -- share of decisions that are just wandering
+
+-- Bots do not all play the same. Skill scales the three things that actually
+-- decide a chase: how far they see, how often they think, and how willing they
+-- are to commit. A field of identical bots is legible within one round.
+Config.BOT_SKILLS = {
+    { id = "dozy",   name = "dozy",   sight = 0.62, think = 1.9,  greed = 0.70, weight = 26 },
+    { id = "plain",  name = "plain",  sight = 1.00, think = 1.0,  greed = 0.86, weight = 46 },
+    { id = "sharp",  name = "sharp",  sight = 1.28, think = 0.65, greed = 0.95, weight = 22 },
+    { id = "feral",  name = "feral",  sight = 1.45, think = 0.45, greed = 1.05, weight = 6 },
+}
+
+-- Names read as players, not as NPC_01. A board full of "Bot 4" tells a lone
+-- player they are alone, which is the one thing this system exists to avoid.
+-- They are tagged as bots in the UI all the same — pretending otherwise is a
+-- lie the player will catch, and catching it costs more than it buys.
+Config.BOT_NAMES = {
+    "Blobbo", "Squish", "Gloop", "Mimsy", "Bubbo", "Nugget", "Pudge", "Wobble",
+    "Slurp", "Tadpole", "Custard", "Goober", "Snorkel", "Jellybean", "Plop",
+    "Mochi", "Dollop", "Gurgle", "Pip", "Marsh", "Splodge", "Bloop", "Tumble",
+    "Yolk", "Doodle", "Fizz", "Grub", "Puddle", "Noodle", "Squelch",
+}
+
 -- Derived last, because it depends on the radius above.
+-- The food field is the disc out to PELLET_OUTER, not to SHALLOWS_INNER. That
+-- is a 35% larger area than it used to be, so the count rises with it: if the
+-- count had stayed put, opening the rim up would have made the WHOLE island
+-- thinner rather than making the edge worth walking to.
 Config.PELLET_TARGET = math.floor(
-    Config.PELLET_DENSITY * math.pi * Config.SHALLOWS_INNER ^ 2)
+    Config.PELLET_DENSITY * math.pi * Config.PELLET_OUTER ^ 2)
 
 
 return Config
@@ -1620,20 +1705,18 @@ end
 -- Expressed as "N seconds of your own income", so the stand stays exactly as
 -- affordable at 1e12 mass as it was at 100. Shared with the client so the
 -- price on the button is always the price the server charges.
-function GoobMath.snackPrice(goob: Goob, tier: any, now: number?): number
-    return GoobMath.incomePerSecond(goob, now) * tier.seconds * Config.SNACK_MARKUP
-end
-
--- Price of the next Goob egg, in Glob.
+-- WHAT USED TO BE HERE. `snackPrice` and `eggPrice` both priced a purchase in
+-- SECONDS OF THE OWNER'S INCOME, so a snack cost roughly the same amount of
+-- waiting at every scale. It was a good idea for the game it was written for
+-- and it has no customer left: the Snack Stand and the Egg Stand are gone, and
+-- feeding and eggs both come out of finishing rounds now. Deleting them rather
+-- than leaving them unreferenced, because an unreferenced pricing function is
+-- an invitation to reintroduce the shop it priced.
 --
--- Anchored to income like the Snack Stand (so it stays meaningful at every
--- scale) but multiplied by EGG_PRICE_GROWTH for each Goob already held. At the
--- default 2.5x that is 15 minutes of income for your second Goob and roughly
--- 25 hours for your eighth.
-function GoobMath.eggPrice(goob: Goob, ownedCount: number, now: number?): number
-    local base = GoobMath.incomePerSecond(goob, now) * Config.EGG_BASE_SECONDS
-    return base * (Config.EGG_PRICE_GROWTH ^ math.max(0, ownedCount - 1))
-end
+-- The replacement rules live in Config: ROUND_FEED_PER_GLOB scales a payout
+-- into feedstock rolls, ROUND_FEED_LUCK makes first place a better table, and
+-- EGG_EVERY_ROUNDS hatches the slot. None of them need an income curve,
+-- because none of them are bought.
 
 function GoobMath.generation(goob: Goob): number
     return #goob.lineage + 1
@@ -1886,12 +1969,9 @@ local Net = {}
 Net.EVENTS = {
     "StateSync",      -- S->C  full/partial profile push
     "Notify",         -- S->C  toast message
-    "CatchCritter",   -- C->S  player touched a critter
     "FeedGoob",       -- C->S  push stomach items (auto, but kept explicit)
     "RenameGoob",     -- C->S
     "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
-    "BuySnack",       -- C->S  spend Glob on feedstock rolls
-    "BuyEgg",         -- C->S  hatch a new Goob (the only source of new Goobs)
     "DismissTutorial",-- C->S  stop showing the first-run guide
     "Ascend",         -- C->S  consume a Colossal Goob for a permanent Crest
     "Dashed",         -- C->S  cosmetic: tell the server a dash happened
@@ -2328,7 +2408,10 @@ Season.XP_PER_TIER = 5600
 Season.XP = {
     catch      = 4,
     secret     = 800,
-    snack      = 12,
+    -- `snack` is gone with the Snack Stand it paid for. `egg` survives, but
+    -- it is now earned by finishing rounds rather than bought, so it fires
+    -- roughly once every five rounds instead of whenever somebody has spare
+    -- Glob — which makes it worth considerably more than 150 was tuned for.
     egg        = 150,
     gulp       = 110,
     trade      = 90,
@@ -2669,7 +2752,15 @@ export type Step = {
     id: string,
     text: string,
     hint: string?,
-    target: string?,   -- UI element to pulse: "snack" | "drawer" | "egg" | nil
+    -- Which control to pulse while this step is up, or nil for none.
+    --
+    -- Resolved through Hud.targets, a registry that other modules write into —
+    -- NOT a hardcoded list in Hud. The list used to be exactly "snack" and
+    -- "drawer", both of which belonged to a screen that has since been deleted,
+    -- so the one step that genuinely needs a pointer ("press your power
+    -- button") had nothing to point at. Any id here must be registered by
+    -- whichever module owns the control, or the step simply will not pulse.
+    target: string?,
     goal: number?,     -- for counted steps
 }
 
@@ -2819,7 +2910,6 @@ local Monetisation = require(Shared.Monetisation)
 local Data = require(script.Data)
 local WorldBuilder = require(script.WorldBuilder)
 local GoobService = require(script.GoobService)
-local CritterService = require(script.CritterService)
 local TradeService = require(script.TradeService)
 local RollService = require(script.RollService)
 local PitService = require(script.PitService)
@@ -2831,7 +2921,6 @@ print(("[%s] booting…"):format(Config.GAME_NAME))
 
 Net.init()
 WorldBuilder.build()
-CritterService.start()
 GoobService.start()
 
 local function activeGoobOf(player: Player)
@@ -2840,12 +2929,6 @@ local function activeGoobOf(player: Player)
 end
 
 -- Reach and catch validation both key off the rolling body.
-CritterService.originFor = function(player: Player): BasePart?
-    local ball = RollService.ballFor(player)
-    if ball then return ball end
-    local char = player.Character
-    return char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-end
 
 RollService.start(activeGoobOf)
 CensusService.start()
@@ -2895,20 +2978,6 @@ local function snapshot(player: Player)
         })
     end
 
-    local snacks = {}
-    if active then
-        for _, tier in ipairs(Config.SNACK_TIERS) do
-            local price = GoobMath.snackPrice(active, tier)
-            table.insert(snacks, {
-                id = tier.id, name = tier.name, emoji = tier.emoji,
-                rolls = tier.rolls, luck = tier.luck,
-                price = price, priceText = Format.short(price),
-                affordable = profile.glob >= price,
-            })
-        end
-    end
-
-    local eggPrice = active and GoobMath.eggPrice(active, #profile.goobs) or 0
     local tutorial = Tutorial.display(profile.tutorial)
     local crests = profile.crests or 0
     local canAsc, ascReason = false, nil
@@ -2917,10 +2986,15 @@ local function snapshot(player: Player)
     return {
         glob = profile.glob,
         globText = Format.short(profile.glob),
-        snacks = snacks,
-        eggPrice = eggPrice,
-        eggPriceText = Format.short(eggPrice),
-        eggAffordable = profile.glob >= eggPrice and #profile.goobs < Config.MAX_GOOBS,
+        -- `snacks`, `eggPrice` and friends used to live here, feeding a shop
+        -- panel that has been deleted along with the shops. What replaced them
+        -- is the pair below: how many rounds until the next egg, and whether
+        -- the stable is full. Those are the only two numbers the wardrobe
+        -- still has to answer, and they come from play rather than from a till.
+        roundsPlayed = profile.roundsPlayed or 0,
+        roundsToEgg = (#profile.goobs >= Config.MAX_GOOBS) and -1
+            or (Config.EGG_EVERY_ROUNDS
+                - ((profile.roundsPlayed or 0) % Config.EGG_EVERY_ROUNDS)),
         eggCapped = #profile.goobs >= Config.MAX_GOOBS,
         maxGoobs = Config.MAX_GOOBS,
         income = active and GoobMath.incomePerSecond(active) or 0,
@@ -3264,6 +3338,67 @@ ArenaService.start({
     sync = function(player, state) ArenaSync:FireClient(player, state) end,
     teach = teach,
 
+    -- EVERYTHING A FINISHED ROUND OWES THE PROFILE.
+    --
+    -- This is what the Snack Stand and the Egg Stand became. Both used to sell
+    -- progress for idle income, which made the arena — the actual game — the
+    -- one thing that could not feed your Goob. Now it is the only thing that
+    -- can: a round pays Glob through `award` and pays MASS through here,
+    -- scaled by the same payout, with the finishing place buying a luckier
+    -- table rather than simply more rolls.
+    roundResult = function(player, place, _mass, payout)
+        local profile = Data.get(player)
+        if not profile then return end
+
+        profile.roundsPlayed = (profile.roundsPlayed or 0) + 1
+
+        local goob = GoobService.activeGoob(profile)
+        if goob then
+            local rolls = math.clamp(
+                math.floor(payout * Config.ROUND_FEED_PER_GLOB),
+                Config.ROUND_FEED_MIN, Config.ROUND_FEED_MAX)
+            local luck = Config.ROUND_FEED_LUCK[place] or Config.ROUND_FEED_LUCK_DEFAULT
+            local rng = Random.new(os.clock() * 1e6 + player.UserId)
+            local best, bestRank = nil, 0
+            local rank = {}
+            for i, r in ipairs(Feedstock.RARITY_ORDER) do rank[r] = i end
+            for _ = 1, rolls do
+                -- `false`: no Secrets from a round payout, same rule the shop
+                -- had. A Secret must be found, never handed out on a timer.
+                local item = Feedstock.roll(rng, luck, false)
+                GoobService.feed(player, item.id)
+                CensusService.recordCaught(item.id)
+                if (rank[item.rarity] or 0) > bestRank then
+                    best, bestRank = item, rank[item.rarity] or 0
+                end
+            end
+            if best then
+                notify(player, ("🍽️ %s ate %d things — best was %s (%s)")
+                    :format(goob.nickname, rolls, best.name, best.rarity),
+                    bestRank >= 5 and "good" or "info")
+                -- ONE effect for the best thing in the haul, not one per roll.
+                -- Twenty-six particle bursts and twenty-six sound stings in the
+                -- same frame is not feedback, it is a crash on a phone — and
+                -- the player only cares about the best one anyway, which is the
+                -- same reason the notification names it.
+                Effect:FireClient(player, "catch", best.id)
+            end
+        end
+
+        -- An egg every EGG_EVERY_ROUNDS rounds finished, up to the cap. This
+        -- is the only source of new Goobs in the game now, and it cannot be
+        -- bought, rushed or idled into.
+        if profile.roundsPlayed % Config.EGG_EVERY_ROUNDS == 0
+            and #profile.goobs < Config.MAX_GOOBS then
+            local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId * 7))
+            table.insert(profile.goobs, egg)
+            progress(player, "egg")
+            notify(player, ("🥚 %d rounds — a new Goob hatched: %s!")
+                :format(profile.roundsPlayed, egg.nickname), "good")
+        end
+        push(player)
+    end,
+
     powerUses = function(player)
         local profile = Data.get(player)
         return (profile and profile.powerUses) or {}
@@ -3501,23 +3636,6 @@ Net.get("RequestProfile").OnServerInvoke = function(player: Player)
     while not Data.get(player) and os.clock() < deadline do task.wait(0.1) end
     return snapshot(player)
 end
-
-Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: Instance)
-    local ok, item = CritterService.tryCatch(player, target)
-    if not ok then return end
-    GoobService.feed(player, item.id)
-    progress(player, "catch")
-    CensusService.recordCaught(item.id)
-    Effect:FireClient(player, "catch", item.id)
-    if item.rarity == "Secret" then progress(player, "secret") end
-    teach(player, "catch")
-    -- The digest step has no action of its own; catching enough to see the
-    -- number move is the lesson, so it clears alongside.
-    teach(player, "digest")
-    push(player)
-    local isBig = item.rarity ~= "Common" and item.rarity ~= "Uncommon"
-    notify(player, ("+%s  (%s)"):format(item.name, item.rarity), isBig and "good" or "info")
-end)
 
 Net.get("RenameGoob").OnServerEvent:Connect(function(player: Player, goobId: string, raw: string)
     local profile = Data.get(player)
@@ -3795,80 +3913,6 @@ Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: 
     end
 end)
 
-Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
-    local profile = Data.get(player)
-    if not profile then return end
-    local active = GoobService.activeGoob(profile)
-    if not active then return end
-
-    if #profile.goobs >= Config.MAX_GOOBS then
-        notify(player, ("You can only keep %d Goobs at once."):format(Config.MAX_GOOBS), "warn")
-        return
-    end
-
-    -- Price is recomputed server-side from the current Goob and the current
-    -- count. The client sends no price, only the button press.
-    local price = GoobMath.eggPrice(active, #profile.goobs)
-    if profile.glob < price then
-        notify(player, "Not enough 💧 for an egg.", "warn")
-        return
-    end
-
-    profile.glob -= price
-    local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
-    table.insert(profile.goobs, egg)
-    teach(player, "egg")
-    progress(player, "egg")
-    push(player)
-    notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
-        :format(egg.nickname), "good")
-end)
-
-Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: string)
-    local profile = Data.get(player)
-    if not profile or typeof(tierId) ~= "string" then return end
-    local goob = GoobService.activeGoob(profile)
-    if not goob then return end
-
-    local tier
-    for _, t in ipairs(Config.SNACK_TIERS) do
-        if t.id == tierId then tier = t break end
-    end
-    if not tier then return end
-
-    -- Price is recomputed server-side from the CURRENT Goob. The client sends
-    -- only which button was pressed, never a price.
-    local price = GoobMath.snackPrice(goob, tier)
-    if profile.glob < price then
-        notify(player, "Not enough 💧 for a " .. tier.name .. ".", "warn")
-        return
-    end
-
-    profile.glob -= price
-    local rng = Random.new(os.clock() * 1e6 + player.UserId)
-    local best, bestRarity = nil, 0
-    local rarityRank = {}
-    for i, r in ipairs(Feedstock.RARITY_ORDER) do rarityRank[r] = i end
-
-    for _ = 1, tier.rolls do
-        -- `false` = no Secrets from the shop. See Feedstock.roll.
-        local item = Feedstock.roll(rng, tier.luck, false)
-        GoobService.feed(player, item.id)
-        CensusService.recordCaught(item.id)
-        local rank = rarityRank[item.rarity] or 0
-        if rank > bestRarity then best, bestRarity = item, rank end
-    end
-
-    teach(player, "snack")
-    progress(player, "snack")
-    push(player)
-    if best then
-        notify(player, ("%s %s — %d items, best was %s (%s)")
-            :format(tier.emoji, tier.name, tier.rolls, best.name, best.rarity),
-            bestRarity >= 5 and "good" or "info")
-    end
-end)
-
 Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: string, eatenId: string)
     local ok, reason = GoobService.gulp(player, eaterId, eatenId)
     if ok then
@@ -3906,11 +3950,6 @@ TradeService.onNotify.Event:Connect(function(player, msg, kind)
     notify(player, msg, kind)
 end)
 
-CritterService.onSecret.Event:Connect(function(item)
-    Notify:FireAllClients(("🌟 A %s just appeared somewhere in the world — GO!")
-        :format(item.name), "secret")
-end)
-
 print(("[%s] ready. one island, %d pellets, %d powers, %d trinkets, %d crates.")
     :format(Config.GAME_NAME, Config.PELLET_TARGET, #Powers.LIST, #Trinkets.LIST, #Crates.LIST))
 ]]></ProtectedString></Properties><Item class="ModuleScript" referent="RBX000020"><Properties><string name="Name">ArenaService</string><ProtectedString name="Source"><![CDATA[--!strict
@@ -3942,6 +3981,7 @@ local Format = require(Shared.Format)
 
 local RollService = require(script.Parent.RollService)
 local WorldBuilder = require(script.Parent.WorldBuilder)
+local BotService = require(script.Parent.BotService)
 
 local ArenaService = {}
 
@@ -3975,6 +4015,8 @@ export type Run = {
     banking: number,
     leakBuffer: number,
     safeUntil: number,
+    rimGrace: number,       -- seconds of rim protection left in the meter
+    committed: boolean,     -- has this blob ever left the rim for the Flats
     trinkets: Trinkets.Resolved,
     bestMass: number,
     peakThisRound: number,
@@ -4022,6 +4064,11 @@ type Deps = {
     teach: (player: Player, event: string) -> (),
     powerUses: (player: Player) -> { [string]: number },
     notePowerUse: (player: Player, id: string) -> (),
+    -- Everything a finished round owes the PROFILE rather than the wallet:
+    -- feeding your Goob, counting rounds towards an egg. Separate from
+    -- `award` because award has exactly one job — creating Glob — and this
+    -- needs the finishing place, which Glob does not care about.
+    roundResult: (player: Player, place: number, mass: number, payout: number) -> (),
 }
 local deps: Deps
 
@@ -4100,6 +4147,64 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- ── What the bots are allowed to ask the island ────────────────────────────
+--
+-- Bots do not own pellets, do not own mass, and do not get their own copy of
+-- either rule. They get these two questions and nothing else, which is what
+-- keeps "how does eating work" a single answer for every contender on the map.
+
+--- Where is the nearest pellet, if any, within `radius`? Walks the same
+--- spatial hash the players use rather than the whole pellet list: at 1,400
+--- pellets and twelve bots re-asking every think, the naive version is 17,000
+--- distance tests a second for nothing.
+local function nearestPelletPos(from: Vector3, radius: number): Vector3?
+    local best, bestD = nil, radius
+    local span = math.max(1, math.ceil(radius / CELL))
+    local cx, cz = math.floor(from.X / CELL), math.floor(from.Z / CELL)
+    for gx = cx - span, cx + span do
+        for gz = cz - span, cz + span do
+            local bucket = grid[gx .. ":" .. gz]
+            if bucket then
+                for part, _ in pairs(bucket) do
+                    if part.Parent then
+                        local d = (part.Position - from).Magnitude
+                        if d < bestD then
+                            best, bestD = part.Position, d
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+--- Eat every pellet within `reach` of a point, returning the mass taken. The
+--- same nine-cell sweep tickPlayer does, minus the trinkets and teaching a
+--- bot has no use for.
+local function harvestAt(from: Vector3, reach: number): number
+    local gained = 0
+    local cx, cz = math.floor(from.X / CELL), math.floor(from.Z / CELL)
+    for gx = cx - 1, cx + 1 do
+        for gz = cz - 1, cz + 1 do
+            local bucket = grid[gx .. ":" .. gz]
+            if bucket then
+                for part, pellet in pairs(bucket) do
+                    if part.Parent then
+                        if (part.Position - from).Magnitude <= reach then
+                            gained += pellet.value
+                            removePellet(pellet)
+                        end
+                    else
+                        removePellet(pellet)
+                    end
+                end
+            end
+        end
+    end
+    return gained
+end
+
 -- CAN THIS PLAYER BE TOUCHED BY SOMEONE ELSE'S POWER?
 --
 -- This existed only inside the eating check, which meant SIPHON, HOOK and SLAM
@@ -4120,7 +4225,23 @@ local function protected(player: Player, run: Run?, now: number): boolean
     if not ball or not ball.Parent then
         return true
     end
-    return WorldBuilder.isSafe(ball.Position) or now < run.safeUntil
+    -- THE RIM IS A FIRE ESCAPE, NOT A HOUSE.
+    --
+    -- Standing in the Shallows used to be unconditional immunity, which is why
+    -- no food could be spawned out there: a player could stand in the one
+    -- place nothing could reach them, and if there had been anything to eat,
+    -- standing still would have been the winning strategy.
+    --
+    -- Now the ground does not protect you; a METER does, and being on the rim
+    -- is what spends it (tickPlayer drains it). Duck out to shake a chaser and
+    -- you are fine. Try to live out there and you run dry in about twelve
+    -- seconds, at which point the edge is simply the most exposed ground on the
+    -- island — which is exactly what it should be, and what finally lets food
+    -- grow all the way to the shoreline.
+    if now < run.safeUntil then
+        return true
+    end
+    return WorldBuilder.isSafe(ball.Position) and run.rimGrace > 0
 end
 
 -- How many times this player has used a power.
@@ -4171,6 +4292,40 @@ local function deflate(target: Player, targetRun: Run, fraction: number, scatter
 
     deps.effect(target, "deflated", { amount = taken })
     return taken
+end
+
+--- The same deflation, applied to a bot.
+---
+--- Separate function, identical rule. A bot has no Player, no trinkets and no
+--- notifications, so sharing the body of `deflate` would mean threading nil
+--- through four call sites for the privilege of one shared line of arithmetic.
+--- What must NOT diverge is the fraction and the fact that what comes off
+--- lands as food — both come straight from Config here, same as for a player,
+--- so deflating the leader feeds the island whether the leader is human or not.
+local function deflateBot(bot: any, fraction: number, scatterIt: boolean): number
+    local taken = bot.mass * math.clamp(fraction, 0, 0.9)
+    if taken <= 0 then
+        return 0
+    end
+    bot.mass = math.max(Config.STARTING_MASS, bot.mass - taken)
+    if scatterIt then
+        local back = taken * Config.DEFLATE_RETURN_AS_FOOD
+        local drops = math.clamp(math.floor(back / Config.LEAK_PELLET_MASS), 1, 14)
+        local r = Blob.radius(bot.mass)
+        for i = 1, drops do
+            local a = math.rad((360 / drops) * i) + rng:NextNumber(-0.3, 0.3)
+            local d = r * 1.8 + rng:NextNumber(3, 14)
+            spawnPellet(Vector3.new(bot.pos.X + math.cos(a) * d, 2,
+                bot.pos.Z + math.sin(a) * d), back / drops, false)
+        end
+    end
+    return taken
+end
+
+--- Is this bot currently untouchable? Same two reasons a player is: it is on
+--- the rim with meter left, or it is mid-respawn.
+local function botProtected(bot: any): boolean
+    return bot.respawnAt ~= 0 or (WorldBuilder.isSafe(bot.pos) and bot.rimGrace > 0)
 end
 
 -- ── Decoys ─────────────────────────────────────────────────────────────────
@@ -4264,6 +4419,18 @@ local function newRun(player: Player): Run
         banking = 0,
         leakBuffer = 0,
         safeUntil = os.clock() + POP_INVULN,
+        -- Full meter on arrival. A fresh blob gets a real look at the island
+        -- before anything is allowed to touch it, which is what makes spawning
+        -- out on the rim the right answer for a new player rather than a trap.
+        rimGrace = Config.SHALLOWS_GRACE,
+        -- The meter does not start running until you have actually gone in.
+        -- Spawns sit ON the rim (SPAWN_RING is outside SHALLOWS_INNER), so a
+        -- meter that drained from the first tick would leave every player in
+        -- the round with twelve seconds gone before they had done anything —
+        -- and a brand-new player, who stands still and reads the tutorial,
+        -- would spend the entire meter learning the controls. The rim is meant
+        -- to stop you LIVING out there, not to punish you for arriving.
+        committed = false,
         trinkets = Trinkets.resolve(ids),
         bestMass = Config.STARTING_MASS,
         peakThisRound = Config.STARTING_MASS,
@@ -4556,7 +4723,32 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 end
             end
         end
-        if target then
+        local hookBot = nil
+        for _, bot in ipairs(BotService.living()) do
+            if not botProtected(bot) then
+                local d = (bot.pos - ball.Position).Magnitude
+                if d < best then hookBot, best = bot, d end
+            end
+        end
+        if hookBot then
+            -- Same rule as against a player: bigger drags smaller, smaller
+            -- drags itself. A bot cannot be shoved by physics here because it
+            -- is kinematic, so the reel is applied to its position directly.
+            local toward = Vector3.new(ball.Position.X - hookBot.pos.X, 0,
+                ball.Position.Z - hookBot.pos.Z)
+            if toward.Magnitude > 0.01 then
+                toward = toward.Unit
+                if run.mass >= hookBot.mass then
+                    hookBot.pos += toward * math.min(HOOK_PULL * 0.5, best - 4)
+                    hookBot.goal = hookBot.pos
+                else
+                    ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
+                end
+                deflateBot(hookBot, Config.DEFLATE.hook, true)
+                deps.teach(player, "deflate")
+                deps.effect(player, "hook", { to = hookBot.name })
+            end
+        elseif target then
             local tb = RollService.ballFor(target)
             local tr = runs[target.UserId]
             if tb and tr then
@@ -4607,7 +4799,22 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 if d < best then target, best = other, d end
             end
         end
-        if target then
+        -- A bigger BOT is a legitimate siphon target and has to be: SIPHON is
+        -- the comeback tool, and on a field of eleven bots the thing that is
+        -- running away with the round is usually one of them.
+        local botTarget = nil
+        for _, bot in ipairs(BotService.living()) do
+            if bot.mass > run.mass and not botProtected(bot) then
+                local d = (bot.pos - ball.Position).Magnitude
+                if d < best then botTarget, best = bot, d end
+            end
+        end
+        if botTarget then
+            local drained = deflateBot(botTarget, Config.DEFLATE.siphon, false)
+            run.mass += drained
+            deps.teach(player, "deflate")
+            deps.effect(player, "siphon", { from = botTarget.name, amount = drained })
+        elseif target then
             local trun = runs[target.UserId]
             -- Stolen, not scattered: SIPHON is the one deflating power whose
             -- take goes straight into the caster. It is also the only power
@@ -4641,6 +4848,20 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
     end
     local pos = ball.Position
     local radius = Blob.radius(run.mass)
+
+    -- THE RIM METER. Drains in real time while you are out on the Shallows and
+    -- refills only while you are back inside the Flats, at SHALLOWS_RECHARGE
+    -- seconds spent per second refunded. Clamped at both ends so a long round
+    -- in the middle cannot bank an unlimited escape.
+    if not WorldBuilder.isSafe(pos) then
+        run.committed = true
+        if run.rimGrace < Config.SHALLOWS_GRACE then
+            run.rimGrace = math.min(Config.SHALLOWS_GRACE,
+                run.rimGrace + dt / Config.SHALLOWS_RECHARGE)
+        end
+    elseif run.committed then
+        run.rimGrace = math.max(0, run.rimGrace - dt)
+    end
 
     -- MELT. The one mechanic the whole game is built on: everything above the
     -- grace mass drips, and what drips becomes real food on the floor rather
@@ -4744,6 +4965,22 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                 end
             end
         end
+        -- Bots are in the blast. A shockwave that passed through eleven of
+        -- the twelve things on the island would make SLAM feel broken in
+        -- exactly the games where the field is mostly bots — which is every
+        -- game on day one.
+        for _, bot in ipairs(BotService.living()) do
+            if not botProtected(bot) then
+                local flat = Vector3.new(bot.pos.X - pos.X, 0, bot.pos.Z - pos.Z)
+                if flat.Magnitude < SLAM_RADIUS and flat.Magnitude > 0.01 then
+                    local falloff = 1 - (flat.Magnitude / SLAM_RADIUS)
+                    bot.pos += flat.Unit * (SLAM_RADIUS * 0.5 * falloff)
+                    bot.goal = bot.pos
+                    deflateBot(bot, Config.DEFLATE.slam * falloff, true)
+                    hits += 1
+                end
+            end
+        end
         for i = #lumps, 1, -1 do
             local lump = lumps[i]
             if (lump.part.Position - pos).Magnitude < SLAM_RADIUS then
@@ -4841,6 +5078,133 @@ local function tickCombat(list: { Player }, now: number)
     end
 end
 
+-- ── Bots ───────────────────────────────────────────────────────────────────
+
+--- Everybody on the island, players and bots alike, in one shape.
+---
+--- The brain is handed this and cannot tell which rows are human. That is the
+--- point: the moment a bot knows, it starts playing two different games and
+--- the difficulty you feel stops being the difficulty that was tuned.
+local function contenders(list: { Player }, now: number): { any }
+    local field = {}
+    for _, player in ipairs(list) do
+        local run = runs[player.UserId]
+        local ball = run and RollService.ballFor(player)
+        if run and ball and ball.Parent then
+            table.insert(field, {
+                key = "player:" .. player.UserId,
+                mass = run.mass,
+                pos = ball.Position,
+                safe = protected(player, run, now),
+            })
+        end
+    end
+    for _, bot in ipairs(BotService.list()) do
+        if bot.respawnAt == 0 then
+            table.insert(field, {
+                key = "bot:" .. bot.id,
+                mass = bot.mass,
+                pos = bot.pos,
+                safe = botProtected(bot),
+            })
+        end
+    end
+    return field
+end
+
+--- Move the bots, then let them eat off the floor.
+---
+--- Feeding is done HERE rather than inside BotService because the pellets are
+--- this file's state. A bot sweeps the same corridor a player does at the same
+--- radius, so a bot and a player standing in the same field grow at the same
+--- rate — which is the only version of this that can be called fair.
+local function tickBots(dt: number, now: number, list: { Player })
+    if BotService.count() == 0 then
+        return
+    end
+    BotService.step(dt, now, contenders(list, now), nearestPelletPos)
+    for _, bot in ipairs(BotService.list()) do
+        if bot.respawnAt == 0 then
+            bot.mass += harvestAt(bot.pos, Blob.radius(bot.mass) + PICKUP_SLACK)
+        end
+    end
+end
+
+--- Blob versus blob, across the species line.
+---
+--- Deliberately the same test tickCombat uses — overlap, then Blob.canEat —
+--- because "can I eat that" must have exactly one answer no matter what is
+--- standing in front of you. A bot that ate on different terms would teach the
+--- player a rule that then fails them against a human, which is worse than
+--- having no bots at all.
+local function tickBotCombat(list: { Player }, now: number)
+    local live = BotService.living()
+    if #live == 0 then
+        return
+    end
+
+    -- Bot vs player.
+    for _, player in ipairs(list) do
+        local run = runs[player.UserId]
+        local ball = run and RollService.ballFor(player)
+        if run and ball and ball.Parent and not protected(player, run, now) then
+            local bubbled = run.activeEffect == "bubble" and now < run.powerUntil
+            local spiked = run.activeEffect == "spike" and now < run.powerUntil
+            for _, bot in ipairs(live) do
+                if bot.respawnAt == 0 and not botProtected(bot) and not bubbled then
+                    local rp, rb = Blob.radius(run.mass), Blob.radius(bot.mass)
+                    local dist = (ball.Position - bot.pos).Magnitude
+                    if dist < (rp + rb) - math.min(rp, rb) * EAT_OVERLAP then
+                        if Blob.canEat(run.mass, bot.mass) then
+                            run.mass += Blob.eatGain(run.mass, bot.mass)
+                            deps.effect(player, "ate", { name = bot.name, bot = true })
+                            deps.teach(player, "eatBlob")
+                            BotService.kill(bot, now)
+                        elseif Blob.canEat(bot.mass, run.mass) then
+                            if spiked then
+                                -- SPIKE works on bots too, and it has to: it
+                                -- is the smallest blob's only answer to the
+                                -- biggest, and a field of bots is exactly
+                                -- where a new player meets that problem.
+                                deflateBot(bot, Config.DEFLATE.spike, true)
+                                deps.notify(player, ("🌵 %s bit a spike."):format(bot.name), "good")
+                            else
+                                bot.mass += Blob.eatGain(bot.mass, run.mass)
+                                pop(player, ball.Position, nil)
+                                deps.notify(player, ("😵 %s swallowed you."):format(bot.name), "bad")
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Bot vs bot. The island has to look busy from across the map even when
+    -- the player is nowhere near it, and a field where only the player ever
+    -- causes anything to happen reads as a stage set.
+    for i = 1, #live do
+        for j = i + 1, #live do
+            local a, b = live[i], live[j]
+            if a.respawnAt == 0 and b.respawnAt == 0
+                and not botProtected(a) and not botProtected(b) then
+                local ra, rb = Blob.radius(a.mass), Blob.radius(b.mass)
+                local dist = (a.pos - b.pos).Magnitude
+                if dist < (ra + rb) - math.min(ra, rb) * EAT_OVERLAP then
+                    if Blob.canEat(a.mass, b.mass) then
+                        a.mass += Blob.eatGain(a.mass, b.mass)
+                        BotService.kill(b, now)
+                    elseif Blob.canEat(b.mass, a.mass) then
+                        b.mass += Blob.eatGain(b.mass, a.mass)
+                        BotService.kill(a, now)
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function topUpPellets(dt: number)
     local deficit = Config.PELLET_TARGET - pelletCount
     if deficit <= 0 then
@@ -4882,6 +5246,10 @@ function ArenaService.inRound(): boolean
 end
 
 local function beginLobby()
+    -- The island empties between rounds. Leaving bots wandering an arena
+    -- nobody is in costs a Heartbeat's worth of work per bot for an empty
+    -- stage, and it makes the lobby's "round starts in" clock read as a lie.
+    BotService.clear()
     phase = "LOBBY"
     phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
     local i = 0
@@ -4912,10 +5280,21 @@ local function beginRound()
         spawnPellet(nil, nil, rng:NextNumber() < 0.012)
     end
 
+    local humans = #Players:GetPlayers()
+
+    -- FILL THE FIELD. Recomputed at the top of every round and only here: a
+    -- player joining mid-round is an extra contender rather than a reason to
+    -- delete a bot that is already out there being chased by somebody.
+    BotService.fill(Config.ROUND_FIELD_SIZE - humans)
+
     local i = 0
     for _, player in ipairs(Players:GetPlayers()) do
         sendToArena(player, i)
-        deps.notify(player, ("🫧 ROUND %d — grow as big as you can."):format(roundNumber), "good")
+        local filled = BotService.count()
+        deps.notify(player, filled > 0
+            and ("🫧 ROUND %d — %d players, %d bots. Grow as big as you can.")
+                :format(roundNumber, humans, filled)
+            or ("🫧 ROUND %d — grow as big as you can."):format(roundNumber), "good")
         i += 1
     end
 end
@@ -4924,12 +5303,26 @@ local function endRound()
     phase = "RESULTS"
     phaseEndsAt = os.clock() + Config.ROUND_END_HOLD
 
+    -- ONE BOARD, both species. A bot that grew all round and then vanished
+    -- from the results would make second place a lie — the player would have
+    -- spent three minutes losing to something the scoreboard says was never
+    -- there. Bots place, bots are named, bots are tagged, and they take no
+    -- payout because there is nobody to pay.
     local board = {}
     for _, player in ipairs(Players:GetPlayers()) do
         local run = runs[player.UserId]
         if run then
-            table.insert(board, { player = player, mass = run.mass, peak = run.peakThisRound })
+            table.insert(board, {
+                player = player, name = player.DisplayName,
+                mass = run.mass, peak = run.peakThisRound,
+            })
         end
+    end
+    for _, bot in ipairs(BotService.list()) do
+        table.insert(board, {
+            player = nil, name = bot.name, bot = true,
+            mass = bot.mass, peak = bot.peak,
+        })
     end
     table.sort(board, function(x, y) return x.mass > y.mass end)
 
@@ -4940,12 +5333,17 @@ local function endRound()
         local base = row.mass ^ Config.ROUND_PAYOUT_EXPONENT * Config.ROUND_PAYOUT_SCALE
         local bonus = Config.ROUND_PLACE_BONUS[place] or 1
         local payout = math.floor(base * bonus)
-        deps.award(row.player, payout, 0, "round")
-        deps.notify(row.player, ("🏁 #%d with %s — 💧%s"):format(
-            place, Format.short(row.mass), Format.short(payout)),
-            place == 1 and "good" or "info")
+        if row.player then
+            deps.award(row.player, payout, 0, "round")
+            deps.roundResult(row.player, place, row.mass, payout)
+            deps.notify(row.player, ("🏁 #%d of %d with %s — 💧%s"):format(
+                place, #board, Format.short(row.mass), Format.short(payout)),
+                place == 1 and "good" or "info")
+        else
+            payout = 0
+        end
         table.insert(lastResults, {
-            name = row.player.DisplayName, place = place,
+            name = row.name, place = place, bot = row.bot == true,
             mass = row.mass, peak = row.peak, payout = payout,
         })
     end
@@ -5008,7 +5406,12 @@ function ArenaService.start(injected: Deps)
             -- Nothing eats anybody outside a round, and the floor is only
             -- stocked while there is somebody to eat off it.
             if playing then
+                -- Bots move BEFORE combat is resolved, so a bot that just
+                -- walked into you is eaten on the tick it arrives rather than
+                -- appearing to phase through and get you on the next one.
+                tickBots(dt, now, active)
                 tickCombat(active, now)
+                tickBotCombat(active, now)
                 topUpPellets(dt)
                 decayLumps(dt)
             end
@@ -5038,7 +5441,17 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         powerCost = Powers.massCost(run.powerId, run.mass, usesOf(player, run.powerId)),
         mastery = Powers.masteryTier(usesOf(player, run.powerId)),
         lit = run.activeEffect == "beacon" and now < run.powerUntil,
-        safe = WorldBuilder.isSafe(pos) or now < run.safeUntil,
+        -- `safe` is what the HUD colours the ring readout with, so it has to
+        -- agree with `protected` exactly. It used to be "am I on the rim",
+        -- which is now only half the answer: the rim protects you while the
+        -- meter lasts and not one second longer, and a HUD still saying SAFE
+        -- while somebody eats you is worse than no HUD at all.
+        safe = (now < run.safeUntil) or (WorldBuilder.isSafe(pos) and run.rimGrace > 0),
+        -- The meter itself, so the player can watch it run out instead of
+        -- discovering it did.
+        rimGrace = run.rimGrace,
+        rimGraceMax = Config.SHALLOWS_GRACE,
+        onRim = WorldBuilder.isSafe(pos),
         ring = WorldBuilder.ringAt(pos),
         biome = (WorldBuilder.biomeAt(pos) or {}).name,
         best = run.bestMass,
@@ -5047,16 +5460,466 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         phaseLeft = math.max(0, phaseEndsAt - now),
         round = roundNumber,
         ceiling = Blob.ceiling(0.8),
+        -- How big the field actually is, and how much of it is bots. Shown on
+        -- the HUD rather than hidden: a player who works out for themselves
+        -- that half the island is bots feels tricked, and a player who was
+        -- told feels like the game is full.
+        field = #Players:GetPlayers() + BotService.count(),
+        bots = BotService.count(),
     }
 end
 
 -- Exposed for tests: the island's live contents.
 function ArenaService.stats()
-    return { pellets = pelletCount, lumps = #lumps }
+    return {
+        pellets = pelletCount,
+        lumps = #lumps,
+        bots = BotService.count(),
+        botsAlive = #BotService.living(),
+    }
 end
 
 return ArenaService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">CensusService</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000021"><Properties><string name="Name">BotService</string><ProtectedString name="Source"><![CDATA[--!strict
+-- BotService.luau — the rest of the field.
+--
+-- WHY THIS EXISTS. An arena game with three people in it is not a small
+-- version of GOOP, it is a different and much worse one. Every system here
+-- assumes a crowd: deflation is a catch-up tool that needs somebody to gang up
+-- on a leader, the board needs places worth placing in, and the core loop —
+-- always being able to see somebody bigger and somebody smaller — is simply
+-- absent below about six contenders. A new game has three players in it for
+-- weeks. Without bots, the first hour of this game's life is the version of it
+-- that does not work, shown to exactly the people deciding whether to stay.
+--
+-- So a round always has Config.ROUND_FIELD_SIZE contenders and bots make up
+-- the difference. Twelve humans, no bots. One human, eleven bots. Nobody at
+-- all and the island still runs a real round with a real board, which is also
+-- what makes the game demoable and testable end to end.
+--
+-- ── WHAT THIS MODULE OWNS AND WHAT IT DOES NOT ────────────────────────────
+--
+-- It owns bot BODIES and bot DECISIONS: where each one is, where it wants to
+-- be, and the part you see. It does not own a single rule about mass. Eating,
+-- deflation, popping and the board all stay in ArenaService, which resolves
+-- bots and players through the same code paths. That split is deliberate and
+-- load-bearing: the moment a bot gets its own eating rule, "can I beat that
+-- thing" stops having one answer, and bots start being either free food or
+-- unbeatable depending on which copy of the rule drifted.
+--
+-- Movement is KINEMATIC — a position integrated by hand, not a physics body.
+-- Twelve unanchored balls being network-owned by the server is a genuine cost
+-- on a Roblox server that is already simulating the players' bodies, and a bot
+-- does not need momentum to be convincing. It needs to be in the right place
+-- at the wrong time for you.
+
+local Shared = game.ReplicatedStorage.GoobShared
+local Config = require(Shared.Config)
+local Blob = require(Shared.Blob)
+
+local WorldBuilder = require(script.Parent.WorldBuilder)
+
+local BotService = {}
+
+export type Bot = {
+    id: number,
+    name: string,
+    skill: any,
+    mass: number,
+    peak: number,
+    pos: Vector3,
+    heading: Vector3,
+    goal: Vector3,
+    mode: string,          -- feed | hunt | flee | wander
+    nextThink: number,
+    respawnAt: number,     -- 0 when alive
+    rimGrace: number,
+    committed: boolean,    -- has it ever left the rim; see Config.SHALLOWS_GRACE
+    part: BasePart?,
+    label: TextLabel?,
+}
+
+-- A contender as the brain sees it. Players and bots are handed in through the
+-- same shape on purpose: a bot must not be able to tell which is which, or it
+-- will play differently against humans and the difficulty stops being honest.
+export type Contender = {
+    key: string,
+    mass: number,
+    pos: Vector3,
+    safe: boolean,         -- currently untouchable; not worth chasing
+}
+
+local bots: { Bot } = {}
+local nextId = 1
+local rng = Random.new(os.clock() * 1e6 // 1 + 7)
+local folder: Folder?
+
+local RESPAWN_DELAY = 3.5
+
+-- ── Bodies ─────────────────────────────────────────────────────────────────
+
+-- SIBLING OF THE ARENA FOLDER, NOT A CHILD OF IT.
+--
+-- The Arena folder is the pellet pool and several things treat it as exactly
+-- that — "how much food is on the island" is `#arena:GetChildren()`, and the
+-- harness walks it taking `child.Position` off every entry. Parenting bots
+-- inside it put a Folder in that list, which has no Position, and turned an
+-- honest pellet sweep into a crash. A pool should hold one kind of thing.
+local function ensureFolder(): Folder?
+    if folder and folder.Parent then
+        return folder
+    end
+    local arena = WorldBuilder.arenaFolder()
+    local world = arena and arena.Parent
+    if not world then
+        return nil
+    end
+    local f = Instance.new("Folder")
+    f.Name = "Bots"
+    f.Parent = world
+    folder = f
+    return f
+end
+
+local function makeBody(bot: Bot)
+    local parent = ensureFolder()
+    if not parent then
+        return
+    end
+    local p = Instance.new("Part")
+    p.Name = "Bot_" .. bot.name
+    p.Shape = Enum.PartType.Ball
+    p.Anchored = true
+    -- CanCollide false and CanQuery false: a bot is resolved by distance in
+    -- ArenaService, never by a touch event. A bot you could physically shove
+    -- would be a second, contradictory answer to "what happens when we meet".
+    p.CanCollide = false
+    p.CanTouch = false
+    p.CanQuery = false
+    p.Material = Enum.Material.SmoothPlastic
+    p.Color = Color3.fromHSV(rng:NextNumber(), 0.52, 0.92)
+    local r = Blob.radius(bot.mass)
+    p.Size = Vector3.new(1, 1, 1) * (r * 2)
+    p.Position = bot.pos
+    p.Parent = parent
+
+    -- Named, and openly tagged as a bot. Pretending otherwise is a lie the
+    -- player catches the first time one walks into a wall, and being caught
+    -- lying costs more trust than the illusion was ever worth.
+    local gui = Instance.new("BillboardGui")
+    gui.Name = "Tag"
+    gui.Size = UDim2.fromScale(9, 2)
+    gui.StudsOffset = Vector3.new(0, r + 3, 0)
+    gui.AlwaysOnTop = false
+    gui.MaxDistance = 320
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.fromScale(1, 1)
+    tl.BackgroundTransparency = 1
+    tl.Font = Enum.Font.FredokaOne
+    tl.TextScaled = true
+    tl.TextStrokeTransparency = 0.35
+    tl.TextColor3 = Color3.fromRGB(226, 232, 240)
+    tl.Text = bot.name .. " 🤖"
+    tl.Parent = gui
+    gui.Parent = p
+
+    bot.part = p
+    bot.label = tl
+end
+
+local function destroyBody(bot: Bot)
+    if bot.part then
+        bot.part:Destroy()
+        bot.part = nil
+        bot.label = nil
+    end
+end
+
+-- ── Spawning ───────────────────────────────────────────────────────────────
+
+local function pickSkill()
+    local total = 0
+    for _, s in ipairs(Config.BOT_SKILLS) do
+        total += s.weight
+    end
+    local roll = rng:NextNumber() * total
+    for _, s in ipairs(Config.BOT_SKILLS) do
+        roll -= s.weight
+        if roll <= 0 then
+            return s
+        end
+    end
+    return Config.BOT_SKILLS[1]
+end
+
+-- Names must be unique within a round. A board with two "Gloop" rows on it
+-- looks like a bug even when it is not, and the player cannot tell which one
+-- just ate them.
+local function pickName(): string
+    local taken: { [string]: boolean } = {}
+    for _, b in ipairs(bots) do
+        taken[b.name] = true
+    end
+    local pool = {}
+    for _, n in ipairs(Config.BOT_NAMES) do
+        if not taken[n] then
+            table.insert(pool, n)
+        end
+    end
+    if #pool == 0 then
+        return "Blob " .. nextId
+    end
+    return pool[rng:NextInteger(1, #pool)]
+end
+
+local function spawnPos(): Vector3
+    local i = rng:NextInteger(1, Config.SPAWN_POINTS)
+    return WorldBuilder.spawnPoint(i)
+end
+
+local function newBot(): Bot
+    local skill = pickSkill()
+    local pos = spawnPos()
+    local bot: Bot = {
+        id = nextId,
+        name = pickName(),
+        skill = skill,
+        mass = Config.STARTING_MASS,
+        peak = Config.STARTING_MASS,
+        pos = pos,
+        heading = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1)).Unit,
+        goal = pos,
+        mode = "wander",
+        nextThink = 0,
+        respawnAt = 0,
+        rimGrace = Config.SHALLOWS_GRACE,
+        committed = false,
+        part = nil,
+        label = nil,
+    }
+    nextId += 1
+    makeBody(bot)
+    return bot
+end
+
+--- Bring the field up to `count` bots, or down to it. Called at the top of
+--- every round with (field size - humans), so a player who joins mid-round
+--- never evicts a bot that is already in play — the count is only corrected
+--- when the slate is clean anyway.
+function BotService.fill(count: number)
+    count = math.max(0, math.floor(count))
+    if not Config.BOTS_ENABLED then
+        count = 0
+    end
+    while #bots > count do
+        local b = table.remove(bots)
+        if b then
+            destroyBody(b)
+        end
+    end
+    while #bots < count do
+        table.insert(bots, newBot())
+    end
+end
+
+function BotService.clear()
+    for _, b in ipairs(bots) do
+        destroyBody(b)
+    end
+    table.clear(bots)
+end
+
+function BotService.list(): { Bot }
+    return bots
+end
+
+function BotService.count(): number
+    return #bots
+end
+
+--- Alive bots only, which is what every caller outside this file actually
+--- wants: a dead bot has no body, no position worth testing and no business
+--- appearing on a leaderboard mid-respawn.
+function BotService.living(): { Bot }
+    local out = {}
+    for _, b in ipairs(bots) do
+        if b.respawnAt == 0 then
+            table.insert(out, b)
+        end
+    end
+    return out
+end
+
+--- Somebody ate this bot. It goes down and comes back, because a round that
+--- empties out by minute two is the problem this module exists to solve.
+function BotService.kill(bot: Bot, now: number)
+    if bot.respawnAt ~= 0 then
+        return
+    end
+    bot.respawnAt = now + RESPAWN_DELAY
+    destroyBody(bot)
+end
+
+-- ── The brain ──────────────────────────────────────────────────────────────
+
+local function clampToIsland(p: Vector3): Vector3
+    local flat = Vector3.new(p.X, 0, p.Z)
+    local r = flat.Magnitude
+    local limit = Config.PELLET_OUTER
+    if r > limit and r > 0 then
+        flat = flat.Unit * limit
+    end
+    return Vector3.new(flat.X, p.Y, flat.Z)
+end
+
+-- Decide what this bot is doing for the next few hundred milliseconds.
+--
+-- Deliberately coarse. A bot that re-evaluates every frame with perfect
+-- information is unloseable and reads as cheating rather than as skill; the
+-- think interval is the gap a human plays through, and it is the main dial
+-- between "dozy" and "feral".
+local function think(bot: Bot, now: number, field: { Contender }, pelletAt: (Vector3, number) -> Vector3?)
+    bot.nextThink = now + Config.BOT_THINK * bot.skill.think
+    local sight = Config.BOT_SIGHT * bot.skill.sight
+
+    local threat: Contender? = nil
+    local threatDist = math.huge
+    local prey: Contender? = nil
+    local preyScore = -math.huge
+
+    for _, c in ipairs(field) do
+        local d = (Vector3.new(c.pos.X, 0, c.pos.Z) - Vector3.new(bot.pos.X, 0, bot.pos.Z)).Magnitude
+        if d <= sight then
+            -- Anything that can eat me, whether or not it has noticed me.
+            if Blob.canEat(c.mass * Config.BOT_FEAR, bot.mass) then
+                if d < threatDist then
+                    threat, threatDist = c, d
+                end
+            elseif not c.safe and Blob.canEat(bot.mass * bot.skill.greed, c.mass) then
+                -- Prefer the biggest meal that is also close. Mass over
+                -- distance is the cheapest expression of "worth the walk".
+                local score = c.mass / math.max(12, d)
+                if score > preyScore then
+                    prey, preyScore = c, score
+                end
+            end
+        end
+    end
+
+    -- Fleeing wins over everything. A bot that trades a chase for its own life
+    -- is a bot that is fun to bully, which is most of what a small player does.
+    if threat then
+        local away = Vector3.new(bot.pos.X - threat.pos.X, 0, bot.pos.Z - threat.pos.Z)
+        if away.Magnitude < 1 then
+            away = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1))
+        end
+        bot.mode = "flee"
+        bot.goal = clampToIsland(bot.pos + away.Unit * 120)
+        return
+    end
+
+    if prey then
+        bot.mode = "hunt"
+        bot.goal = Vector3.new(prey.pos.X, bot.pos.Y, prey.pos.Z)
+        return
+    end
+
+    -- Nothing to chase and nothing to run from: eat. A bot that only ever
+    -- wandered would finish every round at starting mass and the board would
+    -- read as a joke.
+    if rng:NextNumber() > Config.BOT_WANDER then
+        local food = pelletAt(bot.pos, Config.BOT_PELLET_SIGHT * bot.skill.sight)
+        if food then
+            bot.mode = "feed"
+            bot.goal = Vector3.new(food.X, bot.pos.Y, food.Z)
+            return
+        end
+    end
+
+    bot.mode = "wander"
+    local a = rng:NextNumber(0, math.pi * 2)
+    local d = rng:NextNumber(70, 220)
+    bot.goal = clampToIsland(bot.pos + Vector3.new(math.cos(a) * d, 0, math.sin(a) * d))
+end
+
+--- One step of every bot. `field` is every contender on the island INCLUDING
+--- the bots themselves — a bot filters itself out by key, so callers never have
+--- to build a different list per bot.
+function BotService.step(dt: number, now: number, field: { Contender },
+    pelletAt: (Vector3, number) -> Vector3?)
+
+    for _, bot in ipairs(bots) do
+        if bot.respawnAt ~= 0 then
+            if now >= bot.respawnAt then
+                bot.respawnAt = 0
+                bot.mass = Config.STARTING_MASS
+                bot.pos = spawnPos()
+                bot.goal = bot.pos
+                bot.mode = "wander"
+                bot.nextThink = 0
+                bot.rimGrace = Config.SHALLOWS_GRACE
+                bot.committed = false
+                makeBody(bot)
+            end
+        else
+            if not bot.part or not bot.part.Parent then
+                makeBody(bot)
+            end
+
+            -- The same rim meter players carry, because a bot that could camp
+            -- the shoreline forever would be the exploit this round's design
+            -- just removed, played back at the player by the game itself.
+            if not WorldBuilder.isSafe(bot.pos) then
+                bot.committed = true
+                if bot.rimGrace < Config.SHALLOWS_GRACE then
+                    bot.rimGrace = math.min(Config.SHALLOWS_GRACE,
+                        bot.rimGrace + dt / Config.SHALLOWS_RECHARGE)
+                end
+            elseif bot.committed then
+                bot.rimGrace = math.max(0, bot.rimGrace - dt)
+            end
+
+            local mine = "bot:" .. bot.id
+            if now >= bot.nextThink then
+                local others = {}
+                for _, c in ipairs(field) do
+                    if c.key ~= mine then
+                        table.insert(others, c)
+                    end
+                end
+                think(bot, now, others, pelletAt)
+            end
+
+            local to = Vector3.new(bot.goal.X - bot.pos.X, 0, bot.goal.Z - bot.pos.Z)
+            if to.Magnitude > 1 then
+                -- Turn towards the goal rather than snapping to it. The lerp is
+                -- what stops a bot pivoting 180 degrees in one frame, which is
+                -- the single most obvious tell that a thing is not a player.
+                bot.heading = (bot.heading:Lerp(to.Unit, math.clamp(dt * 4, 0, 1))).Unit
+            end
+            local speed = Blob.speed(bot.mass) * Config.BOT_SPEED_MULT
+            bot.pos = clampToIsland(bot.pos + bot.heading * speed * dt)
+
+            local r = Blob.radius(bot.mass)
+            bot.pos = Vector3.new(bot.pos.X, 2 + r, bot.pos.Z)
+            if bot.mass > bot.peak then
+                bot.peak = bot.mass
+            end
+            local part = bot.part
+            if part then
+                part.Size = Vector3.new(1, 1, 1) * (r * 2)
+                part.Position = bot.pos
+                local tag = part:FindFirstChild("Tag")
+                if tag and tag:IsA("BillboardGui") then
+                    tag.StudsOffset = Vector3.new(0, r + 3, 0)
+                end
+            end
+        end
+    end
+end
+
+return BotService
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">CensusService</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CensusService.luau — how many of each thing still exist, worldwide.
 --
 -- WHY THIS IS THE MOST IMPORTANT SCREEN IN THE GAME:
@@ -5247,7 +6110,7 @@ function CensusService.start()
 end
 
 return CensusService
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000022"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">CrewStore</string><ProtectedString name="Source"><![CDATA[--!strict
 -- CrewStore.luau — crews live in their own DataStore because they are shared
 -- between players and between servers. A crew read here may have been written
 -- by a different server thirty seconds ago, so every mutation goes through
@@ -5351,200 +6214,6 @@ function CrewStore.isEnabled(): boolean
 end
 
 return CrewStore
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000023"><Properties><string name="Name">CritterService</string><ProtectedString name="Source"><![CDATA[--!strict
--- CritterService.luau — the ACTIVE half of the loop.
---
--- Grow a Garden's weakness is that there is almost nothing to do while you
--- wait. Here, junk physically wanders the map and you chase it down. Catching
--- is the only source of new mass in the world, and the spawn rate is a hard
--- server-wide constant — that is what makes the economy finite rather than
--- "everyone can farm infinite value".
-
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local Debris = game:GetService("Debris")
-local TweenService = game:GetService("TweenService")
-
-local Shared = game.ReplicatedStorage.GoobShared
-local Config = require(Shared.Config)
-local Feedstock = require(Shared.Feedstock)
-
-local CritterService = {}
-
-local alive: { [BasePart]: { item: Feedstock.Item, born: number, vel: Vector3 } } = {}
-local aliveCount = 0
-local rng = Random.new(os.clock() * 1e6)
-local folder: Folder
-
--- DERIVED FROM THE ISLAND, not a number of its own.
---
--- This was a flat 520 while the island was 300 studs and then 480, so critters
--- spawned out to 640 and up to a third of them landed in the sea — visible,
--- glowing, permanently unreachable, and a standing invitation to roll off the
--- edge chasing one. Tying it to the island means a future resize takes the
--- critters with it instead of leaving them behind, which is the same mistake
--- the pellet count used to make.
-local ROAM_RADIUS = Config.ISLAND_RADIUS - 60
-
-local function spawnCritter()
-    if aliveCount >= Config.CRITTER_MAX_ALIVE then return end
-
-    local item = Feedstock.roll(rng, 1)
-
-    local p = Instance.new("Part")
-    p.Name = "Critter_" .. item.id
-    p.Size = item.scale * 3.4
-    p.Color = item.color
-    p.Material = if item.rarity == "Secret" or item.rarity == "Mythic"
-        then Enum.Material.Neon else Enum.Material.SmoothPlastic
-    p.Anchored = true
-    p.CanCollide = false
-    p.CanQuery = false
-    if item.shape == "Ball" then p.Shape = Enum.PartType.Ball
-    elseif item.shape == "Cylinder" then p.Shape = Enum.PartType.Cylinder end
-
-    local angle = rng:NextNumber() * math.pi * 2
-    -- Inside the shoreline, outside the Vault approach.
-    local dist = Config.VAULT_RADIUS + 40
-        + rng:NextNumber() * (ROAM_RADIUS - Config.VAULT_RADIUS - 40)
-    p.Position = Vector3.new(math.cos(angle) * dist, 4 + rng:NextNumber() * 3, math.sin(angle) * dist)
-
-    -- Rarer things are visibly special from a distance: a coloured glow and a
-    -- floating label. A kid should be able to see a Mythic across the map and
-    -- sprint for it.
-    if item.rarity ~= "Common" and item.rarity ~= "Uncommon" then
-        local light = Instance.new("PointLight")
-        light.Color = Feedstock.RARITY_COLOR[item.rarity]
-        light.Brightness = 3
-        light.Range = 26
-        light.Parent = p
-
-        local gui = Instance.new("BillboardGui")
-        gui.Size = UDim2.fromScale(10, 2.4)
-        gui.StudsOffset = Vector3.new(0, 3.4, 0)
-        gui.AlwaysOnTop = true
-        gui.MaxDistance = 500
-        local tl = Instance.new("TextLabel")
-        tl.Size = UDim2.fromScale(1, 1)
-        tl.BackgroundTransparency = 1
-        tl.Font = Enum.Font.FredokaOne
-        tl.TextScaled = true
-        tl.TextStrokeTransparency = 0.2
-        tl.TextColor3 = Feedstock.RARITY_COLOR[item.rarity]
-        tl.Text = string.upper(item.rarity) .. "\n" .. item.name
-        tl.Parent = gui
-        gui.Parent = p
-    end
-
-    p.Parent = folder
-
-    alive[p] = {
-        item = item,
-        born = os.clock(),
-        vel = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1)).Unit * rng:NextNumber(6, 16),
-    }
-    aliveCount += 1
-
-    -- A Secret spawning is a server-wide event. Announcing it turns a solo
-    -- farm into a race, which is free multiplayer drama.
-    if item.rarity == "Secret" then
-        CritterService.onSecret:Fire(item)
-    end
-end
-
-local function despawn(p: BasePart)
-    if not alive[p] then return end
-    alive[p] = nil
-    aliveCount -= 1
-    p:Destroy()
-end
-
--- Injected by init.server so this module does not need to know about
--- RollService directly.
-CritterService.originFor = function(player: Player): BasePart?
-    local char = player.Character
-    return char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-end
-
-CritterService.onSecret = Instance.new("BindableEvent")
-CritterService.onCatch = Instance.new("BindableEvent")
-
--- Server-authoritative catching. The client NEVER tells us what it caught —
--- it tells us which part it touched, and we verify distance ourselves. This is
--- the single most important anti-exploit line in the game.
-function CritterService.tryCatch(player: Player, target: Instance): (boolean, any)
-    -- Prefer the Goob ball: it is where the player actually is now, and its
-    -- radius is what should decide reach. The character is welded to it and
-    -- works as a fallback while the ball is being rebuilt after a size change.
-    local root = CritterService.originFor(player)
-    if not root then return false end
-    if not target or not target:IsA("BasePart") then return false end
-
-    local entry = alive[target]
-    if not entry then return false end   -- already taken; first to touch wins
-
-    -- A bigger Goob has genuinely longer reach, which is the right answer both
-    -- physically and for feel: at Colossal you plough through a field of junk.
-    local reach = Config.CRITTER_CATCH_RADIUS + root.Size.X / 2
-    if (root.Position - target.Position).Magnitude > reach then
-        return false
-    end
-
-    -- Claim it immediately so two players can't both bank the same critter.
-    alive[target] = nil
-    aliveCount -= 1
-
-    -- Fly the critter into the player, then vanish. Feedback matters more than
-    -- almost anything else in a game aimed at nine-year-olds.
-    target.CanCollide = false
-    target.Anchored = true
-    local tween = TweenService:Create(target, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-        CFrame = root.CFrame,
-        Size = Vector3.new(0.2, 0.2, 0.2),
-        Transparency = 1,
-    })
-    tween:Play()
-    Debris:AddItem(target, 0.45)
-
-    CritterService.onCatch:Fire(player, entry.item)
-    return true, entry.item
-end
-
-function CritterService.start()
-    folder = Instance.new("Folder")
-    folder.Name = "Critters"
-    folder.Parent = Workspace
-
-    task.spawn(function()
-        while true do
-            spawnCritter()
-            task.wait(Config.CRITTER_SPAWN_INTERVAL)
-        end
-    end)
-
-    -- Roaming. Critters bob and wander so the world feels alive; they bounce
-    -- off an invisible boundary so nothing escapes to infinity.
-    RunService.Heartbeat:Connect(function(dt)
-        local now = os.clock()
-        for p, entry in pairs(alive) do
-            if now - entry.born > Config.CRITTER_LIFETIME then
-                despawn(p)
-            else
-                local pos = p.Position + entry.vel * dt
-                if math.sqrt(pos.X ^ 2 + pos.Z ^ 2) > Config.ISLAND_RADIUS - 10 then
-                    entry.vel = -entry.vel
-                    pos = p.Position + entry.vel * dt
-                end
-                local bob = math.sin(now * 2.2 + p.Position.X) * 0.6
-                p.CFrame = CFrame.new(pos.X, 4 + bob, pos.Z)
-                    * CFrame.Angles(0, now * 0.9, math.sin(now) * 0.25)
-            end
-        end
-    end)
-end
-
-return CritterService
 ]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000024"><Properties><string name="Name">Data</string><ProtectedString name="Source"><![CDATA[--!strict
 -- Data.luau — profile persistence.
 --
@@ -5619,6 +6288,7 @@ function Data.blankProfile(userId: number)
         trinketSlots = {} :: { string },
         cratePity = {} :: { [string]: number },    -- rolls since this crate's floor
         bestBank = 0,
+        roundsPlayed = 0,                          -- earns eggs; never spent
         powerUses = {} :: { [string]: number },    -- mastery, per power
         streak = 0,
         streakDay = 0,
@@ -5685,6 +6355,7 @@ function Data.load(player: Player)
     -- only migration that is safe without asking the player anything.
     profile.lifetimeBanked = profile.lifetimeBanked or 0
     profile.bestBank = profile.bestBank or 0
+    profile.roundsPlayed = profile.roundsPlayed or 0
     profile.trinketsOwned = profile.trinketsOwned or {}
     profile.trinketSlots = profile.trinketSlots or {}
     profile.cratePity = profile.cratePity or {}
@@ -8241,12 +8912,19 @@ end
 -- middle, which would put most of the island's food inside the Vault.
 function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: number?): Vector3
     local lo = innerR or (Config.VAULT_RADIUS + 14)
-    -- INSIDE THE FLATS, never the Shallows. Food in the no-PvP ring means a
-    -- player can stand in the one place nothing can touch them and farm
-    -- forever — which is not a strategy, it is an exploit that beats the
-    -- entire game. The Shallows is where you spawn and where you hide; it is
-    -- deliberately bare.
-    local hi = outerR or (Config.SHALLOWS_INNER - 8)
+    -- OUT TO THE SHORELINE. This used to stop at SHALLOWS_INNER - 8 so that
+    -- nothing grew in the no-PvP rim, which left a 93-stud bare band around the
+    -- whole island — a third of its area with no reason to be there.
+    --
+    -- The rim no longer protects you indefinitely (Config.SHALLOWS_GRACE is a
+    -- spendable meter, not a property of the ground), so there is nothing left
+    -- to exploit by farming out here: you get about twelve seconds before the
+    -- edge is the most dangerous place on the map. Food therefore goes all the
+    -- way out, and the sampling stays uniform BY AREA — sqrt of a uniform draw
+    -- between the squared radii — so the outer ring is not thinner per square
+    -- stud than the middle. A naive uniform draw on r would have piled food in
+    -- the centre and looked exactly like the bug this replaces.
+    local hi = outerR or Config.PELLET_OUTER
     local r = math.sqrt(rng:NextNumber(lo * lo, hi * hi))
     local a = rng:NextNumber(0, math.pi * 2)
     local pos = Vector3.new(math.cos(a) * r, 2, math.sin(a) * r)
@@ -8345,39 +9023,20 @@ Hud.registerTarget("power", ArenaHud.powerButton())
 -- from Config and stays silent when they are unset. This file used to keep a
 -- second copy of the same asset ids, which meant fixing a bad one in one place
 -- left it broken in the other.
-
 -- ── Catching ───────────────────────────────────────────────────────────────
--- Auto-collect on proximity. Requiring a click would be miserable on mobile,
--- and "run through the thing to get the thing" is the most legible verb there
--- is. We throttle per-part so we never spam the server.
-
-local critterFolder = Workspace:WaitForChild("Critters")
-local lastAsked: { [Instance]: number } = {}
-local CatchRemote = Net.get("CatchCritter")
-
-RunService.Heartbeat:Connect(function()
-    local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-    if not root then return end
-
-    local now = os.clock()
-    for _, part in ipairs(critterFolder:GetChildren()) do
-        if part:IsA("BasePart") then
-            local d = (part.Position - root.Position).Magnitude
-            if d <= Config.CRITTER_CATCH_RADIUS - 1 then
-                if (now - (lastAsked[part] or 0)) > 0.4 then
-                    lastAsked[part] = now
-                    CatchRemote:FireServer(part)
-                end
-            end
-        end
-    end
-
-    -- Reap the throttle table so it doesn't grow forever over a long session.
-    if #critterFolder:GetChildren() == 0 then
-        lastAsked = {}
-    end
-end)
+--
+-- There was a Heartbeat loop here that watched a "Critters" folder and fired
+-- CatchCritter at anything the player brushed past. Both the folder and the
+-- remote are gone: critters were the active loop of the collecting game that
+-- the arena replaced, and they were still spawning labelled junk into live
+-- rounds — the "RARE Anvil" bobbing past mid-chase.
+--
+-- Note what the loop opened with: `Workspace:WaitForChild("Critters")`, with no
+-- timeout, at module scope. Everything below it in this file — the arena sync,
+-- the input bindings, the HUD wiring — would simply never have run if the
+-- server had stopped creating that folder. Deleting the server half without
+-- deleting this would not have produced an error; it would have produced a
+-- client that boots to a working camera and an unresponsive game.
 
 -- ── Server -> client ───────────────────────────────────────────────────────
 
@@ -8389,6 +9048,10 @@ Net.get("StateSync").OnClientEvent:Connect(function(snap)
     -- and every crate, trinket, power, skin and Goob renders locked or absent
     -- because the code behind each tab is reading fields off nothing.
     ArenaHud.setProfile(snap)
+    -- The two HUDs share one horizontal band on a phone. Hud owns the coach,
+    -- ArenaHud owns the status strip, and this is the wire that lets the strip
+    -- get out of the way while the tutorial is running. See ArenaHud.applyLayout.
+    ArenaHud.setCoachActive(snap.tutorial ~= nil)
 end)
 
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
@@ -8413,15 +9076,6 @@ end
 
 Hud.onOffer = function(goobId: string)
     Net.get("TradeOffer"):FireServer(goobId, true)
-end
-
-Hud.onBuySnack = function(tierId: string)
-    Net.get("BuySnack"):FireServer(tierId)
-    Juice.play("catch", 0.25)
-end
-
-Hud.onBuyEgg = function()
-    Net.get("BuyEgg"):FireServer()
 end
 
 Hud.onDismissCoach = function()
@@ -8979,19 +9633,17 @@ ArenaHud.on.openCrate = function(id) Net.get("OpenCrate"):FireServer(id) end
 ArenaHud.on.equipCosmetic = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
 ArenaHud.on.setActiveGoob = function(id) Net.get("SetActiveGoob"):FireServer(id) end
 
--- One tab still delegates: the season track has its own renderer in Panels.
--- The live trade WINDOW also stays as it is — rebuilding TradeUi would mean
+-- The season track and the crew screen still RENDER through Panels, but they
+-- render inside ArenaHud's own sheet now. There is no second screen to hand
+-- off to: `openLegacy` and the drawer it opened are both gone, along with the
+-- Snack Stand that the drawer used to reparent on top of the season list.
+--
+-- The live trade WINDOW stays as it is — rebuilding TradeUi would mean
 -- rebuilding the anti-scam confirmation reset, which is the most
 -- safety-critical UI in the game and is already proven. The dock's trade tab
 -- explains the rules and lists what you can offer; the window itself still
 -- opens when another player rolls up.
-ArenaHud.on.openLegacy = function(which)
-    if which == "close" then
-        Hud.setDrawerOpen(false)
-    else
-        Hud.openDrawerTab(which)
-    end
-end
+ArenaHud.on.gulpGoob = function(id) Hud.onGulp(id) end
 ArenaHud.on.joinPit = function() Net.get("PitJoin"):FireServer() end
 ArenaHud.on.leavePit = function() Net.get("PitLeave"):FireServer() end
 
@@ -9283,6 +9935,7 @@ local SOURCE_TEXT = {
 
 local Theme = require(script.Parent.Theme)
 local Layout = require(script.Parent.Layout)
+local Panels = require(script.Parent.Panels)
 
 local player = Players.LocalPlayer
 
@@ -9296,9 +9949,11 @@ ArenaHud.on = {
     setPower = function(_id: string) end,
     equipTrinket = function(_id: string?, _slot: number) end,
     openCrate = function(_id: string) end,
-    openLegacy = function(_which: string) end,   -- season / trade / close
     equipCosmetic = function(_kind: string, _id: string) end,
     setActiveGoob = function(_id: string) end,
+    -- Irreversible, so it goes through init.client's two-step confirmation
+    -- rather than firing the remote from a card.
+    gulpGoob = function(_id: string) end,
     joinPit = function() end,
     leavePit = function() end,
 }
@@ -9321,6 +9976,11 @@ local powerSweep: Frame
 local sheet: Frame
 local sheetTitle: TextLabel
 local sheetBody: ScrollingFrame
+-- A plain frame beside sheetBody, for the two tabs whose renderers live in
+-- Panels and bring their own scroller. Nesting a ScrollingFrame inside another
+-- one traps the drag on a phone: the inner list eats the gesture and the outer
+-- panel never moves, which is a bug you only find on hardware.
+local sheetHost: ScrollingFrame
 
 local dockButtons: { [string]: TextButton } = {}
 local openTab: string? = nil
@@ -9336,8 +9996,13 @@ local TABS = {
     { id = "inventory", icon = "🫧", name = "YOUR GOOBS" },
     { id = "trade",     icon = "🤝", name = "TRADE" },
     { id = "season",    icon = "⭐", name = "BETA SEASON" },
+    { id = "crew",      icon = "🛡️", name = "YOUR CREW" },
     { id = "standoff",  icon = "🥊", name = "THE STANDOFF" },
 }
+
+-- Tabs whose body is drawn by Panels rather than by this file. They render
+-- into sheetHost; everything else renders into sheetBody.
+local DELEGATED = { season = true, crew = true }
 
 -- One card shape for every ownable thing in the game — a skin, a trinket, a
 -- power, a Goob. Rarity is a stroke colour and nothing else, so the eye learns
@@ -9398,11 +10063,12 @@ local function row(parent: Instance, height: number, order: number): Frame
     return f
 end
 
-local function actionButton(parent: Instance, text: string, colour: Color3, width: number): TextButton
+local function actionButton(parent: Instance, text: string, colour: Color3,
+    width: number, rightOffset: number?): TextButton
     local b = Theme.button(text, colour, UDim2.fromOffset(width, Layout.MIN_TAP))
     b.TextSize = 18
     b.AnchorPoint = Vector2.new(1, 0.5)
-    b.Position = UDim2.new(1, -10, 0.5, 0)
+    b.Position = UDim2.new(1, -(rightOffset or 10), 0.5, 0)
     b.Parent = parent
     return b
 end
@@ -9410,6 +10076,9 @@ end
 -- ── The sheet ──────────────────────────────────────────────────────────────
 
 local function clearSheet()
+    for _, child in ipairs(sheetHost:GetChildren()) do
+        if child:IsA("GuiObject") then child:Destroy() end
+    end
     for _, child in ipairs(sheetBody:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             child:Destroy()
@@ -9698,14 +10367,32 @@ local function renderInventory()
     local goobs = (profile and profile.goobs) or {}
     local activeId = profile and profile.activeGoobId
 
-    local header = card(sheetBody, 0, 54)
+    local header = card(sheetBody, 0, 74)
     local sum = Theme.label({
-        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -24, 0, 42),
+        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -24, 0, 40),
         Text = ("%d Goob%s  ·  age never resets and cannot be farmed, which is the only reason it is worth anything")
             :format(#goobs, #goobs == 1 and "" or "s"),
         TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
     })
     sum.Parent = header
+
+    -- WHERE GOOBS AND THEIR FOOD COME FROM NOW. There used to be a Snack Stand
+    -- and an Egg Stand for this, both of which sold progress for idle income
+    -- and neither of which had anything to do with the game being played. Both
+    -- are gone; finishing a round feeds your Goob and every fifth round hatches
+    -- one. This line is the whole explanation, and it has to be here, because a
+    -- player who cannot see where the next egg comes from assumes there is not
+    -- one.
+    local toEgg = profile and profile.roundsToEgg or 0
+    local eggLine = Theme.label({
+        Position = UDim2.fromOffset(14, 46), Size = UDim2.new(1, -24, 0, 22),
+        Text = (profile and profile.eggCapped)
+            and ("🥚 Stable full — %d / %d"):format(#goobs, (profile and profile.maxGoobs) or 8)
+            or ("🥚 Next egg in %d round%s  ·  finishing a round also feeds your Goob")
+                :format(toEgg, toEgg == 1 and "" or "s"),
+        TextSize = 13, TextColor3 = Theme.GOLD,
+    })
+    eggLine.Parent = header
 
     for i, goob in ipairs(goobs) do
         local tint = goob.ageColor or Theme.TEXT_DIM
@@ -9747,8 +10434,22 @@ local function renderInventory()
         age.Parent = c
 
         if goob.id ~= activeId then
-            local b = actionButton(c, "CARRY", Theme.ACCENT, 104)
+            local b = actionButton(c, "CARRY", Theme.ACCENT, 96)
             b.Activated:Connect(function() ArenaHud.on.setActiveGoob(goob.id) end)
+
+            -- GULP: feed this one to the Goob you are carrying. It is the mass
+            -- sink the entire economy rests on — the ONLY way a Goob ever
+            -- leaves the world — and until now the only button for it lived in
+            -- the drawer that has just been deleted. Removing that screen
+            -- without putting this somewhere would have left the world's total
+            -- mass with no exit at all, which is the quiet kind of breakage
+            -- that takes a month of live data to notice.
+            --
+            -- Irreversible, so it does not fire the remote: it calls through
+            -- to init.client's two-step confirmation, which spells out exactly
+            -- what is destroyed and what is gained before anything happens.
+            local g = actionButton(c, "GULP", Theme.WARN, 88, 114)
+            g.Activated:Connect(function() ArenaHud.on.gulpGoob(goob.id) end)
         end
     end
 
@@ -9796,6 +10497,15 @@ local function renderTrade()
     end
 end
 
+-- Set by init.client from the tutorial state. See applyLayout for why the
+-- status strip cares.
+ArenaHud.coachActive = false
+function ArenaHud.setCoachActive(on: boolean)
+    if ArenaHud.coachActive == on then return end
+    ArenaHud.coachActive = on
+    ArenaHud.applyLayout()
+end
+
 function ArenaHud.closeSheet()
     openTab = nil
     sheet.Visible = false
@@ -9805,20 +10515,22 @@ function ArenaHud.closeSheet()
 end
 
 function ArenaHud.openSheet(tab: string)
-    -- Delegated tabs still go through here, so opening one closes whatever
-    -- else was up. That is the whole contract: one thing at a time.
-    if tab == "season" then
-        ArenaHud.closeSheet()
-        ArenaHud.on.openLegacy(tab)
-        return
-    end
+    -- THE SHEET IS THE ONLY PANEL. The season tab used to hand off to a second
+    -- screen entirely (`on.openLegacy`), which opened the old Goob drawer and
+    -- drew the season track inside it — with the Snack Stand reparented on top
+    -- of the track, because that drawer moved the stand into itself whenever
+    -- arena mode was on. Two panels, one screen, and the season list unreadable
+    -- underneath a shop for a system that no longer existed.
+    --
+    -- Now there is nowhere to hand off TO. Every tab renders here, and the two
+    -- whose renderers still live in Panels render into sheetHost, inside this
+    -- same sheet, under this same title bar and close button.
     if openTab == tab then
         ArenaHud.closeSheet()
         return
     end
 
     openTab = tab
-    ArenaHud.on.openLegacy("close")   -- shut any legacy panel first
     clearSheet()
     for id, b in pairs(dockButtons) do
         b.BackgroundColor3 = (id == tab) and Theme.ACCENT or Theme.BG_SOFT
@@ -9830,7 +10542,12 @@ function ArenaHud.openSheet(tab: string)
         end
     end
 
-    if tab == "crates" then renderCrates()
+    sheetBody.Visible = not DELEGATED[tab]
+    sheetHost.Visible = DELEGATED[tab] == true
+
+    if DELEGATED[tab] then
+        Panels.render(tab, sheetHost, profile)
+    elseif tab == "crates" then renderCrates()
     elseif tab == "trinkets" then renderTrinkets()
     elseif tab == "powers" then renderPowers()
     elseif tab == "wear" then renderWear()
@@ -9859,20 +10576,26 @@ function ArenaHud.applyLayout()
     local compact = Layout.isCompact()
     local pad = compact and 8 or 14
 
-    -- Dock: top-centre, one row, on every platform.
-    -- Eight tabs now. On a 568-wide phone that is 8 icons plus gaps plus the
-    -- dock's own padding, and the stat card has to fit to the left of it — so
-    -- the icons shrink on compact rather than the dock running into the card.
-    -- 38 is still comfortably above the 34px minimum a thumb needs.
-    local iconSize = compact and 38 or 52
-    local gap = compact and 4 or 7
-    local dockW = #TABS * iconSize + (#TABS - 1) * gap + pad * 2
-    dock.Size = UDim2.fromOffset(dockW, iconSize + pad * 2)
-    dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), 6)
-    for _, entry in ipairs(TABS) do
+    -- Dock: top-centre. One row when there is room, two on a phone — see
+    -- Layout.dockMetrics, which owns that arithmetic because Hud needs the same
+    -- numbers to place the coach and the toasts underneath.
+    -- Registered, not just consumed: Hud places the coach and the toast column
+    -- under this dock and has no other way to learn how tall it is.
+    Layout.setDockTabs(#TABS)
+    local m = Layout.dockMetrics(#TABS)
+    local iconSize = m.icon
+    local dockW = m.width
+    dock.Size = UDim2.fromOffset(dockW, m.height)
+    dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), m.top)
+    for i, entry in ipairs(TABS) do
         local b = dockButtons[entry.id]
         if b then
+            local col = (i - 1) % m.perRow
+            local row = math.floor((i - 1) / m.perRow)
             b.Size = UDim2.fromOffset(iconSize, iconSize)
+            b.Position = UDim2.fromOffset(
+                m.pad + col * (iconSize + m.gap),
+                m.pad + row * (iconSize + m.gap))
             b.TextSize = compact and 22 or 26
         end
     end
@@ -9895,8 +10618,18 @@ function ArenaHud.applyLayout()
 
     -- Status strip: directly under the dock, same width, so the two read as
     -- one block instead of two floating things.
+    --
+    -- HIDDEN WHILE THE TUTORIAL COACH IS UP ON A PHONE, and that is not a
+    -- cosmetic choice. A 568x320 landscape phone has one free horizontal band
+    -- below the dock; the coach and this strip both want it, and stacking them
+    -- pushes the lower one into the jump-button zone where it cannot be read or
+    -- reached. During the tutorial the instruction matters more than the round
+    -- clock, so the strip yields. This file owns the strip's visibility and Hud
+    -- owns the coach's — one owner each, wired together in init.client.
+    statusStrip.Visible = not (compact and ArenaHud.coachActive)
     statusStrip.Size = UDim2.fromOffset(dockW, compact and 30 or 36)
-    statusStrip.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), iconSize + pad * 2 + 10)
+    statusStrip.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2),
+        Layout.belowDock(#TABS))
     statusLabel.TextSize = compact and 13 or 16
 
     -- Power button: bottom-centre, inside the band between the thumbstick and
@@ -9913,14 +10646,24 @@ function ArenaHud.applyLayout()
 
     -- The sheet: near-fullscreen on a phone, a centred panel on a desktop.
     -- Either way it is the ONLY thing on top of the world.
+    -- On a phone the sheet starts directly under the DOCK, not under the
+    -- status strip: it is a panel the player is reading, the round clock is
+    -- the thing they are least interested in while reading it, and going from
+    -- belowStatus to belowDock is the difference between a 132px-tall sheet
+    -- and a 168px one on a 568x320 screen.
+    local sheetTop = compact and Layout.belowDock(#TABS) or Layout.belowStatus(#TABS)
     local sheetSize = compact
-        and UDim2.fromOffset(u.X - 16, u.Y - (iconSize + pad * 2 + 52))
+        and UDim2.fromOffset(u.X - 16, math.max(120, u.Y - sheetTop - 8))
         or Layout.panel(660, 460)
     sheet.Size = sheetSize
     if compact then
-        sheet.Position = UDim2.fromOffset(8, iconSize + pad * 2 + 46)
+        sheet.Position = UDim2.fromOffset(8, sheetTop)
     else
         sheet.Position = Layout.centre(sheetSize)
+    end
+    if sheetHost then
+        sheetHost.Position = sheetBody.Position
+        sheetHost.Size = sheetBody.Size
     end
 end
 
@@ -9947,34 +10690,44 @@ function ArenaHud.build(): ScreenGui
     Theme.corner(statCard, 14)
     Theme.stroke(statCard, Color3.fromRGB(18, 20, 26), 2)
 
+    -- NAMED, all three. An unnamed label is findable only by its own text,
+    -- which means the only test anybody can write for it is "does some label
+    -- somewhere contain this string" — and that passes just as happily on a
+    -- panel wired to nothing as on a working one. These three are the stat
+    -- card's entire contract with the server push, so they get to be findable.
     massLabel = Theme.label({
         Position = UDim2.fromOffset(12, 4), Size = UDim2.new(1, -18, 0, 34),
         Text = "0", TextSize = 32, TextColor3 = Theme.GOLD,
     })
+    massLabel.Name = "Mass"
     massLabel.Parent = statCard
 
     worthLabel = Theme.label({
         Position = UDim2.fromOffset(12, 38), Size = UDim2.new(1, -18, 0, 22),
         Text = "worth 💧0", TextSize = 18, TextColor3 = Theme.ACCENT,
     })
+    worthLabel.Name = "Worth"
     worthLabel.Parent = statCard
 
     meltLabel = Theme.label({
         Position = UDim2.fromOffset(12, 60), Size = UDim2.new(1, -18, 0, 18),
         Text = "not melting yet", TextSize = 14, TextColor3 = Theme.TEXT_DIM,
     })
+    meltLabel.Name = "Melt"
     meltLabel.Parent = statCard
 
     globLabel = Theme.label({
         Text = "💧0", TextSize = 24, TextColor3 = Theme.ACCENT,
         TextXAlignment = Enum.TextXAlignment.Right,
     })
+    globLabel.Name = "Glob"
     globLabel.Parent = gui
 
     seasonLabel = Theme.label({
         Text = "BETA SEASON", TextSize = 15, TextColor3 = Theme.GOLD,
         TextXAlignment = Enum.TextXAlignment.Right,
     })
+    seasonLabel.Name = "Season"
     seasonLabel.Parent = gui
 
     -- Dock.
@@ -10127,6 +10880,27 @@ function ArenaHud.build(): ScreenGui
     bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
     bodyLayout.Parent = sheetBody
 
+    -- A SCROLLING host, not a plain frame.
+    --
+    -- Panels' crew screen lays its rows out at absolute offsets and runs about
+    -- 230px tall. On a landscape phone the sheet's body is barely 60px, so
+    -- every control below the first ran off the bottom — the audit reported
+    -- five elements "off by 144". A fixed-height host cannot hold a panel it
+    -- does not control the height of, and Panels is shared with the season
+    -- track, which brings its own scroller and fills this exactly.
+    sheetHost = Instance.new("ScrollingFrame")
+    sheetHost.Name = "Host"
+    sheetHost.Position = sheetBody.Position
+    sheetHost.Size = sheetBody.Size
+    sheetHost.BackgroundTransparency = 1
+    sheetHost.BorderSizePixel = 0
+    sheetHost.ScrollBarThickness = 5
+    sheetHost.ScrollBarImageColor3 = Theme.ACCENT
+    sheetHost.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sheetHost.CanvasSize = UDim2.new()
+    sheetHost.Visible = false
+    sheetHost.Parent = sheet
+
     ArenaHud.applyLayout()
     Layout.changed.Event:Connect(ArenaHud.applyLayout)
     return gui
@@ -10186,7 +10960,15 @@ function ArenaHud.setArena(state: any)
     local where = state.biome or (state.ring == "VAULT" and "the Vault"
         or state.ring == "SHALLOWS" and "the Shallows" or "the Flats")
     if phase == "LOBBY" then
-        statusLabel.Text = ("WAITING ROOM  ·  round %d in %s"):format((state.round or 0) + 1, clock)
+        -- The field size is announced, and the bot count with it. A player who
+        -- works out for themselves that most of the island is bots feels
+        -- tricked; a player who was told feels like the game is full. The
+        -- honest version is also the one that reads better.
+        local who = (state.bots or 0) > 0
+            and ("  ·  %d in, %d bots"):format(state.field or 0, state.bots)
+            or ""
+        statusLabel.Text = ("WAITING ROOM  ·  round %d in %s%s")
+            :format((state.round or 0) + 1, clock, who)
         statusLabel.TextColor3 = Theme.ACCENT
     elseif phase == "RESULTS" then
         statusLabel.Text = "ROUND OVER"
@@ -10196,9 +10978,24 @@ function ArenaHud.setArena(state: any)
     elseif state.banking > 0 then
         statusLabel.Text = "BANKING — hold still"
         statusLabel.TextColor3 = Theme.GOLD
+    elseif state.safe and state.onRim then
+        -- THE METER, COUNTING DOWN, IN SECONDS. Safety on the rim is spendable
+        -- now, and a meter the player cannot see is not a mechanic — it is an
+        -- ambush. Showing the number is what turns "I got eaten in the safe
+        -- zone" into "I stayed out there too long", which is a lesson rather
+        -- than a bug report.
+        local left2 = math.max(0, math.floor((state.rimGrace or 0) + 0.5))
+        statusLabel.Text = ("%s  ·  SAFE %ds  ·  %s"):format(clock, left2, where)
+        statusLabel.TextColor3 = left2 <= 4 and Theme.WARN or Theme.GOOD
     elseif state.safe then
         statusLabel.Text = ("%s  ·  SAFE  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.GOOD
+    elseif state.onRim then
+        -- Out on the rim with the meter spent. Worth saying explicitly: the
+        -- ground looks identical to the ground that was protecting you a
+        -- moment ago.
+        statusLabel.Text = ("%s  ·  EXPOSED  ·  %s"):format(clock, where)
+        statusLabel.TextColor3 = Theme.BAD
     else
         statusLabel.Text = ("%s  ·  DANGER  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.BAD
@@ -10331,65 +11128,66 @@ end
 
 return ArenaHud
 ]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX000032"><Properties><string name="Name">Hud</string><ProtectedString name="Source"><![CDATA[--!strict
--- Hud.luau — the heads-up display and the Goob drawer.
+-- Hud.luau — toasts, the first-run coach, and the client's copy of the profile.
 --
--- Layout philosophy: ONE always-visible number (your power), ONE always-visible
--- currency, and everything else behind a single big button. Kids bounce off
--- cluttered UI faster than they bounce off bad gameplay.
+-- WHAT THIS FILE USED TO BE, AND WHY IT IS NOT ANYMORE.
+--
+-- This was a 900-line screen: a stat panel, a Snack Stand, an egg button, a
+-- sliding "MY GOOBS" drawer, and a four-tab strip inside it. All of it was
+-- built for the game that existed before the arena — one where you stood on a
+-- plot, watched an income number, and spent it at a shop.
+--
+-- The arena replaced that game and ArenaHud replaced that screen. What did not
+-- happen is the deletion. Both screens stayed, and the dock's SEASON tab still
+-- reached back through `openLegacy` to open this drawer — which meant pressing
+-- "BETA SEASON" rendered the season track INSIDE the old drawer, with the
+-- Snack Stand reparented on top of it, because `applyLayout` moved the stand
+-- into the drawer whenever arena mode was on. That is the overlapping panel in
+-- the bug report: a season list with "Snack 💧113 / Feast 💧564 / Banquet
+-- 💧2.26K" sitting across it. Not a layout bug. Two games sharing a screen.
+--
+-- So the drawer is gone, the shops are gone with the systems that fed them,
+-- and ArenaHud's sheet is now the only panel in the game. What is left here is
+-- the part that was never duplicated:
+--
+--   * TOASTS — the notification column, top-right.
+--   * THE COACH — the first-run tutorial banner, which points at controls
+--     other modules own through Hud.targets.
+--   * THE STATE — one client-side copy of the last profile push, which
+--     ArenaHud, TradeUi and the gulp confirmation all read.
+--
+-- There is deliberately no stat panel here. ArenaHud draws mass, worth and
+-- Glob; a second HUD drawing the same numbers a tick out of step is how you
+-- get two readouts disagreeing on screen.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local Shared = game.ReplicatedStorage.GoobShared
 local Format = require(Shared.Format)
-local Feedstock = require(Shared.Feedstock)
-local Config = require(Shared.Config)
-local Net = require(Shared.Net)
 
 local Theme = require(script.Parent.Theme)
 local Layout = require(script.Parent.Layout)
-local Panels = require(script.Parent.Panels)
 
 local player = Players.LocalPlayer
 local Hud = {}
 
 local gui: ScreenGui
-local powerLabel: TextLabel
-local globLabel: TextLabel
-local incomeLabel: TextLabel
-local ageLabel: TextLabel
-local drawer: Frame
-local drawerList: ScrollingFrame
 local toastHolder: Frame
-local drawerOpen = false
-local snackButtons: { [string]: TextButton } = {}
-local eggButton: TextButton
 local coach: Frame
 local coachText: TextLabel
 local coachHint: TextLabel
 local coachStep: TextLabel
 local pulseTarget: GuiObject? = nil
 local pulseClock = 0
-local topFrame: Frame
-local standFrame: Frame
-local openButton: TextButton
-local standTitle: TextLabel
-local drawerTitle: TextLabel
-local drawerHint: TextLabel
-local tabBar: Frame
-local tabButtons: { [string]: TextButton } = {}
-local tabContent: Frame
-local currentTab = "goobs"
 
 local state: any = nil
-local displayedGlob = 0
 
 -- ── Toasts ─────────────────────────────────────────────────────────────────
 
 local TOAST_COLOR = {
-    info = Theme.ACCENT, good = Theme.GOOD, warn = Theme.WARN,
+    info = Theme.ACCENT, good = Theme.GOOD, warn = Theme.WARN, bad = Theme.WARN,
     trade = Theme.GOLD, secret = Color3.fromRGB(255, 255, 255),
 }
 
@@ -10411,7 +11209,9 @@ function Hud.toast(message: string, kind: string?)
         for _, child in ipairs(toastHolder:GetChildren()) do
             if child:IsA("Frame") then table.insert(live, child) end
         end
-        local allowed = Layout.isCompact() and 2 or Hud.MAX_TOASTS
+        -- ONE on compact. The band above the power button is a single row
+        -- tall; a second toast rendered straight over the button.
+        local allowed = Layout.isCompact() and 1 or Hud.MAX_TOASTS
         while #live >= allowed do
             local oldest = table.remove(live, 1)
             if oldest then oldest:Destroy() end
@@ -10419,7 +11219,10 @@ function Hud.toast(message: string, kind: string?)
     end
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 46)
+    -- Shorter on compact. The band between the coach and the power button is
+    -- about 70px on a landscape phone; two 46px cards do not fit in it and the
+    -- second one landed on the power button.
+    frame.Size = UDim2.new(1, 0, 0, Layout.isCompact() and 32 or 46)
     frame.BackgroundColor3 = Theme.PANEL
     frame.BackgroundTransparency = 0.06
     Theme.corner(frame)
@@ -10430,7 +11233,7 @@ function Hud.toast(message: string, kind: string?)
         Position = UDim2.fromOffset(12, 0),
         Text = message,
         TextColor3 = color,
-        TextSize = 19,
+        TextSize = Layout.isCompact() and 14 or 19,
         TextWrapped = true,
         TextYAlignment = Enum.TextYAlignment.Center,
     })
@@ -10450,382 +11253,93 @@ function Hud.toast(message: string, kind: string?)
         local out = TweenService:Create(frame, TweenInfo.new(0.3), {
             Position = UDim2.new(1, 60, 0, 0), BackgroundTransparency = 1,
         })
-        TweenService:Create(text, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+        out.Completed:Connect(function() frame:Destroy() end)
         out:Play()
-        out.Completed:Wait()
-        frame:Destroy()
     end)
 end
 
--- ── Goob drawer ────────────────────────────────────────────────────────────
-
-local function contentsSummary(contents: { [string]: number }): string
-    local rows = {}
-    for id, count in pairs(contents) do
-        local item = Feedstock.get(id)
-        if item then table.insert(rows, { name = item.name, count = count, mass = item.mass }) end
-    end
-    table.sort(rows, function(a, b) return a.mass * a.count > b.mass * b.count end)
-    local out = {}
-    for i = 1, math.min(3, #rows) do
-        table.insert(out, ("%s ×%s"):format(rows[i].name, Format.comma(rows[i].count)))
-    end
-    if #rows > 3 then table.insert(out, ("+%d more"):format(#rows - 3)) end
-    return #out > 0 and table.concat(out, " · ") or "empty — go catch something!"
-end
-
-local function buildCard(goob: any, index: number): Frame
-    local card = Instance.new("Frame")
-    card.Name = "Goob" .. index
-    card.Size = UDim2.new(1, 0, 0, Layout.isTouch() and 136 or 118)
-    card.BackgroundColor3 = goob.isActive and Theme.BG_SOFT or Theme.PANEL
-    Theme.corner(card)
-    Theme.stroke(card, goob.isActive and Theme.ACCENT or Color3.fromRGB(16, 18, 30), goob.isActive and 3 or 2)
-
-    -- Colour chip showing the Goob's actual body hue, so the list matches what
-    -- you see standing on the plot.
-    local chip = Instance.new("Frame")
-    chip.Size = UDim2.fromOffset(66, 66)
-    chip.Position = UDim2.fromOffset(12, 12)
-    chip.BackgroundColor3 = Color3.fromHSV(goob.hue, 0.55, 1)
-    chip.Parent = card
-    Theme.corner(chip, 33)
-    Theme.stroke(chip, Color3.fromRGB(16, 18, 30), 3)
-
-    local gen = Theme.label({
-        Size = UDim2.fromScale(1, 1), Text = "G" .. goob.generation,
-        TextSize = 22, TextXAlignment = Enum.TextXAlignment.Center,
-        TextColor3 = Color3.fromRGB(25, 27, 40),
-    })
-    gen.Parent = chip
-
-    local name = Theme.label({
-        Position = UDim2.fromOffset(90, 10), Size = UDim2.new(1, -100, 0, 24),
-        Text = goob.nickname, TextSize = 21,
-    })
-    name.Parent = card
-
-    local stats = Theme.label({
-        Position = UDim2.fromOffset(90, 36), Size = UDim2.new(1, -100, 0, 22),
-        Text = ("⚡ %s   %s %s (×%.2f)   ⏳ %s")
-            :format(goob.powerText, goob.ageEmoji, goob.ageTier, goob.ageMult, goob.ageText),
-        TextSize = 16, TextColor3 = goob.ageColor,
-    })
-    stats.Parent = card
-
-    local belly = Theme.label({
-        Position = UDim2.fromOffset(90, 58), Size = UDim2.new(1, -100, 0, 20),
-        Text = "🫧 " .. contentsSummary(goob.contents),
-        TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextTruncate = Enum.TextTruncate.AtEnd,
-    })
-    belly.Parent = card
-
-    local rowH = Layout.isTouch() and Layout.MIN_TAP or 28
-    local row = Instance.new("Frame")
-    row.Position = UDim2.fromOffset(90, 82)
-    row.Size = UDim2.new(1, -102, 0, rowH)
-    row.BackgroundTransparency = 1
-    row.Parent = card
-
-    local layout = Instance.new("UIListLayout")
-    layout.FillDirection = Enum.FillDirection.Horizontal
-    layout.Padding = UDim.new(0, 6)
-    layout.Parent = row
-
-    if not goob.isActive then
-        local show = Theme.button("👁 Display", Theme.ACCENT, UDim2.fromOffset(104, rowH))
-        show.TextSize = 15
-        show.Parent = row
-        show.Activated:Connect(function()
-            Hud.onSetActive(goob.id)
-        end)
-
-        local gulp = Theme.button("😋 Gulp", Theme.BAD, UDim2.fromOffset(88, rowH))
-        gulp.TextSize = 15
-        gulp.Parent = row
-        gulp.Activated:Connect(function()
-            Hud.onGulp(goob.id)
-        end)
-    else
-        local rename = Theme.button("✏️ Rename", Theme.GOLD, UDim2.fromOffset(104, rowH))
-        rename.TextSize = 15
-        rename.Parent = row
-        rename.Activated:Connect(function() Hud.onRename(goob.id) end)
-    end
-
-    -- While a trade window is open, every card grows an "offer" button. This
-    -- keeps the trade UI itself read-only, which means the list you are
-    -- agreeing to and the list you are editing can never drift apart.
-    if Hud.tradeOpen then
-        local offer = Theme.button("➕ Offer", Theme.GOOD, UDim2.fromOffset(90, rowH))
-        offer.TextSize = 15
-        offer.Parent = row
-        offer.Activated:Connect(function() Hud.onOffer(goob.id) end)
-    end
-
-    return card
-end
-
-local function rebuildDrawer()
-    if not state then return end
-    for _, child in ipairs(drawerList:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-    -- Active Goob first, then by power descending.
-    local sorted = table.clone(state.goobs)
-    table.sort(sorted, function(a, b)
-        if a.isActive ~= b.isActive then return a.isActive end
-        return a.power > b.power
-    end)
-    for i, goob in ipairs(sorted) do
-        local card = buildCard(goob, i)
-        card.LayoutOrder = i
-        card.Parent = drawerList
-    end
-    drawerList.CanvasSize = UDim2.new(0, 0, 0, #sorted * (Layout.isTouch() and 144 or 126) + 8)
-end
-
-
--- ── Responsive layout ──────────────────────────────────────────────────────
--- Every size and position in the HUD is decided here rather than at creation,
--- so a viewport change is just a second call to this function.
+-- ── Layout ─────────────────────────────────────────────────────────────────
 --
--- Two distinct layouts, not one layout that shrinks:
---
---   ROOMY   — stat panel and snack stand stacked down the left, drawer button
---             bottom-left, drawer slides in above it.
---   COMPACT — the left column would eat a phone screen whole, and both bottom
---             corners belong to the Roblox touch controls. So: one round
---             button in the gap between thumbstick and jump button, and the
---             snack stand moves INSIDE the drawer. One button, one panel.
-
-function Hud.drawerPosition(open: boolean): UDim2
-    local u = Layout.usable()
-    local size = drawer.Size
-    if not open then
-        return UDim2.fromOffset(-size.X.Offset - 30, drawer.Position.Y.Offset)
-    end
-    if Layout.isCompact() then
-        return UDim2.fromOffset(10, 8)
-    end
-    return UDim2.fromOffset(16, u.Y - size.Y.Offset - 84)
-end
+-- Two things to place. The toast column hangs off the top-right under the Glob
+-- readout ArenaHud owns; the coach sits below ArenaHud's dock, never on it.
 
 function Hud.applyLayout()
-    if not topFrame then return end
-    if Hud.arenaMode then
-        topFrame.Visible = false
-        if ageLabel then ageLabel.Visible = false end
-        if openButton then openButton.Visible = false end
-    end
-    local compact = Layout.isCompact()
-    local touch = Layout.isTouch()
+    if not gui then return end
     local u = Layout.usable()
+    local compact = Layout.isCompact()
 
-    -- Stat panel, top-left.
-    local statW = compact and math.min(210, u.X * 0.42) or 300
-    local statH = compact and 74 or 108
-    topFrame.Size = UDim2.fromOffset(statW, statH)
-    topFrame.Position = UDim2.fromOffset(compact and 10 or 16, compact and 8 or 16)
+    -- ── THE ONE FREE COLUMN ON A PHONE ────────────────────────────────────
+    --
+    -- A 568x320 landscape phone has the dock and stat card across the top, the
+    -- power button at the bottom, and Roblox's own thumbstick and jump button
+    -- claiming the bottom-left and bottom-right corners outright. What is left
+    -- is a single vertical column between those two touch zones — the same
+    -- column the power button already lives in, and the only place a transient
+    -- panel can go without landing somewhere a thumb is or cannot reach.
+    --
+    -- So on compact BOTH the coach and the toast column are constrained to it,
+    -- stacked: coach directly under the dock, toasts directly above the power
+    -- button. Off a phone there is room for the usual thing — coach centred,
+    -- toasts down the right-hand side.
+    local gapL, gapR = Layout.bottomGap()
+    local colW = math.max(120, gapR - gapL - 8)
+    local colX = gapL + 4
+    local powerTop = u.Y - (compact and 76 or 92) - (compact and 14 or 26)
 
-    powerLabel.TextSize = compact and 26 or 34
-    powerLabel.Size = UDim2.new(1, -20, 0, compact and 30 or 40)
-    powerLabel.Position = UDim2.fromOffset(12, compact and 4 or 8)
-    globLabel.TextSize = compact and 18 or 22
-    globLabel.Size = UDim2.new(1, -20, 0, compact and 22 or 26)
-    globLabel.Position = UDim2.fromOffset(12, compact and 34 or 48)
-    incomeLabel.TextSize = compact and 13 or 15
-    incomeLabel.Size = UDim2.new(1, -20, 0, 20)
-    incomeLabel.Position = UDim2.fromOffset(12, compact and 54 or 74)
-
-    ageLabel.Position = UDim2.fromOffset(compact and 10 or 16, statH + (compact and 12 or 30))
-    ageLabel.Size = UDim2.fromOffset(statW + (compact and 40 or 0), compact and 20 or 24)
-    ageLabel.TextSize = compact and 14 or 17
-
-    -- Toasts, top-right. Narrower on a phone so they never meet the stat panel.
-    local toastW = compact and math.min(196, u.X * 0.34) or 300
-    -- Below the Glob and season readouts in arena mode. At y=8 the toast stack
-    -- started exactly on top of them, so every "+500" receipt covered the
-    -- balance it was reporting.
-    -- Below the dock AND the status strip, not merely below the balance. The
-    -- status strip is centred and the toast column is right-aligned, so on a
-    -- narrow screen the two met in the middle.
-    local toastTop = Hud.arenaMode and (compact and 108 or 134) or (compact and 8 or 16)
-    toastHolder.Position = UDim2.fromOffset(u.X - toastW - (compact and 10 or 16), toastTop)
-    toastHolder.Size = UDim2.fromOffset(toastW,
-        math.max(60, math.min(400, u.Y - toastTop - 12)))
-
-    -- The drawer. Near-fullscreen on a phone, a side panel otherwise.
-    local drawerW = compact and math.min(400, u.X - 20) or 430
-    local drawerH = compact and (u.Y - 16) or math.min(460, u.Y - 100)
-    drawer.Size = UDim2.fromOffset(drawerW, drawerH)
-
-    drawerTitle.TextSize = compact and 22 or 26
-    drawerHint.Visible = not compact  -- the warning also lives on the confirm dialog
-
-    local headerH = compact and 42 or 64
-
-    -- Snack stand: its own panel when there is room, inside the drawer when
-    -- there is not. A phone screen cannot host both.
-    local standH = (compact and 3 * 48 + 34 or 132)
-    -- In arena mode it ALWAYS goes in the drawer, on every screen size. As a
-    -- free-floating panel it is persistent chrome, and persistent chrome is
-    -- what ArenaHud now owns; leaving it loose on a desktop put it straight
-    -- under the tutorial coach.
-    if compact or Hud.arenaMode then
-        standFrame.Parent = drawer
-        standFrame.Size = UDim2.fromOffset(drawerW - 20, standH)
-        standFrame.Position = UDim2.fromOffset(10, headerH)
-        standFrame.BackgroundTransparency = 1
-        standTitle.Visible = false
-    else
-        standFrame.Parent = gui
-        standFrame.Size = UDim2.fromOffset(300, standH)
-        standFrame.Position = UDim2.fromOffset(16, 158)
-        standFrame.BackgroundTransparency = 0.12
-        standTitle.Visible = true
-    end
-
-    local btnH = touch and Layout.MIN_TAP or 30
-    local btnGap = compact and 4 or 4
-    local standTop = compact and 4 or 30
-    local i = 0
-    for _, tier in ipairs(Config.SNACK_TIERS) do
-        local btn = snackButtons[tier.id]
-        if btn then
-            btn.Size = UDim2.new(1, -20, 0, btnH)
-            btn.Position = UDim2.fromOffset(10, standTop + i * (btnH + btnGap))
-            btn.TextSize = compact and 16 or 15
-            i += 1
-        end
-    end
-
-    -- Egg button sits under the snack stack inside the drawer on compact.
-    local eggY = compact and (headerH + standH + 6) or 64
-    if eggButton then
-        eggButton.Size = UDim2.new(1, -20, 0, touch and Layout.MIN_TAP or 34)
-        eggButton.Position = UDim2.fromOffset(10, eggY)
-        eggButton.TextSize = compact and 16 or 16
-    end
-
-    -- Tab strip sits under the title; everything below it belongs to the tab.
-    local tabH = touch and 42 or 34
-    local tabTop = compact and 36 or 44
-    tabBar.Position = UDim2.fromOffset(10, tabTop)
-    tabBar.Size = UDim2.new(1, -20, 0, tabH)
-    local tabW = math.floor((drawerW - 20 - 18) / 4)
-    local ti = 0
-    for _, id in ipairs({ "goobs", "wear", "season", "crew" }) do
-        local btn = tabButtons[id]
-        if btn then
-            btn.Size = UDim2.fromOffset(tabW, tabH)
-            btn.Position = UDim2.fromOffset(ti * (tabW + 6), 0)
-            btn.BackgroundColor3 = (currentTab == id) and Theme.ACCENT or Theme.BG_SOFT
-            btn.TextColor3 = (currentTab == id) and Color3.fromRGB(28, 30, 34) or Theme.TEXT
-            ti += 1
-        end
-    end
-
-    local contentTop = tabTop + tabH + 8
-    local isGoobs = currentTab == "goobs"
-
-    standFrame.Visible = compact and isGoobs or not compact
-    if eggButton then eggButton.Visible = isGoobs end
-    drawerHint.Visible = (not compact) and isGoobs
-    drawerList.Visible = isGoobs
-    tabContent.Visible = not isGoobs
-
-    tabContent.Position = UDim2.fromOffset(10, contentTop)
-    tabContent.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - contentTop - 10))
-
-    local listTop = isGoobs and (compact and (eggY + 52) or (eggY + 42)) or contentTop
-    if compact and isGoobs then
-        standFrame.Position = UDim2.fromOffset(10, contentTop)
-        if eggButton then
-            eggButton.Position = UDim2.fromOffset(10, contentTop + standH + 6)
-        end
-        listTop = contentTop + standH + 6 + 52
-    elseif isGoobs then
-        if eggButton then eggButton.Position = UDim2.fromOffset(10, contentTop) end
-        listTop = contentTop + 42
-    end
-    drawerList.Position = UDim2.fromOffset(10, listTop)
-    drawerList.Size = UDim2.new(1, -20, 0, math.max(60, drawerH - listTop - 10))
-
-    if not isGoobs and state then
-        Panels.render(currentTab, tabContent, state)
-    end
-
-    -- The one action button. On touch it goes in the gap between the
-    -- thumbstick and the jump button, which is the only reachable part of the
-    -- bottom edge; otherwise bottom-left as usual.
-    if touch then
-        local gapL, gapR = Layout.bottomGap()
-        local size = Layout.MIN_TAP + 16
-        local cx = (gapL + gapR) / 2
-        -- If the gap is too narrow to centre in, sit just right of the stick.
-        if gapR - gapL < size + 16 then cx = gapL + size / 2 + 8 end
-        openButton.Size = UDim2.fromOffset(size, size)
-        openButton.Position = UDim2.fromOffset(
-            Layout.fit(cx - size / 2, 8, u.X - size - 8),
-            u.Y - size - 10
-        )
-        openButton.Text = compact and "🫧" or "🫧 MY GOOBS"
-        if not compact then
-            openButton.Size = UDim2.fromOffset(190, math.max(size, 58))
-            openButton.Position = UDim2.fromOffset(
-                Layout.fit(cx - 95, 8, u.X - 198), u.Y - math.max(size, 58) - 10)
-        end
-        openButton.TextSize = compact and 28 or 22
-    else
-        openButton.Size = UDim2.fromOffset(190, 58)
-        openButton.Position = UDim2.fromOffset(16, u.Y - 74)
-        openButton.Text = "🫧 MY GOOBS"
-        openButton.TextSize = 24
-    end
-
-    -- Coach banner, centred under the top bar. Narrow enough on a phone that
-    -- it never collides with the stat panel or the toasts.
+    -- ── The coach ──────────────────────────────────────────────────────────
+    --
+    -- ArenaHud hides its status strip while this is up on compact, so the two
+    -- are never both trying to occupy the band under the dock.
+    local coachTop = Layout.belowDock()
+    local coachH = compact and 48 or 84
     if coach then
-        local cw = compact and math.min(330, u.X - 24) or 460
-        local ch = compact and 76 or 84
-        coach.Size = UDim2.fromOffset(cw, ch)
-        -- Under the dock and the status strip, not on top of them. At y=6 the
-        -- coach sat exactly where ArenaHud's dock now lives, which put the
-        -- game's teaching text underneath the thing it is teaching you to use.
-        local below = Hud.arenaMode and (compact and 106 or 134) or (compact and 6 or 14)
-        -- Centred, but never far enough right to push its own skip button into
-        -- the jump-button zone. On a 568x320 phone the centred coach's top
-        -- right corner landed exactly on it, which makes "skip the tutorial"
-        -- into "jump" — the single worst tap to get wrong.
-        local x = math.floor((u.X - cw) / 2)
-        if Hud.arenaMode then
-            -- The right-hand column is spoken for twice over: the jump button
-            -- at the bottom and the toast stack at the top. Reserve whichever
-            -- is wider, or the coach slides under one of them.
-            local reserved = math.max(Layout.JUMP_BUTTON.X, toastW + 20)
-            x = Layout.fit(x, 8, math.max(8, u.X - reserved - cw - 10))
-        end
-        coach.Position = UDim2.fromOffset(x, below)
+        local cw = compact and math.min(300, colW) or 460
+        coach.Size = UDim2.fromOffset(cw, coachH)
+        local x = compact and (colX + math.floor((colW - cw) / 2))
+            or math.floor((u.X - cw) / 2)
+        coach.Position = UDim2.fromOffset(Layout.fit(x, 8, math.max(8, u.X - cw - 8)), coachTop)
+
+        -- On compact the step counter goes: three stacked lines do not fit in
+        -- 48px, and "STEP 2 OF 5" is the least useful of the three.
+        coachStep.Visible = not compact
         coachStep.Position = UDim2.fromOffset(14, 6)
-        coachStep.Size = UDim2.new(1, -50, 0, 16)
-        coachText.Position = UDim2.fromOffset(14, 22)
-        coachText.Size = UDim2.new(1, -28, 0, compact and 26 or 30)
-        coachText.TextSize = compact and 17 or 20
-        coachHint.Position = UDim2.fromOffset(14, compact and 48 or 54)
-        coachHint.Size = UDim2.new(1, -28, 0, compact and 24 or 26)
-        coachHint.TextSize = compact and 12 or 14
+        coachStep.Size = UDim2.new(1, -60, 0, 16)
+        coachText.Position = UDim2.fromOffset(10, compact and 3 or 22)
+        coachText.Size = UDim2.new(1, -(compact and 62 or 28), 0, compact and 22 or 30)
+        coachText.TextSize = compact and 13 or 20
+        coachHint.Position = UDim2.fromOffset(10, compact and 25 or 54)
+        coachHint.Size = UDim2.new(1, -(compact and 62 or 28), 0, compact and 18 or 26)
+        coachHint.TextSize = compact and 10 or 14
+
         local skip = coach:FindFirstChild("SkipCoach") :: TextButton?
         if skip then
-            local sz = touch and 34 or 28
-            skip.Size = UDim2.fromOffset(sz, sz)
-            skip.Position = UDim2.fromOffset(cw - sz - 8, 6)
+            -- FULL SIZE, even though it is only a dismiss button. It was
+            -- 28x28, under the 34px floor a thumb needs, and the audit flagged
+            -- it: a control a player cannot press is not a smaller control, it
+            -- is an absent one.
+            local tap = Layout.MIN_TAP
+            skip.Size = UDim2.fromOffset(tap, tap)
+            skip.Position = UDim2.fromOffset(cw - tap - 6,
+                math.max(2, math.floor((coachH - tap) / 2)))
         end
     end
 
-    drawer.Position = Hud.drawerPosition(drawerOpen)
-    drawer.Visible = drawerOpen
-    if drawerOpen then rebuildDrawer() end
+    -- ── Toasts ─────────────────────────────────────────────────────────────
+    --
+    -- The old position was a fixed 76px from the top, which on a phone put the
+    -- column straight through ArenaHud's status strip and, further down, across
+    -- the power button. Bottom-anchored above the power button on compact, so
+    -- the stack grows AWAY from the one control the player is holding.
+    local toastW = compact and math.min(240, colW) or 340
+    local toastH = compact and 32 or 200
+    local toastTop = compact
+        and math.max(Layout.belowDock() + coachH + 6, powerTop - toastH - 4)
+        or math.max(Layout.belowStatus(), coachTop + coachH + 8)
+    toastHolder.Size = UDim2.fromOffset(toastW, toastH)
+    toastHolder.Position = UDim2.fromOffset(
+        compact and (colX + math.floor((colW - toastW) / 2))
+            or (u.X - toastW - 14),
+        toastTop)
 end
 
 -- ── Build ──────────────────────────────────────────────────────────────────
@@ -10835,8 +11349,7 @@ function Hud.build(): ScreenGui
     gui.Name = "GoobHud"
     gui.ResetOnSpawn = false
     -- false, NOT true: with IgnoreGuiInset = true the ScreenGui draws from the
-    -- true top of the screen and the Roblox top bar covers the first ~36px —
-    -- which is exactly where the power readout was.
+    -- true top of the screen and the Roblox top bar covers the first ~36px.
     gui.IgnoreGuiInset = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     -- Above Roblox's own touch-control ScreenGui, so a dialog button placed
@@ -10844,178 +11357,9 @@ function Hud.build(): ScreenGui
     gui.DisplayOrder = 10
     gui.Parent = player:WaitForChild("PlayerGui")
 
-    -- Top-left: the two numbers that matter.
-    local top = Instance.new("Frame")
-    topFrame = top
-    top.Name = "StatPanel"
-    top.BackgroundColor3 = Theme.BG
-    top.BackgroundTransparency = 0.12
-    top.Parent = gui
-    Theme.corner(top, 18)
-    Theme.stroke(top, Color3.fromRGB(14, 16, 26), 3)
-
-    powerLabel = Theme.label({
-        Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -24, 0, 40),
-        Text = "⚡ 0", TextSize = 34, TextColor3 = Theme.GOLD,
-    })
-    powerLabel.Parent = top
-
-    globLabel = Theme.label({
-        Position = UDim2.fromOffset(16, 48), Size = UDim2.new(1, -24, 0, 26),
-        Text = "💧 0", TextSize = 22, TextColor3 = Theme.ACCENT,
-    })
-    globLabel.Parent = top
-
-    incomeLabel = Theme.label({
-        Position = UDim2.fromOffset(16, 74), Size = UDim2.new(1, -24, 0, 22),
-        Text = "+0 /sec", TextSize = 15, TextColor3 = Theme.TEXT_DIM,
-    })
-    incomeLabel.Parent = top
-
-    ageLabel = Theme.label({
-        Position = UDim2.fromOffset(16, 130), Size = UDim2.fromOffset(300, 24),
-        Text = "", TextSize = 17,
-    })
-    ageLabel.Parent = gui
-
-    -- Bottom-left: the one big button.
-    local openBtn = Theme.button("🫧 MY GOOBS", Theme.ACCENT, UDim2.fromOffset(190, 58))
-    openBtn.Name = "OpenDrawer"
-    openBtn.TextSize = 24
-    openBtn.Parent = gui
-    openButton = openBtn
-
-    -- Drawer.
-    drawer = Instance.new("Frame")
-    drawer.Name = "GoobDrawer"
-    drawer.BackgroundColor3 = Theme.BG
-    drawer.BackgroundTransparency = 0.06
-    drawer.Parent = gui
-    Theme.corner(drawer, 18)
-    Theme.stroke(drawer, Color3.fromRGB(14, 16, 26), 3)
-
-    local title = Theme.label({
-        Position = UDim2.fromOffset(18, 12), Size = UDim2.new(1, -36, 0, 30),
-        Text = "🫧 MY GOOBS", TextSize = 26,
-    })
-    title.Parent = drawer
-    drawerTitle = title
-
-    local hint = Theme.label({
-        Position = UDim2.fromOffset(18, 42), Size = UDim2.new(1, -36, 0, 20),
-        Text = "Gulping one Goob into another DESTROYS it forever.",
-        TextSize = 14, TextColor3 = Theme.WARN, TextWrapped = true,
-    })
-    hint.Parent = drawer
-    drawerHint = hint
-
-    -- Eggs are the ONLY source of new Goobs in the game, so the button lives
-    -- at the top of the drawer rather than behind another menu.
-    eggButton = Theme.button("🥚 HATCH A NEW GOOB", Theme.GOLD, UDim2.new(1, -28, 0, 34))
-    eggButton.Position = UDim2.fromOffset(14, 64)
-    eggButton.TextSize = 16
-    eggButton.Parent = drawer
-    eggButton.Activated:Connect(function() Hud.onBuyEgg() end)
-
-    -- Tabs. Everything that used to want its own floating button lives here
-    -- instead: a phone has room for about one persistent control.
-    tabBar = Instance.new("Frame")
-    tabBar.Name = "Tabs"
-    tabBar.BackgroundTransparency = 1
-    tabBar.Parent = drawer
-
-    local TABS = {
-        { id = "goobs",  label = "🫧" },
-        { id = "wear",   label = "👕" },
-        { id = "season", label = "⭐" },
-        { id = "crew",   label = "🛡️" },
-    }
-    for i, t in ipairs(TABS) do
-        local btn = Theme.button(t.label, Theme.BG_SOFT, UDim2.fromOffset(50, 34))
-        btn.Name = "Tab_" .. t.id
-        btn.TextSize = 18
-        btn.TextColor3 = Theme.TEXT
-        btn.LayoutOrder = i
-        btn.Parent = tabBar
-        tabButtons[t.id] = btn
-        btn.Activated:Connect(function()
-            currentTab = t.id
-            Hud.applyLayout()
-        end)
-    end
-
-    tabContent = Instance.new("Frame")
-    tabContent.Name = "TabContent"
-    tabContent.BackgroundTransparency = 1
-    tabContent.Visible = false
-    tabContent.Parent = drawer
-
-    drawerList = Instance.new("ScrollingFrame")
-    drawerList.Position = UDim2.fromOffset(14, 106)
-    drawerList.Size = UDim2.new(1, -28, 1, -120)
-    drawerList.BackgroundTransparency = 1
-    drawerList.BorderSizePixel = 0
-    drawerList.ScrollBarThickness = 6
-    drawerList.ScrollBarImageColor3 = Theme.ACCENT
-    drawerList.Parent = drawer
-
-    local listLayout = Instance.new("UIListLayout")
-    listLayout.Padding = UDim.new(0, 8)
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.Parent = drawerList
-
-    openBtn.Activated:Connect(function()
-        drawerOpen = not drawerOpen
-        if drawerOpen then
-            drawer.Visible = true
-            rebuildDrawer()
-        end
-        local tween = TweenService:Create(
-            drawer, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            { Position = Hud.drawerPosition(drawerOpen) })
-        -- Hide it once it has slid away. A panel parked off-screen still
-        -- renders and still costs layout, and it makes "is anything hanging
-        -- off the edge of the screen?" impossible to answer honestly.
-        if not drawerOpen then
-            tween.Completed:Connect(function()
-                if not drawerOpen then drawer.Visible = false end
-            end)
-        end
-        tween:Play()
-    end)
-
-    -- Snack Stand: three buttons under the HUD. This is where idle income
-    -- turns back into progression, so it is always on screen, never in a menu.
-    local stand = Instance.new("Frame")
-    stand.Name = "SnackStand"
-    standFrame = stand
-    stand.BackgroundColor3 = Theme.BG
-    stand.BackgroundTransparency = 0.12
-    stand.Parent = gui
-    Theme.corner(stand, 16)
-    Theme.stroke(stand, Color3.fromRGB(14, 16, 26), 3)
-
-    standTitle = Theme.label({
-        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 0, 22),
-        Text = "🍪 SNACK STAND", TextSize = 17, TextColor3 = Theme.GOLD,
-    })
-    standTitle.Parent = stand
-
-    snackButtons = {}
-    for i, tier in ipairs(Config.SNACK_TIERS) do
-        local btn = Theme.button("", Theme.BG_SOFT, UDim2.new(1, -28, 0, 30))
-        btn.Position = UDim2.fromOffset(14, 30 + (i - 1) * 34)
-        btn.TextColor3 = Theme.TEXT
-        btn.TextSize = 15
-        btn.Text = tier.emoji .. " " .. tier.name
-        btn.Parent = stand
-        btn.Activated:Connect(function() Hud.onBuySnack(tier.id) end)
-        snackButtons[tier.id] = btn
-    end
-
-    -- The first-run coach. Top-centre, above everything, one instruction at a
-    -- time. Deliberately NOT a modal: the player should be doing the thing
-    -- while reading it, not dismissing a wall of text before they can move.
+    -- The first-run coach. One instruction at a time, and deliberately NOT a
+    -- modal: the player should be doing the thing while reading it, not
+    -- dismissing a wall of text before they can move.
     coach = Instance.new("Frame")
     coach.Name = "Coach"
     coach.BackgroundColor3 = Theme.BG
@@ -11063,23 +11407,19 @@ function Hud.build(): ScreenGui
     toastLayout.VerticalAlignment = Enum.VerticalAlignment.Top
     toastLayout.Parent = toastHolder
 
-    -- Smoothly count the glob counter up between server pushes, so the number
-    -- visibly ticks instead of jumping twice a second. Pure juice, big payoff.
     RunService.RenderStepped:Connect(function(dt)
-        -- Pulse the coached control. Restores the stroke when the target
-        -- changes so a button never stays stuck mid-glow.
+        -- Pulse the coached control, and restore the stroke on whatever was
+        -- pulsing before so a button never stays stuck mid-glow. The registry
+        -- is walked rather than a hardcoded list of this file's own buttons —
+        -- which is what broke the last version: the only controls it knew how
+        -- to point at were the Snack Stand and the drawer, and by then the
+        -- steps that needed a pointer were all on ArenaHud.
         pulseClock += dt
-        for _, btn in pairs(snackButtons) do
-            local st = btn:FindFirstChildOfClass("UIStroke")
-            if st and btn ~= pulseTarget then st.Thickness = 3 end
-        end
-        if openButton then
-            local st = openButton:FindFirstChildOfClass("UIStroke")
-            if st and openButton ~= pulseTarget then st.Thickness = 3 end
-        end
-        if eggButton then
-            local st = eggButton:FindFirstChildOfClass("UIStroke")
-            if st and eggButton ~= pulseTarget then st.Thickness = 3 end
+        for _, control in pairs(Hud.targets) do
+            if control ~= pulseTarget and control.Parent then
+                local st = control:FindFirstChildOfClass("UIStroke")
+                if st then st.Thickness = 3 end
+            end
         end
         if pulseTarget then
             local st = pulseTarget:FindFirstChildOfClass("UIStroke")
@@ -11088,11 +11428,6 @@ function Hud.build(): ScreenGui
                 st.Thickness = 3 + math.abs(math.sin(pulseClock * 3)) * 4
             end
         end
-
-        if not state then return end
-        displayedGlob += (state.glob - displayedGlob) * math.min(1, dt * 6)
-        displayedGlob += state.income * dt
-        globLabel.Text = "💧 " .. Format.short(displayedGlob)
     end)
 
     Layout.start()
@@ -11102,47 +11437,11 @@ function Hud.build(): ScreenGui
     return gui
 end
 
+-- ── Live update ────────────────────────────────────────────────────────────
+
 function Hud.update(snap: any)
     state = snap
-    if math.abs(displayedGlob - snap.glob) > math.max(10, snap.glob * 0.25) then
-        displayedGlob = snap.glob
-    end
-    incomeLabel.Text = "+" .. snap.incomeText .. " 💧/sec"
 
-    local active
-    for _, g in ipairs(snap.goobs) do if g.isActive then active = g end end
-    if active then
-        powerLabel.Text = "⚡ " .. active.powerText
-        ageLabel.Text = ("%s %s · %s old · ×%.2f power")
-            :format(active.ageEmoji, active.ageTier, active.ageText, active.ageMult)
-        ageLabel.TextColor3 = active.ageColor
-    end
-    -- Snack prices come from the server every push, so the button always shows
-    -- exactly what will be charged.
-    for _, snack in ipairs(snap.snacks or {}) do
-        local btn = snackButtons[snack.id]
-        if btn then
-            btn.Text = ("%s %s  ·  💧%s  ·  %d items")
-                :format(snack.emoji, snack.name, snack.priceText, snack.rolls)
-            btn.BackgroundColor3 = snack.affordable and Theme.GOOD or Theme.BG_SOFT
-            btn.TextColor3 = snack.affordable and Color3.fromRGB(28, 30, 34) or Theme.TEXT_DIM
-        end
-    end
-
-    if eggButton then
-        if snap.eggCapped then
-            eggButton.Text = ("🥚 FULL — %d / %d Goobs"):format(#snap.goobs, snap.maxGoobs)
-            eggButton.BackgroundColor3 = Theme.BG_SOFT
-            eggButton.TextColor3 = Theme.TEXT_DIM
-        else
-            eggButton.Text = ("🥚 HATCH A GOOB  ·  💧%s  (%d/%d)")
-                :format(snap.eggPriceText or "?", #snap.goobs, snap.maxGoobs or 8)
-            eggButton.BackgroundColor3 = snap.eggAffordable and Theme.GOLD or Theme.BG_SOFT
-            eggButton.TextColor3 = snap.eggAffordable and Color3.fromRGB(28, 30, 34) or Theme.TEXT_DIM
-        end
-    end
-
-    -- First-run coach.
     local tut = snap.tutorial
     if coach then
         if tut then
@@ -11151,94 +11450,52 @@ function Hud.update(snap: any)
                 .. (tut.progress and ("   ·   " .. tut.progress) or "")
             coachText.Text = tut.text
             coachHint.Text = tut.hint or ""
-
-            -- Pulse whichever control the step is asking for. Pointing at the
-            -- button beats describing where it is, especially for a player who
-            -- cannot read quickly yet.
-            -- Resolved through a registry rather than a hardcoded if-chain.
-            -- The chain knew about exactly two controls, "snack" and
-            -- "drawer" — both of which the arena rework removed from the
-            -- screen — so the one step that genuinely needs a pointer, "press
-            -- your power button", had nothing to point at. A registry lets
-            -- ArenaHud hand over its own controls without Hud having to know
-            -- they exist.
+            -- Resolved through the registry ONLY. There is no fallback chain
+            -- anymore, because every control a step can name now belongs to
+            -- ArenaHud and registers itself.
             pulseTarget = Hud.targets[tut.target or ""]
-            if not pulseTarget then
-                if tut.target == "snack" then
-                    pulseTarget = snackButtons["snack"]
-                elseif tut.target == "drawer" then
-                    pulseTarget = drawerOpen and eggButton or openButton
-                end
-            end
         else
             coach.Visible = false
             pulseTarget = nil
         end
     end
-
-    if drawerOpen then
-        if currentTab == "goobs" then
-            rebuildDrawer()
-        else
-            Panels.render(currentTab, tabContent, snap)
-        end
-    end
 end
 
--- Wired up by init.client.
+--- Formatted Glob, for anything that wants to print it without re-deriving the
+--- format. Kept because two callers used to do this by hand and disagreed on
+--- whether to round.
+function Hud.globText(): string
+    return state and Format.short(state.glob) or "0"
+end
+
+-- ── Wired up by init.client ────────────────────────────────────────────────
+
 Hud.tradeOpen = false
 Hud.onGulp = function(_: string) end
 Hud.onOffer = function(_: string) end
-Hud.onBuySnack = function(_: string) end
-Hud.onBuyEgg = function() end
 Hud.onDismissCoach = function() end
 Hud.onRename = function(_: string) end
 Hud.onSetActive = function(_: string) end
 
--- ArenaHud owns the persistent chrome now: the stat card, the currency
--- readout and the way into every panel. Hud keeps what it is still best at —
--- toasts, the Goob drawer, the coach — and stops drawing a second stat panel
--- on top of the first one. This is the single switch that turns "everything
--- gets in the way of everything" into one screen with one owner per region.
--- Controls other modules own, which the tutorial coach may point at.
+-- Controls other modules own, which the tutorial coach may point at. ArenaHud
+-- registers its power button here; anything else that a tutorial step names
+-- must register too, or the step simply will not pulse anything.
 Hud.targets = {} :: { [string]: GuiObject }
 
 function Hud.registerTarget(name: string, control: GuiObject?)
     Hud.targets[name] = control
 end
 
-Hud.arenaMode = false
-
--- Opened and closed from the dock. Exposed rather than left to the old toggle
--- button, which ArenaHud has taken over.
-function Hud.setDrawerOpen(open: boolean)
-    drawerOpen = open
-    if drawer then
-        drawer.Visible = open
-        drawer.Position = Hud.drawerPosition(open)
-        if open then rebuildDrawer() end
-    end
-end
-
-function Hud.openDrawerTab(tab: string)
-    currentTab = tab
-    Hud.setDrawerOpen(true)
-    Hud.applyLayout()
-end
-
-function Hud.setArenaMode(on: boolean)
-    Hud.arenaMode = on
-    if topFrame then topFrame.Visible = not on end
-    if ageLabel then ageLabel.Visible = not on end
-    if openButton then openButton.Visible = not on end
-end
+-- Kept as a no-op so the boot sequence reads the same and nothing has to know
+-- that there is no longer a second screen to switch off. There is only one
+-- HUD now; "arena mode" is the only mode.
+Hud.arenaMode = true
+function Hud.setArenaMode(_: boolean) end
 
 function Hud.getState() return state end
 
 function Hud.setTradeOpen(open: boolean)
-    if Hud.tradeOpen == open then return end
     Hud.tradeOpen = open
-    if drawerOpen then rebuildDrawer() end
 end
 
 return Hud
@@ -11699,15 +11956,20 @@ function Juice.onPop(mass: number?)
 end
 
 -- ── Living world ───────────────────────────────────────────────────────────
--- Critters visibly flinch away when you get close. It costs one distance check
--- per critter per frame and it is the single cheapest thing that makes a field
--- of floating junk read as a field of creatures.
-
-local FLEE_RADIUS = 26
+--
+-- This used to make roaming "critters" flinch away from you. The critters are
+-- gone — they belonged to a collecting game that the arena replaced, and they
+-- were still spawning junk into live rounds.
+--
+-- The line worth keeping from the deletion is this: the flinch loop began with
+-- `Workspace:WaitForChild("Critters")`, an INFINITE wait. Had the folder ever
+-- failed to appear, Juice.start would have hung forever and taken camera
+-- shake, hit feedback and every other piece of game feel down with it, with no
+-- error in the output to say why. A client that waits unconditionally on
+-- something a server might not build is a client that can be bricked by a
+-- server-side deletion — which is exactly the deletion that just happened.
 
 function Juice.start()
-    local critters = Workspace:WaitForChild("Critters")
-
     RunService.RenderStepped:Connect(function(dt)
         -- Camera shake, decayed.
         local camera = Workspace.CurrentCamera
@@ -11722,22 +11984,6 @@ function Juice.start()
             shake = 0
         end
 
-        local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
-        if not ball then return end
-
-        for _, c in ipairs(critters:GetChildren()) do
-            if c:IsA("BasePart") then
-                local away = c.Position - ball.Position
-                local d = away.Magnitude
-                if d < FLEE_RADIUS and d > 0.1 then
-                    -- Lean away and bob harder the closer you are. Purely
-                    -- visual: the server owns where critters actually are.
-                    local urgency = 1 - (d / FLEE_RADIUS)
-                    c.CFrame = c.CFrame * CFrame.new(away.Unit * urgency * dt * 14)
-                        * CFrame.Angles(0, dt * urgency * 6, 0)
-                end
-            end
-        end
     end)
 end
 
@@ -11837,6 +12083,74 @@ function Layout.centre(size: UDim2): UDim2
         math.floor((u.X - size.X.Offset) / 2),
         math.floor((u.Y - size.Y.Offset) / 2)
     )
+end
+
+-- ── The top band: the dock, and everything that has to sit under it ────────
+--
+-- ONE OWNER FOR A NUMBER TWO FILES BOTH NEED.
+--
+-- ArenaHud draws the dock. Hud draws the tutorial coach and the toast column,
+-- and both of those have to go BELOW the dock — which means Hud has to know how
+-- tall the dock is. The obvious answers are both wrong: duplicating the icon
+-- arithmetic in Hud leaves two copies to drift the moment a tab is added, and
+-- having Hud require ArenaHud points the small module at the big one for a
+-- single integer. So the arithmetic lives here, where both already look.
+--
+-- WHY THE DOCK WRAPS ON A PHONE. Nine tabs in one row is 390px at a 38px icon.
+-- On a 568-wide screen that leaves 89px either side, and the stat card alone
+-- wants 104 — so the card ran under the dock and the Glob readout ran under the
+-- other end of it. Two rows is 222px wide and 96 tall, which fits between the
+-- card and the Glob readout with room to spare, and keeps every icon at 38px
+-- rather than shrinking them under the 34px a thumb needs.
+-- How many tabs the dock has. REGISTERED BY THE MODULE THAT OWNS THE DOCK,
+-- rather than passed in by every caller — because the callers are ArenaHud
+-- (which knows) and Hud (which does not, and would have to keep a copy of the
+-- number in sync forever). A stale copy in Hud puts the tutorial coach on top
+-- of the dock the first time a tab is added, which is a bug nobody would think
+-- to look for in the file that does not draw tabs.
+local dockTabs = 8
+
+function Layout.setDockTabs(n: number)
+    if n == dockTabs then return end
+    dockTabs = n
+    Layout.changed:Fire(current)
+end
+
+function Layout.dockMetrics(tabCount: number?)
+    local count = tabCount or dockTabs
+    local compact = current.compact
+    local icon = compact and 38 or 52
+    local gap = compact and 4 or 7
+    local pad = compact and 8 or 14
+    local perRow = compact and math.ceil(count / 2) or count
+    local rows = compact and 2 or 1
+    if count <= 5 then
+        perRow, rows = count, 1
+    end
+    return {
+        icon = icon,
+        gap = gap,
+        pad = pad,
+        perRow = perRow,
+        rows = rows,
+        width = perRow * icon + (perRow - 1) * gap + pad * 2,
+        height = rows * icon + (rows - 1) * gap + pad * 2,
+        top = 6,
+    }
+end
+
+--- Y coordinate of the first free pixel under the dock.
+function Layout.belowDock(tabCount: number?): number
+    local m = Layout.dockMetrics(tabCount)
+    return m.top + m.height + (current.compact and 6 or 10)
+end
+
+--- Y coordinate of the first free pixel under the dock AND the status strip
+--- that sits beneath it. Anything drawn from here down is clear of the whole
+--- top block.
+function Layout.belowStatus(tabCount: number?): number
+    local strip = current.compact and 30 or 36
+    return Layout.belowDock(tabCount) + strip + (current.compact and 6 or 10)
 end
 
 -- The horizontal band between the thumbstick and the jump button — the only
@@ -11942,7 +12256,7 @@ local function clear(frame: Instance)
     end
 end
 
-local function scroller(parent: Frame): ScrollingFrame
+local function scroller(parent: GuiObject): ScrollingFrame
     local sf = Instance.new("ScrollingFrame")
     sf.Size = UDim2.fromScale(1, 1)
     sf.BackgroundTransparency = 1
@@ -11959,7 +12273,7 @@ end
 
 -- ── Wardrobe ───────────────────────────────────────────────────────────────
 
-local function wardrobe(container: Frame, state: any)
+local function wardrobe(container: GuiObject, state: any)
     local touch = Layout.isTouch()
     local sf = scroller(container)
     local order = 0
@@ -12041,7 +12355,7 @@ end
 
 -- ── Season pass ────────────────────────────────────────────────────────────
 
-local function season(container: Frame, state: any)
+local function season(container: GuiObject, state: any)
     local s = state.season
     if not s then return end
     local touch = Layout.isTouch()
@@ -12148,7 +12462,7 @@ local crewState: any = nil
 function Panels.setCrew(data: any) crewState = data end
 function Panels.crew() return crewState end
 
-local function crew(container: Frame, _state: any)
+local function crew(container: GuiObject, _state: any)
     local touch = Layout.isTouch()
     local btnH = touch and 48 or 38
 
@@ -12282,7 +12596,10 @@ end
 
 -- ── Entry point ────────────────────────────────────────────────────────────
 
-function Panels.render(tab: string, container: Frame, state: any)
+-- `container` is a GuiObject, not a Frame: since the legacy drawer was
+-- deleted these render into ArenaHud's sheet host, which is a ScrollingFrame
+-- so that a panel taller than the sheet can still be reached on a phone.
+function Panels.render(tab: string, container: GuiObject, state: any)
     clear(container)
     if not state then return end
     if tab == "wear" then wardrobe(container, state)

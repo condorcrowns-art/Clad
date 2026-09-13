@@ -8,6 +8,27 @@ collection-first loop. The scarcity engine, the age axis, the trade rails and
 the monetisation wall all survive — they are moved underneath a real-time
 arena instead of sitting on top of an idle game.
 
+> ### READ THIS FIRST — two later reworks changed the spine below
+>
+> **Melting is OFF during a round** (`Config.LEAK_IN_ROUND = false`). Section 2
+> describes the equilibrium-mass design the game shipped with; it is kept
+> because the curve is kept and still tested, and turning it back on is one
+> line. What replaced it is **rounds**: growth is unbounded, the clock ends it,
+> and the job melting used to do — stopping a runaway leader — is done by other
+> players, because every ability DEFLATES. A leader is brought down by being
+> ganged up on rather than by arithmetic.
+>
+> **The collection game underneath is gone.** Roaming critters, the Snack Stand
+> and the Egg Stand were the active, idle and expansion loops of the game the
+> arena replaced. All three kept running after the rework — critters were still
+> spawning labelled junk into live rounds, and the Snack Stand's panel was
+> rendering across the season track. Feeding your Goob and hatching eggs both
+> come out of finishing rounds now. There is exactly one source of mass in the
+> world and it is playing.
+>
+> **Every round has a full field.** `Config.ROUND_FIELD_SIZE` contenders, bots
+> making up whatever the humans do not. See section 9.
+
 ---
 
 ## 1. The two sentences
@@ -215,3 +236,57 @@ This is the existing Sumo Pit, re-shaped: equal mass is what makes it a
 | four zones + hub | one island, per the brief |
 | idle income as the main earner | melting makes idling negative by design |
 | signpost poles | replaced by UI dock navigation |
+
+---
+
+## 9. The field, and the edge
+
+Two problems with the same shape: the island was bigger than the game being
+played on it.
+
+### Bots
+
+An arena game with three people in it is not a small version of GOOP. It is a
+different and much worse one — nobody to run from, nobody to gang up on, and a
+leader that nothing brings down, because deflation is a catch-up mechanic that
+needs a crowd. A new game has three players in it for weeks, so without bots
+the first hour of this game's life is the version that does not work, shown to
+exactly the people deciding whether to stay.
+
+So the field is guaranteed. Twelve contenders, always: twelve humans means no
+bots, one human means eleven, and an empty server still runs a real round with
+a real board. Recomputed at the top of each round only, so somebody joining
+mid-round is an extra contender rather than a reason to delete a bot that is
+already out there being chased.
+
+Bots are not scoreboard props. They eat pellets, they eat each other, they eat
+you, you eat them, and your abilities deflate them — all of it resolved by
+`ArenaService`, through the same `Blob.canEat` every player goes through.
+`BotService` owns bodies and decisions and not one rule about mass. That split
+is the load-bearing part: a bot with its own eating rule would teach the player
+something that then fails them against a human.
+
+They are also openly tagged as bots in the world and on the board. The
+alternative is a lie the player catches the first time one walks into a wall,
+and being caught lying costs more trust than the illusion was ever worth.
+
+### Why there is now food at the edge
+
+There was not, and it was deliberate, and it was wrong.
+
+Pellets stopped short of the no-PvP rim, because food in a place nothing can
+touch you is not a strategy — it is an exploit that beats the whole game. What
+that produced was a 93-stud bare band around the entire island, over a third of
+its area, with nothing in it and no reason to walk there. The island read as
+smaller than it is.
+
+The fix is not "spawn food there anyway". It is to **stop the rim being a place
+you can live**. Safety out there is now a spendable meter: about twelve seconds,
+draining while you are on the rim, refilling only while you are back inside, and
+not starting at all until you have committed to the Flats once — so a new player
+gets a real look at the island before anything can touch them. The rim is a fire
+escape. Duck out, breathe, get back in.
+
+With nothing left to exploit, food goes all the way to the shoreline, and the
+edge becomes the most exposed ground on the map instead of the safest. Which is
+what an edge should be.

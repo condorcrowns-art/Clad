@@ -49,6 +49,9 @@ node integration.mjs .. powers_test.luau
 echo "── 13. adversarial: attack it ──"
 node integration.mjs .. adversarial.luau
 
+echo "── 14. bots: the rest of the field ──"
+node integration.mjs .. bots_test.luau
+
 echo "── 12. balance sweeps"
 node sim.mjs ../src/shared move.luau
 node sim.mjs ../src/shared fmt.luau
@@ -59,8 +62,7 @@ echo "── 14. economy sweeps ──"
 node sim.mjs ../src/shared season.luau
 node sim.mjs ../src/shared pit.luau
 node sim.mjs ../src/shared systems.luau
-node sim.mjs ../src/shared snack.luau
-node sim.mjs ../src/shared egg.luau
+node sim.mjs ../src/shared feeding.luau
 
 echo
 echo "ALL SUITES PASSED"

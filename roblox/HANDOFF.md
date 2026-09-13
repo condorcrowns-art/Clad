@@ -17,7 +17,43 @@ and why it mattered, the conventions, the traps, and what comes next.
 | CI | none configured — "all suites pass" means `roblox/tools/run_all.sh`, run locally |
 | Check-ins | an hourly self-wake re-checks PR #8; re-arm silently if nothing changed, stop when merged/closed |
 | Build | `cd roblox && python3 build_place.py` → `build/GulpAGoob.rbxlx` |
-| Test | `cd roblox/tools && ./run_all.sh` (13 suites) |
+| Test | `cd roblox/tools && ./run_all.sh` (14 suites) |
+
+### What the last pass did (bots · edge food · the purge)
+
+Four things, in the user's words: *"Add bots for the round if no players are
+in… why is there no food spawning near the edge? …the ui of the food system in
+the screenshot is broken… why is there still like 'scrap' running around —
+youve gotta get rid of outdated shit THATS the BIGGEST THING you struggle
+with."*
+
+1. **`BotService.luau`** — every round is played by `Config.ROUND_FIELD_SIZE`
+   (12) contenders, bots making up the difference, recomputed at the top of
+   each round. Works with zero humans. Bots own their bodies and decisions;
+   `ArenaService` owns every rule about mass, so eating, deflation and the
+   board run through the same code a player does.
+2. **Food reaches the shoreline.** `PELLET_OUTER` replaced the old stop at
+   `SHALLOWS_INNER - 8`, which had left a 93-stud bare band — a third of the
+   island — with nothing in it. It is only safe to open because rim protection
+   is now a spendable meter (`SHALLOWS_GRACE`) rather than a property of the
+   ground.
+3. **One panel.** The dock's season tab used to hand off to the old Goob
+   drawer, which reparented the Snack Stand on top of the season track. The
+   drawer, the stand and the egg button are gone; `Hud.luau` is toasts and the
+   tutorial coach and nothing else; season and crew render inside ArenaHud's
+   sheet.
+4. **The collection game is deleted, and its absence is asserted.** Critters,
+   Snack Stand, Egg Stand — gone, along with their remotes, Config blocks,
+   client loops and sims. Feeding and eggs come out of the round payout now.
+   See invariant 9 in `AGENTS.md`.
+
+**And the finding that mattered more than any of them:** a mutation battery of
+21 deliberate breaks caught 14. The six that escaped all escaped for the same
+reason — **eight of the ten scenario suites printed `FAIL` and exited zero**,
+so `run_all.sh` would have said "ALL SUITES PASSED" over real failures. This is
+the same bug class that was found and fixed in the pure sims months ago; it
+came back in the suites written afterwards. All eight are armed now, and all 21
+mutations are caught.
 
 **Deliver builds to the user with `SendUserFile`** — they open the `.rbxlx` in
 Studio directly. They are a solo dev testing in Studio, not reading the repo.
@@ -122,7 +158,7 @@ roblox/
     WorldBuilder.luau  the entire map, from code
     RollService.luau   the rolling body, cosmetics, anti-cheat, teleport
     GoobService.luau   digestion, income, gulping (delegates spawn to RollService)
-    CritterService.luau spawning + server-authoritative catching
+    BotService.luau    bot bodies + steering; ArenaService owns every rule
     TradeService.luau  the paranoid trade state machine
     PitService.luau    lobby, match loop, shoves, eliminations, payout
 
@@ -130,8 +166,8 @@ roblox/
     init.client.luau   input, proximity, feedback, dialogs, pit strip
     Roll.luau          the controller (velocity-driven, derived spin)
     Layout.luau        responsive: compact vs roomy, touch vs not
-    Hud.luau           HUD + tabbed drawer
-    Panels.luau        wardrobe / season / crew tab contents
+    Hud.luau           toasts + the tutorial coach. Nothing else.
+    Panels.luau        wardrobe / season / crew, rendered into ArenaHud's sheet
     TradeUi.luau       the trade window
     Theme.luau         every colour and corner radius
 
@@ -149,7 +185,11 @@ Do not undo these without understanding the reason.
 | Gulp transfers 75%, not 100% | The 25% burn IS the economy. Without it supply is conserved and values crater like every competitor. |
 | Secrets cannot be bought, ever | Simulation showed the shop reaching them made money buy the collectible layer, killing trading. `Feedstock.roll(rng, luck, allowSecret)` — the shop passes `false`. |
 | No single drop > ~5% of Colossal | One Pocket Singularity used to be 69–93% of a whole playthrough. |
-| Eggs are terrible for mass (309× worse than snacks) | They buy a *slot*, not power. Otherwise egg-spam becomes the strategy. |
+| Eggs are **earned by finishing rounds**, never bought | They buy a *slot*, not power. Gating them on rounds played makes a stable evidence of play — the one thing that cannot be bought, botted or traded. `Config.EGG_EVERY_ROUNDS`. |
+| Feeding your Goob comes **only** from the round payout | The Snack Stand sold progress for idle income, which made the arena — the actual game — the one thing that could not feed your Goob. One source of mass in the world, and it is playing. |
+| Every round is played by `ROUND_FIELD_SIZE` contenders, bots making up the difference | A three-player arena is not a small version of this game, it is a different and worse one: nothing to run from, nothing to gang up on, and deflation (the catch-up mechanic) needs a crowd. A new game has three players for weeks. |
+| Bots are resolved by **ArenaService**, not by BotService | One answer to "can I eat that". A bot with its own eating rule teaches the player something that then fails them against a human. |
+| Safety on the rim is a **spendable meter**, not a property of the ground | Unconditional safety is why no food could spawn near the edge, which left a third of the island bare. `Config.SHALLOWS_GRACE` / `SHALLOWS_RECHARGE`. |
 | Jump near-constant across mass | Falling jump height would lock strong players out of gaps they used to clear — progression punishing progression. |
 | Pit is staked in **Glob, never Goobs** | A Goob that can be taken by force is a Goob nobody will trade. And a nine-year-old who loses a week-old Goob to a stranger does not come back. |
 | Pit has **no rake** | Keeps it economy-neutral: moves Glob between players rather than printing or burning it. |
@@ -167,7 +207,7 @@ Do not undo these without understanding the reason.
 ## 4. The verification harness (`roblox/tools/`)
 
 There is no Roblox runtime in CI, so the game is verified four ways.
-`./run_all.sh` runs **13 suites**.
+`./run_all.sh` runs **14 suites**.
 
 1. **Compiles** — `check.mjs` uses a real **Luau v733 compiler** via
    `@luau-rs/luau` (WebAssembly, from npm).
@@ -185,7 +225,9 @@ There is no Roblox runtime in CI, so the game is verified four ways.
 `integration.luau` (play it) · `client_test.luau` (UI) · `roll_test.luau`
 (rolling, world, ascension) · `tutorial_test.luau` · `mobile_test.luau` ·
 `live_test.luau` (cosmetics/season/pit/crews) · `adversarial.luau` (attack it) ·
-plus pure sims: `tests/move/fmt/season/pit/systems/snack/egg/balance.luau`.
+`rounds_test.luau` (the round cycle, edge food, the rim meter) ·
+`powers_test.luau` · `bots_test.luau` (the field) · plus pure sims:
+`tests/move/fmt/season/pit/systems/feeding/arena/crates/balance.luau`.
 
 ### HARNESS TRAPS — these cost real time, do not rediscover them
 - **`os.time()` fallback.** `GoobMath` falls back to `os.time()` when no `now`
@@ -222,7 +264,8 @@ residue. **Do this for any new suite.**
 ### Logic (audit)
 5. **The core mechanic was unreachable dead code** — `newGoob` ran exactly once,
    at account creation, and trading is zero-sum, so nobody could ever hold two
-   Goobs and `gulp()` could never execute. → the Egg Stand.
+   Goobs and `gulp()` could never execute. → eggs, now earned per
+   `Config.EGG_EVERY_ROUNDS` rounds finished.
 
 ### Rendering / API (against the dump)
 6. **The eyes drifted off the Goob** — positioned once at build time while the
@@ -317,7 +360,7 @@ The harness proves the code doesn't explode; it cannot prove the game is fun.
    consumed at the altar takes its whole belly with it, so the prestige loop
    feeds the scarcity loop and both are readable on one wall.
 2. ✅ **Juice** — `Juice.luau`: rarity-scaled particle bursts, camera shake,
-   catch/gulp/ascend/shove sounds, and critters that visibly flee when you close
+   catch/gulp/ascend/shove sounds, and pellet bursts when you close
    on them.
 3. **Daily login streak** — retention scaffolding. Not built.
 4. **Real asset IDs** — user must supply them from the Creator Dashboard before
@@ -516,7 +559,7 @@ Nine of eleven sims used to PRINT their failures and exit zero, so
 sim with assertions now calls `error()` when `fails > 0`, and this is verified:
 breaking one assertion makes `run_all.sh` exit 1.
 
-`snack.luau`, `egg.luau` and `balance.luau` are REPORTS, not tests — they
+`feeding.luau` and `balance.luau` are REPORTS, not tests — they
 assert nothing and say so at the top. Do not read a clean run as a verified one.
 
 ## Sounds

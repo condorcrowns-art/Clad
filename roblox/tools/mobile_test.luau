@@ -398,6 +398,55 @@ for _, dev in ipairs(DEVICES) do
                 end
             end
         end
+
+        -- CAN A SCROLLING PANEL ACTUALLY REACH ITS CONTENT?
+        --
+        -- The overflow audit above deliberately ignores anything inside a
+        -- ScrollingFrame, because a list is MEANT to extend past its window. That
+        -- exemption has a hole in it: a ScrollingFrame clips its descendants, so a
+        -- panel whose canvas is too short does not overflow anything — it silently
+        -- swallows everything below the fold, unreachable, and the geometry audit
+        -- sees a tidy screen.
+        --
+        -- This was not hypothetical. The crew screen lays out about 230px of
+        -- controls at absolute offsets and the sheet's body is ~60px on a landscape
+        -- phone; with AutomaticCanvasSize off, the JOIN button simply does not
+        -- exist for that player. A mutation that turned it off was not caught by
+        -- anything until this check existed.
+        do
+            -- Heights come from the resolved boxes, not from the instances: the
+            -- harness computes AbsoluteSize in geometry.luau rather than storing
+            -- it on the Instance, so reading d.AbsoluteSize here is nil.
+            local heightOf = {}
+            for _, b in ipairs(tb) do
+                if b.inst then heightOf[b.inst] = b.h end
+            end
+            for _, h in ipairs(huds) do
+                for _, d in ipairs(h:GetDescendants()) do
+                    if d.ClassName == "ScrollingFrame" and d.Visible then
+                        local content = 0
+                        for _, child in ipairs(d:GetChildren()) do
+                            if child:IsA("GuiObject") and child.Visible then
+                                content = math.max(content,
+                                    child.Position.Y.Offset + child.Size.Y.Offset)
+                            end
+                        end
+                        local canvas = d.CanvasSize.Y.Offset
+                        local auto = d.AutomaticCanvasSize
+                        local automatic = auto == Enum.AutomaticSize.Y
+                            or auto == Enum.AutomaticSize.XY
+                        local window = heightOf[d] or 0
+                        if window > 0 and content > window + 1
+                            and not automatic and canvas < content - 1 then
+                            table.insert(tabTrouble,
+                                ("%s: %s hides %d px with no way to scroll to it")
+                                :format(tab and tab.Name or "?", d.Name,
+                                    math.floor(content - math.max(window, canvas))))
+                        end
+                    end
+                end
+            end
+        end
     end
     check("every dock tab fits and stays tappable", #tabTrouble == 0,
         table.concat(tabTrouble, " | "):sub(1, 200))
@@ -408,3 +457,19 @@ end
 
 emit("")
 emit(("══ %s ══"):format(fails == 0 and "ALL MOBILE CHECKS PASSED" or (fails .. " FAILURE(S)")))
+
+-- FAIL THE BUILD, not just the transcript.
+--
+-- Everything above printed "FAIL" to the output and then exited ZERO. Eight of
+-- the ten scenario suites did this, which means `run_all.sh` could print "ALL
+-- SUITES PASSED" underneath a screen of real failures — and did: a mutation
+-- battery deliberately broke the legacy-purge guards and the phone layout, and
+-- every one of those suites reported the break and passed anyway.
+--
+-- This exact class of bug was found and fixed once before, in the pure sims.
+-- It came back here because the scenario suites were written later and nobody
+-- checked that the new ones could fail. A suite that cannot fail is not a
+-- weaker test, it is a comment.
+if fails > 0 then
+    error(fails .. " mobile failure(s)")
+end

@@ -455,15 +455,20 @@ function Juice.onPop(mass: number?)
 end
 
 -- ── Living world ───────────────────────────────────────────────────────────
--- Critters visibly flinch away when you get close. It costs one distance check
--- per critter per frame and it is the single cheapest thing that makes a field
--- of floating junk read as a field of creatures.
-
-local FLEE_RADIUS = 26
+--
+-- This used to make roaming "critters" flinch away from you. The critters are
+-- gone — they belonged to a collecting game that the arena replaced, and they
+-- were still spawning junk into live rounds.
+--
+-- The line worth keeping from the deletion is this: the flinch loop began with
+-- `Workspace:WaitForChild("Critters")`, an INFINITE wait. Had the folder ever
+-- failed to appear, Juice.start would have hung forever and taken camera
+-- shake, hit feedback and every other piece of game feel down with it, with no
+-- error in the output to say why. A client that waits unconditionally on
+-- something a server might not build is a client that can be bricked by a
+-- server-side deletion — which is exactly the deletion that just happened.
 
 function Juice.start()
-    local critters = Workspace:WaitForChild("Critters")
-
     RunService.RenderStepped:Connect(function(dt)
         -- Camera shake, decayed.
         local camera = Workspace.CurrentCamera
@@ -478,22 +483,6 @@ function Juice.start()
             shake = 0
         end
 
-        local ball = Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
-        if not ball then return end
-
-        for _, c in ipairs(critters:GetChildren()) do
-            if c:IsA("BasePart") then
-                local away = c.Position - ball.Position
-                local d = away.Magnitude
-                if d < FLEE_RADIUS and d > 0.1 then
-                    -- Lean away and bob harder the closer you are. Purely
-                    -- visual: the server owns where critters actually are.
-                    local urgency = 1 - (d / FLEE_RADIUS)
-                    c.CFrame = c.CFrame * CFrame.new(away.Unit * urgency * dt * 14)
-                        * CFrame.Angles(0, dt * urgency * 6, 0)
-                end
-            end
-        end
     end)
 end
 

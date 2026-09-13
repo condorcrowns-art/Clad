@@ -290,7 +290,7 @@ emit("══ THE SHALLOWS ARE ACTUALLY SAFE ══")
 -- and ticking to clear a cooldown lets the arena move things too — so both
 -- bodies are planted in their final positions LAST, immediately before the
 -- button is pressed, never before a tick that could move them.
-local function placeAndHook(bobSpot, aliceOffset)
+local function placeAndHook(bobSpot, aliceOffset, prep)
     -- Re-establish the round and the mass to pay with, INSIDE the helper. The
     -- caller ticks to clear a cooldown between the two calls, and that tick can
     -- cross a round boundary — which resets both blobs to 10 mass and puts them
@@ -309,6 +309,12 @@ local function placeAndHook(bobSpot, aliceOffset)
     local aliceSpot = bobSpot + aliceOffset
     svc.movePlayer(alice, aliceSpot)
     if ballOf(alice) then ballOf(alice).Position = aliceSpot end
+
+    -- LAST THING BEFORE THE BUTTON. Anything set earlier can be undone by the
+    -- ticks above — a round boundary rebuilds both runs from scratch — so the
+    -- rim meter, which is per-run state, has to be written here or the test is
+    -- measuring whatever the round machine last left behind.
+    if prep then prep() end
 
     local mark = #_G.TRAFFIC
     svc.fireAs("UsePower", alice, V3.new(0, 0, -1))
@@ -335,10 +341,45 @@ if profile then
         V3.new(shallows.X, 0, shallows.Z).Magnitude > Config.SHALLOWS_INNER,
         ("%.0f vs %d"):format(V3.new(shallows.X, 0, shallows.Z).Magnitude, Config.SHALLOWS_INNER))
 
-    local firedSafe, velSafe = placeAndHook(shallows, V3.new(20, 0, 0))
-    check("HOOK cannot yank a player standing in the Shallows",
+    -- THE RIM PROTECTS WHILE THE METER LASTS, AND NOT AFTER.
+    --
+    -- This used to be a one-line check: standing in the Shallows means nothing
+    -- can touch you, full stop. That rule is what kept food out of the rim and
+    -- left a third of the island bare, so it has been replaced by a spendable
+    -- meter — and a test of the old rule would now be testing a game that no
+    -- longer exists.
+    --
+    -- Both halves have to be proven, because either alone is passable by a
+    -- broken implementation: a meter that never drains passes the first, and
+    -- one that never protects passes the second.
+    local Arena = _G.SERVER("ArenaService")
+    local function setMeter(p, value)
+        return function()
+            local run = Arena.runFor(p)
+            if run then
+                run.rimGrace = value
+                run.committed = true
+                run.safeUntil = 0   -- isolate the rim rule from spawn grace
+            end
+        end
+    end
+
+    local firedSafe, velSafe = placeAndHook(shallows, V3.new(20, 0, 0),
+        setMeter(bob, Config.SHALLOWS_GRACE))
+    check("HOOK cannot yank a player whose rim meter is still full",
         not firedSafe and velSafe < 1,
         ("velocity %.1f, hook effect=%s"):format(velSafe, tostring(firedSafe)))
+
+    tick(14)
+    -- The SAME hook, the SAME spot, the SAME distance — only the meter differs.
+    -- That is what makes this pair a test of the meter rather than a test of
+    -- whether two blobs happened to be near each other.
+    local firedSpent, velSpent = placeAndHook(shallows, V3.new(20, 0, 0),
+        setMeter(bob, 0))
+    check("and it CAN once the meter is spent — the rim is not a house",
+        firedSpent or velSpent > 1,
+        ("velocity %.1f, hook effect=%s"):format(velSpent, tostring(firedSpent)))
+    tick(3)
 
     -- And the same power MUST still work outside it, from the same distance.
     -- Without this the check above would pass just as happily on a power that

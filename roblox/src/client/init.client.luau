@@ -48,39 +48,20 @@ Hud.registerTarget("power", ArenaHud.powerButton())
 -- from Config and stays silent when they are unset. This file used to keep a
 -- second copy of the same asset ids, which meant fixing a bad one in one place
 -- left it broken in the other.
-
 -- ── Catching ───────────────────────────────────────────────────────────────
--- Auto-collect on proximity. Requiring a click would be miserable on mobile,
--- and "run through the thing to get the thing" is the most legible verb there
--- is. We throttle per-part so we never spam the server.
-
-local critterFolder = Workspace:WaitForChild("Critters")
-local lastAsked: { [Instance]: number } = {}
-local CatchRemote = Net.get("CatchCritter")
-
-RunService.Heartbeat:Connect(function()
-    local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-    if not root then return end
-
-    local now = os.clock()
-    for _, part in ipairs(critterFolder:GetChildren()) do
-        if part:IsA("BasePart") then
-            local d = (part.Position - root.Position).Magnitude
-            if d <= Config.CRITTER_CATCH_RADIUS - 1 then
-                if (now - (lastAsked[part] or 0)) > 0.4 then
-                    lastAsked[part] = now
-                    CatchRemote:FireServer(part)
-                end
-            end
-        end
-    end
-
-    -- Reap the throttle table so it doesn't grow forever over a long session.
-    if #critterFolder:GetChildren() == 0 then
-        lastAsked = {}
-    end
-end)
+--
+-- There was a Heartbeat loop here that watched a "Critters" folder and fired
+-- CatchCritter at anything the player brushed past. Both the folder and the
+-- remote are gone: critters were the active loop of the collecting game that
+-- the arena replaced, and they were still spawning labelled junk into live
+-- rounds — the "RARE Anvil" bobbing past mid-chase.
+--
+-- Note what the loop opened with: `Workspace:WaitForChild("Critters")`, with no
+-- timeout, at module scope. Everything below it in this file — the arena sync,
+-- the input bindings, the HUD wiring — would simply never have run if the
+-- server had stopped creating that folder. Deleting the server half without
+-- deleting this would not have produced an error; it would have produced a
+-- client that boots to a working camera and an unresponsive game.
 
 -- ── Server -> client ───────────────────────────────────────────────────────
 
@@ -92,6 +73,10 @@ Net.get("StateSync").OnClientEvent:Connect(function(snap)
     -- and every crate, trinket, power, skin and Goob renders locked or absent
     -- because the code behind each tab is reading fields off nothing.
     ArenaHud.setProfile(snap)
+    -- The two HUDs share one horizontal band on a phone. Hud owns the coach,
+    -- ArenaHud owns the status strip, and this is the wire that lets the strip
+    -- get out of the way while the tutorial is running. See ArenaHud.applyLayout.
+    ArenaHud.setCoachActive(snap.tutorial ~= nil)
 end)
 
 Net.get("Notify").OnClientEvent:Connect(function(message: string, kind: string?)
@@ -116,15 +101,6 @@ end
 
 Hud.onOffer = function(goobId: string)
     Net.get("TradeOffer"):FireServer(goobId, true)
-end
-
-Hud.onBuySnack = function(tierId: string)
-    Net.get("BuySnack"):FireServer(tierId)
-    Juice.play("catch", 0.25)
-end
-
-Hud.onBuyEgg = function()
-    Net.get("BuyEgg"):FireServer()
 end
 
 Hud.onDismissCoach = function()
@@ -682,19 +658,17 @@ ArenaHud.on.openCrate = function(id) Net.get("OpenCrate"):FireServer(id) end
 ArenaHud.on.equipCosmetic = function(kind, id) Net.get("EquipCosmetic"):FireServer(kind, id) end
 ArenaHud.on.setActiveGoob = function(id) Net.get("SetActiveGoob"):FireServer(id) end
 
--- One tab still delegates: the season track has its own renderer in Panels.
--- The live trade WINDOW also stays as it is — rebuilding TradeUi would mean
+-- The season track and the crew screen still RENDER through Panels, but they
+-- render inside ArenaHud's own sheet now. There is no second screen to hand
+-- off to: `openLegacy` and the drawer it opened are both gone, along with the
+-- Snack Stand that the drawer used to reparent on top of the season list.
+--
+-- The live trade WINDOW stays as it is — rebuilding TradeUi would mean
 -- rebuilding the anti-scam confirmation reset, which is the most
 -- safety-critical UI in the game and is already proven. The dock's trade tab
 -- explains the rules and lists what you can offer; the window itself still
 -- opens when another player rolls up.
-ArenaHud.on.openLegacy = function(which)
-    if which == "close" then
-        Hud.setDrawerOpen(false)
-    else
-        Hud.openDrawerTab(which)
-    end
-end
+ArenaHud.on.gulpGoob = function(id) Hud.onGulp(id) end
 ArenaHud.on.joinPit = function() Net.get("PitJoin"):FireServer() end
 ArenaHud.on.leavePit = function() Net.get("PitLeave"):FireServer() end
 

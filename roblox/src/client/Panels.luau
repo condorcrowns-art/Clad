@@ -32,7 +32,7 @@ local function clear(frame: Instance)
     end
 end
 
-local function scroller(parent: Frame): ScrollingFrame
+local function scroller(parent: GuiObject): ScrollingFrame
     local sf = Instance.new("ScrollingFrame")
     sf.Size = UDim2.fromScale(1, 1)
     sf.BackgroundTransparency = 1
@@ -49,7 +49,7 @@ end
 
 -- ── Wardrobe ───────────────────────────────────────────────────────────────
 
-local function wardrobe(container: Frame, state: any)
+local function wardrobe(container: GuiObject, state: any)
     local touch = Layout.isTouch()
     local sf = scroller(container)
     local order = 0
@@ -131,7 +131,7 @@ end
 
 -- ── Season pass ────────────────────────────────────────────────────────────
 
-local function season(container: Frame, state: any)
+local function season(container: GuiObject, state: any)
     local s = state.season
     if not s then return end
     local touch = Layout.isTouch()
@@ -238,7 +238,7 @@ local crewState: any = nil
 function Panels.setCrew(data: any) crewState = data end
 function Panels.crew() return crewState end
 
-local function crew(container: Frame, _state: any)
+local function crew(container: GuiObject, _state: any)
     local touch = Layout.isTouch()
     local btnH = touch and 48 or 38
 
@@ -372,7 +372,10 @@ end
 
 -- ── Entry point ────────────────────────────────────────────────────────────
 
-function Panels.render(tab: string, container: Frame, state: any)
+-- `container` is a GuiObject, not a Frame: since the legacy drawer was
+-- deleted these render into ArenaHud's sheet host, which is a ScrollingFrame
+-- so that a panel taller than the sheet can still be reached on a phone.
+function Panels.render(tab: string, container: GuiObject, state: any)
     clear(container)
     if not state then return end
     if tab == "wear" then wardrobe(container, state)

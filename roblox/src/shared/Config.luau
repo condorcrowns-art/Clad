@@ -79,51 +79,41 @@ Config.GULP_MASS_TRANSFER = 0.75
 Config.GULP_AGE_TRANSFER = 0.35   -- you inherit 35% of the eaten Goob's age
 Config.GULP_MIN_MASS_RATIO = 0.02 -- can't gulp something >50x your size
 
--- ── The Snack Stand: what Glob is actually FOR ─────────────────────────────
+-- ── How your Goob is fed now ───────────────────────────────────────────────
 --
--- Without this, idle income is decorative. You earn Glob, and there is nothing
--- to do with it — which severs the offline pillar from progression entirely.
--- That is the exact pillar that made Grow a Garden the biggest new game on the
--- platform, so it cannot be an afterthought.
+-- WHAT THIS REPLACED, AND WHY. There used to be three separate ways to put
+-- mass into a Goob: a Snack Stand that spent idle income on feedstock rolls,
+-- an Egg Stand that sold you empty vessels, and physical critters that roamed
+-- the island to be chased down. All three predate the arena. They were built
+-- for a game where you stood on a plot and watched a number rise, and they
+-- survived the rework only because nothing ever forced them to justify
+-- themselves.
 --
--- The stand closes the loop:  idle → Glob → snack rolls → stomach → mass.
+-- Keeping them was not free. Critters spawned junk into the ROUND — a "RARE
+-- Anvil" bobbing past two players mid-chase, belonging to a loop that no
+-- longer exists. The Snack Stand needed a shop panel, and that panel was the
+-- thing overlapping the season track on screen. Two visible bugs, one root
+-- cause: dead systems still running.
 --
--- Prices scale with your CURRENT income rather than being flat, so a snack
--- always costs roughly the same number of SECONDS of income no matter how big
--- you are. A flat price would be unaffordable on day one and free by day ten.
-Config.SNACK_TIERS = {
-    { id = "snack",    name = "Snack",    emoji = "🍪", seconds =   60, rolls = 3,  luck = 1 },
-    { id = "feast",    name = "Feast",    emoji = "🍗", seconds =  300, rolls = 12, luck = 2 },
-    { id = "banquet",  name = "Banquet",  emoji = "👑", seconds = 1200, rolls = 40, luck = 4 },
-}
--- A small markup so buying is never strictly better than playing actively.
--- Catching is the intended primary loop; the stand is what your AFK time buys.
-Config.SNACK_MARKUP = 1.35
+-- So feeding now hangs off the only loop there is. A round pays out Glob AND
+-- feeds your Goob, scaled by what you actually did out there, and eggs hatch
+-- on a count of rounds finished rather than being bought. There is exactly one
+-- source of mass in the world again, and it is playing.
+Config.ROUND_FEED_PER_GLOB = 1 / 420   -- payout -> number of feedstock rolls
+Config.ROUND_FEED_MIN = 1
+Config.ROUND_FEED_MAX = 26
+-- Luck by finishing place. Winning buys a better table, not just more of the
+-- same one, because "more rolls" stops reading as a prize very quickly.
+Config.ROUND_FEED_LUCK = { 4, 2.5, 1.8 }
+Config.ROUND_FEED_LUCK_DEFAULT = 1
 
--- ── The Egg Stand: how you ever get a SECOND Goob ─────────────────────────
+-- ── How you ever get a SECOND Goob ─────────────────────────────────────────
 --
--- Without this the game has no core loop at all. `newGoob` was only ever
--- called once, at account creation, and trading is zero-sum — so no player
--- could ever hold two Goobs, the `#goobs <= 1` guard in GoobService.gulp was
--- permanently true, and gulping (the sink the entire design rests on) was
--- unreachable dead code.
---
--- Eggs hatch a Goob at STARTING_MASS with age zero, so they are NOT a way to
--- buy power: gulping a fresh egg returns 7.5 mass for a price worth hundreds.
--- What an egg buys is a SLOT — somewhere to hold a Goob you traded for, and
--- stock a new player can actually bring to the trade zone on day one.
---
--- Price is a steeply rising function of how many Goobs you already hold, so a
--- stable is a genuine investment and nobody floods the world with vessels.
-Config.EGG_BASE_SECONDS = 900   -- first extra egg = 15 minutes of your income
-Config.EGG_PRICE_GROWTH = 2.5   -- each additional Goob multiplies the price
+-- An egg is a SLOT — somewhere to keep something you traded for. Gating it on
+-- rounds finished means a stable is evidence that you played, which is the one
+-- thing in the game that cannot be bought, botted or transferred.
+Config.EGG_EVERY_ROUNDS = 5
 Config.MAX_GOOBS = 8            -- hard cap; also bounds the DataStore payload
-
--- ── Critters (the active loop) ─────────────────────────────────────────────
-Config.CRITTER_MAX_ALIVE = 26
-Config.CRITTER_SPAWN_INTERVAL = 3.5
-Config.CRITTER_LIFETIME = 90
-Config.CRITTER_CATCH_RADIUS = 9
 
 -- ── Trading ────────────────────────────────────────────────────────────────
 Config.TRADE_RANGE = 24
@@ -292,8 +282,41 @@ Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
 -- you stop being able to see anybody, which kills the thing the whole design
 -- rests on: always being able to see somebody bigger and somebody smaller.
 Config.ISLAND_RADIUS = 480
-Config.SHALLOWS_INNER = 395   -- outside this radius is no-PvP
+Config.SHALLOWS_INNER = 395   -- outside this radius is the rim
 Config.VAULT_RADIUS = 48
+
+-- ── WHY THERE IS NOW FOOD OUT AT THE EDGE ──────────────────────────────────
+--
+-- There was not, and it was deliberate, and it was wrong.
+--
+-- Pellets used to stop at SHALLOWS_INNER - 8, because the rim outside it is a
+-- no-PvP ring and food in a place nothing can touch you is not a strategy, it
+-- is an exploit that beats the whole game: stand still, eat forever, win. So
+-- the rim was left bare. What that actually produced was a 93-stud dead band
+-- around the entire island — over a THIRD of its area — with nothing in it and
+-- no reason to walk there. The island read as smaller than it is, and the
+-- outer third of a map built for 16+ players was decoration.
+--
+-- The fix is not "spawn food there anyway". It is to stop the rim being a
+-- place you can live. Safety out there is now a BUDGET, not a property of the
+-- ground: see SHALLOWS_GRACE below. Once you have spent it you are edible on
+-- the rim like anywhere else, so food can be scattered right out to the
+-- shoreline and the edge becomes the most exposed ground on the map instead of
+-- the safest. Which is what an edge should be.
+Config.PELLET_OUTER = Config.ISLAND_RADIUS - 26   -- 454: out to the shoreline
+
+-- ── Safety is a budget ─────────────────────────────────────────────────────
+--
+-- Standing on the rim buys you SHALLOWS_GRACE seconds of being untouchable.
+-- The meter drains while you are out there and refills at RECHARGE seconds of
+-- real time per second of grace, only while you are inside the Flats. So the
+-- rim is a fire escape — duck out, breathe, get back in — and never a home.
+--
+-- A fresh spawn is handed a full meter, which is what makes spawning out here
+-- still the right answer for a new player: you get a real look at the island
+-- before anything is allowed to touch you.
+Config.SHALLOWS_GRACE = 12        -- seconds of protection per full meter
+Config.SHALLOWS_RECHARGE = 3.0    -- seconds in the Flats per second refunded
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ROUNDS
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -394,9 +417,71 @@ Config.SPAWN_RING = 435
 Config.SPAWN_CLEARANCE = 46    -- no scenery may be placed within this of a spawn
 Config.SPAWN_POINTS = 20       -- enough that a full server does not stack up
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BOTS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- An arena game with three people in it is not a small version of the game.
+-- It is a different, worse game: nobody to run from, nobody to gang up on, and
+-- a leader who is never brought down because deflation needs a crowd. Every
+-- system in GOOP — the catch-up loop, the board, the 1v1s — assumes a FIELD.
+--
+-- So the field is guaranteed. Every round is played by ROUND_FIELD_SIZE
+-- contenders and bots make up whatever the humans do not: twelve humans means
+-- no bots, one human means eleven, and nobody at all still runs a real round
+-- with a real board. A player joining mid-round does not push anyone out —
+-- the bot count is recomputed at the top of each round, so the field size is
+-- exact at the start and only ever grows during play.
+--
+-- Bots are NOT a scoreboard prop. They eat pellets, they eat each other, they
+-- eat you, you eat them, and they are deflated by your abilities on exactly
+-- the same terms as a player, because a bot that cannot be beaten the normal
+-- way teaches the wrong thing about the game.
+Config.ROUND_FIELD_SIZE = 12
+Config.BOTS_ENABLED = true
+
+-- Bots are deliberately beatable. A bot re-decides what it is doing every
+-- THINK seconds rather than every frame, which is what gives a human the
+-- opening to cut one off — a perfect-information chaser reacting at 60Hz is
+-- unloseable and reads as cheating.
+Config.BOT_THINK = 0.45
+Config.BOT_SIGHT = 170          -- studs; it cannot act on what it cannot see
+Config.BOT_PELLET_SIGHT = 90
+-- Fear and greed. A bot runs from anything EAT_RATIO * FEAR times its size and
+-- chases anything under GREED of it. Below 1.0 greed means it only commits to
+-- prey it can comfortably swallow, which leaves room for a human to bait one.
+Config.BOT_FEAR = 1.0
+Config.BOT_GREED = 0.86
+Config.BOT_SPEED_MULT = 0.94    -- a shade slower than a player of equal size
+Config.BOT_WANDER = 0.35        -- share of decisions that are just wandering
+
+-- Bots do not all play the same. Skill scales the three things that actually
+-- decide a chase: how far they see, how often they think, and how willing they
+-- are to commit. A field of identical bots is legible within one round.
+Config.BOT_SKILLS = {
+    { id = "dozy",   name = "dozy",   sight = 0.62, think = 1.9,  greed = 0.70, weight = 26 },
+    { id = "plain",  name = "plain",  sight = 1.00, think = 1.0,  greed = 0.86, weight = 46 },
+    { id = "sharp",  name = "sharp",  sight = 1.28, think = 0.65, greed = 0.95, weight = 22 },
+    { id = "feral",  name = "feral",  sight = 1.45, think = 0.45, greed = 1.05, weight = 6 },
+}
+
+-- Names read as players, not as NPC_01. A board full of "Bot 4" tells a lone
+-- player they are alone, which is the one thing this system exists to avoid.
+-- They are tagged as bots in the UI all the same — pretending otherwise is a
+-- lie the player will catch, and catching it costs more than it buys.
+Config.BOT_NAMES = {
+    "Blobbo", "Squish", "Gloop", "Mimsy", "Bubbo", "Nugget", "Pudge", "Wobble",
+    "Slurp", "Tadpole", "Custard", "Goober", "Snorkel", "Jellybean", "Plop",
+    "Mochi", "Dollop", "Gurgle", "Pip", "Marsh", "Splodge", "Bloop", "Tumble",
+    "Yolk", "Doodle", "Fizz", "Grub", "Puddle", "Noodle", "Squelch",
+}
+
 -- Derived last, because it depends on the radius above.
+-- The food field is the disc out to PELLET_OUTER, not to SHALLOWS_INNER. That
+-- is a 35% larger area than it used to be, so the count rises with it: if the
+-- count had stayed put, opening the rim up would have made the WHOLE island
+-- thinner rather than making the edge worth walking to.
 Config.PELLET_TARGET = math.floor(
-    Config.PELLET_DENSITY * math.pi * Config.SHALLOWS_INNER ^ 2)
+    Config.PELLET_DENSITY * math.pi * Config.PELLET_OUTER ^ 2)
 
 
 return Config

@@ -300,3 +300,19 @@ check("crests persist to the DataStore", saved and saved.crests == 1,
 
 emit("")
 emit(("══ %s ══"):format(fails == 0 and "ALL ROLL CHECKS PASSED" or (fails .. " FAILURE(S)")))
+
+-- FAIL THE BUILD, not just the transcript.
+--
+-- Everything above printed "FAIL" to the output and then exited ZERO. Eight of
+-- the ten scenario suites did this, which means `run_all.sh` could print "ALL
+-- SUITES PASSED" underneath a screen of real failures — and did: a mutation
+-- battery deliberately broke the legacy-purge guards and the phone layout, and
+-- every one of those suites reported the break and passed anyway.
+--
+-- This exact class of bug was found and fixed once before, in the pure sims.
+-- It came back here because the scenario suites were written later and nobody
+-- checked that the new ones could fail. A suite that cannot fail is not a
+-- weaker test, it is a comment.
+if fails > 0 then
+    error(fails .. " roll failure(s)")
+end

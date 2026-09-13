@@ -62,6 +62,7 @@ local SOURCE_TEXT = {
 
 local Theme = require(script.Parent.Theme)
 local Layout = require(script.Parent.Layout)
+local Panels = require(script.Parent.Panels)
 
 local player = Players.LocalPlayer
 
@@ -75,9 +76,11 @@ ArenaHud.on = {
     setPower = function(_id: string) end,
     equipTrinket = function(_id: string?, _slot: number) end,
     openCrate = function(_id: string) end,
-    openLegacy = function(_which: string) end,   -- season / trade / close
     equipCosmetic = function(_kind: string, _id: string) end,
     setActiveGoob = function(_id: string) end,
+    -- Irreversible, so it goes through init.client's two-step confirmation
+    -- rather than firing the remote from a card.
+    gulpGoob = function(_id: string) end,
     joinPit = function() end,
     leavePit = function() end,
 }
@@ -100,6 +103,11 @@ local powerSweep: Frame
 local sheet: Frame
 local sheetTitle: TextLabel
 local sheetBody: ScrollingFrame
+-- A plain frame beside sheetBody, for the two tabs whose renderers live in
+-- Panels and bring their own scroller. Nesting a ScrollingFrame inside another
+-- one traps the drag on a phone: the inner list eats the gesture and the outer
+-- panel never moves, which is a bug you only find on hardware.
+local sheetHost: ScrollingFrame
 
 local dockButtons: { [string]: TextButton } = {}
 local openTab: string? = nil
@@ -115,8 +123,13 @@ local TABS = {
     { id = "inventory", icon = "🫧", name = "YOUR GOOBS" },
     { id = "trade",     icon = "🤝", name = "TRADE" },
     { id = "season",    icon = "⭐", name = "BETA SEASON" },
+    { id = "crew",      icon = "🛡️", name = "YOUR CREW" },
     { id = "standoff",  icon = "🥊", name = "THE STANDOFF" },
 }
+
+-- Tabs whose body is drawn by Panels rather than by this file. They render
+-- into sheetHost; everything else renders into sheetBody.
+local DELEGATED = { season = true, crew = true }
 
 -- One card shape for every ownable thing in the game — a skin, a trinket, a
 -- power, a Goob. Rarity is a stroke colour and nothing else, so the eye learns
@@ -177,11 +190,12 @@ local function row(parent: Instance, height: number, order: number): Frame
     return f
 end
 
-local function actionButton(parent: Instance, text: string, colour: Color3, width: number): TextButton
+local function actionButton(parent: Instance, text: string, colour: Color3,
+    width: number, rightOffset: number?): TextButton
     local b = Theme.button(text, colour, UDim2.fromOffset(width, Layout.MIN_TAP))
     b.TextSize = 18
     b.AnchorPoint = Vector2.new(1, 0.5)
-    b.Position = UDim2.new(1, -10, 0.5, 0)
+    b.Position = UDim2.new(1, -(rightOffset or 10), 0.5, 0)
     b.Parent = parent
     return b
 end
@@ -189,6 +203,9 @@ end
 -- ── The sheet ──────────────────────────────────────────────────────────────
 
 local function clearSheet()
+    for _, child in ipairs(sheetHost:GetChildren()) do
+        if child:IsA("GuiObject") then child:Destroy() end
+    end
     for _, child in ipairs(sheetBody:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             child:Destroy()
@@ -477,14 +494,32 @@ local function renderInventory()
     local goobs = (profile and profile.goobs) or {}
     local activeId = profile and profile.activeGoobId
 
-    local header = card(sheetBody, 0, 54)
+    local header = card(sheetBody, 0, 74)
     local sum = Theme.label({
-        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -24, 0, 42),
+        Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -24, 0, 40),
         Text = ("%d Goob%s  ·  age never resets and cannot be farmed, which is the only reason it is worth anything")
             :format(#goobs, #goobs == 1 and "" or "s"),
         TextSize = 14, TextColor3 = Theme.TEXT_DIM, TextWrapped = true,
     })
     sum.Parent = header
+
+    -- WHERE GOOBS AND THEIR FOOD COME FROM NOW. There used to be a Snack Stand
+    -- and an Egg Stand for this, both of which sold progress for idle income
+    -- and neither of which had anything to do with the game being played. Both
+    -- are gone; finishing a round feeds your Goob and every fifth round hatches
+    -- one. This line is the whole explanation, and it has to be here, because a
+    -- player who cannot see where the next egg comes from assumes there is not
+    -- one.
+    local toEgg = profile and profile.roundsToEgg or 0
+    local eggLine = Theme.label({
+        Position = UDim2.fromOffset(14, 46), Size = UDim2.new(1, -24, 0, 22),
+        Text = (profile and profile.eggCapped)
+            and ("🥚 Stable full — %d / %d"):format(#goobs, (profile and profile.maxGoobs) or 8)
+            or ("🥚 Next egg in %d round%s  ·  finishing a round also feeds your Goob")
+                :format(toEgg, toEgg == 1 and "" or "s"),
+        TextSize = 13, TextColor3 = Theme.GOLD,
+    })
+    eggLine.Parent = header
 
     for i, goob in ipairs(goobs) do
         local tint = goob.ageColor or Theme.TEXT_DIM
@@ -526,8 +561,22 @@ local function renderInventory()
         age.Parent = c
 
         if goob.id ~= activeId then
-            local b = actionButton(c, "CARRY", Theme.ACCENT, 104)
+            local b = actionButton(c, "CARRY", Theme.ACCENT, 96)
             b.Activated:Connect(function() ArenaHud.on.setActiveGoob(goob.id) end)
+
+            -- GULP: feed this one to the Goob you are carrying. It is the mass
+            -- sink the entire economy rests on — the ONLY way a Goob ever
+            -- leaves the world — and until now the only button for it lived in
+            -- the drawer that has just been deleted. Removing that screen
+            -- without putting this somewhere would have left the world's total
+            -- mass with no exit at all, which is the quiet kind of breakage
+            -- that takes a month of live data to notice.
+            --
+            -- Irreversible, so it does not fire the remote: it calls through
+            -- to init.client's two-step confirmation, which spells out exactly
+            -- what is destroyed and what is gained before anything happens.
+            local g = actionButton(c, "GULP", Theme.WARN, 88, 114)
+            g.Activated:Connect(function() ArenaHud.on.gulpGoob(goob.id) end)
         end
     end
 
@@ -575,6 +624,15 @@ local function renderTrade()
     end
 end
 
+-- Set by init.client from the tutorial state. See applyLayout for why the
+-- status strip cares.
+ArenaHud.coachActive = false
+function ArenaHud.setCoachActive(on: boolean)
+    if ArenaHud.coachActive == on then return end
+    ArenaHud.coachActive = on
+    ArenaHud.applyLayout()
+end
+
 function ArenaHud.closeSheet()
     openTab = nil
     sheet.Visible = false
@@ -584,20 +642,22 @@ function ArenaHud.closeSheet()
 end
 
 function ArenaHud.openSheet(tab: string)
-    -- Delegated tabs still go through here, so opening one closes whatever
-    -- else was up. That is the whole contract: one thing at a time.
-    if tab == "season" then
-        ArenaHud.closeSheet()
-        ArenaHud.on.openLegacy(tab)
-        return
-    end
+    -- THE SHEET IS THE ONLY PANEL. The season tab used to hand off to a second
+    -- screen entirely (`on.openLegacy`), which opened the old Goob drawer and
+    -- drew the season track inside it — with the Snack Stand reparented on top
+    -- of the track, because that drawer moved the stand into itself whenever
+    -- arena mode was on. Two panels, one screen, and the season list unreadable
+    -- underneath a shop for a system that no longer existed.
+    --
+    -- Now there is nowhere to hand off TO. Every tab renders here, and the two
+    -- whose renderers still live in Panels render into sheetHost, inside this
+    -- same sheet, under this same title bar and close button.
     if openTab == tab then
         ArenaHud.closeSheet()
         return
     end
 
     openTab = tab
-    ArenaHud.on.openLegacy("close")   -- shut any legacy panel first
     clearSheet()
     for id, b in pairs(dockButtons) do
         b.BackgroundColor3 = (id == tab) and Theme.ACCENT or Theme.BG_SOFT
@@ -609,7 +669,12 @@ function ArenaHud.openSheet(tab: string)
         end
     end
 
-    if tab == "crates" then renderCrates()
+    sheetBody.Visible = not DELEGATED[tab]
+    sheetHost.Visible = DELEGATED[tab] == true
+
+    if DELEGATED[tab] then
+        Panels.render(tab, sheetHost, profile)
+    elseif tab == "crates" then renderCrates()
     elseif tab == "trinkets" then renderTrinkets()
     elseif tab == "powers" then renderPowers()
     elseif tab == "wear" then renderWear()
@@ -638,20 +703,26 @@ function ArenaHud.applyLayout()
     local compact = Layout.isCompact()
     local pad = compact and 8 or 14
 
-    -- Dock: top-centre, one row, on every platform.
-    -- Eight tabs now. On a 568-wide phone that is 8 icons plus gaps plus the
-    -- dock's own padding, and the stat card has to fit to the left of it — so
-    -- the icons shrink on compact rather than the dock running into the card.
-    -- 38 is still comfortably above the 34px minimum a thumb needs.
-    local iconSize = compact and 38 or 52
-    local gap = compact and 4 or 7
-    local dockW = #TABS * iconSize + (#TABS - 1) * gap + pad * 2
-    dock.Size = UDim2.fromOffset(dockW, iconSize + pad * 2)
-    dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), 6)
-    for _, entry in ipairs(TABS) do
+    -- Dock: top-centre. One row when there is room, two on a phone — see
+    -- Layout.dockMetrics, which owns that arithmetic because Hud needs the same
+    -- numbers to place the coach and the toasts underneath.
+    -- Registered, not just consumed: Hud places the coach and the toast column
+    -- under this dock and has no other way to learn how tall it is.
+    Layout.setDockTabs(#TABS)
+    local m = Layout.dockMetrics(#TABS)
+    local iconSize = m.icon
+    local dockW = m.width
+    dock.Size = UDim2.fromOffset(dockW, m.height)
+    dock.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), m.top)
+    for i, entry in ipairs(TABS) do
         local b = dockButtons[entry.id]
         if b then
+            local col = (i - 1) % m.perRow
+            local row = math.floor((i - 1) / m.perRow)
             b.Size = UDim2.fromOffset(iconSize, iconSize)
+            b.Position = UDim2.fromOffset(
+                m.pad + col * (iconSize + m.gap),
+                m.pad + row * (iconSize + m.gap))
             b.TextSize = compact and 22 or 26
         end
     end
@@ -674,8 +745,18 @@ function ArenaHud.applyLayout()
 
     -- Status strip: directly under the dock, same width, so the two read as
     -- one block instead of two floating things.
+    --
+    -- HIDDEN WHILE THE TUTORIAL COACH IS UP ON A PHONE, and that is not a
+    -- cosmetic choice. A 568x320 landscape phone has one free horizontal band
+    -- below the dock; the coach and this strip both want it, and stacking them
+    -- pushes the lower one into the jump-button zone where it cannot be read or
+    -- reached. During the tutorial the instruction matters more than the round
+    -- clock, so the strip yields. This file owns the strip's visibility and Hud
+    -- owns the coach's — one owner each, wired together in init.client.
+    statusStrip.Visible = not (compact and ArenaHud.coachActive)
     statusStrip.Size = UDim2.fromOffset(dockW, compact and 30 or 36)
-    statusStrip.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2), iconSize + pad * 2 + 10)
+    statusStrip.Position = UDim2.fromOffset(math.floor((u.X - dockW) / 2),
+        Layout.belowDock(#TABS))
     statusLabel.TextSize = compact and 13 or 16
 
     -- Power button: bottom-centre, inside the band between the thumbstick and
@@ -692,14 +773,24 @@ function ArenaHud.applyLayout()
 
     -- The sheet: near-fullscreen on a phone, a centred panel on a desktop.
     -- Either way it is the ONLY thing on top of the world.
+    -- On a phone the sheet starts directly under the DOCK, not under the
+    -- status strip: it is a panel the player is reading, the round clock is
+    -- the thing they are least interested in while reading it, and going from
+    -- belowStatus to belowDock is the difference between a 132px-tall sheet
+    -- and a 168px one on a 568x320 screen.
+    local sheetTop = compact and Layout.belowDock(#TABS) or Layout.belowStatus(#TABS)
     local sheetSize = compact
-        and UDim2.fromOffset(u.X - 16, u.Y - (iconSize + pad * 2 + 52))
+        and UDim2.fromOffset(u.X - 16, math.max(120, u.Y - sheetTop - 8))
         or Layout.panel(660, 460)
     sheet.Size = sheetSize
     if compact then
-        sheet.Position = UDim2.fromOffset(8, iconSize + pad * 2 + 46)
+        sheet.Position = UDim2.fromOffset(8, sheetTop)
     else
         sheet.Position = Layout.centre(sheetSize)
+    end
+    if sheetHost then
+        sheetHost.Position = sheetBody.Position
+        sheetHost.Size = sheetBody.Size
     end
 end
 
@@ -726,34 +817,44 @@ function ArenaHud.build(): ScreenGui
     Theme.corner(statCard, 14)
     Theme.stroke(statCard, Color3.fromRGB(18, 20, 26), 2)
 
+    -- NAMED, all three. An unnamed label is findable only by its own text,
+    -- which means the only test anybody can write for it is "does some label
+    -- somewhere contain this string" — and that passes just as happily on a
+    -- panel wired to nothing as on a working one. These three are the stat
+    -- card's entire contract with the server push, so they get to be findable.
     massLabel = Theme.label({
         Position = UDim2.fromOffset(12, 4), Size = UDim2.new(1, -18, 0, 34),
         Text = "0", TextSize = 32, TextColor3 = Theme.GOLD,
     })
+    massLabel.Name = "Mass"
     massLabel.Parent = statCard
 
     worthLabel = Theme.label({
         Position = UDim2.fromOffset(12, 38), Size = UDim2.new(1, -18, 0, 22),
         Text = "worth 💧0", TextSize = 18, TextColor3 = Theme.ACCENT,
     })
+    worthLabel.Name = "Worth"
     worthLabel.Parent = statCard
 
     meltLabel = Theme.label({
         Position = UDim2.fromOffset(12, 60), Size = UDim2.new(1, -18, 0, 18),
         Text = "not melting yet", TextSize = 14, TextColor3 = Theme.TEXT_DIM,
     })
+    meltLabel.Name = "Melt"
     meltLabel.Parent = statCard
 
     globLabel = Theme.label({
         Text = "💧0", TextSize = 24, TextColor3 = Theme.ACCENT,
         TextXAlignment = Enum.TextXAlignment.Right,
     })
+    globLabel.Name = "Glob"
     globLabel.Parent = gui
 
     seasonLabel = Theme.label({
         Text = "BETA SEASON", TextSize = 15, TextColor3 = Theme.GOLD,
         TextXAlignment = Enum.TextXAlignment.Right,
     })
+    seasonLabel.Name = "Season"
     seasonLabel.Parent = gui
 
     -- Dock.
@@ -906,6 +1007,27 @@ function ArenaHud.build(): ScreenGui
     bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
     bodyLayout.Parent = sheetBody
 
+    -- A SCROLLING host, not a plain frame.
+    --
+    -- Panels' crew screen lays its rows out at absolute offsets and runs about
+    -- 230px tall. On a landscape phone the sheet's body is barely 60px, so
+    -- every control below the first ran off the bottom — the audit reported
+    -- five elements "off by 144". A fixed-height host cannot hold a panel it
+    -- does not control the height of, and Panels is shared with the season
+    -- track, which brings its own scroller and fills this exactly.
+    sheetHost = Instance.new("ScrollingFrame")
+    sheetHost.Name = "Host"
+    sheetHost.Position = sheetBody.Position
+    sheetHost.Size = sheetBody.Size
+    sheetHost.BackgroundTransparency = 1
+    sheetHost.BorderSizePixel = 0
+    sheetHost.ScrollBarThickness = 5
+    sheetHost.ScrollBarImageColor3 = Theme.ACCENT
+    sheetHost.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sheetHost.CanvasSize = UDim2.new()
+    sheetHost.Visible = false
+    sheetHost.Parent = sheet
+
     ArenaHud.applyLayout()
     Layout.changed.Event:Connect(ArenaHud.applyLayout)
     return gui
@@ -965,7 +1087,15 @@ function ArenaHud.setArena(state: any)
     local where = state.biome or (state.ring == "VAULT" and "the Vault"
         or state.ring == "SHALLOWS" and "the Shallows" or "the Flats")
     if phase == "LOBBY" then
-        statusLabel.Text = ("WAITING ROOM  ·  round %d in %s"):format((state.round or 0) + 1, clock)
+        -- The field size is announced, and the bot count with it. A player who
+        -- works out for themselves that most of the island is bots feels
+        -- tricked; a player who was told feels like the game is full. The
+        -- honest version is also the one that reads better.
+        local who = (state.bots or 0) > 0
+            and ("  ·  %d in, %d bots"):format(state.field or 0, state.bots)
+            or ""
+        statusLabel.Text = ("WAITING ROOM  ·  round %d in %s%s")
+            :format((state.round or 0) + 1, clock, who)
         statusLabel.TextColor3 = Theme.ACCENT
     elseif phase == "RESULTS" then
         statusLabel.Text = "ROUND OVER"
@@ -975,9 +1105,24 @@ function ArenaHud.setArena(state: any)
     elseif state.banking > 0 then
         statusLabel.Text = "BANKING — hold still"
         statusLabel.TextColor3 = Theme.GOLD
+    elseif state.safe and state.onRim then
+        -- THE METER, COUNTING DOWN, IN SECONDS. Safety on the rim is spendable
+        -- now, and a meter the player cannot see is not a mechanic — it is an
+        -- ambush. Showing the number is what turns "I got eaten in the safe
+        -- zone" into "I stayed out there too long", which is a lesson rather
+        -- than a bug report.
+        local left2 = math.max(0, math.floor((state.rimGrace or 0) + 0.5))
+        statusLabel.Text = ("%s  ·  SAFE %ds  ·  %s"):format(clock, left2, where)
+        statusLabel.TextColor3 = left2 <= 4 and Theme.WARN or Theme.GOOD
     elseif state.safe then
         statusLabel.Text = ("%s  ·  SAFE  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.GOOD
+    elseif state.onRim then
+        -- Out on the rim with the meter spent. Worth saying explicitly: the
+        -- ground looks identical to the ground that was protecting you a
+        -- moment ago.
+        statusLabel.Text = ("%s  ·  EXPOSED  ·  %s"):format(clock, where)
+        statusLabel.TextColor3 = Theme.BAD
     else
         statusLabel.Text = ("%s  ·  DANGER  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.BAD

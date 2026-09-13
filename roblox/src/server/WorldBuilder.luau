@@ -950,12 +950,19 @@ end
 -- middle, which would put most of the island's food inside the Vault.
 function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: number?): Vector3
     local lo = innerR or (Config.VAULT_RADIUS + 14)
-    -- INSIDE THE FLATS, never the Shallows. Food in the no-PvP ring means a
-    -- player can stand in the one place nothing can touch them and farm
-    -- forever — which is not a strategy, it is an exploit that beats the
-    -- entire game. The Shallows is where you spawn and where you hide; it is
-    -- deliberately bare.
-    local hi = outerR or (Config.SHALLOWS_INNER - 8)
+    -- OUT TO THE SHORELINE. This used to stop at SHALLOWS_INNER - 8 so that
+    -- nothing grew in the no-PvP rim, which left a 93-stud bare band around the
+    -- whole island — a third of its area with no reason to be there.
+    --
+    -- The rim no longer protects you indefinitely (Config.SHALLOWS_GRACE is a
+    -- spendable meter, not a property of the ground), so there is nothing left
+    -- to exploit by farming out here: you get about twelve seconds before the
+    -- edge is the most dangerous place on the map. Food therefore goes all the
+    -- way out, and the sampling stays uniform BY AREA — sqrt of a uniform draw
+    -- between the squared radii — so the outer ring is not thinner per square
+    -- stud than the middle. A naive uniform draw on r would have piled food in
+    -- the centre and looked exactly like the bug this replaces.
+    local hi = outerR or Config.PELLET_OUTER
     local r = math.sqrt(rng:NextNumber(lo * lo, hi * hi))
     local a = rng:NextNumber(0, math.pi * 2)
     local pos = Vector3.new(math.cos(a) * r, 2, math.sin(a) * r)

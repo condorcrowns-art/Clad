@@ -47,6 +47,22 @@ loudly, which is exactly why they are written down.
    months. If you add a suite, make it fatal, and prove it by breaking an
    assertion and watching `run_all.sh` exit 1.
 
+   **This came back, and it came back in the suites added after the fix.** The
+   pure sims were armed; the ten scenario suites were not, and eight of them
+   printed `FAIL` and exited zero — so `integration`, `client_test`,
+   `mobile_test` and `adversarial` all reported deliberate sabotage and passed
+   anyway. It was found by a mutation battery, not by reading the code, which
+   is the whole argument for rule 2. When you add a suite the arming line is
+   not optional boilerplate; it is the thing that makes the file a test:
+
+   ```lua
+   if fails > 0 then error(fails .. " <name> failure(s)") end
+   ```
+
+   The exceptions are the REPORTS — `balance.luau`, `feeding.luau` — which
+   assert nothing by design and say so in their first line. If a file has a
+   `check()` helper, it must be fatal.
+
 2. **Mutation-test anything you protect.** A test that has never failed is a
    test you have no reason to trust. Deliberately break the thing, confirm the
    suite catches it, restore. Several checks in here were caught passing for
@@ -75,6 +91,35 @@ loudly, which is exactly why they are written down.
 
 8. **Nothing purchasable may touch a gameplay number.**
    `Monetisation.violations()` fails the build if it does.
+
+9. **A system you replace must be DELETED, and its absence asserted.**
+   This is the single most expensive habit in this repo's history. The arena
+   replaced a collection game, and for three reworks afterwards the collection
+   game kept running underneath it: roaming "critters" still spawning labelled
+   junk into live rounds (a player reported a `RARE Anvil` drifting past
+   mid-chase), a Snack Stand whose panel rendered on top of the season track,
+   and an Egg Stand nobody could reach. Each survived because *deleting is
+   riskier than leaving it*, and because nothing anywhere said it should be
+   gone.
+
+   So the rule has two halves, and the second is the one that holds:
+
+   - Delete the module, its remotes in `Net.EVENTS`, its `Config` block, its
+     client loop, and its sim. Leave a comment where it was saying what
+     replaced it and why — that comment is what stops the next agent
+     reinventing it.
+   - **Assert the absence.** `integration.luau` checks that the folder is not
+     in the world, the remotes are not in `GoobNet`, and the `Config` keys are
+     nil; `adversarial.luau` checks that firing a deleted remote reaches
+     nothing; `client_test.luau` checks that no Snack Stand button and no
+     drawer frame exist on the legacy HUD. A deletion that nothing checks
+     comes back.
+
+   Watch for the client half specifically. Two deleted loops opened with
+   `Workspace:WaitForChild("Critters")` at module scope, with no timeout —
+   deleting only the server half would not have errored, it would have hung
+   the client forever on a folder that was never going to appear, with
+   everything below that line silently never running.
 
 ## Conventions
 

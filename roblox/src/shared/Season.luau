@@ -29,7 +29,10 @@ Season.XP_PER_TIER = 5600
 Season.XP = {
     catch      = 4,
     secret     = 800,
-    snack      = 12,
+    -- `snack` is gone with the Snack Stand it paid for. `egg` survives, but
+    -- it is now earned by finishing rounds rather than bought, so it fires
+    -- roughly once every five rounds instead of whenever somebody has spare
+    -- Glob — which makes it worth considerably more than 150 was tuned for.
     egg        = 150,
     gulp       = 110,
     trade      = 90,

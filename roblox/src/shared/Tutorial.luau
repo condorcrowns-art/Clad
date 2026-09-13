@@ -25,7 +25,15 @@ export type Step = {
     id: string,
     text: string,
     hint: string?,
-    target: string?,   -- UI element to pulse: "snack" | "drawer" | "egg" | nil
+    -- Which control to pulse while this step is up, or nil for none.
+    --
+    -- Resolved through Hud.targets, a registry that other modules write into —
+    -- NOT a hardcoded list in Hud. The list used to be exactly "snack" and
+    -- "drawer", both of which belonged to a screen that has since been deleted,
+    -- so the one step that genuinely needs a pointer ("press your power
+    -- button") had nothing to point at. Any id here must be registered by
+    -- whichever module owns the control, or the step simply will not pulse.
+    target: string?,
     goal: number?,     -- for counted steps
 }
 

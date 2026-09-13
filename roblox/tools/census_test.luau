@@ -26,6 +26,36 @@ local function effectsFor(name)
     return out
 end
 
+-- Play out whole rounds. This is what "do something that earns progress" means
+-- now: the Snack Stand and the roaming critters that these suites used to poke
+-- are both gone, and finishing a round is the only thing left that feeds a
+-- Goob, records a catch, or moves the season track.
+local function arenaSyncOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1]
+        end
+    end
+end
+local function playRounds(p, n)
+    local C = _G.SHARED("Config")
+    local seen = 0
+    local wasPlaying = (arenaSyncOf(p) or {}).phase == "PLAYING"
+    local budget = math.floor((C.ROUND_SECONDS + C.ROUND_END_HOLD
+        + C.INTERMISSION_SECONDS + 10) * (n + 1) / 0.5)
+    for _ = 1, budget do
+        tick(0.5)
+        local nowPlaying = (arenaSyncOf(p) or {}).phase == "PLAYING"
+        if wasPlaying and not nowPlaying then
+            seen += 1
+            if seen >= n then return seen end
+        end
+        wasPlaying = nowPlaying
+    end
+    return seen
+end
+
 _G.BOOT_SERVER()
 tick(1)
 local alice = svc.addPlayer("Alice", 101, V3.new(0, 5, 40))
@@ -57,18 +87,7 @@ check("secrets are listed", text:find("Pocket Singularity") ~= nil or text:find(
 
 emit("")
 emit("══ CATCHING IS COUNTED AND FELT ══")
-local critters = svc.Workspace:FindFirstChild("Critters")
-tick(20)
-local caught = 0
-for _ = 1, 20 do
-    local list = critters:GetChildren()
-    if #list > 0 then
-        svc.movePlayer(alice, list[1].Position)
-        svc.fireAs("CatchCritter", alice, list[1])
-        caught += 1
-    end
-    tick(0.6)
-end
+local caught = playRounds(alice, 1)
 tick(2)
 local fx = effectsFor("Alice")
 local catches = 0
@@ -78,14 +97,26 @@ check("particles were actually emitted", _G.PARTICLES() > 0, tostring(_G.PARTICL
 
 emit("")
 emit("══ FINDING RARE THINGS IS COUNTED ══")
--- Catching tracked rarities from the wild is far too unlikely to assert on in a
--- test (Legendary is 1 in 282, Mythic 1 in 2,083). The Snack Stand rolls at
--- luck x4 and forty items per Banquet, and its grants are counted through the
--- same path, so buy enough Banquets to make a Legendary or Mythic a certainty.
-tick(1200)
-for _ = 1, 40 do
-    svc.fireAs("BuySnack", alice, "banquet")
-    tick(240)
+-- Rare rarities are far too unlikely to reach by luck inside a test run
+-- (Legendary is 1 in 282, Mythic 1 in 2,083), so this used to buy forty
+-- Banquets from the Snack Stand — forty rolls each at luck x4 — and let the
+-- odds do the work. The Snack Stand is gone.
+--
+-- The path those grants took is not. CensusService.recordCaught is what the
+-- Archive counts, and the round payout calls it for every item it feeds. So
+-- the rolls are driven directly through the same entry point the live game
+-- uses, at the same luck a first-place finish buys, rather than through a
+-- purchase that no longer exists. This is deliberately NOT a reimplementation
+-- of the counting — it is the real service, called the real way.
+do
+    local Census = _G.SERVER("CensusService")
+    local Feedstock = _G.SHARED("Feedstock")
+    local C = _G.SHARED("Config")
+    local rng = env.Random.new(4242)
+    for _ = 1, 1600 do
+        local item = Feedstock.roll(rng, C.ROUND_FEED_LUCK[1], false)
+        Census.recordCaught(item.id)
+    end
 end
 tick(90, 1)
 local found = tostring(entries.Text)
@@ -137,14 +168,7 @@ emit("")
 emit("══ A DEAD DATASTORE DOES NOT BREAK THE GAME ══")
 svc.datastoreShouldFail = true
 local ok = pcall(function()
-    for _ = 1, 10 do
-        local list = critters:GetChildren()
-        if #list > 0 then
-            svc.movePlayer(alice, list[1].Position)
-            svc.fireAs("CatchCritter", alice, list[1])
-        end
-        tick(1)
-    end
+    playRounds(alice, 1)
     tick(90, 1)
 end)
 check("catching still works with the store down", ok, tostring(ok))
@@ -152,3 +176,19 @@ svc.datastoreShouldFail = false
 
 emit("")
 emit(("══ %s ══"):format(fails == 0 and "ALL CENSUS CHECKS PASSED" or (fails .. " FAILURE(S)")))
+
+-- FAIL THE BUILD, not just the transcript.
+--
+-- Everything above printed "FAIL" to the output and then exited ZERO. Eight of
+-- the ten scenario suites did this, which means `run_all.sh` could print "ALL
+-- SUITES PASSED" underneath a screen of real failures — and did: a mutation
+-- battery deliberately broke the legacy-purge guards and the phone layout, and
+-- every one of those suites reported the break and passed anyway.
+--
+-- This exact class of bug was found and fixed once before, in the pure sims.
+-- It came back here because the scenario suites were written later and nobody
+-- checked that the new ones could fail. A suite that cannot fail is not a
+-- weaker test, it is a comment.
+if fails > 0 then
+    error(fails .. " census failure(s)")
+end

@@ -27,6 +27,7 @@ local Format = require(Shared.Format)
 
 local RollService = require(script.Parent.RollService)
 local WorldBuilder = require(script.Parent.WorldBuilder)
+local BotService = require(script.Parent.BotService)
 
 local ArenaService = {}
 
@@ -60,6 +61,8 @@ export type Run = {
     banking: number,
     leakBuffer: number,
     safeUntil: number,
+    rimGrace: number,       -- seconds of rim protection left in the meter
+    committed: boolean,     -- has this blob ever left the rim for the Flats
     trinkets: Trinkets.Resolved,
     bestMass: number,
     peakThisRound: number,
@@ -107,6 +110,11 @@ type Deps = {
     teach: (player: Player, event: string) -> (),
     powerUses: (player: Player) -> { [string]: number },
     notePowerUse: (player: Player, id: string) -> (),
+    -- Everything a finished round owes the PROFILE rather than the wallet:
+    -- feeding your Goob, counting rounds towards an egg. Separate from
+    -- `award` because award has exactly one job — creating Glob — and this
+    -- needs the finishing place, which Glob does not care about.
+    roundResult: (player: Player, place: number, mass: number, payout: number) -> (),
 }
 local deps: Deps
 
@@ -185,6 +193,64 @@ local function removePellet(p: Pellet)
     p.part:Destroy()
 end
 
+-- ── What the bots are allowed to ask the island ────────────────────────────
+--
+-- Bots do not own pellets, do not own mass, and do not get their own copy of
+-- either rule. They get these two questions and nothing else, which is what
+-- keeps "how does eating work" a single answer for every contender on the map.
+
+--- Where is the nearest pellet, if any, within `radius`? Walks the same
+--- spatial hash the players use rather than the whole pellet list: at 1,400
+--- pellets and twelve bots re-asking every think, the naive version is 17,000
+--- distance tests a second for nothing.
+local function nearestPelletPos(from: Vector3, radius: number): Vector3?
+    local best, bestD = nil, radius
+    local span = math.max(1, math.ceil(radius / CELL))
+    local cx, cz = math.floor(from.X / CELL), math.floor(from.Z / CELL)
+    for gx = cx - span, cx + span do
+        for gz = cz - span, cz + span do
+            local bucket = grid[gx .. ":" .. gz]
+            if bucket then
+                for part, _ in pairs(bucket) do
+                    if part.Parent then
+                        local d = (part.Position - from).Magnitude
+                        if d < bestD then
+                            best, bestD = part.Position, d
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+--- Eat every pellet within `reach` of a point, returning the mass taken. The
+--- same nine-cell sweep tickPlayer does, minus the trinkets and teaching a
+--- bot has no use for.
+local function harvestAt(from: Vector3, reach: number): number
+    local gained = 0
+    local cx, cz = math.floor(from.X / CELL), math.floor(from.Z / CELL)
+    for gx = cx - 1, cx + 1 do
+        for gz = cz - 1, cz + 1 do
+            local bucket = grid[gx .. ":" .. gz]
+            if bucket then
+                for part, pellet in pairs(bucket) do
+                    if part.Parent then
+                        if (part.Position - from).Magnitude <= reach then
+                            gained += pellet.value
+                            removePellet(pellet)
+                        end
+                    else
+                        removePellet(pellet)
+                    end
+                end
+            end
+        end
+    end
+    return gained
+end
+
 -- CAN THIS PLAYER BE TOUCHED BY SOMEONE ELSE'S POWER?
 --
 -- This existed only inside the eating check, which meant SIPHON, HOOK and SLAM
@@ -205,7 +271,23 @@ local function protected(player: Player, run: Run?, now: number): boolean
     if not ball or not ball.Parent then
         return true
     end
-    return WorldBuilder.isSafe(ball.Position) or now < run.safeUntil
+    -- THE RIM IS A FIRE ESCAPE, NOT A HOUSE.
+    --
+    -- Standing in the Shallows used to be unconditional immunity, which is why
+    -- no food could be spawned out there: a player could stand in the one
+    -- place nothing could reach them, and if there had been anything to eat,
+    -- standing still would have been the winning strategy.
+    --
+    -- Now the ground does not protect you; a METER does, and being on the rim
+    -- is what spends it (tickPlayer drains it). Duck out to shake a chaser and
+    -- you are fine. Try to live out there and you run dry in about twelve
+    -- seconds, at which point the edge is simply the most exposed ground on the
+    -- island — which is exactly what it should be, and what finally lets food
+    -- grow all the way to the shoreline.
+    if now < run.safeUntil then
+        return true
+    end
+    return WorldBuilder.isSafe(ball.Position) and run.rimGrace > 0
 end
 
 -- How many times this player has used a power.
@@ -256,6 +338,40 @@ local function deflate(target: Player, targetRun: Run, fraction: number, scatter
 
     deps.effect(target, "deflated", { amount = taken })
     return taken
+end
+
+--- The same deflation, applied to a bot.
+---
+--- Separate function, identical rule. A bot has no Player, no trinkets and no
+--- notifications, so sharing the body of `deflate` would mean threading nil
+--- through four call sites for the privilege of one shared line of arithmetic.
+--- What must NOT diverge is the fraction and the fact that what comes off
+--- lands as food — both come straight from Config here, same as for a player,
+--- so deflating the leader feeds the island whether the leader is human or not.
+local function deflateBot(bot: any, fraction: number, scatterIt: boolean): number
+    local taken = bot.mass * math.clamp(fraction, 0, 0.9)
+    if taken <= 0 then
+        return 0
+    end
+    bot.mass = math.max(Config.STARTING_MASS, bot.mass - taken)
+    if scatterIt then
+        local back = taken * Config.DEFLATE_RETURN_AS_FOOD
+        local drops = math.clamp(math.floor(back / Config.LEAK_PELLET_MASS), 1, 14)
+        local r = Blob.radius(bot.mass)
+        for i = 1, drops do
+            local a = math.rad((360 / drops) * i) + rng:NextNumber(-0.3, 0.3)
+            local d = r * 1.8 + rng:NextNumber(3, 14)
+            spawnPellet(Vector3.new(bot.pos.X + math.cos(a) * d, 2,
+                bot.pos.Z + math.sin(a) * d), back / drops, false)
+        end
+    end
+    return taken
+end
+
+--- Is this bot currently untouchable? Same two reasons a player is: it is on
+--- the rim with meter left, or it is mid-respawn.
+local function botProtected(bot: any): boolean
+    return bot.respawnAt ~= 0 or (WorldBuilder.isSafe(bot.pos) and bot.rimGrace > 0)
 end
 
 -- ── Decoys ─────────────────────────────────────────────────────────────────
@@ -349,6 +465,18 @@ local function newRun(player: Player): Run
         banking = 0,
         leakBuffer = 0,
         safeUntil = os.clock() + POP_INVULN,
+        -- Full meter on arrival. A fresh blob gets a real look at the island
+        -- before anything is allowed to touch it, which is what makes spawning
+        -- out on the rim the right answer for a new player rather than a trap.
+        rimGrace = Config.SHALLOWS_GRACE,
+        -- The meter does not start running until you have actually gone in.
+        -- Spawns sit ON the rim (SPAWN_RING is outside SHALLOWS_INNER), so a
+        -- meter that drained from the first tick would leave every player in
+        -- the round with twelve seconds gone before they had done anything —
+        -- and a brand-new player, who stands still and reads the tutorial,
+        -- would spend the entire meter learning the controls. The rim is meant
+        -- to stop you LIVING out there, not to punish you for arriving.
+        committed = false,
         trinkets = Trinkets.resolve(ids),
         bestMass = Config.STARTING_MASS,
         peakThisRound = Config.STARTING_MASS,
@@ -641,7 +769,32 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 end
             end
         end
-        if target then
+        local hookBot = nil
+        for _, bot in ipairs(BotService.living()) do
+            if not botProtected(bot) then
+                local d = (bot.pos - ball.Position).Magnitude
+                if d < best then hookBot, best = bot, d end
+            end
+        end
+        if hookBot then
+            -- Same rule as against a player: bigger drags smaller, smaller
+            -- drags itself. A bot cannot be shoved by physics here because it
+            -- is kinematic, so the reel is applied to its position directly.
+            local toward = Vector3.new(ball.Position.X - hookBot.pos.X, 0,
+                ball.Position.Z - hookBot.pos.Z)
+            if toward.Magnitude > 0.01 then
+                toward = toward.Unit
+                if run.mass >= hookBot.mass then
+                    hookBot.pos += toward * math.min(HOOK_PULL * 0.5, best - 4)
+                    hookBot.goal = hookBot.pos
+                else
+                    ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
+                end
+                deflateBot(hookBot, Config.DEFLATE.hook, true)
+                deps.teach(player, "deflate")
+                deps.effect(player, "hook", { to = hookBot.name })
+            end
+        elseif target then
             local tb = RollService.ballFor(target)
             local tr = runs[target.UserId]
             if tb and tr then
@@ -692,7 +845,22 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                 if d < best then target, best = other, d end
             end
         end
-        if target then
+        -- A bigger BOT is a legitimate siphon target and has to be: SIPHON is
+        -- the comeback tool, and on a field of eleven bots the thing that is
+        -- running away with the round is usually one of them.
+        local botTarget = nil
+        for _, bot in ipairs(BotService.living()) do
+            if bot.mass > run.mass and not botProtected(bot) then
+                local d = (bot.pos - ball.Position).Magnitude
+                if d < best then botTarget, best = bot, d end
+            end
+        end
+        if botTarget then
+            local drained = deflateBot(botTarget, Config.DEFLATE.siphon, false)
+            run.mass += drained
+            deps.teach(player, "deflate")
+            deps.effect(player, "siphon", { from = botTarget.name, amount = drained })
+        elseif target then
             local trun = runs[target.UserId]
             -- Stolen, not scattered: SIPHON is the one deflating power whose
             -- take goes straight into the caster. It is also the only power
@@ -726,6 +894,20 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
     end
     local pos = ball.Position
     local radius = Blob.radius(run.mass)
+
+    -- THE RIM METER. Drains in real time while you are out on the Shallows and
+    -- refills only while you are back inside the Flats, at SHALLOWS_RECHARGE
+    -- seconds spent per second refunded. Clamped at both ends so a long round
+    -- in the middle cannot bank an unlimited escape.
+    if not WorldBuilder.isSafe(pos) then
+        run.committed = true
+        if run.rimGrace < Config.SHALLOWS_GRACE then
+            run.rimGrace = math.min(Config.SHALLOWS_GRACE,
+                run.rimGrace + dt / Config.SHALLOWS_RECHARGE)
+        end
+    elseif run.committed then
+        run.rimGrace = math.max(0, run.rimGrace - dt)
+    end
 
     -- MELT. The one mechanic the whole game is built on: everything above the
     -- grace mass drips, and what drips becomes real food on the floor rather
@@ -829,6 +1011,22 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                 end
             end
         end
+        -- Bots are in the blast. A shockwave that passed through eleven of
+        -- the twelve things on the island would make SLAM feel broken in
+        -- exactly the games where the field is mostly bots — which is every
+        -- game on day one.
+        for _, bot in ipairs(BotService.living()) do
+            if not botProtected(bot) then
+                local flat = Vector3.new(bot.pos.X - pos.X, 0, bot.pos.Z - pos.Z)
+                if flat.Magnitude < SLAM_RADIUS and flat.Magnitude > 0.01 then
+                    local falloff = 1 - (flat.Magnitude / SLAM_RADIUS)
+                    bot.pos += flat.Unit * (SLAM_RADIUS * 0.5 * falloff)
+                    bot.goal = bot.pos
+                    deflateBot(bot, Config.DEFLATE.slam * falloff, true)
+                    hits += 1
+                end
+            end
+        end
         for i = #lumps, 1, -1 do
             local lump = lumps[i]
             if (lump.part.Position - pos).Magnitude < SLAM_RADIUS then
@@ -926,6 +1124,133 @@ local function tickCombat(list: { Player }, now: number)
     end
 end
 
+-- ── Bots ───────────────────────────────────────────────────────────────────
+
+--- Everybody on the island, players and bots alike, in one shape.
+---
+--- The brain is handed this and cannot tell which rows are human. That is the
+--- point: the moment a bot knows, it starts playing two different games and
+--- the difficulty you feel stops being the difficulty that was tuned.
+local function contenders(list: { Player }, now: number): { any }
+    local field = {}
+    for _, player in ipairs(list) do
+        local run = runs[player.UserId]
+        local ball = run and RollService.ballFor(player)
+        if run and ball and ball.Parent then
+            table.insert(field, {
+                key = "player:" .. player.UserId,
+                mass = run.mass,
+                pos = ball.Position,
+                safe = protected(player, run, now),
+            })
+        end
+    end
+    for _, bot in ipairs(BotService.list()) do
+        if bot.respawnAt == 0 then
+            table.insert(field, {
+                key = "bot:" .. bot.id,
+                mass = bot.mass,
+                pos = bot.pos,
+                safe = botProtected(bot),
+            })
+        end
+    end
+    return field
+end
+
+--- Move the bots, then let them eat off the floor.
+---
+--- Feeding is done HERE rather than inside BotService because the pellets are
+--- this file's state. A bot sweeps the same corridor a player does at the same
+--- radius, so a bot and a player standing in the same field grow at the same
+--- rate — which is the only version of this that can be called fair.
+local function tickBots(dt: number, now: number, list: { Player })
+    if BotService.count() == 0 then
+        return
+    end
+    BotService.step(dt, now, contenders(list, now), nearestPelletPos)
+    for _, bot in ipairs(BotService.list()) do
+        if bot.respawnAt == 0 then
+            bot.mass += harvestAt(bot.pos, Blob.radius(bot.mass) + PICKUP_SLACK)
+        end
+    end
+end
+
+--- Blob versus blob, across the species line.
+---
+--- Deliberately the same test tickCombat uses — overlap, then Blob.canEat —
+--- because "can I eat that" must have exactly one answer no matter what is
+--- standing in front of you. A bot that ate on different terms would teach the
+--- player a rule that then fails them against a human, which is worse than
+--- having no bots at all.
+local function tickBotCombat(list: { Player }, now: number)
+    local live = BotService.living()
+    if #live == 0 then
+        return
+    end
+
+    -- Bot vs player.
+    for _, player in ipairs(list) do
+        local run = runs[player.UserId]
+        local ball = run and RollService.ballFor(player)
+        if run and ball and ball.Parent and not protected(player, run, now) then
+            local bubbled = run.activeEffect == "bubble" and now < run.powerUntil
+            local spiked = run.activeEffect == "spike" and now < run.powerUntil
+            for _, bot in ipairs(live) do
+                if bot.respawnAt == 0 and not botProtected(bot) and not bubbled then
+                    local rp, rb = Blob.radius(run.mass), Blob.radius(bot.mass)
+                    local dist = (ball.Position - bot.pos).Magnitude
+                    if dist < (rp + rb) - math.min(rp, rb) * EAT_OVERLAP then
+                        if Blob.canEat(run.mass, bot.mass) then
+                            run.mass += Blob.eatGain(run.mass, bot.mass)
+                            deps.effect(player, "ate", { name = bot.name, bot = true })
+                            deps.teach(player, "eatBlob")
+                            BotService.kill(bot, now)
+                        elseif Blob.canEat(bot.mass, run.mass) then
+                            if spiked then
+                                -- SPIKE works on bots too, and it has to: it
+                                -- is the smallest blob's only answer to the
+                                -- biggest, and a field of bots is exactly
+                                -- where a new player meets that problem.
+                                deflateBot(bot, Config.DEFLATE.spike, true)
+                                deps.notify(player, ("🌵 %s bit a spike."):format(bot.name), "good")
+                            else
+                                bot.mass += Blob.eatGain(bot.mass, run.mass)
+                                pop(player, ball.Position, nil)
+                                deps.notify(player, ("😵 %s swallowed you."):format(bot.name), "bad")
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Bot vs bot. The island has to look busy from across the map even when
+    -- the player is nowhere near it, and a field where only the player ever
+    -- causes anything to happen reads as a stage set.
+    for i = 1, #live do
+        for j = i + 1, #live do
+            local a, b = live[i], live[j]
+            if a.respawnAt == 0 and b.respawnAt == 0
+                and not botProtected(a) and not botProtected(b) then
+                local ra, rb = Blob.radius(a.mass), Blob.radius(b.mass)
+                local dist = (a.pos - b.pos).Magnitude
+                if dist < (ra + rb) - math.min(ra, rb) * EAT_OVERLAP then
+                    if Blob.canEat(a.mass, b.mass) then
+                        a.mass += Blob.eatGain(a.mass, b.mass)
+                        BotService.kill(b, now)
+                    elseif Blob.canEat(b.mass, a.mass) then
+                        b.mass += Blob.eatGain(b.mass, a.mass)
+                        BotService.kill(a, now)
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function topUpPellets(dt: number)
     local deficit = Config.PELLET_TARGET - pelletCount
     if deficit <= 0 then
@@ -967,6 +1292,10 @@ function ArenaService.inRound(): boolean
 end
 
 local function beginLobby()
+    -- The island empties between rounds. Leaving bots wandering an arena
+    -- nobody is in costs a Heartbeat's worth of work per bot for an empty
+    -- stage, and it makes the lobby's "round starts in" clock read as a lie.
+    BotService.clear()
     phase = "LOBBY"
     phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
     local i = 0
@@ -997,10 +1326,21 @@ local function beginRound()
         spawnPellet(nil, nil, rng:NextNumber() < 0.012)
     end
 
+    local humans = #Players:GetPlayers()
+
+    -- FILL THE FIELD. Recomputed at the top of every round and only here: a
+    -- player joining mid-round is an extra contender rather than a reason to
+    -- delete a bot that is already out there being chased by somebody.
+    BotService.fill(Config.ROUND_FIELD_SIZE - humans)
+
     local i = 0
     for _, player in ipairs(Players:GetPlayers()) do
         sendToArena(player, i)
-        deps.notify(player, ("🫧 ROUND %d — grow as big as you can."):format(roundNumber), "good")
+        local filled = BotService.count()
+        deps.notify(player, filled > 0
+            and ("🫧 ROUND %d — %d players, %d bots. Grow as big as you can.")
+                :format(roundNumber, humans, filled)
+            or ("🫧 ROUND %d — grow as big as you can."):format(roundNumber), "good")
         i += 1
     end
 end
@@ -1009,12 +1349,26 @@ local function endRound()
     phase = "RESULTS"
     phaseEndsAt = os.clock() + Config.ROUND_END_HOLD
 
+    -- ONE BOARD, both species. A bot that grew all round and then vanished
+    -- from the results would make second place a lie — the player would have
+    -- spent three minutes losing to something the scoreboard says was never
+    -- there. Bots place, bots are named, bots are tagged, and they take no
+    -- payout because there is nobody to pay.
     local board = {}
     for _, player in ipairs(Players:GetPlayers()) do
         local run = runs[player.UserId]
         if run then
-            table.insert(board, { player = player, mass = run.mass, peak = run.peakThisRound })
+            table.insert(board, {
+                player = player, name = player.DisplayName,
+                mass = run.mass, peak = run.peakThisRound,
+            })
         end
+    end
+    for _, bot in ipairs(BotService.list()) do
+        table.insert(board, {
+            player = nil, name = bot.name, bot = true,
+            mass = bot.mass, peak = bot.peak,
+        })
     end
     table.sort(board, function(x, y) return x.mass > y.mass end)
 
@@ -1025,12 +1379,17 @@ local function endRound()
         local base = row.mass ^ Config.ROUND_PAYOUT_EXPONENT * Config.ROUND_PAYOUT_SCALE
         local bonus = Config.ROUND_PLACE_BONUS[place] or 1
         local payout = math.floor(base * bonus)
-        deps.award(row.player, payout, 0, "round")
-        deps.notify(row.player, ("🏁 #%d with %s — 💧%s"):format(
-            place, Format.short(row.mass), Format.short(payout)),
-            place == 1 and "good" or "info")
+        if row.player then
+            deps.award(row.player, payout, 0, "round")
+            deps.roundResult(row.player, place, row.mass, payout)
+            deps.notify(row.player, ("🏁 #%d of %d with %s — 💧%s"):format(
+                place, #board, Format.short(row.mass), Format.short(payout)),
+                place == 1 and "good" or "info")
+        else
+            payout = 0
+        end
         table.insert(lastResults, {
-            name = row.player.DisplayName, place = place,
+            name = row.name, place = place, bot = row.bot == true,
             mass = row.mass, peak = row.peak, payout = payout,
         })
     end
@@ -1093,7 +1452,12 @@ function ArenaService.start(injected: Deps)
             -- Nothing eats anybody outside a round, and the floor is only
             -- stocked while there is somebody to eat off it.
             if playing then
+                -- Bots move BEFORE combat is resolved, so a bot that just
+                -- walked into you is eaten on the tick it arrives rather than
+                -- appearing to phase through and get you on the next one.
+                tickBots(dt, now, active)
                 tickCombat(active, now)
+                tickBotCombat(active, now)
                 topUpPellets(dt)
                 decayLumps(dt)
             end
@@ -1123,7 +1487,17 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         powerCost = Powers.massCost(run.powerId, run.mass, usesOf(player, run.powerId)),
         mastery = Powers.masteryTier(usesOf(player, run.powerId)),
         lit = run.activeEffect == "beacon" and now < run.powerUntil,
-        safe = WorldBuilder.isSafe(pos) or now < run.safeUntil,
+        -- `safe` is what the HUD colours the ring readout with, so it has to
+        -- agree with `protected` exactly. It used to be "am I on the rim",
+        -- which is now only half the answer: the rim protects you while the
+        -- meter lasts and not one second longer, and a HUD still saying SAFE
+        -- while somebody eats you is worse than no HUD at all.
+        safe = (now < run.safeUntil) or (WorldBuilder.isSafe(pos) and run.rimGrace > 0),
+        -- The meter itself, so the player can watch it run out instead of
+        -- discovering it did.
+        rimGrace = run.rimGrace,
+        rimGraceMax = Config.SHALLOWS_GRACE,
+        onRim = WorldBuilder.isSafe(pos),
         ring = WorldBuilder.ringAt(pos),
         biome = (WorldBuilder.biomeAt(pos) or {}).name,
         best = run.bestMass,
@@ -1132,12 +1506,23 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         phaseLeft = math.max(0, phaseEndsAt - now),
         round = roundNumber,
         ceiling = Blob.ceiling(0.8),
+        -- How big the field actually is, and how much of it is bots. Shown on
+        -- the HUD rather than hidden: a player who works out for themselves
+        -- that half the island is bots feels tricked, and a player who was
+        -- told feels like the game is full.
+        field = #Players:GetPlayers() + BotService.count(),
+        bots = BotService.count(),
     }
 end
 
 -- Exposed for tests: the island's live contents.
 function ArenaService.stats()
-    return { pellets = pelletCount, lumps = #lumps }
+    return {
+        pellets = pelletCount,
+        lumps = #lumps,
+        bots = BotService.count(),
+        botsAlive = #BotService.living(),
+    }
 end
 
 return ArenaService

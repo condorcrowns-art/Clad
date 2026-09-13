@@ -154,6 +154,12 @@ do
 end
 
 tick(2)
+-- `true` on purpose, and the ONLY place that is acceptable: _G.BOOT_CLIENT()
+-- throws on any error inside the real scripts, so reaching this line is
+-- itself the assertion. Anywhere else, `check(name, true)` is a test that
+-- cannot fail — see the payload sweep in adversarial.luau, which was one
+-- of those and had been silently passing without running since it was
+-- written.
 check("client booted without error", true)
 
 local pg = alice:FindFirstChild("PlayerGui")
@@ -180,75 +186,83 @@ end
 check("HUD renders text", #labels > 0, tostring(#labels) .. " labels")
 
 local joined = table.concat(labels, " | ")
-check("power readout present", joined:find("⚡") ~= nil, joined:sub(1, 90))
-check("glob readout present", joined:find("💧") ~= nil)
+
+-- THE READOUTS MOVED, AND THAT IS THE POINT.
+--
+-- This file used to assert that the legacy HUD drew a power readout, a Glob
+-- readout, three Snack Stand buttons and a "MY GOOBS" drawer button. All of
+-- those belonged to the second screen that used to sit behind ArenaHud — the
+-- one whose Snack Stand rendered on top of the season track. There is one HUD
+-- now, and what is left in this ScreenGui is toasts and the tutorial coach.
+--
+-- So the assertion is inverted: the legacy screen must NOT be drawing any of
+-- it. An inverted assertion is weak on its own — an empty ScreenGui passes
+-- every "is X absent" check ever written — so each absence below is paired
+-- with a presence somewhere else, and the dock section further down proves the
+-- readouts exist on ArenaHud.
+check("the legacy HUD still draws text (toasts and the coach)", #labels > 0,
+    tostring(#labels))
 
 local btnText = {}
 for _, b in ipairs(buttons) do table.insert(btnText, tostring(b.Text)) end
 local btnJoined = table.concat(btnText, " | ")
-check("snack stand buttons exist", btnJoined:find("Snack") ~= nil, btnJoined:sub(1, 140))
-check("MY GOOBS button exists", btnJoined:find("GOOBS") ~= nil)
+check("no Snack Stand survives on the legacy HUD", btnJoined:find("Snack") == nil,
+    btnJoined:sub(1, 140))
+check("no egg button survives on the legacy HUD", btnJoined:find("HATCH") == nil)
+check("no MY GOOBS drawer button survives", btnJoined:find("GOOBS") == nil)
+check("and no drawer frame is left behind at all",
+    hud:FindFirstChild("Drawer") == nil and hud:FindFirstChild("SnackStand") == nil)
 
 emit("")
-emit("══ DOES THE HUD UPDATE FROM SERVER STATE? ══")
+emit("══ DOES THE ARENA HUD UPDATE FROM SERVER STATE? ══")
+-- The readouts this file used to look for on the legacy HUD live on ArenaHud
+-- now. Same question, asked of the screen that actually draws them: are the
+-- numbers bound to the server push, or is the panel inert? An inert panel is
+-- the exact failure this suite exists to catch — it has happened once already,
+-- when ArenaHud.setProfile was never called and the entire sheet rendered
+-- perfectly against a nil profile.
 tick(3)
-local powerLabel
-for _, d in ipairs(hud:GetDescendants()) do
-    if d:IsA("TextLabel") and type(d.Text) == "string" and d.Text:find("^⚡") then
-        powerLabel = d
-    end
-end
-check("power label bound to a real number", powerLabel and powerLabel.Text ~= "⚡ 0",
-    powerLabel and powerLabel.Text)
+do
+    local gui = pg and pg:FindFirstChild("ArenaHud")
+    check("the arena HUD exists", gui ~= nil)
+    if gui then
+        local statCard = gui:FindFirstChild("StatCard")
+        local massLabel = statCard and statCard:FindFirstChild("Mass")
+        local worthLabel = statCard and statCard:FindFirstChild("Worth")
+        local globLabel = gui:FindFirstChild("Glob")
+        check("the stat card draws mass, worth and Glob",
+            massLabel ~= nil and worthLabel ~= nil and globLabel ~= nil)
 
-local snackBtn
-for _, b in ipairs(buttons) do
-    if tostring(b.Text):find("Snack") then snackBtn = b end
-end
-check("snack button shows a live price", snackBtn and tostring(snackBtn.Text):find("💧") ~= nil,
-    snackBtn and tostring(snackBtn.Text))
-
-emit("")
-emit("══ CLICKING THINGS (the whole point) ══")
-local drawerBtn
-for _, b in ipairs(buttons) do
-    if tostring(b.Text):find("GOOBS") then drawerBtn = b end
-end
-if drawerBtn then
-    drawerBtn.Activated:Fire()
-    tick(1)
-    local eggBtn
-    for _, b in ipairs(buttonsUnder(hud)) do
-        if tostring(b.Text):find("HATCH") then eggBtn = b end
+        -- BOUND, not merely present. Each of these is built with a placeholder
+        -- ("0", "worth 💧0", "💧 0") and a panel wired to nothing renders those
+        -- placeholders perfectly — which is exactly what shipped once, when
+        -- ArenaHud.setProfile was never called and the whole sheet drew itself
+        -- against a nil profile without a single error. So each readout is
+        -- compared against the value the SERVER last pushed, not against a
+        -- pattern that a dead panel would also satisfy.
+        local sync
+        for i = #_G.TRAFFIC, 1, -1 do
+            local t = _G.TRAFFIC[i]
+            if t.remote == "ArenaSync" and t.player ~= "ALL" then sync = t.args[1] break end
+        end
+        local state
+        for i = #_G.TRAFFIC, 1, -1 do
+            local t = _G.TRAFFIC[i]
+            if t.remote == "StateSync" and t.player ~= "ALL" then state = t.args[1] break end
+        end
+        check("the arena sync arrived at all", sync ~= nil)
+        if sync and massLabel then
+            local shown = tonumber((tostring(massLabel.Text):gsub("[^%d%.]", "")))
+            check("the mass readout matches the mass the server pushed",
+                shown ~= nil and math.abs(shown - sync.mass) <= math.max(1, sync.mass * 0.05),
+                ("HUD %s vs server %.1f"):format(tostring(massLabel.Text), sync.mass))
+        end
+        if state and globLabel then
+            check("the Glob readout is bound to a real value, not the placeholder",
+                tostring(globLabel.Text) ~= "💧 0" and state.glob > 0,
+                ("%s vs server %.0f"):format(tostring(globLabel.Text), state.glob))
+        end
     end
-    check("opening the drawer reveals the egg button", eggBtn ~= nil,
-        table.concat((function()
-            local t = {}
-            for _, b in ipairs(buttonsUnder(hud)) do table.insert(t, tostring(b.Text)) end
-            return t
-        end)(), " | "):sub(1, 160))
-else
-    check("drawer button found", false)
-end
-
--- Clicking the snack button must reach the server and change state.
-if snackBtn then
-    tick(900)
-    local globBefore
-    for i = #_G.TRAFFIC, 1, -1 do
-        local t = _G.TRAFFIC[i]
-        if t.remote == "StateSync" and t.player ~= "ALL" then globBefore = t.args[1].glob break end
-    end
-    snackBtn.Activated:Fire()
-    tick(3)
-    local globAfter
-    for i = #_G.TRAFFIC, 1, -1 do
-        local t = _G.TRAFFIC[i]
-        if t.remote == "StateSync" and t.player ~= "ALL" then globAfter = t.args[1].glob break end
-    end
-    check("clicking the snack button actually spent Glob",
-        globBefore and globAfter and globAfter < globBefore,
-        ("%s -> %s"):format(tostring(globBefore), tostring(globAfter)))
 end
 
 emit("")
@@ -342,7 +356,11 @@ if arenaGui then
         end
     end
     table.sort(tabs, function(x, y) return x.Name < y.Name end)
-    check("the dock has every tab", #tabs == 8, tostring(#tabs))
+    -- Nine now: CREW joined the dock when the legacy drawer that used to hold
+    -- it was deleted. Derived from the module's own list rather than written
+    -- as a literal, so adding a tab does not mean editing a magic number in a
+    -- test that would otherwise pass by not noticing.
+    check("the dock has every tab", #tabs == 9, tostring(#tabs))
 
     local empty = {}
     for _, tab in ipairs(tabs) do
@@ -354,7 +372,9 @@ if arenaGui then
         end
         -- season and trade delegate elsewhere or are text-only; the rest must
         -- list real, per-player content.
-        if cards == 0 and tab.Name ~= "Dock_season" then
+        -- season and crew render through Panels into the sheet's Host frame,
+        -- not into Body, so Body is legitimately empty for those two.
+        if cards == 0 and tab.Name ~= "Dock_season" and tab.Name ~= "Dock_crew" then
             table.insert(empty, tab.Name)
         end
         tab.Activated:Fire()   -- close again
@@ -380,3 +400,19 @@ end
 emit("")
 
 emit(("══ %s ══"):format(fails == 0 and "ALL CLIENT CHECKS PASSED" or (fails .. " FAILURE(S)")))
+
+-- FAIL THE BUILD, not just the transcript.
+--
+-- Everything above printed "FAIL" to the output and then exited ZERO. Eight of
+-- the ten scenario suites did this, which means `run_all.sh` could print "ALL
+-- SUITES PASSED" underneath a screen of real failures — and did: a mutation
+-- battery deliberately broke the legacy-purge guards and the phone layout, and
+-- every one of those suites reported the break and passed anyway.
+--
+-- This exact class of bug was found and fixed once before, in the pure sims.
+-- It came back here because the scenario suites were written later and nobody
+-- checked that the new ones could fail. A suite that cannot fail is not a
+-- weaker test, it is a comment.
+if fails > 0 then
+    error(fails .. " client failure(s)")
+end

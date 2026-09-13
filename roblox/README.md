@@ -6,6 +6,26 @@ A Roblox experience built for the *Grow a Garden* / *Steal a Brainrot* audience 
 instantly readable, huge power scale, deep trading — with one structural
 difference that none of those games have: **a real economic sink**.
 
+> ## ⚠️ Parts 5–8 of this file describe a game that no longer exists
+>
+> This README documents the original **collection** game: plots, roaming
+> critters you chased down, a Snack Stand, an Egg Stand, four zones. That game
+> was replaced by a real-time round-based arena, and the systems listed above
+> have since been **deleted from the codebase**, not just superseded.
+>
+> The economy underneath — the mass sink, the age axis, the trade rails, the
+> monetisation wall — all survive, which is why the rest of this file is still
+> worth reading for *why* things are the way they are.
+>
+> For what the game **is** right now:
+>
+> | Read | For |
+> |---|---|
+> | [`GOOP.md`](GOOP.md) | the design: one island, rounds, deflation, bots, the edge |
+> | [`HOW_TO_TEST.md`](HOW_TO_TEST.md) | how to play it and what to look for |
+> | [`HANDOFF.md`](HANDOFF.md) | the full project state, every invariant, every trap |
+> | [`../AGENTS.md`](../AGENTS.md) | the nine rules any agent working here must not break |
+
 ---
 
 ## Part 1 — How I can build this on *your* Studio
@@ -400,11 +420,13 @@ roblox/
       Data.luau             DataStore w/ retry, migration, no-blank-overwrite
       WorldBuilder.luau     the entire map, from code
       GoobService.luau      rendering, digestion, income, gulping
-      CritterService.luau   spawning + server-authoritative catching
+      ArenaService.luau     the live round: pellets, eating, powers, the board
+      BotService.luau       the rest of the field (bodies + steering only)
       TradeService.luau     the paranoid trade state machine
     client/                 → StarterPlayer.StarterPlayerScripts.GoobClient
       init.client.luau      input, proximity, feedback
-      Hud.luau              HUD + Goob drawer
+      ArenaHud.luau         the dock, the stat card, the one sheet
+      Hud.luau              toasts + the tutorial coach
       TradeUi.luau          the trade window
       Theme.luau            every colour and corner radius
 ```
@@ -420,15 +442,13 @@ the entire game you should only ever have to open one file.
 ✅ Full economy (mass, age, power, income, offline digestion)
 ✅ Translucent Goobs with visible interiors
 ✅ Runtime world generation, 8 plots, hub, trade zone, leaderboard
-✅ 21 feedstock types across 7 rarities, roaming + server-authoritative catching
-✅ Server-wide Secret announcements
+✅ 21 feedstock types across 7 rarities (fed to your Goob by the round payout;
+   the roaming critters that used to carry them are deleted)
 ✅ Gulping with two-step confirmation
 ✅ Full trade system with the anti-scam rules above
 ✅ DataStore persistence with session handling
-✅ **Snack Stand** — the Glob sink that connects idle income back to
-   progression, priced at a constant number of seconds-of-income at every scale
-✅ **Egg Stand** — the only source of new Goobs, and the reason the gulp
-   mechanic is reachable at all
+❌ ~~**Snack Stand**~~ — deleted. Feeding comes out of finishing a round.
+❌ ~~**Egg Stand**~~ — deleted. An egg every `EGG_EVERY_ROUNDS` rounds played.
 ✅ Test + balance harness
 
 **Next, in the order I'd do it:**

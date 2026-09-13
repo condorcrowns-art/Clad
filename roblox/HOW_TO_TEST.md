@@ -1,14 +1,24 @@
-# 🫧 How to test GULP A GOOB
+# 🫧 How to test GOOP
 
 ## Open it (30 seconds, nothing to install)
 
-1. Download **`GulpAGoob.rbxlx`**
+1. Download **`build/GulpAGoob.rbxlx`**
 2. Roblox Studio → **File → Open from File…** → pick it
 3. Press **▶ Play**
 
-The world builds itself when the server starts, so there is nothing to place by
-hand. You should land on a sand hub ringed by eight plots, with your Goob
-sitting on one of them.
+The world builds itself when the server starts — there is nothing to place by
+hand. You land in the **waiting room**, a platform above the island, and a
+round starts within about 35 seconds.
+
+---
+
+## The loop, in four sentences
+
+You are a blob. Eat the goo on the floor to get bigger, eat anybody smaller
+than you, and run from anybody bigger. **There is no size limit** — whoever is
+biggest when the clock runs out wins the round. Between rounds you are in the
+waiting room, where nothing can eat you and everything is open: crates, skins,
+trinkets, powers, trading.
 
 ---
 
@@ -16,189 +26,154 @@ sitting on one of them.
 
 | Where | What |
 |---|---|
-| Top-left | ⚡ power, 💧 Glob ticking up, income per second |
-| Under that | Your Goob's age tier and its power multiplier |
-| Left | 🍪 **SNACK STAND** — three buttons with live prices |
-| Bottom-left | 🫧 **MY GOOBS** — opens the drawer |
-| Top-right | Toast notifications |
-| Ahead of you | A dark pillar showing 🏆 BIGGEST GOOBS |
+| Top-centre | The **dock** — nine icons. Everything in the game is behind one of them. |
+| Under the dock | The **status strip** — the round clock, where you are standing, and whether you are safe |
+| Top-left | Your **mass**, what it is worth, and your best this round |
+| Top-right | 💧 **Glob**, and your Beta Season tier |
+| Bottom-centre | Your **power button**, between the thumbstick and the jump button |
+| Top of the screen, during your first run | The **coach** — one instruction at a time |
 
-If the HUD is missing entirely, something went wrong loading — check the Output
-window and send me what it says.
+There is exactly **one panel at a time**. Tapping a dock icon opens its sheet
+and closes whatever was up. If you ever see two panels overlapping, that is a
+bug — screenshot it.
 
 ---
 
-## v4: you ARE the Goob now
+## Controls
 
-The biggest change. You no longer stand next to your Goob — **you roll as it.**
-
-| Control | Desktop | Mobile |
+| | Desktop | Mobile |
 |---|---|---|
-| Move | WASD | thumbstick |
-| Jump | Space | Roblox's jump button |
-| **Dash** | Shift or Q | the ⚡ button |
+| Move | WASD or arrows | thumbstick |
+| Jump | Space | the jump button |
+| Power | E, or the ⚡ button | the ⚡ button |
 
-**Mass is now handling.** A big Goob has a higher top speed but takes far
-longer to get going and much longer to stop. A 1T Goob needs 258 studs to
-come to rest; a fresh one needs 8.
-
-**Dash** has 3 charges that refill over ~8 seconds, with exactly **one air
-dash** per jump. It's not flight — it's a correction, and it's the only way
-into The Deep.
-
-### Four zones, not one flat plane
-
-- **The Hub** — trade ring, snack stand, hatchery, leaderboard, ascension
-  altar. Every one signposted with a big icon.
-- **The Scrapyard** — ramps and a half-pipe. Learn to dash here.
-- **The Slickfield** — near-zero friction. You will overshoot.
-- **The Deep** — rarest spawns, across a gap you must dash to clear.
-
-### The goal: ASCEND
-
-At **Colossal**, roll to the 👑 altar at the hub. Your Goob is **destroyed
-forever** and you keep a **Crest** — worn on your nameplate, and every Crest
-makes all food permanently worth +18% more, compounding. That's the point of
-the game: ascend as many times as you can, holding the oldest Goobs when you do.
-
-**Read `DESIGN.md`** for the full reasoning, including why there's no PvP yet,
-why guilds would be premature, and what can and can't be sold for Robux.
-
-## v6: the Archive, and it feels alive now
-
-**📜 THE ARCHIVE** — a monument west of the hub. It shows, **worldwide**, how
-many of each rare thing still exist:
-
-```
-Pocket Singularity
-   7 alive   ·   19 found   ·   12 eaten
-   1 in 101,733
-```
-
-`ALIVE = FOUND − EATEN`. **Ascending destroys everything in your Goob's belly**,
-so the more people reach the endgame, the genuinely rarer old Secrets become.
-Until now you were asked to take the scarcity on faith. This is the real number.
-
-**Juice** — catches burst particles scaled to rarity (a Secret throws 110 and
-shakes the camera), gulps and ascensions get their own effects, Pit shoves thud,
-and **critters now visibly flinch away when you close on them**.
-
-## v5: everything else
-
-**Tabs in the drawer** (🫧 MY GOOBS): 🫧 Goobs · 👕 Wear · ⭐ Season · 🛡️ Crew.
-
-- **👕 Wardrobe** — 30 cosmetics across skins, trails, eyes and crowns. Skins
-  change your body material and colour; trails follow you; crowns and crew tags
-  show on your nameplate. Locked items say exactly how to get them.
-- **⭐ Season pass** — 50 tiers, XP from *playing*. Daily cap of 7,000 (~2h),
-  so the track takes ~40 days. Premium adds a second reward column on tiers you
-  already earned; it never sells tiers.
-- **🛡️ Crews** — found one for 10 minutes of income, or join by 4-letter tag.
-  A rotating weekly goal nobody hits alone; everyone who helped gets paid.
-
-**🥊 The Sumo Pit** — roll south of the hub. Stake Glob, last one in the ring
-takes the pot. The ring shrinks and closes hard at the end.
-
-**You can never lose a Goob in the Pit.** Glob only. That is deliberate and
-permanent — a Goob that can be taken by force is a Goob nobody will trade.
-
-**Monetisation is scaffolded, not live.** Every gamepass and product has
-`assetId = 0`, so nothing is offered for sale until you put real IDs in
-`src/shared/Monetisation.luau`. A test fails the build if anything purchasable
-would touch mass, age, luck or Secrets.
-
-## There's a coach now
-
-A brand-new save gets a gold banner at the top walking you through the whole
-loop in about two minutes — **catch → digest → snack → hatch → gulp → trade** —
-one sentence at a time. It advances when you actually *do* the thing, not on a
-timer, and it pulses whichever button it's asking for.
-
-`✖` skips it permanently. Existing saves are never shown it.
-
-**To see it again:** Studio → View → Explorer, or just test in a fresh place —
-the state lives in your DataStore profile, so wiping the save resets it.
-
-## A 5-minute test run
-
-**1. Catch things.** Junk wanders the field. Just run into it — no clicking.
-Rarer items glow and float a label; you can spot a Legendary from across the
-map. Your Goob's stomach fills, then digests, then it visibly grows.
-
-**2. Watch the blob.** The stuff it ate is *inside* it. Feed it ten traffic
-cones and it looks different from one fed ten rubber ducks. This is the whole
-visual hook — tell me if it reads or not.
-
-**3. Spend Glob.** Click 🍪 Snack. You get 3 random items instantly. Feast and
-Banquet cost more and roll better — but **none of them can ever give you a
-Secret.** Those only come from the field.
-
-**4. Hatch a second Goob.** Open 🫧 MY GOOBS → 🥚 HATCH A GOOB. It costs about
-15 minutes of income the first time and climbs steeply after.
-
-**5. Gulp it.** In the drawer, hit 😋 Gulp on the new one. Confirm. It is
-**destroyed permanently** and your main Goob absorbs 75% of its mass, 35% of
-its age, and everything it had eaten. Generation goes up.
-
-**6. Trade** (needs a second player — a second Studio client, or `Test → Players
-→ 2`). Both stand in the gold 🤝 TRADE ZONE at the hub. A TRADE WITH… button
-appears. Try this specifically: **both confirm, then change your offer.** Both
-confirmation bars must snap back to empty. That is the anti-scam rule.
+**Mass is handling.** A fresh blob is quick and twitchy; a huge one has a lower
+top speed and takes much longer to stop. That gap is what makes a chase
+losable rather than hopeless.
 
 ---
 
-## Things I especially want your read on
+## The five things worth testing
 
-1. **Does the size curve feel right?** A Goob should look visibly bigger every
-   time it gains 10x mass. It is logarithmic — an earlier cube-root version
-   made every Goob past 1M mass identical.
-2. **Is the interior readable?** Can you tell what someone fed their blob by
-   looking at it, or is it just colourful mush?
-3. **Is catching fun or tedious?** Auto-collect on touch, ~1 item per 4 seconds
-   for an engaged player.
-4. **Does the coach actually teach it?** Follow it as if you'd never seen the
-   game. The step that matters most is the gulp one — it's the only place the
-   core idea ("destroying a Goob is how you grow") is ever explained. If that
-   lands, the design works. If it doesn't, the design has a problem no amount
-   of UI will fix.
+### 1. The round
+
+A round is **3½ minutes**, then results, then a 35-second waiting room. Growth
+is unbounded — the fantasy is getting *enormous*, and nothing caps it. Your
+final size is your score; placing in the top three multiplies the payout.
+
+**What to check:** does the round actually end? Does the board show everybody?
+Does the waiting room put you somewhere safe?
+
+### 2. The field is always full
+
+Every round is played by **twelve contenders**. However many humans are on the
+server, bots make up the rest — one human means eleven bots, and an empty
+server still runs a real round.
+
+Bots are **tagged with 🤖** above their heads and marked on the results board.
+They are not props: they eat the floor, they eat each other, they will eat you,
+and your powers deflate them exactly like they deflate a player.
+
+**What to check:** can you beat them? Can they beat you? Does the board list
+them with distinct names? Does anything about them feel like it is cheating —
+if a bot ever reacts instantly or catches you when it should not have, say so.
+
+### 3. Powers deflate — that is the catch-up mechanic
+
+Every power costs a slice of your own mass, and that slice **lands on the floor
+as food**. Most of them also knock size *off* whoever you hit, in proportion to
+how big they are — so the leader is always the most rewarding thing on the
+island to hit, and hitting them feeds everyone standing nearby.
+
+Pick one in the ⚡ **POWERS** tab. More unlock as your lifetime banked Glob
+grows, and each one gets quicker and cheaper the more you use it.
+
+**What to check:** SLAM into a crowd. Does everybody near you visibly shrink?
+Does food appear where they were?
+
+### 4. The edge is food, not a hiding place
+
+The outer rim of the island used to be a permanent no-PvP ring, which is why
+nothing grew out there. It is not permanent anymore. Standing on the rim spends
+a **safety meter** — about twelve seconds, shown on the status strip as
+`SAFE 9s` — which refills only while you are back inside. Run out and the strip
+says **EXPOSED**, and the rim is the most open ground on the map.
+
+The meter does not start until you have gone inland once, so spawning out there
+still gives you a proper look at the island first.
+
+**What to check:** is there food all the way to the shoreline? Does the meter
+count down where you can see it? Does anything eat you *while the strip still
+says SAFE*? (That last one would be a real bug.)
+
+### 5. The waiting room
+
+Between rounds. Nothing can touch you. Every dock tab works here:
+
+| Tab | What |
+|---|---|
+| 🎁 CRATES | The gacha. Glob only — Robux never buys a roll. Hard pity, counter on the button. |
+| 👕 WARDROBE | Skins, trails, crowns |
+| 🔧 TRINKETS | Passive modifiers, two slots |
+| ⚡ POWERS | Pick the one button you carry |
+| 🫧 YOUR GOOBS | Your collection. CARRY one, or GULP one into another. |
+| 🤝 TRADE | The rules, and what you can offer |
+| ⭐ BETA SEASON | The pass. Claim earned tiers. |
+| 🛡️ YOUR CREW | Found or join one; shared weekly goal |
+| 🥊 THE STANDOFF | Queue for a 1v1 |
+
+**Trading** happens by rolling up to another player — a request appears for
+both of you. Confirming is a **3-second hold**, and if either side changes the
+offer after confirming, *both* confirmations reset.
 
 ---
 
-## Known, and deliberately so
+## Where Goobs and their food come from now
 
-- **No Secrets from the shop.** Money must never buy the collectibles the
-  trading economy is built on.
-- **Colossal takes ~3 days of active play.** It is meant to be a trading
-  milestone, not a grind.
-- **Eggs are a terrible way to gain mass** (~309x worse per Glob than snacks).
-  They buy a *slot*, not power.
-- **DataStores need API access.** In Studio without it, the game runs fully but
-  in memory — progress resets on stop. Studio → Game Settings → Security →
-  *Enable Studio Access to API Services* to persist.
+There is no shop for this. Finishing a round feeds the Goob you are carrying —
+more food for a bigger finish, a luckier table for a better placing — and every
+**five rounds finished** hatches a new Goob, up to eight.
 
-## On a phone
+That is deliberate: a stable is evidence that you played, which is the one
+thing in the game that cannot be bought, botted or handed over.
 
-The UI now has two distinct layouts, not one that shrinks:
+---
 
-- **Roomy** (desktop, iPad) — stat panel and snack stand down the left, wide
-  drawer button bottom-left.
-- **Compact** (phone, or any window under 900x500) — the left column would eat
-  the screen whole, so the snack stand moves *inside* the drawer and the whole
-  HUD collapses to one round 🫧 button.
+## Things that are gone (and should stay gone)
 
-That button sits in the gap **between** the thumbstick and the jump button,
-because both bottom corners belong to Roblox's touch controls and anything
-drawn there is unreachable with a thumb.
+If you see any of these, it is a regression:
 
-Verified at 568x320, 736x380, 640x360, 1024x768 and 1920x1080: nothing
-overflows the screen, no persistent button hides under the touch controls, and
-every tap target is at least 44px.
+- **Roaming "critters"** — labelled junk like `RARE Anvil` bobbing around the
+  island. They belonged to the collecting game the arena replaced.
+- **The Snack Stand** — a `🍪 SNACK / 🍗 FEAST / 👑 BANQUET` panel.
+- **The Egg Stand** — a `🥚 HATCH A GOOB` button with a price.
+- **A "MY GOOBS" drawer** sliding in from the left, especially with a shop
+  rendered on top of a season list.
 
-**Worth testing anyway:** resize the Studio window while playing — the layout
-recomputes live. And check that text is actually *legible* at phone size, which
-no automated check can tell me.
+---
 
-## Not yet built
+## What to send back
 
-No tutorial, no daily login, no global scarcity census — those are the roadmap
-in `roblox/README.md`.
+Screenshots beat descriptions, and "it felt bad" is genuinely useful — say it
+even if you cannot say why.
+
+Worth flagging specifically:
+
+1. Anything you got **stuck** in or on.
+2. Anywhere the UI **overlapped itself** or ran off the screen.
+3. A moment a bot felt **unfair** or **stupid**.
+4. Whether the island feels **full** — of food, of players, of places.
+5. Whether three and a half minutes feels **too long or too short**.
+
+---
+
+## If something is broken
+
+Open the **Output** window in Studio (View → Output) and copy anything red.
+The server prints one line at boot that tells you the build is healthy:
+
+```
+[GULP A GOOB] ready. one island, 1424 pellets, 12 powers, 8 trinkets, 3 crates.
+```
+
+No line, or a different pellet count, means the world did not finish building.

@@ -47,33 +47,40 @@ end
 emit("══ BOOTING THE REAL SERVER ══")
 _G.BOOT_SERVER()
 tick(1)
+-- `true` on purpose, and the ONLY place that is acceptable: _G.BOOT_SERVER()
+-- throws on any error inside the real scripts, so reaching this line is
+-- itself the assertion. Anywhere else, `check(name, true)` is a test that
+-- cannot fail — see the payload sweep in adversarial.luau, which was one
+-- of those and had been silently passing without running since it was
+-- written.
 check("server booted without error", true)
 
 local RS = svc.ReplicatedStorage
 local net = RS:FindFirstChild("GoobNet")
 check("GoobNet folder created", net ~= nil)
 check("world folder created", svc.Workspace:FindFirstChild("GoobWorld") ~= nil)
-check("critter folder created", svc.Workspace:FindFirstChild("Critters") ~= nil)
-
--- NOTHING MAY SPAWN IN THE SEA. Critters used to roam to a flat 520 studs,
--- written when the island was 300 — so a third of them sat glowing over open
--- water, unreachable, inviting players to roll off the edge after one.
+-- ══ THE LEGACY LAYER IS ACTUALLY GONE ══════════════════════════════════════
+--
+-- This is a REGRESSION test, not a tidiness one. Three systems from the game
+-- that existed before the arena — roaming "critters", the Snack Stand and the
+-- Egg Stand — kept surviving reworks because nothing ever asserted their
+-- absence. The cost was visible in play: a labelled "RARE Anvil" bobbing past
+-- two players mid-round, and a shop panel rendering across the season track.
+--
+-- A deletion that nothing checks comes back. So the check is: the folder must
+-- not exist, and the remotes must not exist. If somebody re-adds either, this
+-- suite fails before the build does.
 do
-    local Config = _G.SHARED("Config")
-    local critters = svc.Workspace:FindFirstChild("Critters")
-    local drowned, checked = 0, 0
-    for _ = 1, 40 do
-        for _, c in ipairs(critters:GetChildren()) do
-            local flat = math.sqrt(c.Position.X ^ 2 + c.Position.Z ^ 2)
-            checked += 1
-            if flat > Config.ISLAND_RADIUS then drowned += 1 end
-        end
-        tick(2)
+    check("no Critters folder in the world",
+        svc.Workspace:FindFirstChild("Critters") == nil)
+    for _, dead in ipairs({ "CatchCritter", "BuySnack", "BuyEgg" }) do
+        check("the " .. dead .. " remote is gone",
+            net:FindFirstChild(dead) == nil)
     end
-    check("no critter ever spawns off the island",
-        drowned == 0, ("%d of %d sightings in the sea"):format(drowned, checked))
-    check("and some actually spawned, so that meant something", checked > 20,
-        tostring(checked))
+    local Config = _G.SHARED("Config")
+    check("no snack tiers left in Config", Config.SNACK_TIERS == nil)
+    check("no critter tuning left in Config", Config.CRITTER_MAX_ALIVE == nil)
+    check("no egg price left in Config", Config.EGG_BASE_SECONDS == nil)
 end
 
 local world = svc.Workspace:FindFirstChild("GoobWorld")
@@ -195,79 +202,100 @@ check("it carries a nameplate", goobBall and goobBall:FindFirstChild("Plate") ~=
 check("it is unanchored so physics can move it", goobBall and goobBall.Anchored == false)
 
 emit("")
-emit("══ CATCHING ══")
-tick(20)
-local critters = svc.Workspace:FindFirstChild("Critters")
-check("critters spawned", critters and #critters:GetChildren() > 0,
-    critters and tostring(#critters:GetChildren()))
+emit("══ FEEDING: THE ROUND IS THE ONLY SOURCE OF MASS ══")
+--
+-- WHAT THIS REPLACED. There used to be three tests here: catching critters,
+-- buying a snack, and buying an egg. All three systems have been deleted —
+-- they belonged to the collecting game the arena replaced, and they were still
+-- running in live rounds. What has to be proven now is that the game did not
+-- simply lose its economy with them: finishing a round must still feed your
+-- Goob, and eggs must still arrive.
+local Config = _G.SHARED("Config")
 
-local before = snapshotFor(alice)
-local beforeMass = before and before.goobs[1].mass or 0
-
--- Walk Alice onto a critter and fire the real catch remote.
-local caught = 0
-for _ = 1, 12 do
-    local list = critters:GetChildren()
-    if #list == 0 then break end
-    local target = list[1]
-    svc.movePlayer(alice, target.Position)
-    svc.fireAs("CatchCritter", alice, target)
-    tick(0.5)
-    caught += 1
+local function arenaOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1]
+        end
+    end
 end
-check("caught several critters", caught > 0, tostring(caught))
-tick(15)
 
-local after = snapshotFor(alice)
-check("mass increased after catching",
-    after and after.goobs[1].mass > beforeMass,
-    after and ("%f -> %f"):format(beforeMass, after.goobs[1].mass))
-check("stomach digests down over time", after and after.goobs[1].stomachCount >= 0)
+--- Sit through whole rounds. Each is ROUND_SECONDS of play plus the results
+--- hold plus the intermission, so one full cycle is a little over four minutes
+--- of simulated time.
+local function playRounds(n)
+    local seen = 0
+    local wasPlaying = (arenaOf(alice) or {}).phase == "PLAYING"
+    for _ = 1, math.floor((Config.ROUND_SECONDS + Config.ROUND_END_HOLD
+        + Config.INTERMISSION_SECONDS + 6) * n / 0.5) do
+        tick(0.5)
+        local nowPlaying = (arenaOf(alice) or {}).phase == "PLAYING"
+        if wasPlaying and not nowPlaying then
+            seen += 1
+            if seen >= n then return seen end
+        end
+        wasPlaying = nowPlaying
+    end
+    return seen
+end
+
+local beforeRound = snapshotFor(alice)
+local massBeforeRound = beforeRound and beforeRound.goobs[1].mass or 0
+local goobsBefore = beforeRound and #beforeRound.goobs or 0
+check("a fresh profile starts with one Goob and no rounds played",
+    goobsBefore == 1 and (beforeRound.roundsPlayed or 0) == 0,
+    ("goobs=%d rounds=%s"):format(goobsBefore, tostring(beforeRound and beforeRound.roundsPlayed)))
+
+local played = playRounds(1)
+check("a round actually finished", played == 1, tostring(played))
+
+local afterRound = snapshotFor(alice)
+check("finishing a round counted", afterRound and (afterRound.roundsPlayed or 0) >= 1,
+    afterRound and tostring(afterRound.roundsPlayed))
+-- The Goob is fed through the stomach, which digests over time — so the proof
+-- is either mass already up OR food in transit. Asserting only on mass would
+-- fail on timing rather than on behaviour, which is the classic way a true
+-- test turns into a flaky one.
+check("finishing a round fed the Goob",
+    afterRound and (afterRound.goobs[1].mass > massBeforeRound
+        or afterRound.goobs[1].stomachCount > 0),
+    afterRound and ("mass %f -> %f, stomach %d"):format(massBeforeRound,
+        afterRound.goobs[1].mass, afterRound.goobs[1].stomachCount))
+check("the snapshot says when the next egg is due",
+    afterRound and afterRound.roundsToEgg ~= nil
+        and afterRound.roundsToEgg <= Config.EGG_EVERY_ROUNDS,
+    afterRound and tostring(afterRound.roundsToEgg))
+
+tick(40)
+local digested = snapshotFor(alice)
+check("the stomach digests into mass over time",
+    digested and digested.goobs[1].mass > massBeforeRound,
+    digested and ("%f -> %f"):format(massBeforeRound, digested.goobs[1].mass))
 local grownBall = svc.Workspace:FindFirstChild("GoobBall_101")
 check("Goob body grew", grownBall and grownBall.Size.X > 0)
 
 emit("")
-emit("══ THE GLOB SINK: SNACK STAND ══")
-local snapA = snapshotFor(alice)
-check("snapshot exposes snack tiers", snapA and snapA.snacks and #snapA.snacks == 3,
-    snapA and snapA.snacks and tostring(#snapA.snacks))
-check("snack prices are positive", snapA and snapA.snacks[1].price > 0)
+emit("══ EGGS ARE EARNED BY PLAYING, NOT BOUGHT ══")
+-- Play out the remainder of the cycle. The egg lands on the EGG_EVERY_ROUNDS'th
+-- finished round, so this is the exact number of rounds left.
+local snapNow = snapshotFor(alice)
+local remaining = snapNow.roundsToEgg
+check("the countdown is a real number of rounds",
+    remaining >= 1 and remaining <= Config.EGG_EVERY_ROUNDS, tostring(remaining))
+local ran = playRounds(remaining)
+check("played out the countdown", ran == remaining,
+    ("%d of %d"):format(ran, remaining))
 
--- Give Alice enough Glob to afford a Banquet, then buy one.
-tick(600)
-local rich = snapshotFor(alice)
-local massBeforeSnack = rich.goobs[1].mass
-svc.fireAs("BuySnack", alice, "snack")
-tick(30)
-local postSnack = snapshotFor(alice)
-check("buying a snack fed the Goob",
-    postSnack and (postSnack.goobs[1].mass > massBeforeSnack or postSnack.goobs[1].stomachCount > 0),
-    lastNotify("Alice"))
-
-emit("")
-emit("══ THE EGG STAND (the fix for the unreachable gulp) ══")
-local preEgg = snapshotFor(alice)
-check("snapshot exposes an egg price", preEgg and preEgg.eggPrice and preEgg.eggPrice > 0,
-    preEgg and tostring(preEgg.eggPrice))
-
--- Accumulate income until the egg is affordable, then hatch.
-local tries = 0
-while tries < 40 do
-    local s = snapshotFor(alice)
-    if s and s.eggAffordable then break end
-    tick(300)
-    tries += 1
-end
-check("egg became affordable through idle income", tries < 40, "tries=" .. tostring(tries))
-
-svc.fireAs("BuyEgg", alice)
-tick(2)
 local postEgg = snapshotFor(alice)
-check("Alice now has 2 Goobs", postEgg and #postEgg.goobs == 2,
-    postEgg and tostring(#postEgg.goobs) .. " | " .. tostring(lastNotify("Alice")))
+check("an egg hatched on schedule", postEgg and #postEgg.goobs == 2,
+    postEgg and (tostring(#postEgg.goobs) .. " | " .. tostring(lastNotify("Alice"))))
+check("and the countdown reset rather than sticking at zero",
+    postEgg and postEgg.roundsToEgg == Config.EGG_EVERY_ROUNDS,
+    postEgg and tostring(postEgg.roundsToEgg))
 
 emit("")
-emit("══ GULPING — the mechanic that was dead code ══")
+emit("══ GULPING — the only way a Goob leaves the world ══")
 if postEgg and #postEgg.goobs == 2 then
     local activeId, otherId
     for _, g in ipairs(postEgg.goobs) do
@@ -301,16 +329,17 @@ tick(2)
 check("Bob joined and got a body", svc.Workspace:FindFirstChild("GoobBall_202") ~= nil)
 
 -- Both must be inside the trade zone; give Alice a second Goob to offer.
+--
+-- She gets it the only way anybody gets one now: by finishing rounds. There is
+-- no BuyEgg to shortcut with, which is the point — if this loop ever stops
+-- producing a second Goob, trading has quietly become unreachable for every
+-- player in the game and this is where that shows up.
 svc.movePlayer(alice, V3.new(2, 5, 2))
 svc.movePlayer(bob, V3.new(-2, 5, -2))
-tick(600)
-for _ = 1, 40 do
+do
     local s = snapshotFor(alice)
-    if s and #s.goobs >= 2 then break end
-    if s and s.eggAffordable then
-        svc.fireAs("BuyEgg", alice)
-    end
-    tick(300)
+    local need = (s and s.roundsToEgg) or Config.EGG_EVERY_ROUNDS
+    playRounds(need)
 end
 local pre = snapshotFor(alice)
 check("Alice has 2 Goobs to trade with", pre and #pre.goobs >= 2,
@@ -387,3 +416,19 @@ check("saved profile keeps her Goobs", saved and #saved.goobs >= 1,
 
 emit("")
 emit(("══ %s ══"):format(fails == 0 and "ALL INTEGRATION CHECKS PASSED" or (fails .. " FAILURE(S)")))
+
+-- FAIL THE BUILD, not just the transcript.
+--
+-- Everything above printed "FAIL" to the output and then exited ZERO. Eight of
+-- the ten scenario suites did this, which means `run_all.sh` could print "ALL
+-- SUITES PASSED" underneath a screen of real failures — and did: a mutation
+-- battery deliberately broke the legacy-purge guards and the phone layout, and
+-- every one of those suites reported the break and passed anyway.
+--
+-- This exact class of bug was found and fixed once before, in the pure sims.
+-- It came back here because the scenario suites were written later and nobody
+-- checked that the new ones could fail. A suite that cannot fail is not a
+-- weaker test, it is a comment.
+if fails > 0 then
+    error(fails .. " integration failure(s)")
+end

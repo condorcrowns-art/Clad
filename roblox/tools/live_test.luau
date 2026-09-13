@@ -34,6 +34,36 @@ local function lastOf(remote, name)
     end
 end
 
+-- Play out whole rounds. This is what "do something that earns progress" means
+-- now: the Snack Stand and the roaming critters that these suites used to poke
+-- are both gone, and finishing a round is the only thing left that feeds a
+-- Goob, records a catch, or moves the season track.
+local function arenaSyncOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1]
+        end
+    end
+end
+local function playRounds(p, n)
+    local C = _G.SHARED("Config")
+    local seen = 0
+    local wasPlaying = (arenaSyncOf(p) or {}).phase == "PLAYING"
+    local budget = math.floor((C.ROUND_SECONDS + C.ROUND_END_HOLD
+        + C.INTERMISSION_SECONDS + 10) * (n + 1) / 0.5)
+    for _ = 1, budget do
+        tick(0.5)
+        local nowPlaying = (arenaSyncOf(p) or {}).phase == "PLAYING"
+        if wasPlaying and not nowPlaying then
+            seen += 1
+            if seen >= n then return seen end
+        end
+        wasPlaying = nowPlaying
+    end
+    return seen
+end
+
 _G.BOOT_SERVER()
 tick(1)
 local alice = svc.addPlayer("Alice", 101, V3.new(0, 5, 40))
@@ -68,16 +98,7 @@ local s0 = snapOf(alice).season
 check("a season exists", s0 ~= nil and s0.tier == 1, s0 and tostring(s0.tier))
 local xp0 = s0.xp
 
-local critters = svc.Workspace:FindFirstChild("Critters")
-tick(20)
-for _ = 1, 25 do
-    local list = critters:GetChildren()
-    if #list > 0 then
-        svc.movePlayer(alice, list[1].Position)
-        svc.fireAs("CatchCritter", alice, list[1])
-    end
-    tick(0.6)
-end
+check("a round finished", playRounds(alice, 1) == 1)
 tick(3)
 local s1 = snapOf(alice).season
 check("playing earns season xp", s1.xp > xp0, ("%d -> %d"):format(xp0, s1.xp))
@@ -99,8 +120,16 @@ check("premium rewards need the premium pass",
 
 emit("")
 emit("══ CREWS ══")
--- Founding costs ten minutes of income, so bank some first.
-tick(900)
+-- Founding costs ten minutes of INCOME, and income scales with the founder's
+-- Goob. Ticking to accumulate the fee no longer works: the same ticks play out
+-- rounds, every round feeds the Goob, and the price outruns the wallet. So the
+-- wallet is set directly — the crew fee is not what this section is testing.
+local function fund(p, amount)
+    local profile = _G.SERVER("Data").get(p)
+    if profile then profile.glob = amount end
+end
+fund(alice, 1e9)
+fund(bob, 1e9)
 svc.fireAs("CrewCreate", alice, "Th", "X")
 tick(1)
 check("a bad name/tag is refused",
@@ -180,14 +209,30 @@ check("a countdown starts", pitState and pitState.lobbySeconds > 0,
     pitState and tostring(pitState.lobbySeconds))
 
 -- Wait out the lobby; the match should begin.
-tick(Pit.LOBBY_SECONDS + 3)
+--
+-- Sampled in half-second steps rather than ticked through in one go, because
+-- the stake has to be caught IN THE ACT. Alice's wallet is also receiving idle
+-- income and, now that rounds feed her Goob and pay out, possibly a whole round
+-- payout during this wait — so comparing the number before with the number
+-- after cannot tell a taken stake from a quiet minute. A drop between two
+-- consecutive samples can only be a debit.
+local sawDebit = false
+do
+    local prev = snapOf(alice).glob
+    for _ = 1, math.floor((Pit.LOBBY_SECONDS + 6) / 0.5) do
+        tick(0.5, 0.25)
+        local nowGlob = snapOf(alice).glob
+        if nowGlob < prev - 0.001 then sawDebit = true end
+        prev = nowGlob
+    end
+end
 pitState = lastOf("PitSync", "Alice")
 check("the match starts", pitState and pitState.inMatch == true,
     pitState and tostring(pitState.inMatch))
 check("the pot is non-zero", pitState and pitState.pot > 0,
     pitState and tostring(pitState.pot))
-check("stakes were actually taken", snapOf(alice).glob < aGlob,
-    ("%f -> %f"):format(aGlob, snapOf(alice).glob))
+check("stakes were actually taken", sawDebit,
+    ("no sample dropped; ended at %f from %f"):format(snapOf(alice).glob, aGlob))
 
 -- Shove Bob out of the ring and confirm elimination + payout.
 local bobBall = svc.Workspace:FindFirstChild("GoobBall_202")
@@ -385,3 +430,19 @@ check("crew membership persists", saved and saved.crewId ~= nil, saved and tostr
 
 emit("")
 emit(("══ %s ══"):format(fails == 0 and "ALL LIVE SYSTEM CHECKS PASSED" or (fails .. " FAILURE(S)")))
+
+-- FAIL THE BUILD, not just the transcript.
+--
+-- Everything above printed "FAIL" to the output and then exited ZERO. Eight of
+-- the ten scenario suites did this, which means `run_all.sh` could print "ALL
+-- SUITES PASSED" underneath a screen of real failures — and did: a mutation
+-- battery deliberately broke the legacy-purge guards and the phone layout, and
+-- every one of those suites reported the break and passed anyway.
+--
+-- This exact class of bug was found and fixed once before, in the pure sims.
+-- It came back here because the scenario suites were written later and nobody
+-- checked that the new ones could fail. A suite that cannot fail is not a
+-- weaker test, it is a comment.
+if fails > 0 then
+    error(fails .. " live system failure(s)")
+end

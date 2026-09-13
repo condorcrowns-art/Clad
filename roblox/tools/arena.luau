@@ -78,11 +78,22 @@ end
 
 emit("")
 emit("── The island actually holds the density the curves assume ──")
-local flatsArea = math.pi * Config.SHALLOWS_INNER ^ 2
-local realised = Config.PELLET_TARGET / flatsArea
-emit(("  island %d studs · flats %s sq studs · %d pellets · density %.5f (model %.5f)")
-    :format(Config.ISLAND_RADIUS, Format.short(flatsArea),
+-- MEASURED OVER THE DISC THE FOOD ACTUALLY COVERS, which is now the whole
+-- island out to PELLET_OUTER rather than stopping at the rim. Leaving this
+-- reading SHALLOWS_INNER after the field was widened would have reported a
+-- density 32% above the model — the food had not got denser, the ruler had got
+-- shorter. A derived count measured against the wrong area is worse than a
+-- hardcoded one, because it looks derived.
+local foodArea = math.pi * Config.PELLET_OUTER ^ 2
+local realised = Config.PELLET_TARGET / foodArea
+emit(("  island %d studs · food disc %s sq studs · %d pellets · density %.5f (model %.5f)")
+    :format(Config.ISLAND_RADIUS, Format.short(foodArea),
             Config.PELLET_TARGET, realised, Config.PELLET_DENSITY))
+emit(("  the rim from %d to %d studs is fed too, and protection out there is a")
+    :format(Config.SHALLOWS_INNER, Config.PELLET_OUTER))
+emit(("  %ds meter that recharges at 1s per %.0fs inside — so the edge is")
+    :format(Config.SHALLOWS_GRACE, Config.SHALLOWS_RECHARGE))
+emit("  contested ground, not a farm")
 emit(("  respawn %d/s refills the whole island in %.0fs")
     :format(Config.PELLET_RESPAWN_PER_SEC,
             Config.PELLET_TARGET / Config.PELLET_RESPAWN_PER_SEC))
@@ -97,7 +108,13 @@ check("the island's real pellet density matches the model",
 
 -- Room to play. Below about 24k square studs each a full server is a scrum
 -- nobody can build a run in.
-local perPlayer = flatsArea / 24
+--
+-- Measured over the ground a player can actually fight on, which is now the
+-- whole island: the rim used to be a permanent no-PvP ring and was excluded,
+-- but protection out there is a spendable meter now, so it is contested ground
+-- like everywhere else and counts.
+local playableArea = math.pi * Config.PELLET_OUTER ^ 2
+local perPlayer = playableArea / 24
 check("there is room for a full server", perPlayer > 18000,
     ("%.0f sq studs each at 24 players"):format(perPlayer))
 
@@ -113,6 +130,39 @@ local fullServerDrain = 24 * Blob.harvestPerSecond(Blob.ceiling(0.8)) / Config.P
 check("respawn can feed a full server",
     Config.PELLET_RESPAWN_PER_SEC > fullServerDrain * 0.7,
     ("%d/s vs %.0f/s eaten"):format(Config.PELLET_RESPAWN_PER_SEC, fullServerDrain))
+
+emit("")
+emit("── Round mode: does the floor keep up with a guaranteed full field? ──")
+-- THE CHECK ABOVE NO LONGER DESCRIBES THE GAME ON ITS OWN, and this says so
+-- rather than quietly leaving it.
+--
+-- It is written against `Blob.ceiling`, a mass derived from the leak curve —
+-- and leak is OFF during a round (Config.LEAK_IN_ROUND), so nothing caps
+-- growth and the "top of the curve" is no longer where anybody ends up. It is
+-- also written against 24 players, when the real number is now guaranteed:
+-- ROUND_FIELD_SIZE contenders, every round, whether or not anybody logged in.
+--
+-- So the drain is swept across the sizes a round actually passes through. This
+-- is a REPORT for the late round and an ASSERTION for the early one: the floor
+-- thinning out as everyone gets huge is correct — it is what turns the back
+-- half of a round from farming into hunting — but an opening that starves is
+-- simply a broken first thirty seconds.
+local function drainAt(mass)
+    return Config.ROUND_FIELD_SIZE
+        * Blob.harvestPerSecond(mass) / Config.PELLET_VALUE
+end
+emit(("  %-10s %-12s %-12s %s"):format("mass each", "eaten/s", "respawn/s", "verdict"))
+for _, mass in ipairs({ Config.STARTING_MASS, 60, 200, 600, 1500, 4000 }) do
+    local d = drainAt(mass)
+    emit(("  %-10s %-12.1f %-12d %s"):format(Format.short(mass), d,
+        Config.PELLET_RESPAWN_PER_SEC,
+        d <= Config.PELLET_RESPAWN_PER_SEC and "floor holds" or "floor thins — hunt each other"))
+end
+check("the opening of a round is not a famine",
+    drainAt(Config.STARTING_MASS * 6) < Config.PELLET_RESPAWN_PER_SEC,
+    ("%.1f/s eaten by %d contenders vs %d/s respawn"):format(
+        drainAt(Config.STARTING_MASS * 6), Config.ROUND_FIELD_SIZE,
+        Config.PELLET_RESPAWN_PER_SEC))
 
 emit("")
 emit("── Assertions ──")

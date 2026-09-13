@@ -30,7 +30,6 @@ local Monetisation = require(Shared.Monetisation)
 local Data = require(script.Data)
 local WorldBuilder = require(script.WorldBuilder)
 local GoobService = require(script.GoobService)
-local CritterService = require(script.CritterService)
 local TradeService = require(script.TradeService)
 local RollService = require(script.RollService)
 local PitService = require(script.PitService)
@@ -42,7 +41,6 @@ print(("[%s] booting…"):format(Config.GAME_NAME))
 
 Net.init()
 WorldBuilder.build()
-CritterService.start()
 GoobService.start()
 
 local function activeGoobOf(player: Player)
@@ -51,12 +49,6 @@ local function activeGoobOf(player: Player)
 end
 
 -- Reach and catch validation both key off the rolling body.
-CritterService.originFor = function(player: Player): BasePart?
-    local ball = RollService.ballFor(player)
-    if ball then return ball end
-    local char = player.Character
-    return char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-end
 
 RollService.start(activeGoobOf)
 CensusService.start()
@@ -106,20 +98,6 @@ local function snapshot(player: Player)
         })
     end
 
-    local snacks = {}
-    if active then
-        for _, tier in ipairs(Config.SNACK_TIERS) do
-            local price = GoobMath.snackPrice(active, tier)
-            table.insert(snacks, {
-                id = tier.id, name = tier.name, emoji = tier.emoji,
-                rolls = tier.rolls, luck = tier.luck,
-                price = price, priceText = Format.short(price),
-                affordable = profile.glob >= price,
-            })
-        end
-    end
-
-    local eggPrice = active and GoobMath.eggPrice(active, #profile.goobs) or 0
     local tutorial = Tutorial.display(profile.tutorial)
     local crests = profile.crests or 0
     local canAsc, ascReason = false, nil
@@ -128,10 +106,15 @@ local function snapshot(player: Player)
     return {
         glob = profile.glob,
         globText = Format.short(profile.glob),
-        snacks = snacks,
-        eggPrice = eggPrice,
-        eggPriceText = Format.short(eggPrice),
-        eggAffordable = profile.glob >= eggPrice and #profile.goobs < Config.MAX_GOOBS,
+        -- `snacks`, `eggPrice` and friends used to live here, feeding a shop
+        -- panel that has been deleted along with the shops. What replaced them
+        -- is the pair below: how many rounds until the next egg, and whether
+        -- the stable is full. Those are the only two numbers the wardrobe
+        -- still has to answer, and they come from play rather than from a till.
+        roundsPlayed = profile.roundsPlayed or 0,
+        roundsToEgg = (#profile.goobs >= Config.MAX_GOOBS) and -1
+            or (Config.EGG_EVERY_ROUNDS
+                - ((profile.roundsPlayed or 0) % Config.EGG_EVERY_ROUNDS)),
         eggCapped = #profile.goobs >= Config.MAX_GOOBS,
         maxGoobs = Config.MAX_GOOBS,
         income = active and GoobMath.incomePerSecond(active) or 0,
@@ -475,6 +458,67 @@ ArenaService.start({
     sync = function(player, state) ArenaSync:FireClient(player, state) end,
     teach = teach,
 
+    -- EVERYTHING A FINISHED ROUND OWES THE PROFILE.
+    --
+    -- This is what the Snack Stand and the Egg Stand became. Both used to sell
+    -- progress for idle income, which made the arena — the actual game — the
+    -- one thing that could not feed your Goob. Now it is the only thing that
+    -- can: a round pays Glob through `award` and pays MASS through here,
+    -- scaled by the same payout, with the finishing place buying a luckier
+    -- table rather than simply more rolls.
+    roundResult = function(player, place, _mass, payout)
+        local profile = Data.get(player)
+        if not profile then return end
+
+        profile.roundsPlayed = (profile.roundsPlayed or 0) + 1
+
+        local goob = GoobService.activeGoob(profile)
+        if goob then
+            local rolls = math.clamp(
+                math.floor(payout * Config.ROUND_FEED_PER_GLOB),
+                Config.ROUND_FEED_MIN, Config.ROUND_FEED_MAX)
+            local luck = Config.ROUND_FEED_LUCK[place] or Config.ROUND_FEED_LUCK_DEFAULT
+            local rng = Random.new(os.clock() * 1e6 + player.UserId)
+            local best, bestRank = nil, 0
+            local rank = {}
+            for i, r in ipairs(Feedstock.RARITY_ORDER) do rank[r] = i end
+            for _ = 1, rolls do
+                -- `false`: no Secrets from a round payout, same rule the shop
+                -- had. A Secret must be found, never handed out on a timer.
+                local item = Feedstock.roll(rng, luck, false)
+                GoobService.feed(player, item.id)
+                CensusService.recordCaught(item.id)
+                if (rank[item.rarity] or 0) > bestRank then
+                    best, bestRank = item, rank[item.rarity] or 0
+                end
+            end
+            if best then
+                notify(player, ("🍽️ %s ate %d things — best was %s (%s)")
+                    :format(goob.nickname, rolls, best.name, best.rarity),
+                    bestRank >= 5 and "good" or "info")
+                -- ONE effect for the best thing in the haul, not one per roll.
+                -- Twenty-six particle bursts and twenty-six sound stings in the
+                -- same frame is not feedback, it is a crash on a phone — and
+                -- the player only cares about the best one anyway, which is the
+                -- same reason the notification names it.
+                Effect:FireClient(player, "catch", best.id)
+            end
+        end
+
+        -- An egg every EGG_EVERY_ROUNDS rounds finished, up to the cap. This
+        -- is the only source of new Goobs in the game now, and it cannot be
+        -- bought, rushed or idled into.
+        if profile.roundsPlayed % Config.EGG_EVERY_ROUNDS == 0
+            and #profile.goobs < Config.MAX_GOOBS then
+            local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId * 7))
+            table.insert(profile.goobs, egg)
+            progress(player, "egg")
+            notify(player, ("🥚 %d rounds — a new Goob hatched: %s!")
+                :format(profile.roundsPlayed, egg.nickname), "good")
+        end
+        push(player)
+    end,
+
     powerUses = function(player)
         local profile = Data.get(player)
         return (profile and profile.powerUses) or {}
@@ -712,23 +756,6 @@ Net.get("RequestProfile").OnServerInvoke = function(player: Player)
     while not Data.get(player) and os.clock() < deadline do task.wait(0.1) end
     return snapshot(player)
 end
-
-Net.get("CatchCritter").OnServerEvent:Connect(function(player: Player, target: Instance)
-    local ok, item = CritterService.tryCatch(player, target)
-    if not ok then return end
-    GoobService.feed(player, item.id)
-    progress(player, "catch")
-    CensusService.recordCaught(item.id)
-    Effect:FireClient(player, "catch", item.id)
-    if item.rarity == "Secret" then progress(player, "secret") end
-    teach(player, "catch")
-    -- The digest step has no action of its own; catching enough to see the
-    -- number move is the lesson, so it clears alongside.
-    teach(player, "digest")
-    push(player)
-    local isBig = item.rarity ~= "Common" and item.rarity ~= "Uncommon"
-    notify(player, ("+%s  (%s)"):format(item.name, item.rarity), isBig and "good" or "info")
-end)
 
 Net.get("RenameGoob").OnServerEvent:Connect(function(player: Player, goobId: string, raw: string)
     local profile = Data.get(player)
@@ -1006,80 +1033,6 @@ Net.get("SetActiveGoob").OnServerEvent:Connect(function(player: Player, goobId: 
     end
 end)
 
-Net.get("BuyEgg").OnServerEvent:Connect(function(player: Player)
-    local profile = Data.get(player)
-    if not profile then return end
-    local active = GoobService.activeGoob(profile)
-    if not active then return end
-
-    if #profile.goobs >= Config.MAX_GOOBS then
-        notify(player, ("You can only keep %d Goobs at once."):format(Config.MAX_GOOBS), "warn")
-        return
-    end
-
-    -- Price is recomputed server-side from the current Goob and the current
-    -- count. The client sends no price, only the button press.
-    local price = GoobMath.eggPrice(active, #profile.goobs)
-    if profile.glob < price then
-        notify(player, "Not enough 💧 for an egg.", "warn")
-        return
-    end
-
-    profile.glob -= price
-    local egg = Data.newGoob(Random.new(os.clock() * 1e6 + player.UserId))
-    table.insert(profile.goobs, egg)
-    teach(player, "egg")
-    progress(player, "egg")
-    push(player)
-    notify(player, ("🥚 A new Goob hatched: %s! Gulp it, raise it, or trade it.")
-        :format(egg.nickname), "good")
-end)
-
-Net.get("BuySnack").OnServerEvent:Connect(function(player: Player, tierId: string)
-    local profile = Data.get(player)
-    if not profile or typeof(tierId) ~= "string" then return end
-    local goob = GoobService.activeGoob(profile)
-    if not goob then return end
-
-    local tier
-    for _, t in ipairs(Config.SNACK_TIERS) do
-        if t.id == tierId then tier = t break end
-    end
-    if not tier then return end
-
-    -- Price is recomputed server-side from the CURRENT Goob. The client sends
-    -- only which button was pressed, never a price.
-    local price = GoobMath.snackPrice(goob, tier)
-    if profile.glob < price then
-        notify(player, "Not enough 💧 for a " .. tier.name .. ".", "warn")
-        return
-    end
-
-    profile.glob -= price
-    local rng = Random.new(os.clock() * 1e6 + player.UserId)
-    local best, bestRarity = nil, 0
-    local rarityRank = {}
-    for i, r in ipairs(Feedstock.RARITY_ORDER) do rarityRank[r] = i end
-
-    for _ = 1, tier.rolls do
-        -- `false` = no Secrets from the shop. See Feedstock.roll.
-        local item = Feedstock.roll(rng, tier.luck, false)
-        GoobService.feed(player, item.id)
-        CensusService.recordCaught(item.id)
-        local rank = rarityRank[item.rarity] or 0
-        if rank > bestRarity then best, bestRarity = item, rank end
-    end
-
-    teach(player, "snack")
-    progress(player, "snack")
-    push(player)
-    if best then
-        notify(player, ("%s %s — %d items, best was %s (%s)")
-            :format(tier.emoji, tier.name, tier.rolls, best.name, best.rarity),
-            bestRarity >= 5 and "good" or "info")
-    end
-end)
-
 Net.get("GulpGoob").OnServerEvent:Connect(function(player: Player, eaterId: string, eatenId: string)
     local ok, reason = GoobService.gulp(player, eaterId, eatenId)
     if ok then
@@ -1115,11 +1068,6 @@ TradeService.onSync.Event:Connect(function(player, state)
 end)
 TradeService.onNotify.Event:Connect(function(player, msg, kind)
     notify(player, msg, kind)
-end)
-
-CritterService.onSecret.Event:Connect(function(item)
-    Notify:FireAllClients(("🌟 A %s just appeared somewhere in the world — GO!")
-        :format(item.name), "secret")
 end)
 
 print(("[%s] ready. one island, %d pellets, %d powers, %d trinkets, %d crates.")

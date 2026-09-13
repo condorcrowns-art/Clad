@@ -12,12 +12,9 @@ local Net = {}
 Net.EVENTS = {
     "StateSync",      -- S->C  full/partial profile push
     "Notify",         -- S->C  toast message
-    "CatchCritter",   -- C->S  player touched a critter
     "FeedGoob",       -- C->S  push stomach items (auto, but kept explicit)
     "RenameGoob",     -- C->S
     "SetActiveGoob",  -- C->S  choose which Goob sits on your plot
-    "BuySnack",       -- C->S  spend Glob on feedstock rolls
-    "BuyEgg",         -- C->S  hatch a new Goob (the only source of new Goobs)
     "DismissTutorial",-- C->S  stop showing the first-run guide
     "Ascend",         -- C->S  consume a Colossal Goob for a permanent Crest
     "Dashed",         -- C->S  cosmetic: tell the server a dash happened

@@ -153,23 +153,104 @@ check("and standing still does not shrink you",
     ((arenaOf(alice) or {}).mass or 0) >= held * 0.98,
     ("%.0f -> %.0f"):format(held, (arenaOf(alice) or {}).mass or 0))
 
--- FOOD MUST NEVER BE IN THE SAFE RING. Pellets in the Shallows mean a player
--- can stand where nothing can touch them and farm forever, which beats the
--- whole game. The Shallows is where you spawn and where you hide; it is bare
--- on purpose.
+-- FOOD REACHES THE EDGE, AND THE EDGE IS NOT A REFUGE.
+--
+-- This assertion used to be the exact opposite: "no pellet may be outside
+-- SHALLOWS_INNER". The reasoning was sound and the result was not — food in an
+-- unconditionally safe ring means standing still is the winning strategy, so
+-- the ring was left bare, and that left a 93-stud band around the whole island
+-- — over a third of its area — with nothing in it. The player's words: "why is
+-- there no food spawning near the edge".
+--
+-- The fix was to stop the rim being safe FOREVER rather than to stop it being
+-- worth walking to. So there are now two things to prove, and both have to
+-- hold or the change is a regression rather than a fix:
+--
+--   1. food actually reaches the outer third, and
+--   2. the outer third is not thinner per square stud than the middle, because
+--      "technically some pellets are out there" is how this bug comes back
+--      wearing a passing test.
 do
-    local inSafe, total = 0, 0
+    local inRim, outerThird, innerTwo, total = 0, 0, 0, 0
+    -- Split the food disc into two EQUAL-AREA halves. Comparing counts either
+    -- side of an equal-area boundary is the only comparison that means
+    -- anything: split by radius instead and a perfectly uniform field looks
+    -- lopsided, which would make this test pass or fail for reasons that have
+    -- nothing to do with the code.
+    local half = Config.PELLET_OUTER / math.sqrt(2)
     for _, d in ipairs(arena:GetChildren()) do
         if d.Name == "Pellet" or d.Name == "Crumb" then
             total += 1
-            if V3.new(d.Position.X, 0, d.Position.Z).Magnitude > Config.SHALLOWS_INNER then
-                inSafe += 1
-            end
+            local r = V3.new(d.Position.X, 0, d.Position.Z).Magnitude
+            if r > Config.SHALLOWS_INNER then inRim += 1 end
+            if r > half then outerThird += 1 else innerTwo += 1 end
         end
     end
     check("there is food to check", total > 100, tostring(total))
-    check("none of it is in the no-PvP Shallows", inSafe == 0,
-        ("%d of %d pellets in the safe ring"):format(inSafe, total))
+    check("food reaches past the old hard stop into the rim", inRim > 20,
+        ("%d of %d pellets outside %d studs"):format(inRim, total, Config.SHALLOWS_INNER))
+    check("food is spread evenly by AREA, not piled in the middle",
+        outerThird > innerTwo * 0.75 and innerTwo > outerThird * 0.75,
+        ("outer half %d vs inner half %d"):format(outerThird, innerTwo))
+    check("nothing landed in the sea",
+        (function()
+            for _, d in ipairs(arena:GetChildren()) do
+                if d.Name == "Pellet" or d.Name == "Crumb" then
+                    if V3.new(d.Position.X, 0, d.Position.Z).Magnitude > Config.ISLAND_RADIUS then
+                        return false
+                    end
+                end
+            end
+            return true
+        end)())
+end
+
+emit("")
+emit("══ THE RIM IS A FIRE ESCAPE, NOT A HOUSE ══")
+-- The other half of the same change. Opening the rim up to food is only safe
+-- because safety out there is a spendable METER rather than a property of the
+-- ground. If the meter ever stops draining, the farm-forever exploit is back
+-- and this suite is the only thing that would notice.
+do
+    local Arena = _G.SERVER("ArenaService")
+    local run = Arena.runFor(alice)
+    check("the meter exists", run and run.rimGrace ~= nil, run and tostring(run.rimGrace))
+
+    -- Establish a known state rather than assuming one. Alice has been walked
+    -- all over the island by the checks above, so her meter is at whatever
+    -- those left it — asserting "starts full" here would be asserting the
+    -- history of this file rather than the behaviour of the code.
+    walkTo(alice, V3.new(0, 8, 150))
+    tick(Config.SHALLOWS_GRACE * Config.SHALLOWS_RECHARGE + 6)
+    run = Arena.runFor(alice)
+    check("time inside the Flats fills the meter",
+        run and run.rimGrace >= Config.SHALLOWS_GRACE - 0.01, run and tostring(run.rimGrace))
+
+    -- Out to the rim, and it runs.
+    walkTo(alice, V3.new(0, 8, Config.SPAWN_RING))
+    local beforeDrain = (Arena.runFor(alice) or {}).rimGrace
+    tick(5)
+    run = Arena.runFor(alice)
+    check("camping the rim drains it",
+        run and run.rimGrace < beforeDrain - 2,
+        ("%.1f -> %.1f"):format(beforeDrain or -1, (run or {}).rimGrace or -1))
+
+    -- And it runs OUT, which is the whole point.
+    tick(Config.SHALLOWS_GRACE + 4)
+    run = Arena.runFor(alice)
+    check("and it runs out, so the rim stops protecting you",
+        run and run.rimGrace == 0, run and tostring(run.rimGrace))
+    local snap = arenaOf(alice)
+    check("the HUD stops claiming SAFE at the same moment",
+        snap and snap.safe == false and snap.onRim == true,
+        snap and ("safe=%s onRim=%s"):format(tostring(snap.safe), tostring(snap.onRim)))
+
+    -- Back inside, and it refills.
+    walkTo(alice, V3.new(0, 8, 150))
+    tick(Config.SHALLOWS_GRACE * Config.SHALLOWS_RECHARGE + 4)
+    run = Arena.runFor(alice)
+    check("coming back inside refills it", run and run.rimGrace > Config.SHALLOWS_GRACE * 0.8,
+        run and tostring(run.rimGrace))
 end
 
 emit("")
@@ -296,7 +377,30 @@ check("and first place is paid more than last",
         and ("%s vs %s"):format(tostring(board.board[1].payout), tostring(board.board[2].payout)))
 check("the wallet moved too", (globOf(alice) or 0) > globBefore,
     ("%s -> %s"):format(tostring(globBefore), tostring(globOf(alice))))
-check("it ranks everybody", board and #board.board == 2, board and tostring(#board.board))
+-- The board holds the whole FIELD, not just the humans. It used to be exactly
+-- two rows because there were exactly two players; now there are two players
+-- and ten bots, and a bot that grew all round then vanished from the results
+-- would make second place a lie.
+check("it ranks the whole field, bots included",
+    board and #board.board == Config.ROUND_FIELD_SIZE,
+    board and ("%d rows, field is %d"):format(#board.board, Config.ROUND_FIELD_SIZE))
+check("bot rows are labelled as bots",
+    (function()
+        if not board then return false end
+        local tagged, human = 0, 0
+        for _, row in ipairs(board.board) do
+            if row.bot then tagged += 1 else human += 1 end
+        end
+        return tagged == Config.ROUND_FIELD_SIZE - 2 and human == 2
+    end)(), board and tostring(#board.board))
+check("and bots are paid nothing, because there is nobody to pay",
+    (function()
+        if not board then return false end
+        for _, row in ipairs(board.board) do
+            if row.bot and row.payout ~= 0 then return false end
+        end
+        return true
+    end)())
 check("the biggest blob is first",
     board and board.board[1] and board.board[1].mass >= board.board[2].mass,
     board and board.board[1] and ("%.0f vs %.0f"):format(board.board[1].mass, board.board[2].mass))

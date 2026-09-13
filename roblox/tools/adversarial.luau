@@ -38,53 +38,112 @@ local alice = svc.addPlayer("Alice", 101, V3.new(0, 5, 10))
 local mallory = svc.addPlayer("Mallory", 666, V3.new(40, 5, 40))
 tick(3)
 
-emit("══ EXPLOIT: catching from across the map ══")
-local critters = svc.Workspace:FindFirstChild("Critters")
-tick(20)
-local far = critters:GetChildren()[1]
-svc.movePlayer(mallory, V3.new(900, 5, 900))
-local massBefore = snapOf(mallory).goobs[1].mass
-svc.fireAs("CatchCritter", mallory, far)
-tick(2)
-check("teleport-catch from 900 studs was REJECTED",
-    snapOf(mallory).goobs[1].mass <= massBefore + 0.001,
-    ("%f -> %f"):format(massBefore, snapOf(mallory).goobs[1].mass))
-check("the critter is still alive for honest players", far.Parent ~= nil)
+emit("══ EXPLOIT: the remotes that were deleted ══")
+-- Catching from across the map, and two players racing the same critter, both
+-- used to be tested here. Both exploits targeted CatchCritter, which no longer
+-- exists — and neither does BuySnack or BuyEgg.
+--
+-- A deleted remote is not automatically safe. Net builds its folder from a
+-- manifest, so a name left in that list would still create a live RemoteEvent
+-- with NOTHING listening: harmless today, and an unguarded entry point the
+-- moment somebody wires a handler to it without re-reading why it was there.
+-- The exploit surface is the manifest, so that is what gets checked.
+do
+    local net = svc.ReplicatedStorage:FindFirstChild("GoobNet")
+    for _, dead in ipairs({ "CatchCritter", "BuySnack", "BuyEgg" }) do
+        check(("no live remote named %s"):format(dead),
+            net and net:FindFirstChild(dead) == nil)
+        -- And firing it is a harness error rather than a server one, which is
+        -- the proof that nothing on the server is still reachable through it.
+        local reached = pcall(function() svc.fireAs(dead, mallory, 1) end)
+        check(("firing %s reaches nothing"):format(dead), not reached)
+    end
+end
 
 emit("")
-emit("══ EXPLOIT: two players racing for the same critter ══")
-local prize = critters:GetChildren()[1]
-svc.movePlayer(alice, prize.Position)
-svc.movePlayer(mallory, prize.Position)
-local aBefore = snapOf(alice).goobs[1].stomachCount
-local mBefore = snapOf(mallory).goobs[1].stomachCount
-svc.fireAs("CatchCritter", alice, prize)
-svc.fireAs("CatchCritter", mallory, prize)
-tick(1)
-local aGot = snapOf(alice).goobs[1].stomachCount > aBefore
-local mGot = snapOf(mallory).goobs[1].stomachCount > mBefore
-check("exactly one player banked it (no duplication)", (aGot and not mGot) or (mGot and not aGot),
-    ("alice=%s mallory=%s"):format(tostring(aGot), tostring(mGot)))
+emit("══ EXPLOIT: eating a bot you are nowhere near ══")
+-- Bots are the new thing on the island that a client might try to claim. They
+-- are resolved ENTIRELY server-side by distance in ArenaService — there is no
+-- remote for "I touched a bot" and no CanTouch on the part — so the attack has
+-- no entry point at all. What is worth asserting is exactly that: that the bot
+-- parts are inert to a client, because a future "BotCatch" convenience remote
+-- would rebuild the CatchCritter exploit from scratch.
+do
+    local world = svc.Workspace:FindFirstChild("GoobWorld")
+    local botFolder = world and world:FindFirstChild("Bots")
+    if botFolder then
+        local inert = true
+        for _, b in ipairs(botFolder:GetChildren()) do
+            if b:IsA("BasePart") and (b.CanTouch or b.CanQuery or b.CanCollide) then
+                inert = false
+            end
+        end
+        check("bot bodies are non-touchable, non-queryable and non-colliding", inert)
+    else
+        check("bot bodies are non-touchable, non-queryable and non-colliding",
+            true, "no bots in this phase")
+    end
+end
 
 emit("")
 emit("══ EXPLOIT: garbage arguments over every remote ══")
 local before = snapOf(mallory)
-local junk = { nil, 0, -1, 1/0, "", "../../etc/passwd", {}, true, svc.Workspace }
-for _, bad in ipairs(junk) do
-    svc.fireAs("CatchCritter", mallory, bad)
-    svc.fireAs("GulpGoob", mallory, bad, bad)
-    svc.fireAs("BuySnack", mallory, bad)
-    svc.fireAs("RenameGoob", mallory, bad, bad)
+
+-- THIS LOOP NEVER RAN. The payload list used to start with a literal `nil`:
+--
+--     local junk = { nil, 0, -1, 1/0, ... }
+--
+-- `ipairs` stops at the first hole, so it stopped at index 1 and the body
+-- executed ZERO times — and the check underneath it was the literal `true`.
+-- The entire hostile-input test was a no-op that had reported a pass on every
+-- run since it was written. Found by reading it, not by running it, which is
+-- the argument for never writing `check(name, true)`.
+--
+-- nil is still worth sending, so it is sent explicitly as its own case rather
+-- than smuggled into a list that cannot hold it.
+local junk = { 0, -1, 1 / 0, -1 / 0, 0 / 0, "", "../../etc/passwd", {}, true,
+    svc.Workspace, string.rep("x", 5000) }
+
+-- Every remote a client can actually reach, including the arena ones that did
+-- not exist when this test was written. A hostile-input sweep that skips the
+-- newest handlers is testing the code least likely to be wrong.
+local function blast(bad, bad2)
+    svc.fireAs("GulpGoob", mallory, bad, bad2)
+    svc.fireAs("RenameGoob", mallory, bad, bad2)
     svc.fireAs("SetActiveGoob", mallory, bad)
     svc.fireAs("TradeRequest", mallory, bad)
-    svc.fireAs("TradeOffer", mallory, bad, bad)
+    svc.fireAs("TradeOffer", mallory, bad, bad2)
     svc.fireAs("TradeRespond", mallory, bad)
     svc.fireAs("TradeConfirm", mallory, bad)
     svc.fireAs("TradeCancel", mallory)
-    svc.fireAs("BuyEgg", mallory)
+    svc.fireAs("UsePower", mallory, bad)
+    svc.fireAs("SetPower", mallory, bad)
+    svc.fireAs("EquipTrinket", mallory, bad, bad2)
+    svc.fireAs("OpenCrate", mallory, bad)
+    svc.fireAs("EquipCosmetic", mallory, bad, bad2)
+    svc.fireAs("ClaimSeason", mallory, bad, bad2)
+    svc.fireAs("CrewCreate", mallory, bad, bad2)
+    svc.fireAs("CrewJoin", mallory, bad)
+    svc.fireAs("BuyProduct", mallory, bad)
+    svc.fireAs("Dashed", mallory)
+    svc.fireAs("PitJoin", mallory)
+    svc.fireAs("PitLeave", mallory)
 end
+
+local fired = 0
+local survived, blastErr = pcall(function()
+    blast(nil, nil)
+    fired += 1
+    for _, bad in ipairs(junk) do
+        for _, bad2 in ipairs(junk) do
+            blast(bad, bad2)
+            fired += 1
+        end
+    end
+end)
 tick(2)
-check("server survived every malformed payload", true)
+check("the payload sweep actually ran", fired > 100, tostring(fired) .. " rounds")
+check("server survived every malformed payload", survived, tostring(blastErr))
 check("Mallory still has exactly 1 Goob", #snapOf(mallory).goobs == 1,
     tostring(#snapOf(mallory).goobs))
 
@@ -101,29 +160,55 @@ tick(1)
 check("cannot gulp your own only Goob", #snapOf(mallory).goobs == 1)
 
 emit("")
-emit("══ EXPLOIT: buying with no money, and past the cap ══")
--- Drain Mallory so the Banquet is definitely unaffordable, then assert hard.
--- An earlier version of this check had an `or not affordable` escape hatch,
--- which meant it passed even when the server happily sold on credit.
-local poor = snapOf(mallory)
-local globBefore = poor.glob
-check("precondition: Banquet is genuinely unaffordable", not poor.snacks[3].affordable,
-    ("glob=%f price=%f"):format(globBefore, poor.snacks[3].price))
-svc.fireAs("BuySnack", mallory, "banquet")
-tick(1)
-check("cannot buy a Banquet you cannot afford",
-    math.abs(snapOf(mallory).glob - globBefore) < math.max(1, globBefore * 0.02),
-    ("%f -> %f"):format(globBefore, snapOf(mallory).glob))
+emit("══ EXPLOIT: getting past the Goob cap ══")
+-- This used to be "buy with no money, then spam BuyEgg past the cap". Both
+-- shops are gone, so there is no purchase to underpay for. The CAP still
+-- matters, and more than it did: eggs are handed out by the server on a
+-- schedule of rounds finished, the client never asks for one, and the only
+-- thing between a long-lived account and an unbounded DataStore payload is the
+-- cap check inside roundResult.
+--
+-- Driven through the REAL round machine, not through a copy of the rule. The
+-- only concession to the test is turning the round clock down: Config is
+-- tuning, and shortening a round changes how long the real path takes to run,
+-- not which path runs. Restored afterwards so nothing downstream inherits it.
+do
+    local C = _G.SHARED("Config")
+    local realRound, realGap, realHold =
+        C.ROUND_SECONDS, C.INTERMISSION_SECONDS, C.ROUND_END_HOLD
+    C.ROUND_SECONDS, C.INTERMISSION_SECONDS, C.ROUND_END_HOLD = 4, 2, 1
 
--- Spam BuyEgg far past the cap.
-for _ = 1, 60 do
-    svc.fireAs("BuyEgg", mallory)
-    tick(60)
+    local Data = _G.SERVER("Data")
+    local profile = Data.get(mallory)
+    local before = profile and #profile.goobs or 0
+    -- Enough finished rounds for well past MAX_GOOBS eggs.
+    --
+    -- Note the counter is nudged to one-short-of-an-egg before EVERY round, so
+    -- every round in this loop is an egg round — the count is rounds, not
+    -- rounds-times-EGG_EVERY_ROUNDS. Multiplying by the interval as well ran
+    -- sixty full round cycles to test a guard that trips after eight, which is
+    -- five times the work for the same assertion.
+    local want = C.MAX_GOOBS + 4
+    for _ = 1, want do
+        if profile then
+            -- Sit one round short of an egg each time, so every round that
+            -- follows is an egg round. The COUNTER is nudged; the decision
+            -- about whether to hatch is still entirely the server's.
+            profile.roundsPlayed = C.EGG_EVERY_ROUNDS - 1
+        end
+        tick(C.ROUND_SECONDS + C.ROUND_END_HOLD + C.INTERMISSION_SECONDS + 2, 0.25)
+    end
+
+    local capped = snapOf(mallory)
+    check("the cap is actually reached, so the check below means something",
+        #capped.goobs > before, ("%d -> %d"):format(before, #capped.goobs))
+    check("egg cap is enforced after far more egg rounds than the cap allows",
+        #capped.goobs <= capped.maxGoobs,
+        ("%d / %d"):format(#capped.goobs, capped.maxGoobs))
+    check("Glob never went negative", capped.glob >= 0, tostring(capped.glob))
+
+    C.ROUND_SECONDS, C.INTERMISSION_SECONDS, C.ROUND_END_HOLD = realRound, realGap, realHold
 end
-local capped = snapOf(mallory)
-check("egg cap is enforced", #capped.goobs <= capped.maxGoobs,
-    ("%d / %d"):format(#capped.goobs, capped.maxGoobs))
-check("Glob never went negative", capped.glob >= 0, tostring(capped.glob))
 
 emit("")
 emit("══ EXPLOIT: renaming with hostile input ══")
@@ -219,8 +304,37 @@ local errs = 0
 local ok, err = pcall(function() tick(1200, 0.5) end)
 if not ok then errs += 1; emit("  RUNTIME ERROR during soak: " .. tostring(err)) end
 check("20 minutes of heartbeats with no runtime error", errs == 0)
-check("critter population stayed bounded",
-    #critters:GetChildren() <= 30, tostring(#critters:GetChildren()))
+-- The population that has to stay bounded now is the bots. A leak here is
+-- worse than the old critter leak was: a bot that is spawned and never
+-- collected keeps a part, a BillboardGui and a Heartbeat's worth of steering
+-- alive for the rest of the server's life.
+do
+    local world = svc.Workspace:FindFirstChild("GoobWorld")
+    local botFolder = world and world:FindFirstChild("Bots")
+    local bodies = botFolder and #botFolder:GetChildren() or 0
+    local C = _G.SHARED("Config")
+    check("bot population stayed bounded after 20 minutes",
+        bodies <= C.ROUND_FIELD_SIZE, tostring(bodies))
+    local stats = _G.SERVER("ArenaService").stats()
+    check("and the service agrees with what is in the world",
+        stats.bots <= C.ROUND_FIELD_SIZE, tostring(stats.bots))
+end
 
 emit("")
 emit(("══ %s ══"):format(fails == 0 and "ALL ADVERSARIAL CHECKS PASSED" or (fails .. " FAILURE(S)")))
+
+-- FAIL THE BUILD, not just the transcript.
+--
+-- Everything above printed "FAIL" to the output and then exited ZERO. Eight of
+-- the ten scenario suites did this, which means `run_all.sh` could print "ALL
+-- SUITES PASSED" underneath a screen of real failures — and did: a mutation
+-- battery deliberately broke the legacy-purge guards and the phone layout, and
+-- every one of those suites reported the break and passed anyway.
+--
+-- This exact class of bug was found and fixed once before, in the pure sims.
+-- It came back here because the scenario suites were written later and nobody
+-- checked that the new ones could fail. A suite that cannot fail is not a
+-- weaker test, it is a comment.
+if fails > 0 then
+    error(fails .. " adversarial failure(s)")
+end
