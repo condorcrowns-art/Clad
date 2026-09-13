@@ -14,12 +14,25 @@ and then wonder why the chatbot is quiet.
 Cloudflare Pages, from the repo, free, and it redeploys itself on every push.
 
 1. **Cloudflare dashboard → Workers & Pages → Create → Pages → Connect to Git**
-2. Pick this repository and the branch
+2. Pick the repository **`condorcrowns-art/Clad`**
 3. Build settings:
    - Framework preset: **None**
+   - **Production branch: `claude/victor-ai-familiarity-rf2730`**
    - Build command: *(leave empty — there is no build step)*
    - **Build output directory: `parla`**
 4. Deploy, then **Custom domains → Set up a domain → `lunosia.com`**
+
+### The production branch is not `main`
+
+`main` is empty. Everything — the app, the dictionary, the function — is on
+`claude/victor-ai-familiarity-rf2730`, and Cloudflare defaults the production
+branch to `main`, so accepting the default gets you a successful build of
+nothing and a 404 on your own domain.
+
+Setting the branch is also what makes it redeploy: every push to that branch
+rebuilds the site by itself, which is where the work lands. If you later merge
+it into `main`, change the production branch to `main` at the same time —
+Pages watches one branch, and it will keep watching whichever you named.
 
 Because your DNS is already at Cloudflare, the record is created for you and
 HTTPS is issued automatically.
