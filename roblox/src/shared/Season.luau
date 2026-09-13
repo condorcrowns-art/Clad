@@ -41,6 +41,8 @@ Season.XP = {
     -- 55 a bank and a ~90-second bank puts the daily cap about three hours
     -- out, which is the same shape the rest of the track was paced to.
     bank       = 55,
+    round      = 220,   -- finishing a round at all
+    deflate    = 8,
     bigBank    = 260,   -- a run taken past 60% of the ceiling before cashing
     pop        = 15,    -- you get something for dying; it is still play
 }

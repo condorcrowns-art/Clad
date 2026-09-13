@@ -48,6 +48,7 @@ Net.EVENTS = {
     "EquipTrinket",   -- C->S  slot a trinket
     "OpenCrate",      -- C->S  spend Glob on a roll
     "CrateResult",    -- S->C  what came out
+    "RoundSync",      -- S->C  phase, clock and the last round's results
 }
 
 Net.FUNCTIONS = {

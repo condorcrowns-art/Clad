@@ -62,10 +62,20 @@ export type Run = {
     safeUntil: number,
     trinkets: Trinkets.Resolved,
     bestMass: number,
+    peakThisRound: number,
     lastPos: Vector3,
     startedAt: number,      -- for the run summary
     ateThisRun: number,
 }
+
+-- ── The round ──────────────────────────────────────────────────────────────
+-- LOBBY -> PLAYING -> RESULTS -> LOBBY, forever. The phase is the single piece
+-- of state that decides whether anything in this file is allowed to happen:
+-- no eating, no pellets and no deflation outside PLAYING.
+local phase = "LOBBY"
+local phaseEndsAt = 0
+local roundNumber = 0
+local lastResults: { any } = {}
 
 local runs: { [number]: Run } = {}
 local rng = Random.new(os.clock() * 1e6 // 1)
@@ -209,6 +219,45 @@ local function usesOf(player: Player, id: string): number
     return (deps.powerUses(player) or {})[id] or 0
 end
 
+-- DEFLATE A BLOB.
+--
+-- Takes a fraction of the TARGET'S OWN mass, which is what makes this a
+-- catch-up mechanism rather than a flat nerf: the bigger somebody is, the more
+-- there is to take, so the leader is always the most rewarding thing on the
+-- island to hit. What comes off does not vanish — most of it lands as pellets
+-- right where it happened, so deflating the leader literally feeds whoever is
+-- standing nearby. That is the entire comeback loop in one function.
+--
+-- Returns how much was removed, so a thief (SIPHON) can keep it instead.
+local function deflate(target: Player, targetRun: Run, fraction: number, scatterIt: boolean): number
+    if fraction <= 0 then
+        return 0
+    end
+    local before = targetRun.mass
+    local taken = math.max(0, before - Config.STARTING_MASS) * fraction
+    if taken <= 0 then
+        return 0
+    end
+    targetRun.mass = math.max(Config.STARTING_MASS, before - taken)
+
+    if scatterIt then
+        local ball = RollService.ballFor(target)
+        local at = ball and ball.Position or Vector3.zero
+        local food = taken * Config.DEFLATE_RETURN_AS_FOOD
+        local n = math.clamp(math.floor(food / Config.LEAK_PELLET_MASS), 1, 30)
+        local radius = Blob.radius(before)
+        for i = 1, n do
+            local a = math.rad((360 / n) * i + rng:NextNumber(-12, 12))
+            local d = radius * 1.6 + rng:NextNumber(3, 18)
+            spawnPellet(Vector3.new(at.X + math.cos(a) * d, at.Y, at.Z + math.sin(a) * d),
+                food / n, false, target.UserId)
+        end
+    end
+
+    deps.effect(target, "deflated", { amount = taken })
+    return taken
+end
+
 -- ── Decoys ─────────────────────────────────────────────────────────────────
 -- A fake body at your current size, in your colour, that anyone may try to
 -- eat and that gives nothing when they do. It is the only power in the game
@@ -242,6 +291,49 @@ local function spawnDecoy(player: Player, run: Run, at: Vector3)
     end)
 end
 
+-- DECLARED ABOVE ArenaService.enter, which calls them. A `local function` only
+-- enters scope from its declaration downward, so with these left next to the
+-- rest of the round machine — which sits near the bottom of the file — the
+-- call inside enter() resolved to a nil GLOBAL and the server died on the
+-- first join. Fifth time in this project. tools/scopecheck.py now fails the
+-- build on it rather than waiting for a play-test to find it.
+local function sendToLobby(player: Player, index: number)
+    local run = runs[player.UserId]
+    if run then
+        run.mass = Config.STARTING_MASS
+        run.banking = 0
+        run.leakBuffer = 0
+        run.slamUntil = 0
+        run.splitOwed = 0
+        run.activeEffect = nil
+        run.powerUntil = 0
+        run.safeUntil = os.clock() + 3600   -- untouchable for the whole lobby
+        RollService.setRadius(player, Blob.radius(run.mass))
+    end
+    RollService.teleport(player, WorldBuilder.lobbyPoint(index))
+end
+
+local function sendToArena(player: Player, index: number)
+    local run = runs[player.UserId]
+    if run then
+        run.mass = Config.STARTING_MASS
+        run.bestMass = Config.STARTING_MASS
+        run.peakThisRound = Config.STARTING_MASS
+        run.banking = 0
+        run.leakBuffer = 0
+        run.slamUntil = 0
+        run.splitOwed = 0
+        run.activeEffect = nil
+        run.powerUntil = 0
+        run.ateThisRun = 0
+        run.startedAt = os.clock()
+        run.safeUntil = os.clock() + POP_INVULN
+        RollService.setRadius(player, Blob.radius(run.mass))
+    end
+    RollService.teleport(player, WorldBuilder.spawnPoint(index))
+end
+
+
 -- ── Run state ──────────────────────────────────────────────────────────────
 
 local function newRun(player: Player): Run
@@ -259,6 +351,7 @@ local function newRun(player: Player): Run
         safeUntil = os.clock() + POP_INVULN,
         trinkets = Trinkets.resolve(ids),
         bestMass = Config.STARTING_MASS,
+        peakThisRound = Config.STARTING_MASS,
         lastPos = Vector3.zero,
         startedAt = os.clock(),
         ateThisRun = 0,
@@ -289,6 +382,15 @@ end
 
 function ArenaService.enter(player: Player)
     runs[player.UserId] = newRun(player)
+    -- Arrive into whatever is happening. Joining mid-round puts you on the
+    -- island small and late, which is the honest version of walking in halfway
+    -- through — and joining during a lobby puts you where everyone else is.
+    local n = #Players:GetPlayers()
+    if phase == "PLAYING" then
+        sendToArena(player, n)
+    else
+        sendToLobby(player, n)
+    end
 end
 
 function ArenaService.leave(player: Player)
@@ -459,6 +561,9 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if not run then
         return false, "You're not in the arena."
     end
+    if phase ~= "PLAYING" then
+        return false, "Wait for the round to start."
+    end
     local now = os.clock()
     if now < run.powerReadyAt then
         return false, ("%.1fs"):format(run.powerReadyAt - now)
@@ -550,6 +655,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                     else
                         ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
                     end
+                    deflate(target, tr, Config.DEFLATE.hook, true)
+                    deps.teach(player, "deflate")
                     deps.effect(player, "hook", { to = target.DisplayName })
                 end
             end
@@ -587,9 +694,12 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         end
         if target then
             local trun = runs[target.UserId]
-            local drained = math.min(trun.mass * SIPHON_FRACTION, run.mass * 0.6)
-            trun.mass = math.max(Config.STARTING_MASS, trun.mass - drained)
+            -- Stolen, not scattered: SIPHON is the one deflating power whose
+            -- take goes straight into the caster. It is also the only power
+            -- that works exclusively upward, so the trade is fair.
+            local drained = deflate(target, trun, Config.DEFLATE.siphon, false)
             run.mass += drained
+            deps.teach(player, "deflate")
             deps.notify(target, ("🩸 %s siphoned %s off you.")
                 :format(player.DisplayName, Format.short(drained)), "bad")
             deps.effect(player, "siphon", { from = target.DisplayName, amount = drained })
@@ -621,7 +731,16 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
     -- grace mass drips, and what drips becomes real food on the floor rather
     -- than a number going down. A big blob is a moving buffet, and everyone
     -- can see the trail.
-    local leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult * dt
+    -- MELT IS OFF IN ROUND MODE. The whole fantasy is getting enormous, and a
+    -- leak curve that caps growth is directly at odds with it. The job melt
+    -- used to do — stopping a runaway leader — belongs to other players now:
+    -- abilities deflate, so a leader is brought down by being ganged up on.
+    -- The curve is kept and still tested; Config.LEAK_IN_ROUND turns it back
+    -- on in one line if deflation proves too weak a brake.
+    local leak = 0
+    if Config.LEAK_IN_ROUND then
+        leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult * dt
+    end
     if leak > 0 then
         deps.teach(player, "melt")
         run.mass = math.max(Config.STARTING_MASS, run.mass - leak)
@@ -658,6 +777,9 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                             end
                             run.mass += worth
                             run.ateThisRun += 1
+                            if run.mass > Config.STARTING_MASS * 4 then
+                                deps.teach(player, "grow")
+                            end
                             removePellet(pellet)
                             deps.teach(player, "eat")
                         end
@@ -669,20 +791,13 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
         end
     end
 
-    -- BANK. You have to actually stop, inside the dish, for the full count.
-    -- Standing still in the most visible place on the island for three seconds
-    -- while holding everything you own is the best moment the game has.
-    local inVault = WorldBuilder.ringAt(pos) == "VAULT"
-        and math.abs(pos.Y - Config.VAULT_HEIGHT) < 26
-    local slow = ball.AssemblyLinearVelocity.Magnitude < BANK_MAX_SPEED
-    if inVault and slow and run.mass > Config.BANK_RESET_MASS then
-        run.banking += dt
-        if run.banking >= Blob.bankSeconds(run.trinkets.bankHaste) then
-            bank(player, run)
-        end
-    elseif run.banking > 0 then
-        run.banking = math.max(0, run.banking - dt * 2)
-    end
+    -- NO MID-ROUND BANKING. It used to convert your mass to Glob and reset you
+    -- to 25, which is in direct conflict with the point of a round: get as
+    -- enormous as you can before the clock runs out. The round end is the
+    -- bank now, and it pays on the size you finish with. The Vault survives as
+    -- the island's landmark — it is what the whole map orients on — and the
+    -- code below is kept for the same reason Config.LEAK_IN_ROUND is: turning
+    -- a cash-out back on is a small change, not an archaeology project.
 
     if run.mass > run.bestMass then
         run.bestMass = run.mass
@@ -706,6 +821,10 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                     ob.AssemblyLinearVelocity = flat.Unit
                             * (SLAM_IMPULSE * falloff * orun.trinkets.knockbackMult)
                         + Vector3.new(0, 26 * falloff, 0)
+                    -- Scaled by how central the hit was, so a clean slam on
+                    -- the leader is worth lining up.
+                    deflate(other, orun, Config.DEFLATE.slam * falloff, true)
+                    deps.teach(player, "deflate")
                     hits += 1
                 end
             end
@@ -778,11 +897,22 @@ local function tickCombat(list: { Player }, now: number)
                             if eater and prey then
                                 local preySpiked = (prey == a and aSpiked) or (prey == b and bSpiked)
                                 if preySpiked then
-                                    eater, prey = prey, eater
+                                    -- Biting a spiked blob does not swap the
+                                    -- meal round, it COSTS you. Deflating the
+                                    -- biter by a third of themselves is how
+                                    -- the smallest blob on the island punishes
+                                    -- the biggest without having to swallow it.
+                                    local biter = eater
+                                    local biterRun = runs[biter.UserId]
+                                    if biterRun then
+                                        deflate(biter, biterRun, Config.DEFLATE.spike, true)
+                                        deps.notify(biter, "🌵 Spiked. That cost you.", "bad")
+                                    end
+                                    eater, prey = nil, nil
                                 end
-                                local re = runs[eater.UserId]
-                                local rp = runs[prey.UserId]
-                                local bp = RollService.ballFor(prey)
+                                local re = eater and runs[eater.UserId]
+                                local rp = prey and runs[prey.UserId]
+                                local bp = prey and RollService.ballFor(prey)
                                 if re and rp and bp then
                                     re.mass += Blob.eatGain(re.mass, rp.mass)
                                     pop(prey, bp.Position, eater)
@@ -826,15 +956,107 @@ function ArenaService.grant(player: Player, mass: number)
     RollService.setRadius(player, Blob.radius(run.mass))
 end
 
+-- ── The round machine ──────────────────────────────────────────────────────
+
+function ArenaService.phase(): (string, number, number)
+    return phase, math.max(0, phaseEndsAt - os.clock()), roundNumber
+end
+
+function ArenaService.inRound(): boolean
+    return phase == "PLAYING"
+end
+
+local function beginLobby()
+    phase = "LOBBY"
+    phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
+    local i = 0
+    for _, player in ipairs(Players:GetPlayers()) do
+        sendToLobby(player, i)
+        i += 1
+    end
+    -- Clear the floor. Pellets left lying around the island during a lobby are
+    -- just instance count nobody can reach.
+    for _, pellet in pairs(pellets) do
+        removePellet(pellet)
+    end
+end
+
+local function beginRound()
+    phase = "PLAYING"
+    roundNumber += 1
+    phaseEndsAt = os.clock() + Config.ROUND_SECONDS
+
+    for i = #lumps, 1, -1 do
+        lumps[i].part:Destroy()
+        table.remove(lumps, i)
+    end
+    for _, pellet in pairs(pellets) do
+        removePellet(pellet)
+    end
+    for _ = 1, Config.PELLET_TARGET do
+        spawnPellet(nil, nil, rng:NextNumber() < 0.012)
+    end
+
+    local i = 0
+    for _, player in ipairs(Players:GetPlayers()) do
+        sendToArena(player, i)
+        deps.notify(player, ("🫧 ROUND %d — grow as big as you can."):format(roundNumber), "good")
+        i += 1
+    end
+end
+
+local function endRound()
+    phase = "RESULTS"
+    phaseEndsAt = os.clock() + Config.ROUND_END_HOLD
+
+    local board = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        local run = runs[player.UserId]
+        if run then
+            table.insert(board, { player = player, mass = run.mass, peak = run.peakThisRound })
+        end
+    end
+    table.sort(board, function(x, y) return x.mass > y.mass end)
+
+    lastResults = {}
+    for place, row in ipairs(board) do
+        -- Your final size is the score. Placement is a bonus on top, so second
+        -- is still worth playing for rather than being worth nothing.
+        local base = row.mass ^ Config.ROUND_PAYOUT_EXPONENT * Config.ROUND_PAYOUT_SCALE
+        local bonus = Config.ROUND_PLACE_BONUS[place] or 1
+        local payout = math.floor(base * bonus)
+        deps.award(row.player, payout, 0, "round")
+        deps.notify(row.player, ("🏁 #%d with %s — 💧%s"):format(
+            place, Format.short(row.mass), Format.short(payout)),
+            place == 1 and "good" or "info")
+        table.insert(lastResults, {
+            name = row.player.DisplayName, place = place,
+            mass = row.mass, peak = row.peak, payout = payout,
+        })
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        deps.effect(player, "roundEnd", { round = roundNumber, board = lastResults })
+    end
+end
+
+function ArenaService.results()
+    return lastResults
+end
+
 function ArenaService.start(injected: Deps)
     deps = injected
     -- From here on the arena is the only thing that resizes a body.
     RollService.sizeOwnedByArena = true
 
-    -- Seed the island so the first player does not arrive to an empty floor.
-    for _ = 1, Config.PELLET_TARGET do
-        spawnPellet(nil, nil, rng:NextNumber() < 0.012)
+    RollService.rescuePoint = function(player)
+        if phase == "PLAYING" then
+            return WorldBuilder.spawnPoint(player.UserId)
+        end
+        return WorldBuilder.lobbyPoint(player.UserId)
     end
+
+    phase = "LOBBY"
+    phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
 
     task.spawn(function()
         local last = os.clock()
@@ -844,19 +1066,37 @@ function ArenaService.start(injected: Deps)
             local dt = math.min(0.5, now - last)
             last = now
 
+            -- Advance the machine first, so a phase change takes effect on
+            -- the same tick rather than leaving one frame of the old rules.
+            if now >= phaseEndsAt then
+                if phase == "LOBBY" then beginRound()
+                elseif phase == "PLAYING" then endRound()
+                else beginLobby() end
+            end
+
+            local playing = phase == "PLAYING"
             local active: { Player } = {}
             for _, player in ipairs(Players:GetPlayers()) do
                 local run = runs[player.UserId]
                 if run then
-                    tickPlayer(player, run, dt, now)
+                    if playing then
+                        tickPlayer(player, run, dt, now)
+                        if run.mass > run.peakThisRound then
+                            run.peakThisRound = run.mass
+                        end
+                    end
                     table.insert(active, player)
                     deps.sync(player, ArenaService.snapshot(player, run, now))
                 end
             end
 
-            tickCombat(active, now)
-            topUpPellets(dt)
-            decayLumps(dt)
+            -- Nothing eats anybody outside a round, and the floor is only
+            -- stocked while there is somebody to eat off it.
+            if playing then
+                tickCombat(active, now)
+                topUpPellets(dt)
+                decayLumps(dt)
+            end
         end
     end)
 end
@@ -868,7 +1108,12 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
     return {
         mass = run.mass,
         radius = Blob.radius(run.mass),
-        leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult,
+        -- The leak ACTUALLY APPLIED, not the curve's value. Reporting the
+        -- curve while Config.LEAK_IN_ROUND is off would put a melt rate on the
+        -- HUD that nothing is subtracting — a readout describing a different
+        -- game to the one being played.
+        leak = Config.LEAK_IN_ROUND
+            and (Blob.leakPerSecond(run.mass) * run.trinkets.leakMult) or 0,
         harvest = Blob.harvestPerSecond(run.mass) * run.trinkets.pelletMult,
         worth = Blob.bankValue(run.mass),
         banking = run.banking,
@@ -882,6 +1127,10 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         ring = WorldBuilder.ringAt(pos),
         biome = (WorldBuilder.biomeAt(pos) or {}).name,
         best = run.bestMass,
+        peak = run.peakThisRound,
+        phase = phase,
+        phaseLeft = math.max(0, phaseEndsAt - now),
+        round = roundNumber,
         ceiling = Blob.ceiling(0.8),
     }
 end

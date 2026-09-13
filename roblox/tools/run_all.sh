@@ -14,6 +14,7 @@ node check.mjs ../src/shared/*.luau ../src/server/*.luau ../src/client/*.luau
 echo "── 2. Roblox API validation ──"
 python3 apicheck.py ../src/shared/*.luau ../src/server/*.luau ../src/client/*.luau
 python3 apicheck_tables.py
+python3 scopecheck.py ../src/shared/*.luau ../src/server/*.luau ../src/client/*.luau
 
 echo "── 3. economy correctness ──"
 node sim.mjs ../src/shared tests.luau
@@ -39,10 +40,13 @@ node integration.mjs .. live_test.luau
 echo "── 10. census + juice: the Archive and the feel layer ──"
 node integration.mjs .. census_test.luau
 
-echo "── 11. powers: press all twelve, with a second player ──"
+echo "── 11. rounds: the lobby/round cycle and deflation ──"
+node integration.mjs .. rounds_test.luau
+
+echo "── 12. powers: press all twelve, with a second player ──"
 node integration.mjs .. powers_test.luau
 
-echo "── 12. adversarial: attack it ──"
+echo "── 13. adversarial: attack it ──"
 node integration.mjs .. adversarial.luau
 
 echo "── 12. balance sweeps"

@@ -22,6 +22,37 @@ local function tick(sec, dt)
     end
 end
 
+-- WAIT FOR A ROUND. The arena is not permanently live any more: it cycles
+-- LOBBY -> PLAYING -> RESULTS, and nothing can be eaten, spawned or deflated
+-- outside PLAYING. Every scenario that acts on the island has to arrive at the
+-- right moment rather than assuming one.
+local function phaseOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1].phase, t.args[1].phaseLeft or 0
+        end
+    end
+    return nil, 0
+end
+
+local function waitForRound(p, budget)
+    for _ = 1, math.floor((budget or 90) / 0.5) do
+        local ph = phaseOf(p)
+        if ph == "PLAYING" then return true end
+        tick(0.5)
+    end
+    return phaseOf(p) == "PLAYING"
+end
+
+-- Seconds of round left, so a long scenario can tell when it is about to be
+-- reset out from under itself.
+local function roundLeft(p)
+    local ph, left = phaseOf(p)
+    return ph == "PLAYING" and left or 0
+end
+
+
 -- Find a descendant by name anywhere under the PlayerGui.
 local function findGui(root, name)
     for _, d in ipairs(root:GetDescendants()) do
@@ -146,12 +177,20 @@ end
 
 emit("")
 emit("══ TOASTS ══")
-local toastsBefore = #hud:GetDescendants()
+-- Asserted on the TEXT, not on the descendant count. The stack is capped at a
+-- few toasts, so once it is full a new one REPLACES the oldest and the count
+-- does not move — and the round system now produces toasts of its own, so by
+-- the time this runs the stack is routinely full. Counting nodes reported a
+-- working notification as broken.
+local MESSAGE = "Test message!"
 svc.ReplicatedStorage:FindFirstChild("GoobNet"):FindFirstChild("Notify")
-    .OnClientEvent:Fire("Test message!", "good")
+    .OnClientEvent:Fire(MESSAGE, "good")
 tick(0.5)
-check("a notification renders something on screen", #hud:GetDescendants() > toastsBefore,
-    ("%d -> %d"):format(toastsBefore, #hud:GetDescendants()))
+local shown = false
+for _, d in ipairs(hud:GetDescendants()) do
+    if d:IsA("TextLabel") and tostring(d.Text) == MESSAGE then shown = true end
+end
+check("a notification renders its message on screen", shown)
 
 emit("")
 emit("══ TRADE WINDOW ══")

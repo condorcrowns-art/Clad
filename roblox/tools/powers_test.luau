@@ -22,6 +22,37 @@ local function tick(sec, dt)
     end
 end
 
+-- WAIT FOR A ROUND. The arena is not permanently live any more: it cycles
+-- LOBBY -> PLAYING -> RESULTS, and nothing can be eaten, spawned or deflated
+-- outside PLAYING. Every scenario that acts on the island has to arrive at the
+-- right moment rather than assuming one.
+local function phaseOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1].phase, t.args[1].phaseLeft or 0
+        end
+    end
+    return nil, 0
+end
+
+local function waitForRound(p, budget)
+    for _ = 1, math.floor((budget or 90) / 0.5) do
+        local ph = phaseOf(p)
+        if ph == "PLAYING" then return true end
+        tick(0.5)
+    end
+    return phaseOf(p) == "PLAYING"
+end
+
+-- Seconds of round left, so a long scenario can tell when it is about to be
+-- reset out from under itself.
+local function roundLeft(p)
+    local ph, left = phaseOf(p)
+    return ph == "PLAYING" and left or 0
+end
+
+
 _G.BOOT_SERVER()
 tick(1)
 local alice = svc.addPlayer("Alice", 101, V3.new(0, 5, 60))
@@ -117,18 +148,13 @@ local function bankRun(p, feedAmount)
     end
 end
 
-emit("══ EARNING THE LADDER ══")
-for _ = 1, 14 do bankRun(alice, 26) end
-local banked = 0
-for i = #_G.TRAFFIC, 1, -1 do
-    local t = _G.TRAFFIC[i]
-    if t.remote == "StateSync" and t.player ~= "ALL" and t.player.Name == "Alice" then
-        banked = t.args[1].lifetimeBanked or 0
-        break
-    end
-end
-emit(("  Alice has banked 💧%d"):format(math.floor(banked)))
-check("banking actually accrues toward the ladder", banked > 0, tostring(banked))
+emit("══ THE ROUND MACHINE ══")
+check("the game starts in a lobby", phaseOf(alice) == "LOBBY" or phaseOf(alice) == nil,
+    tostring(phaseOf(alice)))
+check("a round begins on its own", waitForRound(alice), tostring(phaseOf(alice)))
+local arena = svc.Workspace:FindFirstChild("GoobWorld"):FindFirstChild("Arena")
+check("the island stocks itself when the round starts",
+    #arena:GetChildren() > 100, tostring(#arena:GetChildren()))
 
 emit("")
 emit("══ EVERY POWER FIRES ══")
@@ -141,41 +167,50 @@ check("the test can reach a profile", profile ~= nil)
 if profile then profile.lifetimeBanked = 1e9 end
 
 local pressed, refused = {}, {}
+-- A round is shorter than twelve cooldowns back to back, so this loop crosses
+-- round boundaries. Feeding takes real time too, so checking the phase once at
+-- the top is not enough: the clock can run out DURING the feed and the press
+-- then lands in the lobby. Each power gets a few attempts, and every attempt
+-- re-establishes the round immediately before pressing.
 for _, power in ipairs(Powers.LIST) do
-    -- Fatten up so the cost is always affordable.
-    feed(alice, 30)
-    svc.fireAs("SetPower", alice, power.id)
-    tick(0.5)
-    local got = arenaOf(alice)
-    if not got or got.powerId ~= power.id then
-        table.insert(refused, power.id .. " (not equipped: " .. tostring(got and got.powerId) .. ")")
-    else
-        local before = arenaOf(alice).mass
-        local mark = #_G.TRAFFIC
-        svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
-        tick(0.6)
-        local after = arenaOf(alice)
-        -- MAGNET drags in far more than it costs, so "did mass go down" is
-        -- the wrong probe: it reports a working power as broken. Read the cost
-        -- the server puts on its own effect instead, which is true for all
-        -- twelve regardless of what the power then does for you.
-        local charged = 0
-        for i = mark + 1, #_G.TRAFFIC do
-            local t = _G.TRAFFIC[i]
-            if t.remote == "Effect" and t.args[1] == "power" then
-                charged = (t.args[2] and t.args[2].cost) or 0
+    local charged, note, before, after = 0, "", 0, 0
+    for attempt = 1, 3 do
+        if not waitForRound(alice, 140) then break end
+        feed(alice, 26)
+        if phaseOf(alice) ~= "PLAYING" then
+            note = "round ended during setup"
+        else
+            svc.fireAs("SetPower", alice, power.id)
+            tick(0.4)
+            local got = arenaOf(alice)
+            if not got or got.powerId ~= power.id then
+                note = "not equipped: " .. tostring(got and got.powerId)
+            else
+                before = got.mass
+                local mark = #_G.TRAFFIC
+                svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
+                tick(0.6)
+                after = (arenaOf(alice) or {}).mass or 0
+                for i = mark + 1, #_G.TRAFFIC do
+                    local t = _G.TRAFFIC[i]
+                    if t.remote == "Effect" and t.args[1] == "power" then
+                        charged = (t.args[2] and t.args[2].cost) or 0
+                    end
+                end
+                note = lastNotify(alice)
             end
         end
-        local sawPower = charged > 0
-        if sawPower then
-            table.insert(pressed, power.id)
-        else
-            table.insert(refused, ("%s (mass %.0f->%.0f, charged=%.1f, note=%q)")
-                :format(power.id, before, after.mass, charged, lastNotify(alice)))
-        end
+        if charged > 0 then break end
+        tick(20)   -- cooldown, then try again
     end
-    -- Clear the cooldown before the next one.
-    tick(26)
+
+    if charged > 0 then
+        table.insert(pressed, power.id)
+    else
+        table.insert(refused, ("%s (mass %.0f->%.0f, charged=%.1f, note=%q)")
+            :format(power.id, before, after, charged, note))
+    end
+    tick(22)
 end
 
 emit(("  fired: %s"):format(table.concat(pressed, ", ")))
@@ -212,6 +247,7 @@ emit("══ MASTERY COUNTS ONCE PER PRESS ══")
 -- so incrementing it locally and calling notePowerUse both wrote to the
 -- profile. Mastery accrued at double rate.
 if profile then
+    if phaseOf(alice) ~= "PLAYING" then waitForRound(alice, 120) end
     profile.powerUses = {}
     svc.fireAs("SetPower", alice, "dash")
     tick(0.5)
@@ -255,6 +291,15 @@ emit("══ THE SHALLOWS ARE ACTUALLY SAFE ══")
 -- bodies are planted in their final positions LAST, immediately before the
 -- button is pressed, never before a tick that could move them.
 local function placeAndHook(bobSpot, aliceOffset)
+    -- Re-establish the round and the mass to pay with, INSIDE the helper. The
+    -- caller ticks to clear a cooldown between the two calls, and that tick can
+    -- cross a round boundary — which resets both blobs to 10 mass and puts them
+    -- in the lobby, so the control case failed for a reason that had nothing to
+    -- do with the thing under test.
+    if phaseOf(alice) ~= "PLAYING" then waitForRound(alice, 140) end
+    if ((arenaOf(alice) or {}).mass or 0) < 120 then feed(alice, 26) end
+    if phaseOf(alice) ~= "PLAYING" then waitForRound(alice, 140) end
+
     local bb = ballOf(bob)
     svc.movePlayer(bob, bobSpot)
     if bb then
@@ -278,6 +323,7 @@ local function placeAndHook(bobSpot, aliceOffset)
 end
 
 if profile then
+    if phaseOf(alice) ~= "PLAYING" then waitForRound(alice, 120) end
     profile.lifetimeBanked = 1e9
     svc.fireAs("SetPower", alice, "hook")
     tick(0.5)
@@ -315,6 +361,7 @@ emit("══ A LUMP MUST NEVER BLOCK THE VAULT ══")
 -- from an earlier section, and no pop ever happened at the Vault at all. So
 -- the pop is now PROVEN to have happened here, by counting before and after.
 if profile then
+    if phaseOf(alice) ~= "PLAYING" then waitForRound(alice, 120) end
     local function lumpsNow()
         local n, worst = 0, nil
         for _, d in ipairs(arena:GetChildren()) do

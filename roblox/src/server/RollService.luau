@@ -395,6 +395,14 @@ end
 -- which. It is set by ArenaService.start.
 RollService.sizeOwnedByArena = false
 
+-- Where a player who fell out of the world should be put back. Set by
+-- ArenaService, because the right answer depends on the phase: rescuing a
+-- player to the island during a lobby drops them somewhere nothing can reach
+-- them, and rescuing to the lobby mid-round removes them from the game.
+RollService.rescuePoint = function(_player: Player): Vector3
+    return Vector3.new(0, 30, 40)
+end
+
 function RollService.refresh(player: Player, goob)
     local ball = balls[player.UserId]
     if not ball or not goob then return end
@@ -460,7 +468,7 @@ function RollService.start(getGoob: (Player) -> any)
                     -- Fell off the world. Recorded as a legitimate move, or the
                     -- next sample would read the rescue itself as a teleport.
                     if ball.Position.Y < -80 then
-                        RollService.teleport(player, Vector3.new(0, 30, 40))
+                        RollService.teleport(player, RollService.rescuePoint(player))
                     end
                 end
             end

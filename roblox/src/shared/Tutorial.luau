@@ -37,20 +37,13 @@ Tutorial.STEPS = {
         goal = 12,
     },
     {
-        -- Counted, and counted high on purpose. The melt event fires on every
-        -- arena tick while you are above the grace mass, so without a goal the
-        -- step advanced on the very next frame and the player never saw the
-        -- one lesson in this game they cannot guess. 40 ticks is about three
-        -- seconds of it sitting on screen while it is visibly happening.
-        id = "melt",
-        goal = 40,
-        text = "Careful — now you're MELTING.",
-        hint = "The bigger you get, the faster you drip. Everything you drip is food for everyone else.",
-    },
-    {
-        id = "bank",
-        text = "Get to the 🏦 VAULT in the middle and hold still.",
-        hint = "Banking turns your size into 💧 you keep forever. Nothing else is safe.",
+        id = "grow",
+        -- Counted, because the lesson is that it KEEPS going. A single frame
+        -- of "you got bigger" teaches nothing; watching the number climb for
+        -- a few seconds is the whole promise of the game.
+        goal = 30,
+        text = "Keep going — there's no size limit.",
+        hint = "Whoever is biggest when the clock runs out wins the round.",
     },
     {
         id = "power",
@@ -59,9 +52,14 @@ Tutorial.STEPS = {
         hint = "One button, and it costs a slice of you. That slice lands on the floor as food.",
     },
     {
+        id = "deflate",
+        text = "Powers knock size OFF whoever you hit.",
+        hint = "The bigger they are the more comes off — and it drops as food for everyone nearby. That's how you catch up.",
+    },
+    {
         id = "done",
-        text = "That's the whole game. Eat, melt, bank, repeat.",
-        hint = "Stay out too long and you shrink. Bank too early and you leave 💧 behind.",
+        text = "That's the whole game. Eat, get huge, drag the leader down.",
+        hint = "Between rounds you're in the waiting room — trade and dress up there.",
     },
 }
 

@@ -294,7 +294,57 @@ Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
 Config.ISLAND_RADIUS = 480
 Config.SHALLOWS_INNER = 395   -- outside this radius is no-PvP
 Config.VAULT_RADIUS = 48
-Config.SHACK_POSITION = Vector3.new(-286, 0, 246)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ROUNDS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- The game is round-based now. A round is a clean slate: everybody starts the
+-- same size, grows without limit, and the round ends. Between rounds everyone
+-- sits in a lobby where nothing can eat them and the shops are open.
+--
+-- WHY THIS REPLACED THE MELT CEILING. The old design capped growth with a leak
+-- curve, so nobody could run away with it. Rounds make that unnecessary — a
+-- runaway leader only owns the board until the clock runs out — and it makes
+-- the cap actively unwanted, because the fantasy is getting ENORMOUS. The job
+-- the melt used to do is now done by other players: abilities DEFLATE, so a
+-- leader is brought down by people ganging up rather than by arithmetic.
+Config.ROUND_SECONDS = 210
+Config.INTERMISSION_SECONDS = 35
+Config.ROUND_END_HOLD = 8       -- results on screen before the lobby teleport
+
+-- Leak is off during a round. The curve itself is kept and still tested,
+-- because it is the thing to reach for if deflation turns out to be too weak
+-- a brake in playtesting — flipping this back on is a one-line change.
+Config.LEAK_IN_ROUND = false
+
+-- Round-end payout. Your final mass is the score; placement is a bonus on top
+-- so that second place is still worth playing for.
+Config.ROUND_PAYOUT_EXPONENT = 1.05
+Config.ROUND_PAYOUT_SCALE = 0.55
+Config.ROUND_PLACE_BONUS = { 3.0, 1.8, 1.3 }   -- 1st, 2nd, 3rd multipliers
+
+-- ── The lobby ──────────────────────────────────────────────────────────────
+-- A separate platform, well clear of the island, with a rim so nobody falls
+-- off it. Deliberately NOT a building: it is a floor, a rail and some signs.
+Config.LOBBY_CENTRE = Vector3.new(0, 420, 0)
+Config.LOBBY_RADIUS = 120
+
+-- ── Deflation ──────────────────────────────────────────────────────────────
+-- The catch-up mechanism, and the reason a leader cannot simply sit on the
+-- lead. Every deflating ability takes a FRACTION OF THE TARGET'S OWN MASS, so
+-- the bigger somebody is the more there is to take — the leader is always the
+-- most rewarding thing on the island to hit.
+--
+-- What comes off does not vanish: it hits the floor as pellets, so deflating
+-- the leader literally feeds everyone standing nearby. That is the whole
+-- catch-up loop in one sentence.
+Config.DEFLATE_RETURN_AS_FOOD = 0.8
+Config.DEFLATE = {
+    slam   = 0.10,   -- everyone caught in the shockwave
+    hook   = 0.06,   -- the blob you reel
+    siphon = 0.14,   -- stolen rather than scattered: the thief keeps it
+    spike  = 0.35,   -- whoever tries to eat you, and it is meant to hurt
+    blink  = 0.0,
+}
 
 -- ── Biomes ─────────────────────────────────────────────────────────────────
 -- The four old zones are gone as places, but not as ideas. Their characters
@@ -327,7 +377,21 @@ Config.BIOMES = {
 }
 
 Config.VAULT_HEIGHT = 7
-Config.SPAWN_RING = 438        -- where a fresh blob appears, inside the Shallows
+-- WHERE A FRESH BLOB APPEARS.
+--
+-- This was 438, and the scenery scatter ran from 407 to 466 — so spawn points
+-- sat in the dead centre of the rock band and a player could, and did,
+-- materialise inside a boulder. Scenery is now kept out of a ring around the
+-- spawns entirely, and the spawns themselves moved inboard. Two independent
+-- guarantees, because spawning stuck is the single worst first impression a
+-- game can make.
+-- Back out in the SHALLOWS, which is where a new player belongs anyway: it is
+-- the no-PvP ring. Moving spawns inboard to dodge the rocks put them inside
+-- the biome furniture instead — basin walls, ramps, scrap and signposts — so
+-- the fix was trading one obstacle for five. Out here the only thing that gets
+-- placed is scattered rock, and that now respects SPAWN_CLEARANCE.
+Config.SPAWN_RING = 435
+Config.SPAWN_CLEARANCE = 46    -- no scenery may be placed within this of a spawn
 Config.SPAWN_POINTS = 20       -- enough that a full server does not stack up
 
 -- Derived last, because it depends on the radius above.

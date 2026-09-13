@@ -30,6 +30,39 @@ local function arenaOf(p)
     end
     return nil
 end
+
+-- WAIT FOR A ROUND. The arena is not permanently live any more: it cycles
+-- LOBBY -> PLAYING -> RESULTS, and nothing can be eaten, spawned or deflated
+-- outside PLAYING. Every scenario that acts on the island has to arrive at the
+-- right moment rather than assuming one.
+local Config = _G.SHARED("Config")
+
+local function phaseOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1].phase, t.args[1].phaseLeft or 0
+        end
+    end
+    return nil, 0
+end
+
+local function waitForRound(p, budget)
+    for _ = 1, math.floor((budget or 90) / 0.5) do
+        local ph = phaseOf(p)
+        if ph == "PLAYING" then return true end
+        tick(0.5)
+    end
+    return phaseOf(p) == "PLAYING"
+end
+
+-- Seconds of round left, so a long scenario can tell when it is about to be
+-- reset out from under itself.
+local function roundLeft(p)
+    local ph, left = phaseOf(p)
+    return ph == "PLAYING" and left or 0
+end
+
 local function snapOf(p)
     for i = #_G.TRAFFIC, 1, -1 do
         local t = _G.TRAFFIC[i]
@@ -116,6 +149,7 @@ emit("══ THE BODY IS THE ARENA'S MASS ══")
 -- owners fight and RollService.refresh respawns the player's body out from
 -- under them every few seconds. So the honest test is to eat real pellets off
 -- the real island and watch the real body grow.
+check("a round starts on its own", waitForRound(alice), tostring(phaseOf(alice)))
 local smallReach = ball().Size.X / 2
 local arena = svc.Workspace:FindFirstChild("GoobWorld"):FindFirstChild("Arena")
 check("the island seeded itself with food", arena and #arena:GetChildren() > 100,
@@ -137,35 +171,21 @@ check("the body grew with the run", ball().Size.X / 2 > smallReach,
 
 local fed = arenaOf(alice)
 check("the arena reports a run", fed ~= nil and fed.mass ~= nil, fed and tostring(fed.mass))
-check("eating got past the grace mass", fed and fed.mass > 60, fed and tostring(fed.mass))
-check("the HUD is told what it is leaking", fed and fed.leak > 0, fed and tostring(fed.leak))
+check("eating made it grow", fed and fed.mass > Config.STARTING_MASS * 2,
+    fed and tostring(fed.mass))
 
--- THE MELT. Past the grace mass, standing still must LOSE mass. This is the
--- assertion the entire design rests on, and it is the one that caught a bug
--- that had quietly deleted the game: leaked goop was spawning inside the
--- leaking blob's own pickup radius, so a big blob vacuumed its own drips back
--- up and its net melt was exactly zero.
+-- GROWTH IS UNBOUNDED IN ROUND MODE. The melt curve is still in Blob and still
+-- tested there, but Config.LEAK_IN_ROUND turns it off during play: the point
+-- of a round is to get enormous, and a leak that caps growth fights that
+-- directly. What stops a runaway leader now is other players deflating them.
 local beforeMass = fed.mass
-local beforePellets = #arena:GetChildren()
-tick(30)
+tick(20)
 local afterMass = arenaOf(alice).mass
-check("standing still while big melts you", afterMass < beforeMass * 0.85,
+check("standing still does NOT shrink you any more",
+    afterMass >= beforeMass * 0.98,
     ("%.0f -> %.0f"):format(beforeMass, afterMass))
-
--- And what melted did not vanish. It is on the floor, for everyone else.
-check("what you melted became food for everyone else",
-    #arena:GetChildren() > beforePellets * 0.9,
-    ("%d -> %d"):format(beforePellets, #arena:GetChildren()))
-
--- A blob may never re-absorb its own trail. Without the lockout the melt is
--- cosmetic and the ceiling does not exist.
-local ownTrail = 0
-for _, pellet in ipairs(arena:GetChildren()) do
-    if (pellet.Position - ball().Position).Magnitude < ball().Size.X / 2 then
-        ownTrail += 1
-    end
-end
-check("its own drips are not sitting inside it", ownTrail == 0, tostring(ownTrail))
+check("and the server agrees there is no leak",
+    arenaOf(alice).leak == 0, tostring(arenaOf(alice).leak))
 
 emit("")
 emit("══ ANTI-CHEAT: CLIENT OWNS THE PHYSICS ══")

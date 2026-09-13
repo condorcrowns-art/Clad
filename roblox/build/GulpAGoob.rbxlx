@@ -518,7 +518,57 @@ Config.BANK_RESET_MASS = 25   -- you come out of the Vault slightly fed
 Config.ISLAND_RADIUS = 480
 Config.SHALLOWS_INNER = 395   -- outside this radius is no-PvP
 Config.VAULT_RADIUS = 48
-Config.SHACK_POSITION = Vector3.new(-286, 0, 246)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ROUNDS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- The game is round-based now. A round is a clean slate: everybody starts the
+-- same size, grows without limit, and the round ends. Between rounds everyone
+-- sits in a lobby where nothing can eat them and the shops are open.
+--
+-- WHY THIS REPLACED THE MELT CEILING. The old design capped growth with a leak
+-- curve, so nobody could run away with it. Rounds make that unnecessary — a
+-- runaway leader only owns the board until the clock runs out — and it makes
+-- the cap actively unwanted, because the fantasy is getting ENORMOUS. The job
+-- the melt used to do is now done by other players: abilities DEFLATE, so a
+-- leader is brought down by people ganging up rather than by arithmetic.
+Config.ROUND_SECONDS = 210
+Config.INTERMISSION_SECONDS = 35
+Config.ROUND_END_HOLD = 8       -- results on screen before the lobby teleport
+
+-- Leak is off during a round. The curve itself is kept and still tested,
+-- because it is the thing to reach for if deflation turns out to be too weak
+-- a brake in playtesting — flipping this back on is a one-line change.
+Config.LEAK_IN_ROUND = false
+
+-- Round-end payout. Your final mass is the score; placement is a bonus on top
+-- so that second place is still worth playing for.
+Config.ROUND_PAYOUT_EXPONENT = 1.05
+Config.ROUND_PAYOUT_SCALE = 0.55
+Config.ROUND_PLACE_BONUS = { 3.0, 1.8, 1.3 }   -- 1st, 2nd, 3rd multipliers
+
+-- ── The lobby ──────────────────────────────────────────────────────────────
+-- A separate platform, well clear of the island, with a rim so nobody falls
+-- off it. Deliberately NOT a building: it is a floor, a rail and some signs.
+Config.LOBBY_CENTRE = Vector3.new(0, 420, 0)
+Config.LOBBY_RADIUS = 120
+
+-- ── Deflation ──────────────────────────────────────────────────────────────
+-- The catch-up mechanism, and the reason a leader cannot simply sit on the
+-- lead. Every deflating ability takes a FRACTION OF THE TARGET'S OWN MASS, so
+-- the bigger somebody is the more there is to take — the leader is always the
+-- most rewarding thing on the island to hit.
+--
+-- What comes off does not vanish: it hits the floor as pellets, so deflating
+-- the leader literally feeds everyone standing nearby. That is the whole
+-- catch-up loop in one sentence.
+Config.DEFLATE_RETURN_AS_FOOD = 0.8
+Config.DEFLATE = {
+    slam   = 0.10,   -- everyone caught in the shockwave
+    hook   = 0.06,   -- the blob you reel
+    siphon = 0.14,   -- stolen rather than scattered: the thief keeps it
+    spike  = 0.35,   -- whoever tries to eat you, and it is meant to hurt
+    blink  = 0.0,
+}
 
 -- ── Biomes ─────────────────────────────────────────────────────────────────
 -- The four old zones are gone as places, but not as ideas. Their characters
@@ -551,7 +601,21 @@ Config.BIOMES = {
 }
 
 Config.VAULT_HEIGHT = 7
-Config.SPAWN_RING = 438        -- where a fresh blob appears, inside the Shallows
+-- WHERE A FRESH BLOB APPEARS.
+--
+-- This was 438, and the scenery scatter ran from 407 to 466 — so spawn points
+-- sat in the dead centre of the rock band and a player could, and did,
+-- materialise inside a boulder. Scenery is now kept out of a ring around the
+-- spawns entirely, and the spawns themselves moved inboard. Two independent
+-- guarantees, because spawning stuck is the single worst first impression a
+-- game can make.
+-- Back out in the SHALLOWS, which is where a new player belongs anyway: it is
+-- the no-PvP ring. Moving spawns inboard to dodge the rocks put them inside
+-- the biome furniture instead — basin walls, ramps, scrap and signposts — so
+-- the fix was trading one obstacle for five. Out here the only thing that gets
+-- placed is scattered rock, and that now respects SPAWN_CLEARANCE.
+Config.SPAWN_RING = 435
+Config.SPAWN_CLEARANCE = 46    -- no scenery may be placed within this of a spawn
 Config.SPAWN_POINTS = 20       -- enough that a full server does not stack up
 
 -- Derived last, because it depends on the radius above.
@@ -1858,6 +1922,7 @@ Net.EVENTS = {
     "EquipTrinket",   -- C->S  slot a trinket
     "OpenCrate",      -- C->S  spend Glob on a roll
     "CrateResult",    -- S->C  what came out
+    "RoundSync",      -- S->C  phase, clock and the last round's results
 }
 
 Net.FUNCTIONS = {
@@ -2275,6 +2340,8 @@ Season.XP = {
     -- 55 a bank and a ~90-second bank puts the daily cap about three hours
     -- out, which is the same shape the rest of the track was paced to.
     bank       = 55,
+    round      = 220,   -- finishing a round at all
+    deflate    = 8,
     bigBank    = 260,   -- a run taken past 60% of the ceiling before cashing
     pop        = 15,    -- you get something for dying; it is still play
 }
@@ -2614,20 +2681,13 @@ Tutorial.STEPS = {
         goal = 12,
     },
     {
-        -- Counted, and counted high on purpose. The melt event fires on every
-        -- arena tick while you are above the grace mass, so without a goal the
-        -- step advanced on the very next frame and the player never saw the
-        -- one lesson in this game they cannot guess. 40 ticks is about three
-        -- seconds of it sitting on screen while it is visibly happening.
-        id = "melt",
-        goal = 40,
-        text = "Careful — now you're MELTING.",
-        hint = "The bigger you get, the faster you drip. Everything you drip is food for everyone else.",
-    },
-    {
-        id = "bank",
-        text = "Get to the 🏦 VAULT in the middle and hold still.",
-        hint = "Banking turns your size into 💧 you keep forever. Nothing else is safe.",
+        id = "grow",
+        -- Counted, because the lesson is that it KEEPS going. A single frame
+        -- of "you got bigger" teaches nothing; watching the number climb for
+        -- a few seconds is the whole promise of the game.
+        goal = 30,
+        text = "Keep going — there's no size limit.",
+        hint = "Whoever is biggest when the clock runs out wins the round.",
     },
     {
         id = "power",
@@ -2636,9 +2696,14 @@ Tutorial.STEPS = {
         hint = "One button, and it costs a slice of you. That slice lands on the floor as food.",
     },
     {
+        id = "deflate",
+        text = "Powers knock size OFF whoever you hit.",
+        hint = "The bigger they are the more comes off — and it drops as food for everyone nearby. That's how you catch up.",
+    },
+    {
         id = "done",
-        text = "That's the whole game. Eat, melt, bank, repeat.",
-        hint = "Stay out too long and you shrink. Bank too early and you leave 💧 behind.",
+        text = "That's the whole game. Eat, get huge, drag the leader down.",
+        hint = "Between rounds you're in the waiting room — trade and dress up there.",
     },
 }
 
@@ -3150,7 +3215,20 @@ ArenaService.start({
         local profile = Data.get(player)
         if not profile then return end
         profile.glob += glob
-        if reason == "bank" then
+        if reason == "round" then
+            profile.lifetimeBanked += glob
+            if glob > (profile.bestBank or 0) then
+                profile.bestBank = glob
+            end
+            progress(player, "round")
+            for _, power in ipairs(Powers.LIST) do
+                if power.unlockBanked > 0
+                    and profile.lifetimeBanked >= power.unlockBanked
+                    and profile.lifetimeBanked - glob < power.unlockBanked then
+                    notify(player, ("🔓 New power: %s — %s"):format(power.name, power.blurb), "good")
+                end
+            end
+        elseif reason == "bank" then
             profile.lifetimeBanked += glob
             if glob > (profile.bestBank or 0) then
                 profile.bestBank = glob
@@ -3899,10 +3977,20 @@ export type Run = {
     safeUntil: number,
     trinkets: Trinkets.Resolved,
     bestMass: number,
+    peakThisRound: number,
     lastPos: Vector3,
     startedAt: number,      -- for the run summary
     ateThisRun: number,
 }
+
+-- ── The round ──────────────────────────────────────────────────────────────
+-- LOBBY -> PLAYING -> RESULTS -> LOBBY, forever. The phase is the single piece
+-- of state that decides whether anything in this file is allowed to happen:
+-- no eating, no pellets and no deflation outside PLAYING.
+local phase = "LOBBY"
+local phaseEndsAt = 0
+local roundNumber = 0
+local lastResults: { any } = {}
 
 local runs: { [number]: Run } = {}
 local rng = Random.new(os.clock() * 1e6 // 1)
@@ -4046,6 +4134,45 @@ local function usesOf(player: Player, id: string): number
     return (deps.powerUses(player) or {})[id] or 0
 end
 
+-- DEFLATE A BLOB.
+--
+-- Takes a fraction of the TARGET'S OWN mass, which is what makes this a
+-- catch-up mechanism rather than a flat nerf: the bigger somebody is, the more
+-- there is to take, so the leader is always the most rewarding thing on the
+-- island to hit. What comes off does not vanish — most of it lands as pellets
+-- right where it happened, so deflating the leader literally feeds whoever is
+-- standing nearby. That is the entire comeback loop in one function.
+--
+-- Returns how much was removed, so a thief (SIPHON) can keep it instead.
+local function deflate(target: Player, targetRun: Run, fraction: number, scatterIt: boolean): number
+    if fraction <= 0 then
+        return 0
+    end
+    local before = targetRun.mass
+    local taken = math.max(0, before - Config.STARTING_MASS) * fraction
+    if taken <= 0 then
+        return 0
+    end
+    targetRun.mass = math.max(Config.STARTING_MASS, before - taken)
+
+    if scatterIt then
+        local ball = RollService.ballFor(target)
+        local at = ball and ball.Position or Vector3.zero
+        local food = taken * Config.DEFLATE_RETURN_AS_FOOD
+        local n = math.clamp(math.floor(food / Config.LEAK_PELLET_MASS), 1, 30)
+        local radius = Blob.radius(before)
+        for i = 1, n do
+            local a = math.rad((360 / n) * i + rng:NextNumber(-12, 12))
+            local d = radius * 1.6 + rng:NextNumber(3, 18)
+            spawnPellet(Vector3.new(at.X + math.cos(a) * d, at.Y, at.Z + math.sin(a) * d),
+                food / n, false, target.UserId)
+        end
+    end
+
+    deps.effect(target, "deflated", { amount = taken })
+    return taken
+end
+
 -- ── Decoys ─────────────────────────────────────────────────────────────────
 -- A fake body at your current size, in your colour, that anyone may try to
 -- eat and that gives nothing when they do. It is the only power in the game
@@ -4079,6 +4206,49 @@ local function spawnDecoy(player: Player, run: Run, at: Vector3)
     end)
 end
 
+-- DECLARED ABOVE ArenaService.enter, which calls them. A `local function` only
+-- enters scope from its declaration downward, so with these left next to the
+-- rest of the round machine — which sits near the bottom of the file — the
+-- call inside enter() resolved to a nil GLOBAL and the server died on the
+-- first join. Fifth time in this project. tools/scopecheck.py now fails the
+-- build on it rather than waiting for a play-test to find it.
+local function sendToLobby(player: Player, index: number)
+    local run = runs[player.UserId]
+    if run then
+        run.mass = Config.STARTING_MASS
+        run.banking = 0
+        run.leakBuffer = 0
+        run.slamUntil = 0
+        run.splitOwed = 0
+        run.activeEffect = nil
+        run.powerUntil = 0
+        run.safeUntil = os.clock() + 3600   -- untouchable for the whole lobby
+        RollService.setRadius(player, Blob.radius(run.mass))
+    end
+    RollService.teleport(player, WorldBuilder.lobbyPoint(index))
+end
+
+local function sendToArena(player: Player, index: number)
+    local run = runs[player.UserId]
+    if run then
+        run.mass = Config.STARTING_MASS
+        run.bestMass = Config.STARTING_MASS
+        run.peakThisRound = Config.STARTING_MASS
+        run.banking = 0
+        run.leakBuffer = 0
+        run.slamUntil = 0
+        run.splitOwed = 0
+        run.activeEffect = nil
+        run.powerUntil = 0
+        run.ateThisRun = 0
+        run.startedAt = os.clock()
+        run.safeUntil = os.clock() + POP_INVULN
+        RollService.setRadius(player, Blob.radius(run.mass))
+    end
+    RollService.teleport(player, WorldBuilder.spawnPoint(index))
+end
+
+
 -- ── Run state ──────────────────────────────────────────────────────────────
 
 local function newRun(player: Player): Run
@@ -4096,6 +4266,7 @@ local function newRun(player: Player): Run
         safeUntil = os.clock() + POP_INVULN,
         trinkets = Trinkets.resolve(ids),
         bestMass = Config.STARTING_MASS,
+        peakThisRound = Config.STARTING_MASS,
         lastPos = Vector3.zero,
         startedAt = os.clock(),
         ateThisRun = 0,
@@ -4126,6 +4297,15 @@ end
 
 function ArenaService.enter(player: Player)
     runs[player.UserId] = newRun(player)
+    -- Arrive into whatever is happening. Joining mid-round puts you on the
+    -- island small and late, which is the honest version of walking in halfway
+    -- through — and joining during a lobby puts you where everyone else is.
+    local n = #Players:GetPlayers()
+    if phase == "PLAYING" then
+        sendToArena(player, n)
+    else
+        sendToLobby(player, n)
+    end
 end
 
 function ArenaService.leave(player: Player)
@@ -4296,6 +4476,9 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
     if not run then
         return false, "You're not in the arena."
     end
+    if phase ~= "PLAYING" then
+        return false, "Wait for the round to start."
+    end
     local now = os.clock()
     if now < run.powerReadyAt then
         return false, ("%.1fs"):format(run.powerReadyAt - now)
@@ -4387,6 +4570,8 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
                     else
                         ball.AssemblyLinearVelocity = -toward * HOOK_PULL + Vector3.new(0, 12, 0)
                     end
+                    deflate(target, tr, Config.DEFLATE.hook, true)
+                    deps.teach(player, "deflate")
                     deps.effect(player, "hook", { to = target.DisplayName })
                 end
             end
@@ -4424,9 +4609,12 @@ function ArenaService.usePower(player: Player, aim: Vector3?): (boolean, string?
         end
         if target then
             local trun = runs[target.UserId]
-            local drained = math.min(trun.mass * SIPHON_FRACTION, run.mass * 0.6)
-            trun.mass = math.max(Config.STARTING_MASS, trun.mass - drained)
+            -- Stolen, not scattered: SIPHON is the one deflating power whose
+            -- take goes straight into the caster. It is also the only power
+            -- that works exclusively upward, so the trade is fair.
+            local drained = deflate(target, trun, Config.DEFLATE.siphon, false)
             run.mass += drained
+            deps.teach(player, "deflate")
             deps.notify(target, ("🩸 %s siphoned %s off you.")
                 :format(player.DisplayName, Format.short(drained)), "bad")
             deps.effect(player, "siphon", { from = target.DisplayName, amount = drained })
@@ -4458,7 +4646,16 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
     -- grace mass drips, and what drips becomes real food on the floor rather
     -- than a number going down. A big blob is a moving buffet, and everyone
     -- can see the trail.
-    local leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult * dt
+    -- MELT IS OFF IN ROUND MODE. The whole fantasy is getting enormous, and a
+    -- leak curve that caps growth is directly at odds with it. The job melt
+    -- used to do — stopping a runaway leader — belongs to other players now:
+    -- abilities deflate, so a leader is brought down by being ganged up on.
+    -- The curve is kept and still tested; Config.LEAK_IN_ROUND turns it back
+    -- on in one line if deflation proves too weak a brake.
+    local leak = 0
+    if Config.LEAK_IN_ROUND then
+        leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult * dt
+    end
     if leak > 0 then
         deps.teach(player, "melt")
         run.mass = math.max(Config.STARTING_MASS, run.mass - leak)
@@ -4495,6 +4692,9 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                             end
                             run.mass += worth
                             run.ateThisRun += 1
+                            if run.mass > Config.STARTING_MASS * 4 then
+                                deps.teach(player, "grow")
+                            end
                             removePellet(pellet)
                             deps.teach(player, "eat")
                         end
@@ -4506,20 +4706,13 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
         end
     end
 
-    -- BANK. You have to actually stop, inside the dish, for the full count.
-    -- Standing still in the most visible place on the island for three seconds
-    -- while holding everything you own is the best moment the game has.
-    local inVault = WorldBuilder.ringAt(pos) == "VAULT"
-        and math.abs(pos.Y - Config.VAULT_HEIGHT) < 26
-    local slow = ball.AssemblyLinearVelocity.Magnitude < BANK_MAX_SPEED
-    if inVault and slow and run.mass > Config.BANK_RESET_MASS then
-        run.banking += dt
-        if run.banking >= Blob.bankSeconds(run.trinkets.bankHaste) then
-            bank(player, run)
-        end
-    elseif run.banking > 0 then
-        run.banking = math.max(0, run.banking - dt * 2)
-    end
+    -- NO MID-ROUND BANKING. It used to convert your mass to Glob and reset you
+    -- to 25, which is in direct conflict with the point of a round: get as
+    -- enormous as you can before the clock runs out. The round end is the
+    -- bank now, and it pays on the size you finish with. The Vault survives as
+    -- the island's landmark — it is what the whole map orients on — and the
+    -- code below is kept for the same reason Config.LEAK_IN_ROUND is: turning
+    -- a cash-out back on is a small change, not an archaeology project.
 
     if run.mass > run.bestMass then
         run.bestMass = run.mass
@@ -4543,6 +4736,10 @@ local function tickPlayer(player: Player, run: Run, dt: number, now: number)
                     ob.AssemblyLinearVelocity = flat.Unit
                             * (SLAM_IMPULSE * falloff * orun.trinkets.knockbackMult)
                         + Vector3.new(0, 26 * falloff, 0)
+                    -- Scaled by how central the hit was, so a clean slam on
+                    -- the leader is worth lining up.
+                    deflate(other, orun, Config.DEFLATE.slam * falloff, true)
+                    deps.teach(player, "deflate")
                     hits += 1
                 end
             end
@@ -4615,11 +4812,22 @@ local function tickCombat(list: { Player }, now: number)
                             if eater and prey then
                                 local preySpiked = (prey == a and aSpiked) or (prey == b and bSpiked)
                                 if preySpiked then
-                                    eater, prey = prey, eater
+                                    -- Biting a spiked blob does not swap the
+                                    -- meal round, it COSTS you. Deflating the
+                                    -- biter by a third of themselves is how
+                                    -- the smallest blob on the island punishes
+                                    -- the biggest without having to swallow it.
+                                    local biter = eater
+                                    local biterRun = runs[biter.UserId]
+                                    if biterRun then
+                                        deflate(biter, biterRun, Config.DEFLATE.spike, true)
+                                        deps.notify(biter, "🌵 Spiked. That cost you.", "bad")
+                                    end
+                                    eater, prey = nil, nil
                                 end
-                                local re = runs[eater.UserId]
-                                local rp = runs[prey.UserId]
-                                local bp = RollService.ballFor(prey)
+                                local re = eater and runs[eater.UserId]
+                                local rp = prey and runs[prey.UserId]
+                                local bp = prey and RollService.ballFor(prey)
                                 if re and rp and bp then
                                     re.mass += Blob.eatGain(re.mass, rp.mass)
                                     pop(prey, bp.Position, eater)
@@ -4663,15 +4871,107 @@ function ArenaService.grant(player: Player, mass: number)
     RollService.setRadius(player, Blob.radius(run.mass))
 end
 
+-- ── The round machine ──────────────────────────────────────────────────────
+
+function ArenaService.phase(): (string, number, number)
+    return phase, math.max(0, phaseEndsAt - os.clock()), roundNumber
+end
+
+function ArenaService.inRound(): boolean
+    return phase == "PLAYING"
+end
+
+local function beginLobby()
+    phase = "LOBBY"
+    phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
+    local i = 0
+    for _, player in ipairs(Players:GetPlayers()) do
+        sendToLobby(player, i)
+        i += 1
+    end
+    -- Clear the floor. Pellets left lying around the island during a lobby are
+    -- just instance count nobody can reach.
+    for _, pellet in pairs(pellets) do
+        removePellet(pellet)
+    end
+end
+
+local function beginRound()
+    phase = "PLAYING"
+    roundNumber += 1
+    phaseEndsAt = os.clock() + Config.ROUND_SECONDS
+
+    for i = #lumps, 1, -1 do
+        lumps[i].part:Destroy()
+        table.remove(lumps, i)
+    end
+    for _, pellet in pairs(pellets) do
+        removePellet(pellet)
+    end
+    for _ = 1, Config.PELLET_TARGET do
+        spawnPellet(nil, nil, rng:NextNumber() < 0.012)
+    end
+
+    local i = 0
+    for _, player in ipairs(Players:GetPlayers()) do
+        sendToArena(player, i)
+        deps.notify(player, ("🫧 ROUND %d — grow as big as you can."):format(roundNumber), "good")
+        i += 1
+    end
+end
+
+local function endRound()
+    phase = "RESULTS"
+    phaseEndsAt = os.clock() + Config.ROUND_END_HOLD
+
+    local board = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        local run = runs[player.UserId]
+        if run then
+            table.insert(board, { player = player, mass = run.mass, peak = run.peakThisRound })
+        end
+    end
+    table.sort(board, function(x, y) return x.mass > y.mass end)
+
+    lastResults = {}
+    for place, row in ipairs(board) do
+        -- Your final size is the score. Placement is a bonus on top, so second
+        -- is still worth playing for rather than being worth nothing.
+        local base = row.mass ^ Config.ROUND_PAYOUT_EXPONENT * Config.ROUND_PAYOUT_SCALE
+        local bonus = Config.ROUND_PLACE_BONUS[place] or 1
+        local payout = math.floor(base * bonus)
+        deps.award(row.player, payout, 0, "round")
+        deps.notify(row.player, ("🏁 #%d with %s — 💧%s"):format(
+            place, Format.short(row.mass), Format.short(payout)),
+            place == 1 and "good" or "info")
+        table.insert(lastResults, {
+            name = row.player.DisplayName, place = place,
+            mass = row.mass, peak = row.peak, payout = payout,
+        })
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        deps.effect(player, "roundEnd", { round = roundNumber, board = lastResults })
+    end
+end
+
+function ArenaService.results()
+    return lastResults
+end
+
 function ArenaService.start(injected: Deps)
     deps = injected
     -- From here on the arena is the only thing that resizes a body.
     RollService.sizeOwnedByArena = true
 
-    -- Seed the island so the first player does not arrive to an empty floor.
-    for _ = 1, Config.PELLET_TARGET do
-        spawnPellet(nil, nil, rng:NextNumber() < 0.012)
+    RollService.rescuePoint = function(player)
+        if phase == "PLAYING" then
+            return WorldBuilder.spawnPoint(player.UserId)
+        end
+        return WorldBuilder.lobbyPoint(player.UserId)
     end
+
+    phase = "LOBBY"
+    phaseEndsAt = os.clock() + Config.INTERMISSION_SECONDS
 
     task.spawn(function()
         local last = os.clock()
@@ -4681,19 +4981,37 @@ function ArenaService.start(injected: Deps)
             local dt = math.min(0.5, now - last)
             last = now
 
+            -- Advance the machine first, so a phase change takes effect on
+            -- the same tick rather than leaving one frame of the old rules.
+            if now >= phaseEndsAt then
+                if phase == "LOBBY" then beginRound()
+                elseif phase == "PLAYING" then endRound()
+                else beginLobby() end
+            end
+
+            local playing = phase == "PLAYING"
             local active: { Player } = {}
             for _, player in ipairs(Players:GetPlayers()) do
                 local run = runs[player.UserId]
                 if run then
-                    tickPlayer(player, run, dt, now)
+                    if playing then
+                        tickPlayer(player, run, dt, now)
+                        if run.mass > run.peakThisRound then
+                            run.peakThisRound = run.mass
+                        end
+                    end
                     table.insert(active, player)
                     deps.sync(player, ArenaService.snapshot(player, run, now))
                 end
             end
 
-            tickCombat(active, now)
-            topUpPellets(dt)
-            decayLumps(dt)
+            -- Nothing eats anybody outside a round, and the floor is only
+            -- stocked while there is somebody to eat off it.
+            if playing then
+                tickCombat(active, now)
+                topUpPellets(dt)
+                decayLumps(dt)
+            end
         end
     end)
 end
@@ -4705,7 +5023,12 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
     return {
         mass = run.mass,
         radius = Blob.radius(run.mass),
-        leak = Blob.leakPerSecond(run.mass) * run.trinkets.leakMult,
+        -- The leak ACTUALLY APPLIED, not the curve's value. Reporting the
+        -- curve while Config.LEAK_IN_ROUND is off would put a melt rate on the
+        -- HUD that nothing is subtracting — a readout describing a different
+        -- game to the one being played.
+        leak = Config.LEAK_IN_ROUND
+            and (Blob.leakPerSecond(run.mass) * run.trinkets.leakMult) or 0,
         harvest = Blob.harvestPerSecond(run.mass) * run.trinkets.pelletMult,
         worth = Blob.bankValue(run.mass),
         banking = run.banking,
@@ -4719,6 +5042,10 @@ function ArenaService.snapshot(player: Player, run: Run, now: number)
         ring = WorldBuilder.ringAt(pos),
         biome = (WorldBuilder.biomeAt(pos) or {}).name,
         best = run.bestMass,
+        peak = run.peakThisRound,
+        phase = phase,
+        phaseLeft = math.max(0, phaseEndsAt - now),
+        round = roundNumber,
         ceiling = Blob.ceiling(0.8),
     }
 end
@@ -6599,6 +6926,14 @@ end
 -- which. It is set by ArenaService.start.
 RollService.sizeOwnedByArena = false
 
+-- Where a player who fell out of the world should be put back. Set by
+-- ArenaService, because the right answer depends on the phase: rescuing a
+-- player to the island during a lobby drops them somewhere nothing can reach
+-- them, and rescuing to the lobby mid-round removes them from the game.
+RollService.rescuePoint = function(_player: Player): Vector3
+    return Vector3.new(0, 30, 40)
+end
+
 function RollService.refresh(player: Player, goob)
     local ball = balls[player.UserId]
     if not ball or not goob then return end
@@ -6664,7 +6999,7 @@ function RollService.start(getGoob: (Player) -> any)
                     -- Fell off the world. Recorded as a legitimate move, or the
                     -- next sample would read the rescue itself as a teleport.
                     if ball.Position.Y < -80 then
-                        RollService.teleport(player, Vector3.new(0, 30, 40))
+                        RollService.teleport(player, RollService.rescuePoint(player))
                     end
                 end
             end
@@ -7165,88 +7500,49 @@ end
 
 -- ── Construction ───────────────────────────────────────────────────────────
 
--- The Shack. One building, holding every service in the game — and every one
--- of them is ALSO a tap on the dock, from anywhere on the island. Walking here
--- is a thing you may do, never a thing you must do. The previous map made you
--- roll across a zone to press a button, which is how a signpost on a pole
--- ended up being the interface.
-local function buildShack(world: Instance)
-    local base = Config.SHACK_POSITION
-    local shell = part({
-        Name = "Shack",
-        Size = Vector3.new(54, 26, 40),
-        Position = base + Vector3.new(0, 13, 0),
-        Color = Color3.fromRGB(122, 114, 104),
-        Material = Enum.Material.WoodPlanks,
-    })
-    shell.Parent = world
-
-    local roof = part({
-        Name = "ShackRoof",
-        Size = Vector3.new(60, 3, 46),
-        Position = base + Vector3.new(0, 27, 0),
-        Color = Color3.fromRGB(96, 88, 82),
-        Material = Enum.Material.Slate,
-    })
-    roof.Parent = world
-
-    -- An open front, so it reads as a shop rather than a crate.
-    local counter = part({
-        Name = "ShackCounter",
-        Size = Vector3.new(44, 5, 4),
-        Position = base + Vector3.new(0, 4, 22),
-        Color = Color3.fromRGB(146, 134, 118),
-        Material = Enum.Material.Wood,
-    })
-    counter.Parent = world
-
-    for i, entry in ipairs({
-        { icon = "🎁", label = "CRATES",   x = -17 },
-        { icon = "🔧", label = "TRINKETS", x =  -0 },
-        { icon = "🤝", label = "TRADE",    x =  17 },
-    }) do
-        local post = part({
-            Name = "ShackStall" .. i,
-            Size = Vector3.new(12, 12, 2),
-            Position = base + Vector3.new(entry.x, 12, 19),
-            Color = Color3.fromRGB(70, 72, 78),
-            Material = Enum.Material.SmoothPlastic,
-        })
-        post.Parent = world
-
-        local gui = Instance.new("BillboardGui")
-        gui.Size = UDim2.fromScale(9, 6)
-        gui.MaxDistance = 420
-        gui.StudsOffset = Vector3.new(0, 2, 2)
-        gui.Parent = post
-
-        local icon = Instance.new("TextLabel")
-        icon.Size = UDim2.fromScale(1, 0.62)
-        icon.BackgroundTransparency = 1
-        icon.Font = Enum.Font.FredokaOne
-        icon.TextScaled = true
-        icon.Text = entry.icon
-        icon.Parent = gui
-
-        local label = Instance.new("TextLabel")
-        label.Position = UDim2.fromScale(0, 0.62)
-        label.Size = UDim2.fromScale(1, 0.34)
-        label.BackgroundTransparency = 1
-        label.Font = Enum.Font.FredokaOne
-        label.TextScaled = true
-        label.TextColor3 = Color3.fromRGB(206, 190, 156)
-        label.Text = entry.label
-        label.Parent = gui
+-- Scatter props in a ring, skipping anything too near a landmark. Used for
+-- every piece of set dressing, because "a bit of variety, but never in the
+-- way" is the same problem every time.
+local function scatter(world: Instance, count: number, inner: number, outer: number,
+                       rng: Random, make: (Vector3, number) -> ())
+    for i = 1, count do
+        local a = rng:NextNumber(0, math.pi * 2)
+        local r = math.sqrt(rng:NextNumber(inner * inner, outer * outer))
+        local pos = Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+        -- Never inside the Vault approach, and NEVER within reach of a spawn
+        -- point. A rock placed on a spawn is a player who materialises inside
+        -- it and cannot move, which is exactly what happened in the first
+        -- play-test: the scatter band ran 407-466 and the spawns sat at 438.
+        local clear = pos.Magnitude > Config.VAULT_RADIUS + 60
+        if clear then
+            for k = 1, Config.SPAWN_POINTS do
+                local a = math.rad(k * (360 / Config.SPAWN_POINTS))
+                local spawnAt = Vector3.new(
+                    math.cos(a) * Config.SPAWN_RING, 0, math.sin(a) * Config.SPAWN_RING)
+                if (pos - spawnAt).Magnitude < Config.SPAWN_CLEARANCE then
+                    clear = false
+                    break
+                end
+            end
+        end
+        if clear then
+            make(pos, i)
+        end
     end
-
-    signpost(world, base + Vector3.new(0, 0, 30), "🏚️", "THE GOOP SHACK",
-        "or just tap the dock", Color3.fromRGB(198, 174, 118))
 end
 
 
+-- The lobby platform. Between rounds everyone stands here: nothing can eat
+-- anybody, the shops are open, and the boards are somewhere people are
+-- actually still enough to read them.
 -- A readable standing board: a slab with a big text panel on the front. Every
 -- board in the world is one of these, so "where does information live" has a
--- single answer instead of four bespoke props.
+-- single answer instead of several bespoke props.
+--
+-- DECLARED ABOVE buildLobby, which uses it. This helper was accidentally
+-- deleted along with the Shack when that block was cut out, and the result was
+-- not a compile error — `board(...)` simply became a call to a nil GLOBAL and
+-- the server died on boot. Same trap, fourth time.
 local function board(parent: Instance, name: string, position: Vector3, facing: number,
                     size: Vector2, tint: Color3)
     local slab = part({
@@ -7258,9 +7554,6 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     })
     slab.Parent = parent
 
-    -- Named `surface`, not `gui`: apicheck tracks instance classes by variable
-    -- name across the whole file, and a SurfaceGui called `gui` here made it
-    -- read every BillboardGui called `gui` elsewhere as a SurfaceGui too.
     local surface = Instance.new("SurfaceGui")
     surface.Name = "Board"
     surface.Face = Enum.NormalId.Front
@@ -7285,41 +7578,58 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     entries.Size = UDim2.fromScale(0.9, 0.9)
     entries.BackgroundTransparency = 1
     entries.Font = Enum.Font.FredokaOne
-    entries.TextScaled = false
     entries.TextSize = 34
     entries.TextWrapped = true
     entries.TextXAlignment = Enum.TextXAlignment.Left
     entries.TextYAlignment = Enum.TextYAlignment.Top
     entries.TextColor3 = Color3.fromRGB(226, 224, 216)
     -- Set here, not at first refresh: a TextLabel's default Text is the
-    -- literal string "Label", and an empty board reading "Label" in
-    -- half-metre letters is how that bug shipped last time.
+    -- literal string "Label", and an empty board reading "Label" in half-metre
+    -- letters is how that bug shipped once already.
     entries.Text = name .. "\nloading…"
-    -- Parented to the SurfaceGui, NOT to the backing frame: every consumer
-    -- looks it up as Board -> Entries, and burying it one level deeper turns
-    -- that into a WaitForChild that never returns and a board that silently
-    -- says "loading…" forever.
+    -- Parented to the SurfaceGui, NOT the backing frame: every consumer looks
+    -- it up as Board -> Entries, and burying it deeper is a WaitForChild that
+    -- never returns.
     entries.ZIndex = 2
     entries.Parent = surface
 
     return slab
 end
 
--- Scatter props in a ring, skipping anything too near a landmark. Used for
--- every piece of set dressing, because "a bit of variety, but never in the
--- way" is the same problem every time.
-local function scatter(world: Instance, count: number, inner: number, outer: number,
-                       rng: Random, make: (Vector3, number) -> ())
-    for i = 1, count do
-        local a = rng:NextNumber(0, math.pi * 2)
-        local r = math.sqrt(rng:NextNumber(inner * inner, outer * outer))
-        local pos = Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
-        -- Never inside the Vault approach, and never on top of the Shack.
-        if pos.Magnitude > Config.VAULT_RADIUS + 60
-            and (pos - Config.SHACK_POSITION).Magnitude > 110 then
-            make(pos, i)
-        end
+local function buildLobby(world: Instance)
+    local c = Config.LOBBY_CENTRE
+
+    local floor = disc(world, c, Config.LOBBY_RADIUS, 6,
+        Color3.fromRGB(128, 130, 136), Enum.Material.Concrete, "LobbyFloor")
+    floor.Name = "LobbyFloor"
+
+    local inlay = disc(world, c + Vector3.new(0, 3.2, 0), Config.LOBBY_RADIUS - 18, 1,
+        Color3.fromRGB(146, 140, 126), Enum.Material.Marble, "LobbyInlay")
+    inlay.CanCollide = false
+
+    -- A rail all the way round. Falling off a lobby while waiting for a round
+    -- is pure frustration: nothing is gained by making the floor dangerous.
+    for i = 0, 35 do
+        local a = math.rad(i * 10)
+        local post = part({
+            Name = "LobbyRail",
+            Size = Vector3.new(9, 14, 5),
+            CFrame = CFrame.new(c + Vector3.new(
+                math.cos(a) * (Config.LOBBY_RADIUS + 2), 7, math.sin(a) * (Config.LOBBY_RADIUS + 2)))
+                * CFrame.Angles(0, -a, 0),
+            Color = Color3.fromRGB(108, 110, 116),
+            Material = Enum.Material.Metal,
+        })
+        post.Parent = world
     end
+
+    board(world, "Leaderboard", c + Vector3.new(-58, 22, -Config.LOBBY_RADIUS + 26), 24,
+        Vector2.new(52, 32), Color3.fromRGB(198, 174, 118))
+    board(world, "Archive", c + Vector3.new(58, 22, -Config.LOBBY_RADIUS + 26), -24,
+        Vector2.new(52, 32), Color3.fromRGB(150, 170, 186))
+
+    signpost(world, c + Vector3.new(0, 3, Config.LOBBY_RADIUS - 30), "\u{1F6CB}\u{FE0F}", "THE WAITING ROOM",
+        "trade, dress up, get ready", Color3.fromRGB(198, 174, 118))
 end
 
 function WorldBuilder.build()
@@ -7604,18 +7914,11 @@ function WorldBuilder.build()
             boulder.Parent = world
         end)
 
-    -- ── THE SHACK ──────────────────────────────────────────────────────────
-    buildShack(world)
-
+    -- No plot pads either. They were the last remnant of the display-your-Goob
+    -- layer, and on a round-based island they are eight concrete discs nobody
+    -- has a reason to stand on. The list stays, empty, because GoobService
+    -- still asks for a plot and expects nil to mean "no pad".
     WorldBuilder.plots = {}
-    for i = 1, Config.PLOT_COUNT do
-        local a = math.rad(-90 + (i - 1) * (180 / math.max(1, Config.PLOT_COUNT - 1)))
-        local centre = Config.SHACK_POSITION + Vector3.new(math.cos(a) * 70, 1, math.sin(a) * 70)
-        local pad = disc(world, centre, 12, 2,
-            Color3.fromRGB(140, 134, 122), Enum.Material.Concrete, "Plot" .. i)
-        pad.Name = "Plot" .. i
-        table.insert(WorldBuilder.plots, { index = i, center = centre + Vector3.new(0, 1, 0), owner = nil })
-    end
 
     -- ── THE STANDOFF RING ──────────────────────────────────────────────────
     -- Off the island, across a causeway, and raised. A 1v1 anyone can roll
@@ -7661,25 +7964,80 @@ function WorldBuilder.build()
     joinPad.Name = "PitJoinPad"
     joinPad.CanCollide = false
 
-    -- ── THE BOARDS ─────────────────────────────────────────────────────────
-    board(world, "Leaderboard",
-        Vector3.new(-96, 20, -(Config.VAULT_RADIUS + 46)), 14,
-        Vector2.new(56, 34), Color3.fromRGB(198, 174, 118))
-    board(world, "Archive",
-        Vector3.new(96, 20, -(Config.VAULT_RADIUS + 46)), -14,
-        Vector2.new(56, 34), Color3.fromRGB(150, 170, 186))
+    -- ── THE LOBBY ──────────────────────────────────────────────────────────
+    -- A floor, a rail and two boards. Not a building: there is no roof, no
+    -- door and no interior, because "I want there to be no buildings" was the
+    -- note and a lobby you walk INTO would be the same mistake in a new place.
+    buildLobby(world)
 
     -- ── SPAWNS ─────────────────────────────────────────────────────────────
-    -- Spread around the Shallows so a full server does not appear inside
-    -- itself, and so nobody spawns in reach of a predator.
+    -- PLACED LAST, AND CHECKED. Every previous attempt at this picked a radius
+    -- by hand and hoped: the first put spawns at 438 with rocks scattered
+    -- across 407-466, and a play-tester materialised inside a boulder before
+    -- touching a control. Moving them inboard traded rocks for basin walls,
+    -- ramps and signposts.
+    --
+    -- So they are not picked, they are SEARCHED. Each spawn starts at its even
+    -- angle on the ring and steps outward until it finds a spot with nothing
+    -- solid within SPAWN_CLEARANCE. Add scenery later and the spawns move out
+    -- of its way on the next build instead of swallowing a player.
+    local solid = {}
+    for _, d in ipairs(world:GetChildren()) do
+        if d:IsA("BasePart") and d.CanCollide
+            and d.Name ~= "Island" and d.Name ~= "Sea" and d.Name ~= "Skirt"
+            and d.Name ~= "Causeway" and d.Name ~= "PitFloor"
+            and d.Name ~= "LobbyFloor" then
+            table.insert(solid, d)
+        end
+    end
+
+    local function clearAt(pos: Vector3): boolean
+        for _, d in ipairs(solid) do
+            local flat = Vector3.new(d.Position.X - pos.X, 0, d.Position.Z - pos.Z)
+            if flat.Magnitude < Config.SPAWN_CLEARANCE + math.max(d.Size.X, d.Size.Z) / 2 then
+                return false
+            end
+        end
+        return true
+    end
+
+    WorldBuilder.spawns = {}
     for i = 1, Config.SPAWN_POINTS do
         local a = math.rad(i * (360 / Config.SPAWN_POINTS))
+        local chosen
+        -- Walk the radius out to the shoreline, then back in, before giving up.
+        for _, r in ipairs({ Config.SPAWN_RING, Config.SPAWN_RING + 14,
+                             Config.SPAWN_RING + 28, Config.SPAWN_RING - 14,
+                             Config.SPAWN_RING - 28, Config.SPAWN_RING + 40 }) do
+            local candidate = Vector3.new(math.cos(a) * r, 8, math.sin(a) * r)
+            if clearAt(candidate) then
+                chosen = candidate
+                break
+            end
+        end
+        -- If every radius on this spoke is blocked, rotate off the spoke
+        -- rather than dropping the spawn: fewer spawns means a full server
+        -- stacks up on the ones that are left.
+        if not chosen then
+            for step = 1, 24 do
+                local a2 = a + math.rad(step * 3)
+                local candidate = Vector3.new(
+                    math.cos(a2) * Config.SPAWN_RING, 8, math.sin(a2) * Config.SPAWN_RING)
+                if clearAt(candidate) then
+                    chosen = candidate
+                    break
+                end
+            end
+        end
+        chosen = chosen or Vector3.new(math.cos(a) * Config.SPAWN_RING, 8, math.sin(a) * Config.SPAWN_RING)
+        table.insert(WorldBuilder.spawns, chosen)
+
         local spawn = Instance.new("SpawnLocation")
         spawn.Name = "Spawn" .. i
         spawn.Anchored = true
         spawn.CanCollide = false
         spawn.Size = Vector3.new(16, 1, 16)
-        spawn.Position = Vector3.new(math.cos(a) * Config.SPAWN_RING, 1.4, math.sin(a) * Config.SPAWN_RING)
+        spawn.Position = Vector3.new(chosen.X, 1.4, chosen.Z)
         spawn.Color = Color3.fromRGB(186, 190, 176)
         spawn.Material = Enum.Material.SmoothPlastic
         spawn.Transparency = 0.75
@@ -7695,6 +8053,34 @@ function WorldBuilder.build()
 end
 
 -- ── Queries ────────────────────────────────────────────────────────────────
+
+function WorldBuilder.lobbyPoint(index: number): Vector3
+    -- Spread around the rail rather than stacked on the middle, so a full
+    -- server in the lobby is a crowd and not a single pile of blobs.
+    local a = math.rad((index % 24) * 15)
+    local r = Config.LOBBY_RADIUS - 34
+    return Config.LOBBY_CENTRE
+        + Vector3.new(math.cos(a) * r, 8, math.sin(a) * r)
+end
+
+function WorldBuilder.isInLobby(position: Vector3): boolean
+    local d = position - Config.LOBBY_CENTRE
+    return math.abs(d.Y) < 60
+        and Vector3.new(d.X, 0, d.Z).Magnitude < Config.LOBBY_RADIUS + 20
+end
+
+-- The searched positions, not the ideal ring. Teleporting a player to the
+-- nominal angle would undo the whole clearance search and drop them back into
+-- whatever the build step moved them away from.
+WorldBuilder.spawns = {} :: { Vector3 }
+
+function WorldBuilder.spawnPoint(index: number): Vector3
+    local n = #WorldBuilder.spawns
+    if n == 0 then
+        return Vector3.new(0, 8, Config.SPAWN_RING)
+    end
+    return WorldBuilder.spawns[(index % n) + 1]
+end
 
 function WorldBuilder.vaultPosition(): Vector3
     return Vector3.new(0, Config.VAULT_HEIGHT, 0)
@@ -7733,7 +8119,12 @@ end
 -- middle, which would put most of the island's food inside the Vault.
 function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: number?): Vector3
     local lo = innerR or (Config.VAULT_RADIUS + 14)
-    local hi = outerR or (Config.ISLAND_RADIUS - 10)
+    -- INSIDE THE FLATS, never the Shallows. Food in the no-PvP ring means a
+    -- player can stand in the one place nothing can touch them and farm
+    -- forever — which is not a strategy, it is an exploit that beats the
+    -- entire game. The Shallows is where you spawn and where you hide; it is
+    -- deliberately bare.
+    local hi = outerR or (Config.SHALLOWS_INNER - 8)
     local r = math.sqrt(rng:NextNumber(lo * lo, hi * hi))
     local a = rng:NextNumber(0, math.pi * 2)
     local pos = Vector3.new(math.cos(a) * r, 2, math.sin(a) * r)
@@ -8289,7 +8680,9 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     elseif kind == "slam" then Juice.shakeCamera(1.4)
     elseif kind == "hook" then Juice.play("slam", 0.3)
     elseif kind == "siphon" then Juice.play("drip", 0.3)
-    elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount) end
+    elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount)
+    elseif kind == "deflated" then Juice.onSiphoned(nil, a and a.amount)
+    elseif kind == "roundEnd" then ArenaHud.roundEnded(a) end
 end)
 
 Roll.bindInput()
@@ -9630,7 +10023,10 @@ function ArenaHud.setArena(state: any)
         meltLabel.Text = "LIT UP — food +45%, everyone sees you"
         meltLabel.TextColor3 = Theme.GOLD
     elseif state.leak <= 0 then
-        meltLabel.Text = "not melting yet"
+        -- Leak is off in round mode, so "not melting yet" would be a permanent
+        -- and meaningless line. Peak size is what a player actually wants back
+        -- from this row: it is the number the round is scored on.
+        meltLabel.Text = "best this round " .. Format.short(state.peak or state.mass)
         meltLabel.TextColor3 = Theme.TEXT_DIM
     elseif state.leak < state.harvest * 0.5 then
         meltLabel.Text = ("melting -%s/s"):format(Format.short(state.leak))
@@ -9640,18 +10036,31 @@ function ArenaHud.setArena(state: any)
         meltLabel.TextColor3 = Theme.BAD
     end
 
+    -- The phase clock owns the status strip whenever the round is not running.
+    -- A player in the lobby needs to know how long they have to shop far more
+    -- than they need to know which patch of ground they are standing on.
+    local phase = state.phase or "PLAYING"
+    local left = math.max(0, math.floor(state.phaseLeft or 0))
+    local clock = ("%d:%02d"):format(math.floor(left / 60), left % 60)
+
     local where = state.biome or (state.ring == "VAULT" and "the Vault"
         or state.ring == "SHALLOWS" and "the Shallows" or "the Flats")
-    if showingSummary then
+    if phase == "LOBBY" then
+        statusLabel.Text = ("WAITING ROOM  ·  round %d in %s"):format((state.round or 0) + 1, clock)
+        statusLabel.TextColor3 = Theme.ACCENT
+    elseif phase == "RESULTS" then
+        statusLabel.Text = "ROUND OVER"
+        statusLabel.TextColor3 = Theme.GOLD
+    elseif showingSummary then
         -- leave the summary up
     elseif state.banking > 0 then
         statusLabel.Text = "BANKING — hold still"
         statusLabel.TextColor3 = Theme.GOLD
     elseif state.safe then
-        statusLabel.Text = "SAFE  ·  " .. where
+        statusLabel.Text = ("%s  ·  SAFE  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.GOOD
     else
-        statusLabel.Text = "DANGER  ·  " .. where
+        statusLabel.Text = ("%s  ·  DANGER  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.BAD
     end
 
@@ -9719,6 +10128,33 @@ end
 -- player is left reconstructing what happened from a number that has already
 -- changed. Deliberately a banner on the status strip rather than a panel: it
 -- must not interrupt the next run, which starts the same second.
+-- The round results board, shown on the sheet so it cannot cover the game.
+function ArenaHud.roundEnded(data: any)
+    if not gui or not data or not data.board then return end
+    openTab = "results"
+    clearSheet()
+    sheetTitle.Text = ("🏁  ROUND %d RESULTS"):format(data.round or 0)
+    for i, row in ipairs(data.board) do
+        local c = card(sheetBody, i, 52, i == 1 and "Legendary" or nil)
+        local name = Theme.label({
+            Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 0, 24),
+            Text = ("#%d  %s"):format(row.place, row.name),
+            TextSize = 18,
+            TextColor3 = i == 1 and Theme.GOLD or Theme.TEXT,
+        })
+        name.Parent = c
+        local sub = Theme.label({
+            Position = UDim2.fromOffset(14, 28), Size = UDim2.new(1, -28, 0, 20),
+            Text = ("%s mass  ·  peak %s  ·  💧%s"):format(
+                Format.short(row.mass), Format.short(row.peak), Format.short(row.payout)),
+            TextSize = 13, TextColor3 = Theme.TEXT_DIM,
+        })
+        sub.Parent = c
+    end
+    sheet.Visible = true
+    ArenaHud.applyLayout()
+end
+
 function ArenaHud.runEnded(s: any)
     if not gui or not s then return end
     local banked = s.ended == "banked"

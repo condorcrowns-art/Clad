@@ -426,7 +426,20 @@ ArenaService.start({
         local profile = Data.get(player)
         if not profile then return end
         profile.glob += glob
-        if reason == "bank" then
+        if reason == "round" then
+            profile.lifetimeBanked += glob
+            if glob > (profile.bestBank or 0) then
+                profile.bestBank = glob
+            end
+            progress(player, "round")
+            for _, power in ipairs(Powers.LIST) do
+                if power.unlockBanked > 0
+                    and profile.lifetimeBanked >= power.unlockBanked
+                    and profile.lifetimeBanked - glob < power.unlockBanked then
+                    notify(player, ("🔓 New power: %s — %s"):format(power.name, power.blurb), "good")
+                end
+            end
+        elseif reason == "bank" then
             profile.lifetimeBanked += glob
             if glob > (profile.bestBank or 0) then
                 profile.bestBank = glob

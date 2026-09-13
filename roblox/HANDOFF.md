@@ -392,6 +392,35 @@ ceiling 1.06K mass, 600 at 70s, 90% of ceiling at 180s, 99% at 349s.
   via `Hud.setArenaMode(true)`. Still owns toasts, the drawer and the coach.
 - `mobile_test.luau` / `geometry.luau` — see "traps" below.
 
+## THE GAME IS ROUND-BASED NOW (supersedes the melt sections below)
+
+LOBBY (35s) -> PLAYING (210s) -> RESULTS (8s) -> LOBBY, forever.
+`ArenaService.phase()` is the single source of truth; nothing eats, spawns or
+deflates outside PLAYING.
+
+- **Growth is unbounded during a round.** `Config.LEAK_IN_ROUND = false`. The
+  melt curve is still in `Blob` and still tested there — it is what to reach
+  for if deflation proves too weak a brake, and turning it back on is one line.
+- **Deflation replaced melt as the anti-runaway.** Every deflating power takes
+  a fraction of the TARGET'S OWN mass (`Config.DEFLATE`), so the leader is
+  always the most rewarding target; 80% of what comes off lands as pellets, so
+  hitting the leader feeds everyone nearby. That is the whole catch-up loop.
+- **No mid-round banking.** It reset you to 25 mass, which contradicts the
+  point of a round. The round end is the bank: final mass -> Glob, plus a
+  placement bonus.
+- **The lobby is a place**, 420 studs up, with a rail. Not a building.
+- **No buildings at all.** The Shack and plot pads are gone; every service is
+  a tap on the dock.
+- **Food never spawns in the Shallows.** Pellets in the no-PvP ring let a
+  player farm untouchable forever, which beats the whole game.
+
+## tools/scopecheck.py
+
+The `local function` forward-reference trap took down FIVE builds. It is now a
+lint in `run_all.sh`: it flags any call to a name whose `local function`
+declaration appears later in the same file, which is exactly the failure
+(the call resolves to a nil global; the server boots and dies later).
+
 ## Scale (changed)
 
 One island, **480 studs**, sized for 16-24 players. `Config.PELLET_TARGET` is

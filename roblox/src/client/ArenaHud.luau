@@ -942,7 +942,10 @@ function ArenaHud.setArena(state: any)
         meltLabel.Text = "LIT UP — food +45%, everyone sees you"
         meltLabel.TextColor3 = Theme.GOLD
     elseif state.leak <= 0 then
-        meltLabel.Text = "not melting yet"
+        -- Leak is off in round mode, so "not melting yet" would be a permanent
+        -- and meaningless line. Peak size is what a player actually wants back
+        -- from this row: it is the number the round is scored on.
+        meltLabel.Text = "best this round " .. Format.short(state.peak or state.mass)
         meltLabel.TextColor3 = Theme.TEXT_DIM
     elseif state.leak < state.harvest * 0.5 then
         meltLabel.Text = ("melting -%s/s"):format(Format.short(state.leak))
@@ -952,18 +955,31 @@ function ArenaHud.setArena(state: any)
         meltLabel.TextColor3 = Theme.BAD
     end
 
+    -- The phase clock owns the status strip whenever the round is not running.
+    -- A player in the lobby needs to know how long they have to shop far more
+    -- than they need to know which patch of ground they are standing on.
+    local phase = state.phase or "PLAYING"
+    local left = math.max(0, math.floor(state.phaseLeft or 0))
+    local clock = ("%d:%02d"):format(math.floor(left / 60), left % 60)
+
     local where = state.biome or (state.ring == "VAULT" and "the Vault"
         or state.ring == "SHALLOWS" and "the Shallows" or "the Flats")
-    if showingSummary then
+    if phase == "LOBBY" then
+        statusLabel.Text = ("WAITING ROOM  ·  round %d in %s"):format((state.round or 0) + 1, clock)
+        statusLabel.TextColor3 = Theme.ACCENT
+    elseif phase == "RESULTS" then
+        statusLabel.Text = "ROUND OVER"
+        statusLabel.TextColor3 = Theme.GOLD
+    elseif showingSummary then
         -- leave the summary up
     elseif state.banking > 0 then
         statusLabel.Text = "BANKING — hold still"
         statusLabel.TextColor3 = Theme.GOLD
     elseif state.safe then
-        statusLabel.Text = "SAFE  ·  " .. where
+        statusLabel.Text = ("%s  ·  SAFE  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.GOOD
     else
-        statusLabel.Text = "DANGER  ·  " .. where
+        statusLabel.Text = ("%s  ·  DANGER  ·  %s"):format(clock, where)
         statusLabel.TextColor3 = Theme.BAD
     end
 
@@ -1031,6 +1047,33 @@ end
 -- player is left reconstructing what happened from a number that has already
 -- changed. Deliberately a banner on the status strip rather than a panel: it
 -- must not interrupt the next run, which starts the same second.
+-- The round results board, shown on the sheet so it cannot cover the game.
+function ArenaHud.roundEnded(data: any)
+    if not gui or not data or not data.board then return end
+    openTab = "results"
+    clearSheet()
+    sheetTitle.Text = ("🏁  ROUND %d RESULTS"):format(data.round or 0)
+    for i, row in ipairs(data.board) do
+        local c = card(sheetBody, i, 52, i == 1 and "Legendary" or nil)
+        local name = Theme.label({
+            Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 0, 24),
+            Text = ("#%d  %s"):format(row.place, row.name),
+            TextSize = 18,
+            TextColor3 = i == 1 and Theme.GOLD or Theme.TEXT,
+        })
+        name.Parent = c
+        local sub = Theme.label({
+            Position = UDim2.fromOffset(14, 28), Size = UDim2.new(1, -28, 0, 20),
+            Text = ("%s mass  ·  peak %s  ·  💧%s"):format(
+                Format.short(row.mass), Format.short(row.peak), Format.short(row.payout)),
+            TextSize = 13, TextColor3 = Theme.TEXT_DIM,
+        })
+        sub.Parent = c
+    end
+    sheet.Visible = true
+    ArenaHud.applyLayout()
+end
+
 function ArenaHud.runEnded(s: any)
     if not gui or not s then return end
     local banked = s.ended == "banked"

@@ -83,7 +83,9 @@ if world then
         if c.Name:match("^Plot%d+$") then plotCount += 1 end
     end
 end
-check("8 plots built", plotCount == 8, "got " .. tostring(plotCount))
+-- No plot pads and no Shack any more: the play-test note was "I want there to
+-- be no buildings", and every service they held is a tap on the dock.
+check("no plot pads remain", plotCount == 0, "got " .. tostring(plotCount))
 check("leaderboard exists", world and world:FindFirstChild("Leaderboard") ~= nil)
 check("archive exists", world and world:FindFirstChild("Archive") ~= nil)
 
@@ -96,7 +98,8 @@ check("there is a sea under it, so nobody falls out of the world",
 check("the vault dish exists", world and world:FindFirstChild("VaultDish") ~= nil)
 check("the standoff ring is named what PitService looks up",
     world and world:FindFirstChild("PitRing") ~= nil)
-check("the shack is built", world and world:FindFirstChild("Shack") ~= nil)
+check("the shack is gone", world and world:FindFirstChild("Shack") == nil)
+check("there is a lobby to wait in", world and world:FindFirstChild("LobbyFloor") ~= nil)
 check("the arena folder exists for runtime spawns",
     world and world:FindFirstChild("Arena") ~= nil)
 
@@ -125,7 +128,42 @@ local spawns = 0
 for _, d in ipairs(world and world:GetChildren() or {}) do
     if d.ClassName == "SpawnLocation" then spawns += 1 end
 end
-check("spawns ring the shallows", spawns >= 8, "got " .. tostring(spawns))
+check("spawns ring the island", spawns >= 8, "got " .. tostring(spawns))
+
+-- THE PLAY-TEST BUG, AS A TEST. Scenery scattered from 407 to 466 studs while
+-- spawn points sat at 438, so a player could materialise inside a boulder and
+-- be stuck before they had touched a control.
+--
+-- Reads the ACTUAL SpawnLocation positions, not a recomputed ring. The first
+-- version of this recalculated the nominal angles and so tested a ring the
+-- builder no longer uses — it reported a collision that had already been
+-- searched away, and would equally have missed a real one.
+do
+    local Config2 = _G.SHARED("Config")
+    local solid, spawnParts = {}, {}
+    for _, d in ipairs(world and world:GetChildren() or {}) do
+        if d.ClassName == "SpawnLocation" then
+            table.insert(spawnParts, d)
+        elseif d:IsA("BasePart") and d.CanCollide and d.Name ~= "Island"
+            and d.Name ~= "Sea" and d.Name ~= "Skirt" and d.Name ~= "Causeway"
+            and d.Name ~= "PitFloor" and d.Name ~= "LobbyFloor" then
+            table.insert(solid, d)
+        end
+    end
+    check("the spawns were actually built", #spawnParts >= 8, tostring(#spawnParts))
+
+    local blocked = {}
+    for _, sp in ipairs(spawnParts) do
+        for _, d in ipairs(solid) do
+            local flat = V3.new(d.Position.X - sp.Position.X, 0, d.Position.Z - sp.Position.Z)
+            if flat.Magnitude < Config2.SPAWN_CLEARANCE then
+                table.insert(blocked, ("%s %.0f studs from %s"):format(d.Name, flat.Magnitude, sp.Name))
+            end
+        end
+    end
+    check("nothing solid sits on a spawn point", #blocked == 0,
+        table.concat(blocked, ", "):sub(1, 150))
+end
 
 -- Every board must carry its text label at exactly Board -> Entries. Burying
 -- it one level deeper is a silent hang, not an error, so it gets its own check.

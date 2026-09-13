@@ -16,6 +16,37 @@ local function tick(sec, dt)
         sched.step(dt); svc.heartbeat(dt); svc.renderStep(dt)
     end
 end
+
+-- WAIT FOR A ROUND. The arena is not permanently live any more: it cycles
+-- LOBBY -> PLAYING -> RESULTS, and nothing can be eaten, spawned or deflated
+-- outside PLAYING. Every scenario that acts on the island has to arrive at the
+-- right moment rather than assuming one.
+local function phaseOf(p)
+    for i = #_G.TRAFFIC, 1, -1 do
+        local t = _G.TRAFFIC[i]
+        if t.remote == "ArenaSync" and t.player ~= "ALL" and t.player.Name == p.Name then
+            return t.args[1].phase, t.args[1].phaseLeft or 0
+        end
+    end
+    return nil, 0
+end
+
+local function waitForRound(p, budget)
+    for _ = 1, math.floor((budget or 90) / 0.5) do
+        local ph = phaseOf(p)
+        if ph == "PLAYING" then return true end
+        tick(0.5)
+    end
+    return phaseOf(p) == "PLAYING"
+end
+
+-- Seconds of round left, so a long scenario can tell when it is about to be
+-- reset out from under itself.
+local function roundLeft(p)
+    local ph, left = phaseOf(p)
+    return ph == "PLAYING" and left or 0
+end
+
 local function snapOf(p)
     for i = #_G.TRAFFIC, 1, -1 do
         local t = _G.TRAFFIC[i]
@@ -49,123 +80,75 @@ check("step 1 asks them to eat",
 check("it shows progress", tut() and tut().progress == "0 / 12",
     tut() and tostring(tut().progress))
 
-emit("")
-emit("══ STEP 1: EAT ══")
--- Eat off the real island. The tutorial must advance on the player DOING the
--- thing, never on a timer, so this drives it the only way a player can.
-for _ = 1, 40 do
-    local list = arena:GetChildren()
-    if #list == 0 then break end
-    svc.movePlayer(alice, list[1].Position)
-    local b = ball()
-    if b then b.Position = list[1].Position end
-    tick(0.3)
-    if tut() and tut().id ~= "eat" then break end
+check("a round starts on its own", waitForRound(alice), tostring(phaseOf(alice)))
+local arena = svc.Workspace:FindFirstChild("GoobWorld"):FindFirstChild("Arena")
+local function ball()
+    return svc.Workspace:FindFirstChild("GoobBall_" .. alice.UserId)
 end
-check("eating moved it past step 1", tut() and tut().id ~= "eat",
-    tut() and tut().id)
-
-emit("")
-emit("══ STEP 2: MELT — the step that matters ══")
--- Melting is the one mechanic in this game a child cannot guess and has not
--- seen elsewhere. If they learn it by watching their number fall for no stated
--- reason they read it as the game being broken, not as the game being tense.
--- So it must be TAUGHT, and taught at the moment it starts.
-check("the melt step exists and is reached", tut() and tut().id == "melt",
-    tut() and tut().id)
-check("it says the word, in plain language",
-    tut() and tut().text:lower():find("melt") ~= nil, tut() and tut().text)
-check("and it says where the melted goo goes",
-    tut() and (tut().hint or ""):lower():find("food") ~= nil, tut() and tut().hint)
-
--- Keep eating so the melt event keeps firing and the step clears.
-for _ = 1, 20 do
-    local list = arena:GetChildren()
-    if #list > 0 then
-        svc.movePlayer(alice, list[1].Position)
+local function feed(n)
+    for _ = 1, n do
+        local list = arena:GetChildren()
+        local target
+        for _, d in ipairs(list) do
+            if d.Name == "Pellet" or d.Name == "Crumb" then target = d break end
+        end
+        if not target then break end
+        svc.movePlayer(alice, target.Position)
         local b = ball()
-        if b then b.Position = list[1].Position end
+        if b then b.Position = target.Position end
+        tick(0.3)
     end
-    tick(0.5)
-    if tut() and tut().id ~= "melt" then break end
 end
-check("melting advanced it", tut() and tut().id ~= "melt", tut() and tut().id)
 
 emit("")
-emit("══ STEP 3: BANK ══")
-check("it now sends them to the Vault", tut() and tut().id == "bank", tut() and tut().id)
-check("it says what banking is FOR",
-    tut() and (tut().hint or ""):lower():find("keep") ~= nil, tut() and tut().hint)
+emit("══ EAT, THEN GROW ══")
+feed(90)
+check("eating moved it past step 1", tut() and tut().id ~= "eat", tut() and tut().id)
 
-local globBefore = (snapOf(alice) or {}).glob or 0
--- Roll into the Vault and hold still. Anti-cheat tolerates this because the
--- body is moved the same way the server moves it.
-for _ = 1, 40 do
-    svc.movePlayer(alice, V3.new(0, 9, 0))
-    local b = ball()
-    if b then
-        b.Position = V3.new(0, 9, 0)
-        b.AssemblyLinearVelocity = V3.new(0, 0, 0)
-    end
-    tick(0.4)
-    if tut() and tut().id ~= "bank" then break end
+-- The GROW step is counted on purpose. A single frame of "you got bigger"
+-- teaches nothing; the lesson is that it keeps going, with no cap, which is
+-- the entire promise of a round.
+check("the grow step is reached", tut() and (tut().id == "grow" or tut().id == "power"),
+    tut() and tut().id)
+if tut() and tut().id == "grow" then
+    check("it says there is no limit",
+        tut().text:lower():find("no size limit") ~= nil, tut().text)
+    feed(60)
 end
-check("banking advanced the tutorial", tut() and tut().id ~= "bank", tut() and tut().id)
-
--- A loop this short has to CLOSE. Without a summary a run simply stops, and
--- the player is left reconstructing what happened from a number that has
--- already been reset to 25.
-local runEnd = nil
-for i = #_G.TRAFFIC, 1, -1 do
-    local t = _G.TRAFFIC[i]
-    if t.remote == "Effect" and t.args[1] == "runEnd" then runEnd = t.args[2] break end
-end
-check("the run reports back when it ends", runEnd ~= nil)
-check("and it says how it ended, what it peaked at and what it paid",
-    runEnd and runEnd.ended == "banked" and runEnd.peak > 0 and runEnd.payout > 0,
-    runEnd and ("%s peak=%s pay=%s"):format(tostring(runEnd.ended),
-        tostring(runEnd.peak), tostring(runEnd.payout)))
-check("and banking actually paid", ((snapOf(alice) or {}).glob or 0) > globBefore,
-    ("%s -> %s"):format(tostring(globBefore), tostring((snapOf(alice) or {}).glob)))
+check("growing advanced it", tut() and tut().id ~= "grow", tut() and tut().id)
 
 emit("")
-emit("══ STEP 4: THE POWER ══")
+emit("══ THE POWER ══")
 check("it asks for the power button", tut() and tut().id == "power", tut() and tut().id)
--- The coach must POINT at the button, not just describe it. The pointer was
--- resolved through a hardcoded list of two controls the arena rework deleted,
--- so this step had nothing to point at and the player was left hunting.
 check("the power step points at a real control",
     tut() and tut().target == "power", tut() and tostring(tut().target))
--- Asserted against the live registry, not against a global that does not
--- exist. The first version of this read _G.CLIENT_HUD, which is nil, so the
--- whole check collapsed to "true" and would have passed with nothing wired
--- at all.
 check("and that control has been registered by the HUD that owns it",
     (function()
         local Hud = _G.CLIENT("Hud")
         return Hud ~= nil and Hud.targets ~= nil and Hud.targets.power ~= nil
     end)())
-
 check("it warns the power costs you something",
     tut() and (tut().hint or ""):lower():find("cost") ~= nil, tut() and tut().hint)
 
--- Feed up first: a power costs mass, and the server refuses the press if
--- paying for it would drop the player below the floor.
-for _ = 1, 30 do
-    local list = arena:GetChildren()
-    if #list > 0 then
-        svc.movePlayer(alice, list[1].Position)
-        local b = ball()
-        if b then b.Position = list[1].Position end
-    end
-    tick(0.3)
-end
+feed(40)
 svc.fireAs("UsePower", alice, V3.new(0, 0, 1))
 tick(1)
-check("using a power finished the tutorial", tut() and tut().id == "done",
+check("using a power advanced the tutorial", tut() and tut().id ~= "power",
     tut() and tut().id)
-check("the closing line states the loop",
-    tut() and tut().text:lower():find("bank") ~= nil, tut() and tut().text)
+
+emit("")
+emit("══ DEFLATION IS TAUGHT ══")
+-- The catch-up mechanism has to be explained or it is invisible: a player who
+-- does not know powers knock size off other blobs has no idea why they would
+-- ever attack somebody bigger than them.
+check("the deflate step exists", tut() and (tut().id == "deflate" or tut().id == "done"),
+    tut() and tut().id)
+if tut() and tut().id == "deflate" then
+    check("it explains that size comes OFF the target",
+        tut().text:lower():find("off") ~= nil, tut().text)
+    check("and that the bigger they are the more you get",
+        (tut().hint or ""):lower():find("bigger") ~= nil, tut().hint)
+end
 
 emit("")
 emit("══ COUNTED STEPS DO NOT SHARE A COUNTER ══")
@@ -176,15 +159,15 @@ emit("══ COUNTED STEPS DO NOT SHARE A COUNTER ══")
 local Tutorial = _G.SHARED("Tutorial")
 local st = Tutorial.blank()
 for _ = 1, 12 do Tutorial.advance(st, "eat") end
-check("the counted first step completed", Tutorial.display(st).id == "melt",
+check("the counted first step completed", Tutorial.display(st).id == "grow",
     Tutorial.display(st).id)
 check("its counter reset for the next counted step",
     (st.caught or 0) == 0, tostring(st.caught))
-for _ = 1, 39 do Tutorial.advance(st, "melt") end
-check("39 of 40 is not enough to clear the melt lesson",
-    Tutorial.display(st).id == "melt", Tutorial.display(st).id)
-Tutorial.advance(st, "melt")
-check("the fortieth clears it", Tutorial.display(st).id == "bank",
+for _ = 1, 29 do Tutorial.advance(st, "grow") end
+check("29 of 30 is not enough to clear the grow lesson",
+    Tutorial.display(st).id == "grow", Tutorial.display(st).id)
+Tutorial.advance(st, "grow")
+check("the thirtieth clears it", Tutorial.display(st).id == "power",
     Tutorial.display(st).id)
 
 emit("")

@@ -209,88 +209,49 @@ end
 
 -- ── Construction ───────────────────────────────────────────────────────────
 
--- The Shack. One building, holding every service in the game — and every one
--- of them is ALSO a tap on the dock, from anywhere on the island. Walking here
--- is a thing you may do, never a thing you must do. The previous map made you
--- roll across a zone to press a button, which is how a signpost on a pole
--- ended up being the interface.
-local function buildShack(world: Instance)
-    local base = Config.SHACK_POSITION
-    local shell = part({
-        Name = "Shack",
-        Size = Vector3.new(54, 26, 40),
-        Position = base + Vector3.new(0, 13, 0),
-        Color = Color3.fromRGB(122, 114, 104),
-        Material = Enum.Material.WoodPlanks,
-    })
-    shell.Parent = world
-
-    local roof = part({
-        Name = "ShackRoof",
-        Size = Vector3.new(60, 3, 46),
-        Position = base + Vector3.new(0, 27, 0),
-        Color = Color3.fromRGB(96, 88, 82),
-        Material = Enum.Material.Slate,
-    })
-    roof.Parent = world
-
-    -- An open front, so it reads as a shop rather than a crate.
-    local counter = part({
-        Name = "ShackCounter",
-        Size = Vector3.new(44, 5, 4),
-        Position = base + Vector3.new(0, 4, 22),
-        Color = Color3.fromRGB(146, 134, 118),
-        Material = Enum.Material.Wood,
-    })
-    counter.Parent = world
-
-    for i, entry in ipairs({
-        { icon = "🎁", label = "CRATES",   x = -17 },
-        { icon = "🔧", label = "TRINKETS", x =  -0 },
-        { icon = "🤝", label = "TRADE",    x =  17 },
-    }) do
-        local post = part({
-            Name = "ShackStall" .. i,
-            Size = Vector3.new(12, 12, 2),
-            Position = base + Vector3.new(entry.x, 12, 19),
-            Color = Color3.fromRGB(70, 72, 78),
-            Material = Enum.Material.SmoothPlastic,
-        })
-        post.Parent = world
-
-        local gui = Instance.new("BillboardGui")
-        gui.Size = UDim2.fromScale(9, 6)
-        gui.MaxDistance = 420
-        gui.StudsOffset = Vector3.new(0, 2, 2)
-        gui.Parent = post
-
-        local icon = Instance.new("TextLabel")
-        icon.Size = UDim2.fromScale(1, 0.62)
-        icon.BackgroundTransparency = 1
-        icon.Font = Enum.Font.FredokaOne
-        icon.TextScaled = true
-        icon.Text = entry.icon
-        icon.Parent = gui
-
-        local label = Instance.new("TextLabel")
-        label.Position = UDim2.fromScale(0, 0.62)
-        label.Size = UDim2.fromScale(1, 0.34)
-        label.BackgroundTransparency = 1
-        label.Font = Enum.Font.FredokaOne
-        label.TextScaled = true
-        label.TextColor3 = Color3.fromRGB(206, 190, 156)
-        label.Text = entry.label
-        label.Parent = gui
+-- Scatter props in a ring, skipping anything too near a landmark. Used for
+-- every piece of set dressing, because "a bit of variety, but never in the
+-- way" is the same problem every time.
+local function scatter(world: Instance, count: number, inner: number, outer: number,
+                       rng: Random, make: (Vector3, number) -> ())
+    for i = 1, count do
+        local a = rng:NextNumber(0, math.pi * 2)
+        local r = math.sqrt(rng:NextNumber(inner * inner, outer * outer))
+        local pos = Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+        -- Never inside the Vault approach, and NEVER within reach of a spawn
+        -- point. A rock placed on a spawn is a player who materialises inside
+        -- it and cannot move, which is exactly what happened in the first
+        -- play-test: the scatter band ran 407-466 and the spawns sat at 438.
+        local clear = pos.Magnitude > Config.VAULT_RADIUS + 60
+        if clear then
+            for k = 1, Config.SPAWN_POINTS do
+                local a = math.rad(k * (360 / Config.SPAWN_POINTS))
+                local spawnAt = Vector3.new(
+                    math.cos(a) * Config.SPAWN_RING, 0, math.sin(a) * Config.SPAWN_RING)
+                if (pos - spawnAt).Magnitude < Config.SPAWN_CLEARANCE then
+                    clear = false
+                    break
+                end
+            end
+        end
+        if clear then
+            make(pos, i)
+        end
     end
-
-    signpost(world, base + Vector3.new(0, 0, 30), "🏚️", "THE GOOP SHACK",
-        "or just tap the dock", Color3.fromRGB(198, 174, 118))
 end
 
 
+-- The lobby platform. Between rounds everyone stands here: nothing can eat
+-- anybody, the shops are open, and the boards are somewhere people are
+-- actually still enough to read them.
 -- A readable standing board: a slab with a big text panel on the front. Every
 -- board in the world is one of these, so "where does information live" has a
--- single answer instead of four bespoke props.
+-- single answer instead of several bespoke props.
+--
+-- DECLARED ABOVE buildLobby, which uses it. This helper was accidentally
+-- deleted along with the Shack when that block was cut out, and the result was
+-- not a compile error — `board(...)` simply became a call to a nil GLOBAL and
+-- the server died on boot. Same trap, fourth time.
 local function board(parent: Instance, name: string, position: Vector3, facing: number,
                     size: Vector2, tint: Color3)
     local slab = part({
@@ -302,9 +263,6 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     })
     slab.Parent = parent
 
-    -- Named `surface`, not `gui`: apicheck tracks instance classes by variable
-    -- name across the whole file, and a SurfaceGui called `gui` here made it
-    -- read every BillboardGui called `gui` elsewhere as a SurfaceGui too.
     local surface = Instance.new("SurfaceGui")
     surface.Name = "Board"
     surface.Face = Enum.NormalId.Front
@@ -329,41 +287,58 @@ local function board(parent: Instance, name: string, position: Vector3, facing: 
     entries.Size = UDim2.fromScale(0.9, 0.9)
     entries.BackgroundTransparency = 1
     entries.Font = Enum.Font.FredokaOne
-    entries.TextScaled = false
     entries.TextSize = 34
     entries.TextWrapped = true
     entries.TextXAlignment = Enum.TextXAlignment.Left
     entries.TextYAlignment = Enum.TextYAlignment.Top
     entries.TextColor3 = Color3.fromRGB(226, 224, 216)
     -- Set here, not at first refresh: a TextLabel's default Text is the
-    -- literal string "Label", and an empty board reading "Label" in
-    -- half-metre letters is how that bug shipped last time.
+    -- literal string "Label", and an empty board reading "Label" in half-metre
+    -- letters is how that bug shipped once already.
     entries.Text = name .. "\nloading…"
-    -- Parented to the SurfaceGui, NOT to the backing frame: every consumer
-    -- looks it up as Board -> Entries, and burying it one level deeper turns
-    -- that into a WaitForChild that never returns and a board that silently
-    -- says "loading…" forever.
+    -- Parented to the SurfaceGui, NOT the backing frame: every consumer looks
+    -- it up as Board -> Entries, and burying it deeper is a WaitForChild that
+    -- never returns.
     entries.ZIndex = 2
     entries.Parent = surface
 
     return slab
 end
 
--- Scatter props in a ring, skipping anything too near a landmark. Used for
--- every piece of set dressing, because "a bit of variety, but never in the
--- way" is the same problem every time.
-local function scatter(world: Instance, count: number, inner: number, outer: number,
-                       rng: Random, make: (Vector3, number) -> ())
-    for i = 1, count do
-        local a = rng:NextNumber(0, math.pi * 2)
-        local r = math.sqrt(rng:NextNumber(inner * inner, outer * outer))
-        local pos = Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
-        -- Never inside the Vault approach, and never on top of the Shack.
-        if pos.Magnitude > Config.VAULT_RADIUS + 60
-            and (pos - Config.SHACK_POSITION).Magnitude > 110 then
-            make(pos, i)
-        end
+local function buildLobby(world: Instance)
+    local c = Config.LOBBY_CENTRE
+
+    local floor = disc(world, c, Config.LOBBY_RADIUS, 6,
+        Color3.fromRGB(128, 130, 136), Enum.Material.Concrete, "LobbyFloor")
+    floor.Name = "LobbyFloor"
+
+    local inlay = disc(world, c + Vector3.new(0, 3.2, 0), Config.LOBBY_RADIUS - 18, 1,
+        Color3.fromRGB(146, 140, 126), Enum.Material.Marble, "LobbyInlay")
+    inlay.CanCollide = false
+
+    -- A rail all the way round. Falling off a lobby while waiting for a round
+    -- is pure frustration: nothing is gained by making the floor dangerous.
+    for i = 0, 35 do
+        local a = math.rad(i * 10)
+        local post = part({
+            Name = "LobbyRail",
+            Size = Vector3.new(9, 14, 5),
+            CFrame = CFrame.new(c + Vector3.new(
+                math.cos(a) * (Config.LOBBY_RADIUS + 2), 7, math.sin(a) * (Config.LOBBY_RADIUS + 2)))
+                * CFrame.Angles(0, -a, 0),
+            Color = Color3.fromRGB(108, 110, 116),
+            Material = Enum.Material.Metal,
+        })
+        post.Parent = world
     end
+
+    board(world, "Leaderboard", c + Vector3.new(-58, 22, -Config.LOBBY_RADIUS + 26), 24,
+        Vector2.new(52, 32), Color3.fromRGB(198, 174, 118))
+    board(world, "Archive", c + Vector3.new(58, 22, -Config.LOBBY_RADIUS + 26), -24,
+        Vector2.new(52, 32), Color3.fromRGB(150, 170, 186))
+
+    signpost(world, c + Vector3.new(0, 3, Config.LOBBY_RADIUS - 30), "\u{1F6CB}\u{FE0F}", "THE WAITING ROOM",
+        "trade, dress up, get ready", Color3.fromRGB(198, 174, 118))
 end
 
 function WorldBuilder.build()
@@ -648,18 +623,11 @@ function WorldBuilder.build()
             boulder.Parent = world
         end)
 
-    -- ── THE SHACK ──────────────────────────────────────────────────────────
-    buildShack(world)
-
+    -- No plot pads either. They were the last remnant of the display-your-Goob
+    -- layer, and on a round-based island they are eight concrete discs nobody
+    -- has a reason to stand on. The list stays, empty, because GoobService
+    -- still asks for a plot and expects nil to mean "no pad".
     WorldBuilder.plots = {}
-    for i = 1, Config.PLOT_COUNT do
-        local a = math.rad(-90 + (i - 1) * (180 / math.max(1, Config.PLOT_COUNT - 1)))
-        local centre = Config.SHACK_POSITION + Vector3.new(math.cos(a) * 70, 1, math.sin(a) * 70)
-        local pad = disc(world, centre, 12, 2,
-            Color3.fromRGB(140, 134, 122), Enum.Material.Concrete, "Plot" .. i)
-        pad.Name = "Plot" .. i
-        table.insert(WorldBuilder.plots, { index = i, center = centre + Vector3.new(0, 1, 0), owner = nil })
-    end
 
     -- ── THE STANDOFF RING ──────────────────────────────────────────────────
     -- Off the island, across a causeway, and raised. A 1v1 anyone can roll
@@ -705,25 +673,80 @@ function WorldBuilder.build()
     joinPad.Name = "PitJoinPad"
     joinPad.CanCollide = false
 
-    -- ── THE BOARDS ─────────────────────────────────────────────────────────
-    board(world, "Leaderboard",
-        Vector3.new(-96, 20, -(Config.VAULT_RADIUS + 46)), 14,
-        Vector2.new(56, 34), Color3.fromRGB(198, 174, 118))
-    board(world, "Archive",
-        Vector3.new(96, 20, -(Config.VAULT_RADIUS + 46)), -14,
-        Vector2.new(56, 34), Color3.fromRGB(150, 170, 186))
+    -- ── THE LOBBY ──────────────────────────────────────────────────────────
+    -- A floor, a rail and two boards. Not a building: there is no roof, no
+    -- door and no interior, because "I want there to be no buildings" was the
+    -- note and a lobby you walk INTO would be the same mistake in a new place.
+    buildLobby(world)
 
     -- ── SPAWNS ─────────────────────────────────────────────────────────────
-    -- Spread around the Shallows so a full server does not appear inside
-    -- itself, and so nobody spawns in reach of a predator.
+    -- PLACED LAST, AND CHECKED. Every previous attempt at this picked a radius
+    -- by hand and hoped: the first put spawns at 438 with rocks scattered
+    -- across 407-466, and a play-tester materialised inside a boulder before
+    -- touching a control. Moving them inboard traded rocks for basin walls,
+    -- ramps and signposts.
+    --
+    -- So they are not picked, they are SEARCHED. Each spawn starts at its even
+    -- angle on the ring and steps outward until it finds a spot with nothing
+    -- solid within SPAWN_CLEARANCE. Add scenery later and the spawns move out
+    -- of its way on the next build instead of swallowing a player.
+    local solid = {}
+    for _, d in ipairs(world:GetChildren()) do
+        if d:IsA("BasePart") and d.CanCollide
+            and d.Name ~= "Island" and d.Name ~= "Sea" and d.Name ~= "Skirt"
+            and d.Name ~= "Causeway" and d.Name ~= "PitFloor"
+            and d.Name ~= "LobbyFloor" then
+            table.insert(solid, d)
+        end
+    end
+
+    local function clearAt(pos: Vector3): boolean
+        for _, d in ipairs(solid) do
+            local flat = Vector3.new(d.Position.X - pos.X, 0, d.Position.Z - pos.Z)
+            if flat.Magnitude < Config.SPAWN_CLEARANCE + math.max(d.Size.X, d.Size.Z) / 2 then
+                return false
+            end
+        end
+        return true
+    end
+
+    WorldBuilder.spawns = {}
     for i = 1, Config.SPAWN_POINTS do
         local a = math.rad(i * (360 / Config.SPAWN_POINTS))
+        local chosen
+        -- Walk the radius out to the shoreline, then back in, before giving up.
+        for _, r in ipairs({ Config.SPAWN_RING, Config.SPAWN_RING + 14,
+                             Config.SPAWN_RING + 28, Config.SPAWN_RING - 14,
+                             Config.SPAWN_RING - 28, Config.SPAWN_RING + 40 }) do
+            local candidate = Vector3.new(math.cos(a) * r, 8, math.sin(a) * r)
+            if clearAt(candidate) then
+                chosen = candidate
+                break
+            end
+        end
+        -- If every radius on this spoke is blocked, rotate off the spoke
+        -- rather than dropping the spawn: fewer spawns means a full server
+        -- stacks up on the ones that are left.
+        if not chosen then
+            for step = 1, 24 do
+                local a2 = a + math.rad(step * 3)
+                local candidate = Vector3.new(
+                    math.cos(a2) * Config.SPAWN_RING, 8, math.sin(a2) * Config.SPAWN_RING)
+                if clearAt(candidate) then
+                    chosen = candidate
+                    break
+                end
+            end
+        end
+        chosen = chosen or Vector3.new(math.cos(a) * Config.SPAWN_RING, 8, math.sin(a) * Config.SPAWN_RING)
+        table.insert(WorldBuilder.spawns, chosen)
+
         local spawn = Instance.new("SpawnLocation")
         spawn.Name = "Spawn" .. i
         spawn.Anchored = true
         spawn.CanCollide = false
         spawn.Size = Vector3.new(16, 1, 16)
-        spawn.Position = Vector3.new(math.cos(a) * Config.SPAWN_RING, 1.4, math.sin(a) * Config.SPAWN_RING)
+        spawn.Position = Vector3.new(chosen.X, 1.4, chosen.Z)
         spawn.Color = Color3.fromRGB(186, 190, 176)
         spawn.Material = Enum.Material.SmoothPlastic
         spawn.Transparency = 0.75
@@ -739,6 +762,34 @@ function WorldBuilder.build()
 end
 
 -- ── Queries ────────────────────────────────────────────────────────────────
+
+function WorldBuilder.lobbyPoint(index: number): Vector3
+    -- Spread around the rail rather than stacked on the middle, so a full
+    -- server in the lobby is a crowd and not a single pile of blobs.
+    local a = math.rad((index % 24) * 15)
+    local r = Config.LOBBY_RADIUS - 34
+    return Config.LOBBY_CENTRE
+        + Vector3.new(math.cos(a) * r, 8, math.sin(a) * r)
+end
+
+function WorldBuilder.isInLobby(position: Vector3): boolean
+    local d = position - Config.LOBBY_CENTRE
+    return math.abs(d.Y) < 60
+        and Vector3.new(d.X, 0, d.Z).Magnitude < Config.LOBBY_RADIUS + 20
+end
+
+-- The searched positions, not the ideal ring. Teleporting a player to the
+-- nominal angle would undo the whole clearance search and drop them back into
+-- whatever the build step moved them away from.
+WorldBuilder.spawns = {} :: { Vector3 }
+
+function WorldBuilder.spawnPoint(index: number): Vector3
+    local n = #WorldBuilder.spawns
+    if n == 0 then
+        return Vector3.new(0, 8, Config.SPAWN_RING)
+    end
+    return WorldBuilder.spawns[(index % n) + 1]
+end
 
 function WorldBuilder.vaultPosition(): Vector3
     return Vector3.new(0, Config.VAULT_HEIGHT, 0)
@@ -777,7 +828,12 @@ end
 -- middle, which would put most of the island's food inside the Vault.
 function WorldBuilder.randomSurfacePoint(rng: Random, innerR: number?, outerR: number?): Vector3
     local lo = innerR or (Config.VAULT_RADIUS + 14)
-    local hi = outerR or (Config.ISLAND_RADIUS - 10)
+    -- INSIDE THE FLATS, never the Shallows. Food in the no-PvP ring means a
+    -- player can stand in the one place nothing can touch them and farm
+    -- forever — which is not a strategy, it is an exploit that beats the
+    -- entire game. The Shallows is where you spawn and where you hide; it is
+    -- deliberately bare.
+    local hi = outerR or (Config.SHALLOWS_INNER - 8)
     local r = math.sqrt(rng:NextNumber(lo * lo, hi * hi))
     local a = rng:NextNumber(0, math.pi * 2)
     local pos = Vector3.new(math.cos(a) * r, 2, math.sin(a) * r)

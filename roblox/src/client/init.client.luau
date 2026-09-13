@@ -505,7 +505,9 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
     elseif kind == "slam" then Juice.shakeCamera(1.4)
     elseif kind == "hook" then Juice.play("slam", 0.3)
     elseif kind == "siphon" then Juice.play("drip", 0.3)
-    elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount) end
+    elseif kind == "siphoned" then Juice.onSiphoned(a and a.by, a and a.amount)
+    elseif kind == "deflated" then Juice.onSiphoned(nil, a and a.amount)
+    elseif kind == "roundEnd" then ArenaHud.roundEnded(a) end
 end)
 
 Roll.bindInput()
