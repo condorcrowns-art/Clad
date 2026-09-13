@@ -19,7 +19,8 @@ Cloudflare Pages, from the repo, free, and it redeploys itself on every push.
    - Framework preset: **None**
    - **Production branch: `claude/victor-ai-familiarity-rf2730`**
    - Build command: *(leave empty — there is no build step)*
-   - **Build output directory: `parla`**
+   - **Root directory: `parla`**
+   - **Build output directory: *(leave empty)***
 4. Deploy, then **Custom domains → Set up a domain → `lunosia.com`**
 
 ### The production branch is not `main`
@@ -37,13 +38,27 @@ Pages watches one branch, and it will keep watching whichever you named.
 Because your DNS is already at Cloudflare, the record is created for you and
 HTTPS is issued automatically.
 
-### Do not change the output directory
+### Root directory, not build output directory
 
-`parla` has to be the output directory, and it is not cosmetic. The Pages
-Function that answers the chatbot lives at `parla/functions/api/chat.js`, and
-Pages only finds a `functions/` folder if it sits at the root of what you
-published. Point Pages at the repository root instead and the site will still
-load — and `/api/chat` will 404, which looks exactly like "the AI is broken".
+This one cost an hour, so it is worth being precise about.
+
+Pages looks for `functions/` relative to the **root directory**, *not* the build
+output directory. The app lives in `parla/` and so does the function, at
+`parla/functions/api/chat.js`.
+
+Set **root directory to `parla`** and leave **build output directory empty**.
+
+The tempting wrong answer — root directory empty, build output `parla` — gets
+you a site that loads perfectly and a chatbot that is silently dead. Assets
+resolve from `parla/`, so every screen works; Pages looks for `/functions` at
+the repository root, finds nothing, and skips Functions entirely. `/api/chat`
+then falls through to the single-page app and returns `index.html`, so the
+endpoint answers 200 with HTML instead of 404 — which defeats most ways you
+would think to check it.
+
+The build log says which happened. `No functions dir at /functions found.
+Skipping.` is the broken case; `Compiled Worker successfully` is the working
+one. Read it before changing anything else.
 
 ### About that 1.5 MB dictionary
 
@@ -92,7 +107,11 @@ Open `https://lunosia.com/api/chat` in a browser. You want:
 ```
 
 `"available":false` means the binding is missing or the deployment predates it —
-go back to step 3. In the app itself, **Settings → Conversation partner → This
+go back to step 3.
+
+If you get **the app's own HTML** instead of JSON — an unstyled page with the
+nav at the bottom — the Function is not running at all and the root directory
+is wrong. See *Root directory, not build output directory* above. In the app itself, **Settings → Conversation partner → This
 site → Test connection** says the same thing in a sentence.
 
 If Workers AI is ever down or rate-limited, the function walks through five
