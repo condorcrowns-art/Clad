@@ -1,0 +1,318 @@
+local Config = require("Config")
+local Blob = require("Blob")
+local Format = require("Format")
+
+local fails, passes = 0, 0
+local function check(label, cond, detail)
+    if cond then passes += 1; emit("  ok    " .. label)
+    else fails += 1; emit("  FAIL  " .. label .. "   " .. tostring(detail)) end
+end
+
+emit("── The two curves ──")
+emit("  mass     radius  speed   harvest/s  leak/s   net/s")
+for _, m in ipairs({10, 60, 150, 300, 600, 900, 1200, 1600, 2500, 5000}) do
+    emit(("  %-8s %5.1f  %5.1f   %8.2f  %7.2f  %6.2f"):format(
+        Format.short(m), Blob.radius(m), Blob.speed(m),
+        Blob.harvestPerSecond(m), Blob.leakPerSecond(m), Blob.netPerSecond(m)))
+end
+
+emit("")
+emit("── Where the curves cross (the ceiling) ──")
+for _, eff in ipairs({1.0, 0.8, 0.6, 0.4}) do
+    emit(("  at %d%% harvest efficiency, ceiling = %s mass")
+        :format(eff * 100, Format.short(Blob.ceiling(eff))))
+end
+
+-- Simulate an actual run: a player harvesting at `eff`, from spawn, second by
+-- second, recording how long each milestone takes and what it banks for.
+local function run(eff)
+    local m, t = Config.STARTING_MASS, 0
+    local marks, next_i = {}, 1
+    local want = {100, 300, 600, 900, 1200, 1500}
+    local dt = 0.25
+    while t < 900 do
+        local net = Blob.netPerSecond(m, eff)
+        if net <= 0.02 and next_i <= #want then
+            -- stalled below the next milestone; record the stall and stop
+            marks[#marks + 1] = { mass = m, t = t, stalled = true }
+            break
+        end
+        m += net * dt
+        t += dt
+        while next_i <= #want and m >= want[next_i] do
+            marks[#marks + 1] = { mass = want[next_i], t = t }
+            next_i += 1
+        end
+        if next_i > #want then break end
+    end
+    return marks
+end
+
+emit("")
+emit("── How long is a run? ──")
+for _, eff in ipairs({1.0, 0.8, 0.6}) do
+    local parts = {}
+    for _, mk in ipairs(run(eff)) do
+        parts[#parts + 1] = ("%s@%.0fs%s"):format(
+            Format.short(mk.mass), mk.t, mk.stalled and "(stall)" or "")
+    end
+    emit(("  %d%% eff:  %s"):format(eff * 100, table.concat(parts, "  ")))
+end
+
+emit("")
+emit("── What a run is worth ──")
+emit("  banked mass   glob      = crates")
+for _, m in ipairs({100, 300, 600, 900, 1200, 1500}) do
+    local g = Blob.bankValue(m)
+    emit(("  %-13s %-9s %.1f goop / %.2f deep"):format(
+        Format.short(m), Format.short(g), g / 1000, g / 8000))
+end
+
+emit("")
+emit("── A big blob is a food supply ──")
+emit("  mass     leaks/s   pellets/s fed to the world")
+for _, m in ipairs({300, 900, 1500}) do
+    emit(("  %-8s %6.2f    %.2f"):format(Format.short(m),
+        Blob.leakPerSecond(m), Blob.leakPerSecond(m) / Config.LEAK_PELLET_MASS))
+end
+
+emit("")
+emit("── The island actually holds the density the curves assume ──")
+-- MEASURED OVER THE DISC THE FOOD ACTUALLY COVERS, which is now the whole
+-- island out to PELLET_OUTER rather than stopping at the rim. Leaving this
+-- reading SHALLOWS_INNER after the field was widened would have reported a
+-- density 32% above the model — the food had not got denser, the ruler had got
+-- shorter. A derived count measured against the wrong area is worse than a
+-- hardcoded one, because it looks derived.
+local foodArea = math.pi * Config.PELLET_OUTER ^ 2
+local realised = Config.PELLET_TARGET / foodArea
+emit(("  island %d studs · food disc %s sq studs · %d pellets · density %.5f (model %.5f)")
+    :format(Config.ISLAND_RADIUS, Format.short(foodArea),
+            Config.PELLET_TARGET, realised, Config.PELLET_DENSITY))
+emit(("  the rim from %d to %d studs is fed too, and protection out there is a")
+    :format(Config.SHALLOWS_INNER, Config.PELLET_OUTER))
+emit(("  %ds meter that recharges at 1s per %.0fs inside — so the edge is")
+    :format(Config.SHALLOWS_GRACE, Config.SHALLOWS_RECHARGE))
+emit("  contested ground, not a farm")
+emit(("  respawn %d/s refills the whole island in %.0fs")
+    :format(Config.PELLET_RESPAWN_PER_SEC,
+            Config.PELLET_TARGET / Config.PELLET_RESPAWN_PER_SEC))
+
+-- THE SILENT FAILURE THIS CATCHES: harvest, and therefore the ceiling and the
+-- run length, are computed from PELLET_DENSITY. Resize the island without
+-- resizing the food supply and the realised density stops matching the model
+-- the curves were tuned against. The ceiling moves and nothing reports it.
+check("the island's real pellet density matches the model",
+    math.abs(realised - Config.PELLET_DENSITY) / Config.PELLET_DENSITY < 0.02,
+    ("%.5f vs %.5f"):format(realised, Config.PELLET_DENSITY))
+
+-- Room to play. Below about 24k square studs each a full server is a scrum
+-- nobody can build a run in.
+--
+-- Measured over the ground a player can actually fight on, which is now the
+-- whole island: the rim used to be a permanent no-PvP ring and was excluded,
+-- but protection out there is a spendable meter now, so it is contested ground
+-- like everywhere else and counts.
+local playableArea = math.pi * Config.PELLET_OUTER ^ 2
+local perPlayer = playableArea / 24
+check("there is room for a full server", perPlayer > 18000,
+    ("%.0f sq studs each at 24 players"):format(perPlayer))
+
+-- And the island must not be so big that a leader is invisible. The whole
+-- design rests on always being able to see somebody bigger and somebody
+-- smaller; past roughly 560 studs you stop being able to.
+check("but not so big that nobody can see anybody",
+    Config.ISLAND_RADIUS <= 560, tostring(Config.ISLAND_RADIUS))
+
+-- THIS CHECK IS GONE, AND ON PURPOSE. It read:
+--
+--   24 * Blob.harvestPerSecond(Blob.ceiling(0.8)) / PELLET_VALUE
+--
+-- Two of its three inputs stopped describing the game. `Blob.ceiling` is
+-- derived from the leak curve, and leak is OFF during a round — nothing caps
+-- growth, so "the top of the curve" is not a mass anybody ends at. And 24 was
+-- a guess at a full server, when the field size is now a guarantee.
+--
+-- Left as a check it would have gone on passing or failing for reasons
+-- unconnected to play. It is replaced by the sweep below, which asks the
+-- question the round actually poses at the sizes a round actually reaches.
+
+emit("")
+emit("── Round mode: does the floor keep up with a guaranteed full field? ──")
+-- THE CHECK ABOVE NO LONGER DESCRIBES THE GAME ON ITS OWN, and this says so
+-- rather than quietly leaving it.
+--
+-- It is written against `Blob.ceiling`, a mass derived from the leak curve —
+-- and leak is OFF during a round (Config.LEAK_IN_ROUND), so nothing caps
+-- growth and the "top of the curve" is no longer where anybody ends up. It is
+-- also written against 24 players, when the real number is now guaranteed:
+-- ROUND_FIELD_SIZE contenders, every round, whether or not anybody logged in.
+--
+-- So the drain is swept across the sizes a round actually passes through. This
+-- is a REPORT for the late round and an ASSERTION for the early one: the floor
+-- thinning out as everyone gets huge is correct — it is what turns the back
+-- half of a round from farming into hunting — but an opening that starves is
+-- simply a broken first thirty seconds.
+local function drainAt(mass)
+    return Config.ROUND_FIELD_SIZE
+        * Blob.harvestPerSecond(mass) / Config.PELLET_VALUE
+end
+emit(("  %-10s %-12s %-12s %s"):format("mass each", "eaten/s", "respawn/s", "verdict"))
+for _, mass in ipairs({ Config.STARTING_MASS, 60, 200, 600, 1500, 4000 }) do
+    local d = drainAt(mass)
+    emit(("  %-10s %-12.1f %-12d %s"):format(Format.short(mass), d,
+        Config.PELLET_RESPAWN_PER_SEC,
+        d <= Config.PELLET_RESPAWN_PER_SEC and "floor holds" or "floor thins — hunt each other"))
+end
+check("the opening of a round is not a famine",
+    drainAt(Config.STARTING_MASS * 6) < Config.PELLET_RESPAWN_PER_SEC,
+    ("%.1f/s eaten by %d contenders vs %d/s respawn"):format(
+        drainAt(Config.STARTING_MASS * 6), Config.ROUND_FIELD_SIZE,
+        Config.PELLET_RESPAWN_PER_SEC))
+
+emit("")
+emit("── Assertions ──")
+
+-- The ceiling must exist and be finite. If harvest ever outran leak the game
+-- would have a permanent king and every other property below would be moot.
+local ceil = Blob.ceiling(1.0)
+check("a perfect player still hits a ceiling", ceil < 1e6, ceil)
+check("the ceiling is reachable, not theoretical", ceil > 600, ceil)
+check("past the ceiling you shrink no matter how well you play",
+    Blob.netPerSecond(ceil * 1.5, 1.0) < 0, Blob.netPerSecond(ceil * 1.5, 1.0))
+
+-- A brand new blob must never melt. The first thirty seconds have to read as
+-- clean growth or the game reads as broken rather than tense.
+check("a fresh blob does not melt", Blob.leakPerSecond(Config.STARTING_MASS) == 0)
+check("melting starts only above the grace mass",
+    Blob.leakPerSecond(Config.LEAK_GRACE + 1) > 0
+        and Blob.leakPerSecond(Config.LEAK_GRACE) == 0)
+
+-- Standing still must be strictly negative once you are big, or someone will
+-- park in a corner and win.
+check("AFK at size is a net loss", Blob.netPerSecond(600, 0) < -2,
+    Blob.netPerSecond(600, 0))
+
+-- ── EATING SOMEBODY HAS TO BE VISIBLE ─────────────────────────────────────
+--
+-- THE BUG THIS CATCHES. Radius used to be a LOGARITHM of mass, which was the
+-- right call for a game that reached 1e24 and needed every tenfold gain to
+-- stay a visible step forever. It is the wrong call for a round, which lasts
+-- three and a half minutes and tops out in the low thousands: across that band
+-- a log curve barely moves, and swallowing a blob your own size — which nearly
+-- doubles your mass — added about one and a half studs. The number on the HUD
+-- leapt and the thing on screen did not. The player's words were "size should
+-- scale better when you eat blobs".
+--
+-- Asserted as a RATIO across the band a round actually uses, not against the
+-- constant that produces it, so the check survives a retune of the exponent
+-- and fails on a change of shape.
+do
+    local worst, worstAt = math.huge, 0
+    for _, mass in ipairs({ 20, 60, 200, 600, 1800, 5000 }) do
+        -- What you weigh after swallowing somebody your own size: their mass
+        -- at the transfer rate, on top of your own.
+        local after = mass + Blob.eatGain(mass, mass * 0.95)
+        local growth = Blob.radius(after) / Blob.radius(mass)
+        if growth < worst then worst, worstAt = growth, mass end
+    end
+    check("swallowing an equal is a visible jump in size, at every scale",
+        worst > 1.15, ("worst %.3fx at mass %d"):format(worst, worstAt))
+end
+
+-- And the curve must still be sub-linear, or a big blob fills the screen and
+-- the camera has nowhere to go. Radius over a hundredfold mass gain must be
+-- well under a hundredfold.
+check("but size is still far sub-linear in mass",
+    Blob.radius(100000) / Blob.radius(1000) < 12,
+    ("%.1fx radius for 100x mass"):format(Blob.radius(100000) / Blob.radius(1000)))
+
+-- Chases have to be winnable by the prey.
+check("small outruns large", Blob.speed(10) > Blob.speed(1200) * 1.5,
+    Blob.speed(10) / Blob.speed(1200))
+check("but not absurdly - a chase is still a chase",
+    Blob.speed(10) < Blob.speed(1200) * 2.5, Blob.speed(10) / Blob.speed(1200))
+check("speed has a floor so a whale is not a statue",
+    Blob.speed(1e9) == Config.BLOB_MIN_SPEED)
+
+-- Eating.
+check("near-equals bounce", not Blob.canEat(100, 95))
+check("clearly bigger swallows", Blob.canEat(200, 100))
+check("eating is lossy, like every transfer in this game",
+    Blob.eatGain(200, 100) < 100)
+
+-- The sink.
+local sp = Blob.popSplit(1000)
+check("a pop burns mass out of the world", sp.burned > 0, sp.burned)
+check("a pop feeds the floor more than it feeds the terrain",
+    sp.scatter > sp.congeal)
+check("the split is conservative", math.abs(
+    (sp.kept + sp.scatter + sp.congeal + sp.burned) - 1000) < 1e-6)
+local sk = Blob.popSplit(1000, 0.15)
+check("Second Skin rescues mass from the burn, not from the floor",
+    sk.kept > 0 and sk.scatter < sp.scatter and sk.burned < sp.burned)
+check("no trinket can rescue more than the cap",
+    Blob.popSplit(1000, 0.99).kept <= 1000 * Config.POP_KEEP_MAX + 1e-6)
+
+-- Banking.
+check("one more lap pays for itself", Blob.bankValue(1200) > Blob.bankValue(600) * 2,
+    Blob.bankValue(1200) / Blob.bankValue(600))
+check("a one-minute run buys something", Blob.bankValue(600) >= 1000,
+    Blob.bankValue(600))
+check("banking nothing is worth nothing", Blob.bankValue(0) == 0)
+check("the very best run cannot buy the whole shop in one go",
+    Blob.bankValue(ceil * 1.2) < 8000, Blob.bankValue(ceil * 1.2))
+
+-- Run length. This is the number the whole design exists to produce.
+--
+-- Measured against the ceiling rather than a fixed mass, because the ceiling
+-- moves when the curves are retuned and a hardcoded milestone would quietly
+-- become unreachable — which is exactly the bug this block caught the first
+-- time it ran.
+local function timeTo(eff, target)
+    local m, t, dt = Config.STARTING_MASS, 0, 0.25
+    while t < 1200 do
+        local net = Blob.netPerSecond(m, eff)
+        if net <= 0.01 then return nil end
+        m += net * dt
+        t += dt
+        if m >= target then return t end
+    end
+    return nil
+end
+
+local REAL = 0.8                      -- what a competent player actually sweeps
+local realCeil = Blob.ceiling(REAL)
+local tQuick = timeTo(REAL, 600)                 -- a fine, ordinary run
+local tGreat = timeTo(REAL, realCeil * 0.90)     -- milking it
+
+emit(("  (at %d%% eff: ceiling %s, 600 at %.0fs, 90%% of ceiling at %.0fs)")
+    :format(REAL * 100, Format.short(realCeil), tQuick or -1, tGreat or -1))
+
+check("a decent run lands inside a minute and a bit", tQuick ~= nil and tQuick < 80, tQuick)
+check("milking it to the ceiling takes two to five minutes",
+    tGreat ~= nil and tGreat > 110 and tGreat < 300, tGreat)
+check("the last stretch is sharply diminishing, so players bank instead",
+    tQuick ~= nil and tGreat ~= nil and (tGreat - tQuick) > tQuick * 1.2,
+    tQuick and tGreat and (tGreat - tQuick) / tQuick)
+local tSliver = timeTo(REAL, realCeil * 0.99)
+emit(("  (99%% of ceiling at %s)"):format(tSliver and ("%.0fs"):format(tSliver) or "never"))
+check("the final sliver costs more than everything before it",
+    tSliver == nil or tSliver > (tGreat or 0) * 1.8, tSliver)
+
+-- Efficiency has to matter: playing well must beat playing badly by a visible
+-- margin, or skill is decorative.
+check("playing well beats playing badly", Blob.ceiling(1.0) > Blob.ceiling(0.6) * 1.4,
+    Blob.ceiling(1.0) / Blob.ceiling(0.6))
+
+-- Lumps.
+check("a big pop leaves a bigger lump",
+    Blob.lumpRadius(1000) > Blob.lumpRadius(100))
+check("no lump can wall off the island",
+    Blob.lumpRadius(1e9) <= Config.LUMP_RADIUS_MAX)
+check("lumps melt, so the island does not silt up",
+    Blob.lumpDecay(100, 60) < 100)
+
+emit("")
+if fails > 0 then error(fails .. " arena assertion(s) failed") end
+emit(("All %d arena assertions passed."):format(passes))

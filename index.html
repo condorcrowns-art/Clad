@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLITCHTOPIA — a world-building boss-battling sandbox</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="game">
+  <canvas id="canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hudTop">
+      <div id="lvlWrap"><span id="lvlText">LV 1</span><div id="xpBarBg"><div id="xpBar"></div></div></div>
+      <div id="hpWrap"><div id="hpBar"></div><span id="hpText"></span></div>
+      <div id="fuelWrap" class="hidden"><div id="fuelBar"></div></div>
+      <div id="gemWrap"><span class="gemIcon">◆</span><span id="gemText">0</span></div>
+      <div id="keyWrap" class="hidden">🔑 <span id="keyText">0/3</span></div>
+      <div id="shardWrap"><span class="shardIcon">◈</span><span id="shardText">0</span></div>
+      <div id="worldName"></div>
+    </div>
+    <div id="bossWrap" class="hidden">
+      <div id="bossName"></div>
+      <div id="bossBarBg"><div id="bossBar"></div></div>
+    </div>
+  </div>
+
+  <!-- On-screen nav dock (open any panel without memorizing keys) -->
+  <div id="navDock">
+    <button data-act="inv" title="Inventory (E)"><span class="ndIco">🎒</span><span class="ndLbl">Bag</span></button>
+    <button data-act="wardrobe" title="Wardrobe (U)"><span class="ndIco">👕</span><span class="ndLbl">Wear</span></button>
+    <button data-act="emote" title="Emotes (O)"><span class="ndIco">😄</span><span class="ndLbl">Emote</span></button>
+    <button data-act="codex" title="Splice Codex (C)"><span class="ndIco">⚗️</span><span class="ndLbl">Splice</span></button>
+    <button data-act="quest" title="Quests (Q)"><span class="ndIco">📜</span><span class="ndLbl">Quests</span></button>
+    <button data-act="shop" title="Gem Shop (B)"><span class="ndIco">🛒</span><span class="ndLbl">Shop</span></button>
+    <button data-act="store" title="Shard Store (K)"><span class="ndIco">◈</span><span class="ndLbl">Store</span></button>
+    <button data-act="trade" title="Trade (Y)"><span class="ndIco">🤝</span><span class="ndLbl">Trade</span></button>
+    <button data-act="guild" title="Guild (H)"><span class="ndIco">⚑</span><span class="ndLbl">Guild</span></button>
+    <button data-act="skills" title="Skill Tree (T)"><span class="ndIco">🌳</span><span class="ndLbl">Skills</span></button>
+    <button data-act="sheet" title="Character (J)"><span class="ndIco">⬢</span><span class="ndLbl">Hero</span></button>
+    <button data-act="worlds" title="Worlds (V)"><span class="ndIco">🌐</span><span class="ndLbl">Worlds</span></button>
+    <button data-act="ach" title="Achievements (G)"><span class="ndIco">🏆</span><span class="ndLbl">Awards</span></button>
+    <button data-act="pause" title="Settings (P)"><span class="ndIco">⚙️</span><span class="ndLbl">Menu</span></button>
+  </div>
+
+  <!-- Hotbar -->
+  <div id="hotbar"></div>
+
+  <!-- Inventory -->
+  <div id="invPanel" class="panel hidden">
+    <div class="panelTitle">INVENTORY <span class="panelHint">[E] close · click to select / equip · right-click hotbar to assign</span></div>
+    <div id="equipRow">
+      <div class="equipSlot" data-slot="back"><span class="equipLabel">BACK</span><div class="equipIcon"></div></div>
+      <div class="equipSlot" data-slot="feet"><span class="equipLabel">FEET</span><div class="equipIcon"></div></div>
+      <div class="equipSlot" data-slot="chip"><span class="equipLabel">CHIP</span><div class="equipIcon"></div></div>
+      <div class="equipSlot" data-slot="pet"><span class="equipLabel">PET</span><div class="equipIcon"></div></div>
+    </div>
+    <div id="invControls">
+      <input id="invSearch" placeholder="🔍 search items…" autocomplete="off">
+      <select id="invSort">
+        <option value="kind">sort: type</option>
+        <option value="name">sort: name</option>
+        <option value="tier">sort: rarity</option>
+        <option value="count">sort: count</option>
+      </select>
+    </div>
+    <div id="invGrid"></div>
+  </div>
+
+  <!-- Shop -->
+  <div id="shopPanel" class="panel hidden">
+    <div class="panelTitle">GEM EXCHANGE <span class="panelHint">[B] close</span></div>
+    <div id="shopList"></div>
+    <div class="panelTitle" style="margin-top:14px">RECYCLER <span class="panelHint">click an item to sell it for gems</span></div>
+    <div id="sellGrid"></div>
+  </div>
+
+  <!-- Quests -->
+  <div id="questPanel" class="panel hidden">
+    <div class="panelTitle">QUEST LOG <span class="panelHint">[Q] close</span></div>
+    <div id="questList"></div>
+  </div>
+
+  <!-- My Worlds -->
+  <div id="worldsPanel" class="panel hidden">
+    <div class="panelTitle">WORLDS <span class="panelHint">[V] close · type ANY name to travel — every name is a world</span></div>
+    <div id="worldTravel">
+      <input id="worldTravelInput" maxlength="16" placeholder="go to world…">
+      <button id="worldTravelBtn">▶ GO</button>
+      <button id="worldRandomBtn" title="visit a random world">🎲</button>
+    </div>
+    <div id="worldBossHint">⚠ World bosses: travel to <b>OVERSEER</b> (3 bosses), <b>ARCHIVIST</b> (5), <b>SOVEREIGN</b> (7), then <b>OMEGA</b> (all 3 world bosses) for the mythic set — plus limited seasonal loot during live events.</div>
+    <div id="worldsList"></div>
+    <div id="worldCreate">
+      <input id="worldNameInput" maxlength="16" placeholder="new world name…">
+      <button id="worldCreateBtn">⚿ FOUND WORLD</button>
+      <span id="lockCount"></span>
+    </div>
+  </div>
+
+  <!-- Guild -->
+  <div id="guildPanel" class="panel hidden">
+    <div class="panelTitle">GUILD <span class="panelHint">[H] close · contribute gems to level up account-wide perks</span></div>
+    <div id="guildBody"></div>
+  </div>
+
+  <!-- Shard Store -->
+  <div id="storePanel" class="panel hidden">
+    <div class="panelTitle">◈ SHARD STORE <span class="panelHint">[K] close · Shards earned from bosses, achievements & daily login</span></div>
+    <div id="storeNote">This is an in-game store. Purchases use ◈ Shards you earn by playing — no real money, nothing to buy.</div>
+    <div id="storeList"></div>
+  </div>
+
+  <!-- Character sheet -->
+  <div id="sheetPanel" class="panel hidden">
+    <div class="panelTitle">CHARACTER <span class="panelHint">[J] close</span></div>
+    <div id="sheetBody"></div>
+  </div>
+
+  <!-- Wardrobe -->
+  <div id="wardrobePanel" class="panel hidden">
+    <div class="panelTitle">WARDROBE <span class="panelHint">[U] close · dress up head-to-toe — hats, hair, face, shirts, wings, held items &amp; auras all stack</span></div>
+    <div id="wardrobeBody"></div>
+  </div>
+
+  <!-- Login reward calendar -->
+  <div id="loginPanel" class="panel hidden">
+    <div class="panelTitle">DAILY LOGIN REWARDS <span class="panelHint">claim one per day · 7-day cycle · don't break the streak</span></div>
+    <div id="loginGrid"></div>
+  </div>
+
+  <!-- Emotes -->
+  <div id="emotePanel" class="panel hidden">
+    <div class="panelTitle">EMOTES <span class="panelHint">[O] close · express yourself</span></div>
+    <div id="emoteGrid"></div>
+  </div>
+
+  <!-- Trade window -->
+  <div id="tradePanel" class="panel hidden">
+    <div class="panelTitle">TRADE — DATA BROKER <span class="panelHint">[Y] close · offer items/gems, the broker matches value</span></div>
+    <div id="tradeCols">
+      <div class="tradeCol">
+        <div class="tradeColHead">YOUR OFFER <span id="tradeGiveVal" class="tradeVal"></span></div>
+        <div id="tradeGiveOffer" class="tradeOffer"></div>
+        <div class="tradeGemRow"><span>◆ gems</span><button class="tGem" data-side="give" data-d="100">+100</button><button class="tGem" data-side="give" data-d="-100">−100</button><span id="tradeGiveGems" class="tGemVal">0</span></div>
+        <div class="tradeSrcLabel">your inventory — click to offer</div>
+        <div id="tradeGiveInv" class="tradeSrc"></div>
+      </div>
+      <div class="tradeCol">
+        <div class="tradeColHead">BROKER OFFER <span id="tradeGetVal" class="tradeVal"></span></div>
+        <div id="tradeGetOffer" class="tradeOffer"></div>
+        <div class="tradeGemRow"><span>◆ gems</span><button class="tGem" data-side="get" data-d="100">+100</button><button class="tGem" data-side="get" data-d="-100">−100</button><span id="tradeGetGems" class="tGemVal">0</span></div>
+        <div class="tradeSrcLabel">broker stock — click to request</div>
+        <div id="tradeGetStock" class="tradeSrc"></div>
+      </div>
+    </div>
+    <div id="tradeFooter"><span id="tradeBalance"></span><button id="tradeConfirmBtn">✔ CONFIRM TRADE</button></div>
+  </div>
+
+  <!-- Skill tree -->
+  <div id="skillsPanel" class="panel hidden">
+    <div class="panelTitle">SKILL TREE <span class="panelHint">[T] close · spend skill points earned on level-up</span></div>
+    <div id="skillsBody"></div>
+  </div>
+
+  <!-- Pause / settings -->
+  <div id="settingsPanel" class="panel hidden">
+    <div class="panelTitle">PAUSED — SETTINGS <span class="panelHint">[P] resume · sound &amp; difficulty</span></div>
+    <div id="settingsBody"></div>
+  </div>
+
+  <!-- Achievements -->
+  <div id="achPanel" class="panel hidden">
+    <div class="panelTitle">ACHIEVEMENTS <span class="panelHint">[G] close · <span id="achCount"></span></span></div>
+    <div id="achList"></div>
+  </div>
+
+  <!-- DEFRAG minigame -->
+  <div id="defragPanel" class="panel hidden">
+    <div class="panelTitle">DEFRAG.EXE <span class="panelHint">hit the matching op before the bar empties · 3 faults = drive lost</span></div>
+    <div id="defragScreen">
+      <div id="defragStep"></div>
+      <div id="defragSymbol">⌕</div>
+      <div id="defragTimerBg"><div id="defragTimer"></div></div>
+      <div id="defragFaults"></div>
+    </div>
+    <div id="defragBtns">
+      <button class="dfBtn" data-op="scan">⌕ SCAN</button>
+      <button class="dfBtn" data-op="patch">⚙ PATCH</button>
+      <button class="dfBtn" data-op="purge">⚡ PURGE</button>
+      <button class="dfBtn" data-op="cool">❄ COOL</button>
+    </div>
+  </div>
+
+  <!-- Splice codex -->
+  <div id="codexPanel" class="panel hidden">
+    <div class="panelTitle">SPLICE CODEX <span class="panelHint">[C] close · plant a seed, then plant a different seed on the sapling</span></div>
+    <div id="codexList"></div>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- Toasts -->
+  <div id="toasts"></div>
+
+  <!-- Menu / intro -->
+  <div id="menu">
+    <div id="menuInner">
+      <h1 class="glitchTitle" data-text="GLITCHTOPIA">GLITCHTOPIA</h1>
+      <p class="tagline">Your home server is yours to build. The corrupted sectors are yours to purge.</p>
+      <p id="menuGreet" class="hidden"></p>
+      <p class="menuBody">
+        Punch blocks to harvest <b>data seeds</b>. Plant them, grow them, and <b>splice</b> two seeds
+        together to compile new tech. Every item <i>does something</i> — springs launch you, sentries
+        fight for you, tesla coils chain-zap, pets follow and defend. Fish the ponds, dig for riches
+        in <b>THE MINESHAFT</b>, climb <b>THE STACK</b>, trade with the wandering <b>merchant</b>,
+        level up, and in each corrupted sector gather the <b>cipher keys</b> to unseal the boss gate —
+        then purge all <b>seven corrupted processes</b>, from the FIREWALL DAEMON to KRAKEN.SYS to the
+        invisible ROOTKIT to the SWARM QUEEN. Type any name in <b>WORLDS [V]</b> to travel there —
+        every name is a world. Survive them all and the <b>BOSS RUSH</b> awaits.
+      </p>
+      <div class="menuControls">
+        <span><b>A/D</b> move</span><span><b>SPACE</b> jump</span><span><b>CLICK</b> punch / place / plant</span>
+        <span><b>R-CLICK</b> build background walls</span><span><b>M-CLICK</b> pick block</span>
+        <span><b>1–9</b> hotbar</span><span><b>E</b> inventory</span><span><b>B</b> shop</span>
+        <span><b>C</b> splice codex</span><span><b>Q</b> quests</span><span><b>G</b> achievements</span><span><b>V</b> worlds (travel by name)</span><span><b>H</b> guild</span><span><b>K</b> shard store</span><span><b>T</b> skill tree</span><span><b>J</b> character (+ titles)</span><span><b>U</b> wardrobe (dress up)</span><span><b>O</b> emotes</span><span><b>Y</b> trade (data broker)</span><span><b>P</b> pause / settings (rebind keys)</span><span><b>S</b> interact (teleporter/weather/shelf/vendor/chime)</span><span><b>W</b> enter portal</span>
+        <span><b>SHIFT</b> dash (with boots)</span>
+      </div>
+      <div id="menuBtns">
+        <button id="playBtn">▶ BOOT UP</button>
+        <div id="menuMiniRow">
+          <button id="newCharBtn" class="menuMini hidden">new character</button>
+          <button id="settingsBtn" class="menuMini">⚙ settings</button>
+          <button id="creditsBtn" class="menuMini">credits</button>
+          <button id="wipeBtn" class="menuMini">wipe save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Character creation -->
+    <div id="profileScreen" class="hidden">
+      <h2 class="screenTitle">CREATE YOUR AVATAR</h2>
+      <canvas id="avatarPreview" width="88" height="104"></canvas>
+      <input id="nameInput" maxlength="14" placeholder="name your character…" autocomplete="off">
+      <div class="screenLabel">pick a colour</div>
+      <div id="colorPalette"></div>
+      <div class="screenBtns">
+        <button id="profileBack" class="menuMini">‹ back</button>
+        <button id="profileGo">▶ ENTER GLITCHTOPIA</button>
+      </div>
+    </div>
+
+    <!-- Credits -->
+    <div id="creditsBox" class="hidden">
+      <h2 class="screenTitle">CREDITS</h2>
+      <p class="creditsText">
+        <b>GLITCHTOPIA</b> — a world-building, boss-battling sandbox.<br>
+        Design, code, art &amp; sound: procedurally generated, zero dependencies.<br>
+        Inspired by <b>Growtopia</b> and <b>Pixel Worlds</b>.<br>
+        Built with vanilla JavaScript + HTML5 canvas.
+      </p>
+      <button id="creditsBack" class="menuMini">‹ back</button>
+    </div>
+  </div>
+
+  <!-- Death overlay -->
+  <div id="deathOverlay" class="hidden">
+    <div id="deathInner">
+      <h2>CONNECTION LOST</h2>
+      <p id="deathText"></p>
+      <button id="respawnBtn">RECONNECT</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/items.js"></script>
+<script src="js/world.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/bosses.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

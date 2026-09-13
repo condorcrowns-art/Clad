@@ -1,0 +1,12 @@
+node_modules/
+package-lock.json
+
+# apidump.json is a ~20MB generated fetch of Roblox's published API surface.
+# run_all.sh pulls it on first run; it does not belong in history.
+apidump.json
+
+# package.json is NOT ignored, on purpose. It carries the pinned Luau compiler
+# version, and run_all.sh falls back to `npm install @luau-rs/luau` UNPINNED
+# when it is missing — so a fresh clone would silently build against whatever
+# version happens to be latest, and "the tests pass" would mean something
+# different on every machine. The pin is the whole point of committing it.

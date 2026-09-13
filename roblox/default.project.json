@@ -1,0 +1,45 @@
+{
+  "name": "GulpAGoob",
+  "tree": {
+    "$className": "DataModel",
+
+    "Workspace": {
+      "$className": "Workspace"
+    },
+
+    "Lighting": {
+      "$className": "Lighting"
+    },
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "GoobShared": {
+        "$path": "src/shared"
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "GoobServer": {
+        "$path": "src/server"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "GoobClient": {
+          "$path": "src/client"
+        }
+      }
+    },
+
+    "SoundService": {
+      "$className": "SoundService",
+      "$properties": {
+        "RespectFilteringEnabled": true
+      }
+    }
+  }
+}
