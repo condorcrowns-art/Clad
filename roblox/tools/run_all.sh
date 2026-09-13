@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # run_all.sh — the whole verification suite. Run from roblox/tools.
 set -euo pipefail
-[ -d node_modules ] || npm install --silent @luau-rs/luau
+# Install from the committed package.json so the Luau compiler version is the
+# one this suite was validated against. Installing the package by NAME instead
+# takes whatever is latest, which quietly changes what "passing" means.
+[ -d node_modules ] || npm install --silent
 [ -f apidump.json ] || curl -sSo apidump.json \
   https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json
 

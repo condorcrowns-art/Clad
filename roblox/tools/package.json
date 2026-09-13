@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@luau-rs/luau": "^0.733.0"
+  }
+}
