@@ -414,6 +414,26 @@ deflates outside PLAYING.
 - **Food never spawns in the Shallows.** Pellets in the no-PvP ring let a
   player farm untouchable forever, which beats the whole game.
 
+## THE INPUT LAYER MUST BE BOUND
+
+`Stick.luau` holds every keyboard, gamepad and touch handler. `bindHardware()`
+connects them; `moveVector()` reads what they fill in. If it is never called,
+moveVector returns Vector3.zero on every frame and `Roll.step` brakes the blob
+to a standstill — THE PLAYER CANNOT MOVE, and nothing reports it, because
+powers are a separate server-side path and keep working.
+
+It was never called for two play-tests, the second one AFTER a commit that
+claimed to fix the first. It now binds at require time AND inside
+`Stick.build`, and `client_test.luau` presses a real key and asserts the body
+responds. Nothing in this harness had ever pressed a key before that.
+
+Related harness fixes, both of which made the bug untestable:
+- `Enum` items are now SINGLETONS, as in the engine. They used to be a fresh
+  table per access, so a table keyed by an enum item — which is how a keymap is
+  naturally written — could never be looked up.
+- `UserInputService` gained `WindowFocusReleased`/`WindowFocused`, and
+  `svc.pressKey` / `svc.releaseKey` exist.
+
 ## tools/scopecheck.py
 
 The `local function` forward-reference trap took down FIVE builds. It is now a

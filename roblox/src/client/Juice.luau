@@ -113,19 +113,57 @@ if #missingVolume > 0 then
     warn("[Goob/Juice] no volume set for: " .. table.concat(missingVolume, ", "))
 end
 
--- Report a dead sound id ONCE, at boot, rather than on every play. The harness
--- has no audio engine and cannot tell whether a file exists, so this warning is
--- the only thing that will ever say so — it needs to be findable in the output
--- rather than buried under a thousand repeats.
-task.defer(function()
-    local dead = {}
+-- Report a dead sound id ONCE, after giving it a fair chance to load.
+--
+-- THE FIRST VERSION OF THIS CRIED WOLF. It checked IsLoaded inside a
+-- task.defer — one frame after creating the Sound — and audio cannot possibly
+-- have loaded by then, so it listed EVERY sound as dead on a completely
+-- healthy client. A warning that is always wrong is worse than no warning:
+-- it trains you to ignore the console.
+--
+-- It now waits, polls, and listens for the Loaded event, and only complains
+-- about what is still not there after a real timeout.
+local SOUND_LOAD_TIMEOUT = 12
+
+task.spawn(function()
+    local pending = {}
     for name, sound in pairs(sfx) do
-        if not sound.IsLoaded and sound.TimeLength == 0 then
-            table.insert(dead, name .. " (" .. sound.SoundId .. ")")
+        pending[name] = sound
+        -- Guarded: polling IsLoaded below is the real mechanism, and the event
+        -- is only an early-out. Assuming a signal exists on an instance is how
+        -- a cosmetic nicety takes down the whole client.
+        local loaded = (sound :: any).Loaded
+        if loaded and type(loaded) == "table" and loaded.Connect then
+            loaded:Connect(function()
+                pending[name] = nil
+            end)
         end
     end
+
+    local deadline = os.clock() + SOUND_LOAD_TIMEOUT
+    while os.clock() < deadline do
+        local left = 0
+        for name, sound in pairs(pending) do
+            if sound.IsLoaded then
+                pending[name] = nil
+            else
+                left += 1
+            end
+        end
+        if left == 0 then
+            return
+        end
+        task.wait(0.5)
+    end
+
+    local dead = {}
+    for name, sound in pairs(pending) do
+        table.insert(dead, name .. " (" .. tostring(sound.SoundId) .. ")")
+    end
     if #dead > 0 then
-        warn("[Goob/Juice] sounds that did not load: " .. table.concat(dead, ", "))
+        table.sort(dead)
+        warn(("[Goob/Juice] %d sound(s) still not loaded after %ds: %s")
+            :format(#dead, SOUND_LOAD_TIMEOUT, table.concat(dead, ", ")))
     end
 end)
 

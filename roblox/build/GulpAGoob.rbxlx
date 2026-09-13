@@ -7464,9 +7464,9 @@ WorldBuilder.plots = {} :: { { index: number, center: Vector3, owner: Player? } 
 
 local function buildAmbience()
     Lighting.Ambient = Color3.fromRGB(126, 126, 128)
-    Lighting.OutdoorAmbient = Color3.fromRGB(152, 152, 150)
+    Lighting.OutdoorAmbient = Color3.fromRGB(138, 142, 150)
     Lighting.Brightness = 2.0
-    Lighting.ClockTime = 15.2
+    Lighting.ClockTime = 16.4
     Lighting.GeographicLatitude = 14
     Lighting.FogEnd = 2200
     Lighting.FogColor = Color3.fromRGB(196, 202, 200)
@@ -7657,8 +7657,12 @@ function WorldBuilder.build()
     sea.Parent = world
 
     -- ── THE ISLAND ─────────────────────────────────────────────────────────
+    -- CONCRETE, NOT GRASS. A field reads as somewhere nothing happens; a poured
+    -- floor reads as somewhere built for the thing you are about to do. It
+    -- also gives the painted markings below something to sit on, which is what
+    -- actually makes a flat plane look designed rather than empty.
     local island = disc(world, Vector3.new(0, -3, 0), Config.ISLAND_RADIUS, 10,
-        Color3.fromRGB(132, 146, 120), Enum.Material.Grass, "Island")
+        Color3.fromRGB(118, 120, 126), Enum.Material.Concrete, "Island")
     island.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.35, 1, 1)
 
     -- A skirt below the island so it reads as land sitting IN water rather
@@ -7671,18 +7675,20 @@ function WorldBuilder.build()
     -- "am I safe right now" has to be answerable at a glance while being
     -- chased. Sand, a shade lighter, very slightly lower.
     local shallows = disc(world, Vector3.new(0, -2.2, 0), Config.ISLAND_RADIUS, 1.4,
-        Color3.fromRGB(198, 188, 160), Enum.Material.Sand, "Shallows")
+        Color3.fromRGB(168, 166, 158), Enum.Material.Pavement, "Shallows")
     shallows.CanCollide = false
 
     -- A wet band where the sand meets the water. One extra disc, and it is the
     -- difference between an island and a cylinder.
     local surf = disc(world, Vector3.new(0, -2.0, 0), Config.ISLAND_RADIUS + 16, 1.0,
-        Color3.fromRGB(150, 172, 172), Enum.Material.Sand, "Surf")
+        Color3.fromRGB(126, 146, 150), Enum.Material.Slate, "Surf")
     surf.CanCollide = false
     surf.Transparency = 0.25
 
+    -- The contested ground is a shade darker than the safe rim, so "am I in the
+    -- danger zone" is answerable from the floor colour alone at any speed.
     local flats = disc(world, Vector3.new(0, -1.6, 0), Config.SHALLOWS_INNER, 1.4,
-        Color3.fromRGB(126, 144, 112), Enum.Material.Grass, "Flats")
+        Color3.fromRGB(96, 100, 108), Enum.Material.Asphalt, "Flats")
     flats.CanCollide = false
 
     -- The boundary between safe and not safe is a LINE YOU CAN SEE. It was a
@@ -7882,6 +7888,122 @@ function WorldBuilder.build()
         tuft.Parent = world
     end
 
+    -- ── MARKINGS ───────────────────────────────────────────────────────────
+    -- Painted rings on the floor. They cost nothing, they collide with nothing,
+    -- and they are most of the difference between "a flat plane" and "a place":
+    -- they give the eye something to measure distance and speed against, which
+    -- a featureless floor cannot do at any resolution.
+    for _, ring in ipairs({
+        { r = 120, w = 2.5, c = Color3.fromRGB(176, 168, 132) },
+        { r = 200, w = 2.0, c = Color3.fromRGB(150, 154, 160) },
+        { r = 290, w = 2.0, c = Color3.fromRGB(150, 154, 160) },
+    }) do
+        local outer = disc(world, Vector3.new(0, -1.0, 0), ring.r, 0.6,
+            ring.c, Enum.Material.SmoothPlastic, "Marking")
+        outer.CanCollide = false
+        outer.Transparency = 0.25
+        local inner = disc(world, Vector3.new(0, -0.9, 0), ring.r - ring.w, 0.7,
+            Color3.fromRGB(96, 100, 108), Enum.Material.Asphalt, "MarkingCut")
+        inner.CanCollide = false
+    end
+
+    -- Spokes out from the middle, so the plaza reads as a hub.
+    for i = 0, 7 do
+        local a = math.rad(i * 45)
+        local lane = part({
+            Name = "Marking",
+            Size = Vector3.new(5, 0.6, 220),
+            CFrame = CFrame.new(Vector3.new(math.cos(a) * 180, -1.0, math.sin(a) * 180))
+                * CFrame.Angles(0, -a + math.pi / 2, 0),
+            Color = Color3.fromRGB(142, 146, 152),
+            Material = Enum.Material.SmoothPlastic,
+            Transparency = 0.35,
+        })
+        lane.CanCollide = false
+        lane.Parent = world
+    end
+
+    -- ── STRUCTURES ─────────────────────────────────────────────────────────
+    -- Places, not decoration. Every one of these is something a blob can use:
+    -- climb it, hide behind it, drop off it, or lose a pursuer around it. An
+    -- arena with nothing in it is a running track.
+    local function plinth(at: Vector3, w: number, h: number, tint: Color3)
+        local base = part({
+            Name = "Plinth",
+            Size = Vector3.new(w, h, w),
+            Position = at + Vector3.new(0, h / 2 - 1, 0),
+            Color = tint,
+            Material = Enum.Material.Concrete,
+        })
+        base.Parent = world
+        local cap = part({
+            Name = "PlinthCap",
+            Size = Vector3.new(w + 4, 1.2, w + 4),
+            Position = at + Vector3.new(0, h - 1, 0),
+            Color = Color3.fromRGB(154, 150, 140),
+            Material = Enum.Material.Marble,
+        })
+        cap.Parent = world
+        -- A ramp on one side, or it is a wall rather than a place.
+        ramp(world, at + Vector3.new(0, h / 2 - 1, w / 2 + h * 0.9),
+            Vector3.new(w * 0.8, h, h * 1.8), 0, tint)
+    end
+
+    -- Four raised platforms on the inner ring, and four taller ones further
+    -- out, so there is always something to break line of sight.
+    for i = 0, 3 do
+        local a = math.rad(i * 90 + 45)
+        plinth(Vector3.new(math.cos(a) * 150, 0, math.sin(a) * 150), 46, 16,
+            Color3.fromRGB(112, 114, 120))
+    end
+    for i = 0, 3 do
+        local a = math.rad(i * 90)
+        plinth(Vector3.new(math.cos(a) * 268, 0, math.sin(a) * 268), 58, 26,
+            Color3.fromRGB(104, 106, 112))
+    end
+
+    -- Pipe arches you can roll under. Cover that does not become a dead end.
+    for i = 0, 5 do
+        local a = math.rad(i * 60 + 30)
+        local at = Vector3.new(math.cos(a) * 215, 0, math.sin(a) * 215)
+        for side = -1, 1, 2 do
+            local leg = part({
+                Name = "ArchLeg",
+                Size = Vector3.new(8, 34, 8),
+                CFrame = CFrame.new(at + Vector3.new(math.cos(a + math.pi / 2) * 26 * side,
+                    16, math.sin(a + math.pi / 2) * 26 * side)) * CFrame.Angles(0, -a, 0),
+                Color = Color3.fromRGB(126, 122, 114),
+                Material = Enum.Material.Metal,
+            })
+            leg.Parent = world
+        end
+        local span = part({
+            Name = "ArchSpan",
+            Size = Vector3.new(62, 7, 12),
+            CFrame = CFrame.new(at + Vector3.new(0, 36, 0)) * CFrame.Angles(0, -a, 0),
+            Color = Color3.fromRGB(134, 130, 120),
+            Material = Enum.Material.Metal,
+        })
+        span.Parent = world
+    end
+
+    -- Low walls in broken arcs: something to corner around at speed, which is
+    -- where the momentum in this game actually gets used.
+    for i = 0, 11 do
+        local a = math.rad(i * 30 + 15)
+        if i % 3 ~= 0 then
+            local wall = part({
+                Name = "Baffle",
+                Size = Vector3.new(46, 13, 6),
+                CFrame = CFrame.new(Vector3.new(math.cos(a) * 330, 4, math.sin(a) * 330))
+                    * CFrame.Angles(0, -a + math.pi / 2, 0),
+                Color = Color3.fromRGB(110, 112, 118),
+                Material = Enum.Material.Concrete,
+            })
+            wall.Parent = world
+        end
+    end
+
     -- ── SCENERY ────────────────────────────────────────────────────────────
     -- Rocks on the rim and a few boulders inland. Anchored, collidable, and
     -- deliberately sparse: this is an arena, and every prop is somewhere a
@@ -7895,8 +8017,8 @@ function WorldBuilder.build()
                 CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
                     * CFrame.Angles(rng:NextNumber(-0.2, 0.2), rng:NextNumber(0, 6),
                                     rng:NextNumber(-0.2, 0.2)),
-                Color = Color3.fromRGB(118, 112, 104),
-                Material = Enum.Material.Rock,
+                Color = Color3.fromRGB(122, 120, 116),
+                Material = Enum.Material.Slate,
             })
             rock.Parent = world
         end)
@@ -7908,8 +8030,8 @@ function WorldBuilder.build()
                 Shape = Enum.PartType.Ball,
                 Size = Vector3.new(1, 1, 1) * rng:NextNumber(14, 30),
                 Position = pos + Vector3.new(0, 3, 0),
-                Color = Color3.fromRGB(124, 120, 110),
-                Material = Enum.Material.Slate,
+                Color = Color3.fromRGB(114, 114, 118),
+                Material = Enum.Material.Concrete,
             })
             boulder.Parent = world
         end)
@@ -8633,16 +8755,14 @@ local function findBall(): BasePart?
     return Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
 end
 
+-- The mass the controller steers with. It is the ARENA run's mass, not the
+-- stored Goob's: handling is derived from how big you are RIGHT NOW, and the
+-- stored Goob has nothing to do with a round.
+local liveMass = 10
+
 local function bindBall(ball: BasePart?)
     currentBall = ball
-    local snap = Hud.getState()
-    local mass = 10
-    if snap then
-        for _, g in ipairs(snap.goobs) do
-            if g.isActive then mass = g.mass end
-        end
-    end
-    Roll.setBall(ball, mass)
+    Roll.setBall(ball, liveMass)
     local camera = Workspace.CurrentCamera
     if camera and ball then
         camera.CameraSubject = ball
@@ -8686,13 +8806,29 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
 end)
 
 Roll.bindInput()
+-- The touch thumbstick has to be BUILT, not just bound. Stick.build draws it
+-- into the HUD; without this call a phone player has keyboard handlers
+-- connected and no on-screen control to use them with.
+Stick.build(gui)
 Roll.onDash = function()
     Net.get("Dashed"):FireServer()
     Juice.play("catch", 0.6)
 end
 
+-- BIND WHATEVER IS ALREADY THERE, then keep looking until something is.
+--
+-- THE BUG THIS FIXES: the ball was bound from Workspace.ChildAdded alone. The
+-- server creates it on join, the client boots at roughly the same moment, and
+-- if the ball won the race the event had already fired before this script
+-- connected — so currentBall stayed nil forever. The old guard only re-bound
+-- when currentBall EXISTED and had been removed, so nil was a permanent state,
+-- Roll.step returned on its first line every frame, and the player could not
+-- move at all. Powers still worked, because those are server-side, which is
+-- exactly the shape the play-test reported.
+bindBall(findBall())
+
 RunService.RenderStepped:Connect(function(dt)
-    if currentBall and not currentBall.Parent then
+    if not currentBall or not currentBall.Parent then
         bindBall(findBall())
     end
     Roll.step(dt)
@@ -8861,6 +8997,10 @@ ArenaHud.on.leavePit = function() Net.get("PitLeave"):FireServer() end
 
 Net.get("ArenaSync").OnClientEvent:Connect(function(state)
     ArenaHud.setArena(state)
+    if state and state.mass then
+        liveMass = state.mass
+        Roll.setMass(liveMass)
+    end
 end)
 
 Net.get("CrateResult").OnClientEvent:Connect(function(result)
@@ -11217,19 +11357,57 @@ if #missingVolume > 0 then
     warn("[Goob/Juice] no volume set for: " .. table.concat(missingVolume, ", "))
 end
 
--- Report a dead sound id ONCE, at boot, rather than on every play. The harness
--- has no audio engine and cannot tell whether a file exists, so this warning is
--- the only thing that will ever say so — it needs to be findable in the output
--- rather than buried under a thousand repeats.
-task.defer(function()
-    local dead = {}
+-- Report a dead sound id ONCE, after giving it a fair chance to load.
+--
+-- THE FIRST VERSION OF THIS CRIED WOLF. It checked IsLoaded inside a
+-- task.defer — one frame after creating the Sound — and audio cannot possibly
+-- have loaded by then, so it listed EVERY sound as dead on a completely
+-- healthy client. A warning that is always wrong is worse than no warning:
+-- it trains you to ignore the console.
+--
+-- It now waits, polls, and listens for the Loaded event, and only complains
+-- about what is still not there after a real timeout.
+local SOUND_LOAD_TIMEOUT = 12
+
+task.spawn(function()
+    local pending = {}
     for name, sound in pairs(sfx) do
-        if not sound.IsLoaded and sound.TimeLength == 0 then
-            table.insert(dead, name .. " (" .. sound.SoundId .. ")")
+        pending[name] = sound
+        -- Guarded: polling IsLoaded below is the real mechanism, and the event
+        -- is only an early-out. Assuming a signal exists on an instance is how
+        -- a cosmetic nicety takes down the whole client.
+        local loaded = (sound :: any).Loaded
+        if loaded and type(loaded) == "table" and loaded.Connect then
+            loaded:Connect(function()
+                pending[name] = nil
+            end)
         end
     end
+
+    local deadline = os.clock() + SOUND_LOAD_TIMEOUT
+    while os.clock() < deadline do
+        local left = 0
+        for name, sound in pairs(pending) do
+            if sound.IsLoaded then
+                pending[name] = nil
+            else
+                left += 1
+            end
+        end
+        if left == 0 then
+            return
+        end
+        task.wait(0.5)
+    end
+
+    local dead = {}
+    for name, sound in pairs(pending) do
+        table.insert(dead, name .. " (" .. tostring(sound.SoundId) .. ")")
+    end
     if #dead > 0 then
-        warn("[Goob/Juice] sounds that did not load: " .. table.concat(dead, ", "))
+        table.sort(dead)
+        warn(("[Goob/Juice] %d sound(s) still not loaded after %ds: %s")
+            :format(#dead, SOUND_LOAD_TIMEOUT, table.concat(dead, ", ")))
     end
 end)
 
@@ -12154,6 +12332,23 @@ Roll.onDash = nil :: ((charges: number) -> ())?
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
+-- Update the mass the handling curves read without rebinding the body. Called
+-- on every arena sync, which is twelve times a second, so it must stay this
+-- cheap.
+-- What the controller is currently steering, or nil if it has not found a body.
+--
+-- Exposed because nil here is the single most consequential state in the
+-- client: Roll.step returns on its first line when it is nil, so the player
+-- cannot move and nothing anywhere reports a problem. It has been nil for a
+-- whole play-test twice now. A test can assert on it; a player cannot.
+function Roll.boundBall(): BasePart?
+    return ball
+end
+
+function Roll.setMass(newMass: number)
+    mass = newMass
+end
+
 function Roll.setBall(newBall: BasePart?, newMass: number)
     ball = newBall
     mass = math.max(1, newMass)
@@ -12368,7 +12563,13 @@ local KEYMAP = {
     [Enum.KeyCode.D] = "D", [Enum.KeyCode.Right] = "D",
 }
 
+local bound = false
+
 local function bindHardware()
+    if bound then
+        return
+    end
+    bound = true
     UserInputService.InputBegan:Connect(function(input, processed)
         if processed then return end
         local k = KEYMAP[input.KeyCode]
@@ -12479,6 +12680,31 @@ function Stick.setTouchEnabled(on: boolean)
         base.Visible = false
         touchVector = Vector2.new(0, 0)
     end
+end
+
+-- WIRE IT UP. THIS LINE IS THE WHOLE MODULE.
+--
+-- bindHardware() connects the keyboard, gamepad and touch handlers that fill
+-- the `keys`, `gamepad` and `touchVector` values moveVector() reads. Without
+-- it every one of those stays at its initial zero, moveVector returns
+-- Vector3.zero on every frame, and Roll.step brakes the blob to a standstill —
+-- so the player cannot move AT ALL, while everything else works perfectly.
+--
+-- It was never called. The module was written, compiled, type-checked, listed
+-- in the build and imported by the controller, and none of its input handlers
+-- had ever run. Two play-tests reported "I can't move" because of this exact
+-- omission, and the second one came AFTER a commit whose message claimed to
+-- have fixed the first.
+--
+-- Calling it at require time is deliberate: there is no state to wait for, and
+-- an explicit start() is one more thing a caller can forget, which is the
+-- mistake this comment exists to stop repeating.
+bindHardware()
+
+-- True once the hardware handlers are connected. Exposed so a test can assert
+-- the wiring exists rather than trusting that somebody remembered.
+function Stick.isBound(): boolean
+    return bound
 end
 
 return Stick

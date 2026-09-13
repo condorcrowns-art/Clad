@@ -173,7 +173,11 @@ end
 
 -- ── UserInputService ───────────────────────────────────────────────────────
 local UserInputService = service("UserInputService")
-for _, n in ipairs({ "InputBegan", "InputEnded", "InputChanged", "TouchTap" }) do
+-- WindowFocusReleased included: the input layer uses it to clear held keys
+-- when the window loses focus, and a missing signal there takes the whole
+-- client down at require time rather than degrading.
+for _, n in ipairs({ "InputBegan", "InputEnded", "InputChanged", "TouchTap",
+                     "WindowFocusReleased", "WindowFocused" }) do
     rawget(UserInputService, "_signals")[n] = Signal.new(n)
 end
 rawget(UserInputService, "_props").GetMouseLocation = function() return env.Vector2.new(0, 0) end
@@ -186,6 +190,27 @@ rawget(UserInputService, "_props").TouchEnabled = false
 rawget(UserInputService, "_props").KeyboardEnabled = true
 rawget(UserInputService, "_props").MouseEnabled = true
 S.UserInputService = UserInputService
+
+-- Press and release a key, the way a player does.
+--
+-- Added because the client's movement was dead for two play-tests and nothing
+-- in this harness could have noticed: every suite asserted on state the server
+-- sends, and none of them had ever pressed a key. A controller that never
+-- receives input is indistinguishable from a working one unless you actually
+-- push on it.
+function S.pressKey(keyName)
+    S.keysDown[keyName] = true
+    rawget(UserInputService, "_signals").InputBegan:Fire(
+        { KeyCode = env.Enum.KeyCode[keyName],
+          UserInputType = env.Enum.UserInputType.Keyboard }, false)
+end
+
+function S.releaseKey(keyName)
+    S.keysDown[keyName] = nil
+    rawget(UserInputService, "_signals").InputEnded:Fire(
+        { KeyCode = env.Enum.KeyCode[keyName],
+          UserInputType = env.Enum.UserInputType.Keyboard }, false)
+end
 
 function S.setTouch(on)
     rawget(UserInputService, "_props").TouchEnabled = on

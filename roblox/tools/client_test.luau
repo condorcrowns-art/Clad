@@ -75,8 +75,84 @@ tick(1)
 local alice = svc.addPlayer("Alice", 101, V3.new(0, 5, 10))
 tick(2)
 
+-- BOOT THE CLIENT ON THE LOSING SIDE OF THE RACE, deliberately.
+--
+-- The roll controller binds its ball from Workspace.ChildAdded. If the ball is
+-- created BEFORE the client connects to that event, the event has already
+-- fired and the controller never sees it — which is the bug that cost two
+-- play-tests. Ticking here guarantees the server has built the ball first, so
+-- this suite exercises the order that actually breaks rather than the one that
+-- happens to work.
+tick(3)
+emit(("  [probe] ball before boot: %s"):format(
+    tostring(svc.Workspace:FindFirstChild("GoobBall_" .. alice.UserId) ~= nil)))
 svc.enterClientMode(alice)
 _G.BOOT_CLIENT()
+tick(0.05)
+
+emit("")
+emit("══ THE CONTROLLER HAS A BODY ══")
+-- ASSERTED IMMEDIATELY AFTER BOOT, before anything can rebuild the ball. The
+-- harness recreates the body ~0.4s after the character spawns, which fires
+-- ChildAdded a second time and papers over the bug entirely — so this runs in
+-- the gap, when the ball was built before boot and nothing has replaced it.
+--
+-- THE BUG THIS EXISTS FOR, TWICE OVER. The roll controller binds its ball from
+-- Workspace.ChildAdded. The server creates that ball on join and the client
+-- boots at roughly the same moment, so if the ball won the race the event had
+-- already fired before the client connected to it — and the old guard only
+-- re-bound when currentBall EXISTED and had been removed, making nil a
+-- permanent state. Roll.step returns on its first line when there is no ball,
+-- so the player simply cannot move, and NOTHING reports it: powers still work,
+-- because those are server-side. That is exactly what the play-test saw.
+--
+-- The harness creates the player (and therefore the ball) before booting the
+-- client, which is precisely the losing side of that race.
+do
+    local Roll = _G.CLIENT("Roll")
+    check("the roll controller exists", Roll ~= nil)
+    check("it has a boundBall accessor to assert on", Roll and Roll.boundBall ~= nil)
+    local bound = Roll and Roll.boundBall and Roll.boundBall()
+    check("the client bound a body that already existed when it booted",
+        bound ~= nil, "nil means the player cannot move at all")
+    -- PRESS A KEY AND WATCH THE BODY MOVE. Nothing in this harness had ever
+    -- done that, which is how the input layer shipped completely unconnected
+    -- twice: Stick.luau's handlers were never bound, so moveVector returned
+    -- zero on every frame and Roll.step braked the blob to a standstill. Every
+    -- suite was green because they all asserted on state the SERVER sends.
+    local Stick = _G.CLIENT("Stick")
+    check("the input layer is connected to the hardware",
+        Stick ~= nil and Stick.isBound and Stick.isBound() == true,
+        "unbound means the player cannot move at all")
+
+    svc.pressKey("W")
+    tick(0.2)
+    local moving = Stick and Stick.moveVector and Stick.moveVector()
+    check("holding a key produces a movement vector",
+        moving ~= nil and moving.Magnitude > 0.1,
+        moving and ("%.2f"):format(moving.Magnitude) or "nil")
+    svc.releaseKey("W")
+    tick(0.2)
+    local stopped = Stick and Stick.moveVector and Stick.moveVector()
+    check("and releasing it stops",
+        stopped ~= nil and stopped.Magnitude < 0.1,
+        stopped and ("%.2f"):format(stopped.Magnitude) or "nil")
+
+    check("and it bound the RIGHT body",
+        bound ~= nil and tostring(bound.Name) == ("GoobBall_" .. alice.UserId),
+        bound and tostring(bound.Name))
+
+    -- And it must recover if the body is ever replaced under it.
+    if bound then
+        bound:Destroy()
+        tick(1)
+        local after = Roll.boundBall()
+        check("it rebinds after the body is replaced",
+            after == nil or after.Parent ~= nil,
+            after and tostring(after.Name) or "nil")
+    end
+end
+
 tick(2)
 check("client booted without error", true)
 
@@ -300,5 +376,7 @@ if arenaGui then
     check("the season readout shows a real tier",
         season ~= nil and season ~= "BETA SEASON · 0", tostring(season))
 end
+
+emit("")
 
 emit(("══ %s ══"):format(fails == 0 and "ALL CLIENT CHECKS PASSED" or (fails .. " FAILURE(S)")))

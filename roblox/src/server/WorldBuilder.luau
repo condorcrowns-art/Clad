@@ -173,9 +173,9 @@ WorldBuilder.plots = {} :: { { index: number, center: Vector3, owner: Player? } 
 
 local function buildAmbience()
     Lighting.Ambient = Color3.fromRGB(126, 126, 128)
-    Lighting.OutdoorAmbient = Color3.fromRGB(152, 152, 150)
+    Lighting.OutdoorAmbient = Color3.fromRGB(138, 142, 150)
     Lighting.Brightness = 2.0
-    Lighting.ClockTime = 15.2
+    Lighting.ClockTime = 16.4
     Lighting.GeographicLatitude = 14
     Lighting.FogEnd = 2200
     Lighting.FogColor = Color3.fromRGB(196, 202, 200)
@@ -366,8 +366,12 @@ function WorldBuilder.build()
     sea.Parent = world
 
     -- ── THE ISLAND ─────────────────────────────────────────────────────────
+    -- CONCRETE, NOT GRASS. A field reads as somewhere nothing happens; a poured
+    -- floor reads as somewhere built for the thing you are about to do. It
+    -- also gives the painted markings below something to sit on, which is what
+    -- actually makes a flat plane look designed rather than empty.
     local island = disc(world, Vector3.new(0, -3, 0), Config.ISLAND_RADIUS, 10,
-        Color3.fromRGB(132, 146, 120), Enum.Material.Grass, "Island")
+        Color3.fromRGB(118, 120, 126), Enum.Material.Concrete, "Island")
     island.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.4, 0.35, 1, 1)
 
     -- A skirt below the island so it reads as land sitting IN water rather
@@ -380,18 +384,20 @@ function WorldBuilder.build()
     -- "am I safe right now" has to be answerable at a glance while being
     -- chased. Sand, a shade lighter, very slightly lower.
     local shallows = disc(world, Vector3.new(0, -2.2, 0), Config.ISLAND_RADIUS, 1.4,
-        Color3.fromRGB(198, 188, 160), Enum.Material.Sand, "Shallows")
+        Color3.fromRGB(168, 166, 158), Enum.Material.Pavement, "Shallows")
     shallows.CanCollide = false
 
     -- A wet band where the sand meets the water. One extra disc, and it is the
     -- difference between an island and a cylinder.
     local surf = disc(world, Vector3.new(0, -2.0, 0), Config.ISLAND_RADIUS + 16, 1.0,
-        Color3.fromRGB(150, 172, 172), Enum.Material.Sand, "Surf")
+        Color3.fromRGB(126, 146, 150), Enum.Material.Slate, "Surf")
     surf.CanCollide = false
     surf.Transparency = 0.25
 
+    -- The contested ground is a shade darker than the safe rim, so "am I in the
+    -- danger zone" is answerable from the floor colour alone at any speed.
     local flats = disc(world, Vector3.new(0, -1.6, 0), Config.SHALLOWS_INNER, 1.4,
-        Color3.fromRGB(126, 144, 112), Enum.Material.Grass, "Flats")
+        Color3.fromRGB(96, 100, 108), Enum.Material.Asphalt, "Flats")
     flats.CanCollide = false
 
     -- The boundary between safe and not safe is a LINE YOU CAN SEE. It was a
@@ -591,6 +597,122 @@ function WorldBuilder.build()
         tuft.Parent = world
     end
 
+    -- ── MARKINGS ───────────────────────────────────────────────────────────
+    -- Painted rings on the floor. They cost nothing, they collide with nothing,
+    -- and they are most of the difference between "a flat plane" and "a place":
+    -- they give the eye something to measure distance and speed against, which
+    -- a featureless floor cannot do at any resolution.
+    for _, ring in ipairs({
+        { r = 120, w = 2.5, c = Color3.fromRGB(176, 168, 132) },
+        { r = 200, w = 2.0, c = Color3.fromRGB(150, 154, 160) },
+        { r = 290, w = 2.0, c = Color3.fromRGB(150, 154, 160) },
+    }) do
+        local outer = disc(world, Vector3.new(0, -1.0, 0), ring.r, 0.6,
+            ring.c, Enum.Material.SmoothPlastic, "Marking")
+        outer.CanCollide = false
+        outer.Transparency = 0.25
+        local inner = disc(world, Vector3.new(0, -0.9, 0), ring.r - ring.w, 0.7,
+            Color3.fromRGB(96, 100, 108), Enum.Material.Asphalt, "MarkingCut")
+        inner.CanCollide = false
+    end
+
+    -- Spokes out from the middle, so the plaza reads as a hub.
+    for i = 0, 7 do
+        local a = math.rad(i * 45)
+        local lane = part({
+            Name = "Marking",
+            Size = Vector3.new(5, 0.6, 220),
+            CFrame = CFrame.new(Vector3.new(math.cos(a) * 180, -1.0, math.sin(a) * 180))
+                * CFrame.Angles(0, -a + math.pi / 2, 0),
+            Color = Color3.fromRGB(142, 146, 152),
+            Material = Enum.Material.SmoothPlastic,
+            Transparency = 0.35,
+        })
+        lane.CanCollide = false
+        lane.Parent = world
+    end
+
+    -- ── STRUCTURES ─────────────────────────────────────────────────────────
+    -- Places, not decoration. Every one of these is something a blob can use:
+    -- climb it, hide behind it, drop off it, or lose a pursuer around it. An
+    -- arena with nothing in it is a running track.
+    local function plinth(at: Vector3, w: number, h: number, tint: Color3)
+        local base = part({
+            Name = "Plinth",
+            Size = Vector3.new(w, h, w),
+            Position = at + Vector3.new(0, h / 2 - 1, 0),
+            Color = tint,
+            Material = Enum.Material.Concrete,
+        })
+        base.Parent = world
+        local cap = part({
+            Name = "PlinthCap",
+            Size = Vector3.new(w + 4, 1.2, w + 4),
+            Position = at + Vector3.new(0, h - 1, 0),
+            Color = Color3.fromRGB(154, 150, 140),
+            Material = Enum.Material.Marble,
+        })
+        cap.Parent = world
+        -- A ramp on one side, or it is a wall rather than a place.
+        ramp(world, at + Vector3.new(0, h / 2 - 1, w / 2 + h * 0.9),
+            Vector3.new(w * 0.8, h, h * 1.8), 0, tint)
+    end
+
+    -- Four raised platforms on the inner ring, and four taller ones further
+    -- out, so there is always something to break line of sight.
+    for i = 0, 3 do
+        local a = math.rad(i * 90 + 45)
+        plinth(Vector3.new(math.cos(a) * 150, 0, math.sin(a) * 150), 46, 16,
+            Color3.fromRGB(112, 114, 120))
+    end
+    for i = 0, 3 do
+        local a = math.rad(i * 90)
+        plinth(Vector3.new(math.cos(a) * 268, 0, math.sin(a) * 268), 58, 26,
+            Color3.fromRGB(104, 106, 112))
+    end
+
+    -- Pipe arches you can roll under. Cover that does not become a dead end.
+    for i = 0, 5 do
+        local a = math.rad(i * 60 + 30)
+        local at = Vector3.new(math.cos(a) * 215, 0, math.sin(a) * 215)
+        for side = -1, 1, 2 do
+            local leg = part({
+                Name = "ArchLeg",
+                Size = Vector3.new(8, 34, 8),
+                CFrame = CFrame.new(at + Vector3.new(math.cos(a + math.pi / 2) * 26 * side,
+                    16, math.sin(a + math.pi / 2) * 26 * side)) * CFrame.Angles(0, -a, 0),
+                Color = Color3.fromRGB(126, 122, 114),
+                Material = Enum.Material.Metal,
+            })
+            leg.Parent = world
+        end
+        local span = part({
+            Name = "ArchSpan",
+            Size = Vector3.new(62, 7, 12),
+            CFrame = CFrame.new(at + Vector3.new(0, 36, 0)) * CFrame.Angles(0, -a, 0),
+            Color = Color3.fromRGB(134, 130, 120),
+            Material = Enum.Material.Metal,
+        })
+        span.Parent = world
+    end
+
+    -- Low walls in broken arcs: something to corner around at speed, which is
+    -- where the momentum in this game actually gets used.
+    for i = 0, 11 do
+        local a = math.rad(i * 30 + 15)
+        if i % 3 ~= 0 then
+            local wall = part({
+                Name = "Baffle",
+                Size = Vector3.new(46, 13, 6),
+                CFrame = CFrame.new(Vector3.new(math.cos(a) * 330, 4, math.sin(a) * 330))
+                    * CFrame.Angles(0, -a + math.pi / 2, 0),
+                Color = Color3.fromRGB(110, 112, 118),
+                Material = Enum.Material.Concrete,
+            })
+            wall.Parent = world
+        end
+    end
+
     -- ── SCENERY ────────────────────────────────────────────────────────────
     -- Rocks on the rim and a few boulders inland. Anchored, collidable, and
     -- deliberately sparse: this is an arena, and every prop is somewhere a
@@ -604,8 +726,8 @@ function WorldBuilder.build()
                 CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
                     * CFrame.Angles(rng:NextNumber(-0.2, 0.2), rng:NextNumber(0, 6),
                                     rng:NextNumber(-0.2, 0.2)),
-                Color = Color3.fromRGB(118, 112, 104),
-                Material = Enum.Material.Rock,
+                Color = Color3.fromRGB(122, 120, 116),
+                Material = Enum.Material.Slate,
             })
             rock.Parent = world
         end)
@@ -617,8 +739,8 @@ function WorldBuilder.build()
                 Shape = Enum.PartType.Ball,
                 Size = Vector3.new(1, 1, 1) * rng:NextNumber(14, 30),
                 Position = pos + Vector3.new(0, 3, 0),
-                Color = Color3.fromRGB(124, 120, 110),
-                Material = Enum.Material.Slate,
+                Color = Color3.fromRGB(114, 114, 118),
+                Material = Enum.Material.Concrete,
             })
             boulder.Parent = world
         end)

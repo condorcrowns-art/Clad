@@ -39,6 +39,23 @@ Roll.onDash = nil :: ((charges: number) -> ())?
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
+-- Update the mass the handling curves read without rebinding the body. Called
+-- on every arena sync, which is twelve times a second, so it must stay this
+-- cheap.
+-- What the controller is currently steering, or nil if it has not found a body.
+--
+-- Exposed because nil here is the single most consequential state in the
+-- client: Roll.step returns on its first line when it is nil, so the player
+-- cannot move and nothing anywhere reports a problem. It has been nil for a
+-- whole play-test twice now. A test can assert on it; a player cannot.
+function Roll.boundBall(): BasePart?
+    return ball
+end
+
+function Roll.setMass(newMass: number)
+    mass = newMass
+end
+
 function Roll.setBall(newBall: BasePart?, newMass: number)
     ball = newBall
     mass = math.max(1, newMass)

@@ -156,7 +156,11 @@ do
     for _, sp in ipairs(spawnParts) do
         for _, d in ipairs(solid) do
             local flat = V3.new(d.Position.X - sp.Position.X, 0, d.Position.Z - sp.Position.Z)
-            if flat.Magnitude < Config2.SPAWN_CLEARANCE then
+            -- An ABSOLUTE distance, not the constant the builder uses. Asking
+            -- SPAWN_CLEARANCE what "too close" means makes the check agree
+            -- with it no matter what it is set to: a mutation zeroing it made
+            -- every position acceptable and the test cheerfully passed.
+            if flat.Magnitude < 30 then
                 table.insert(blocked, ("%s %.0f studs from %s"):format(d.Name, flat.Magnitude, sp.Name))
             end
         end

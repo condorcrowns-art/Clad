@@ -458,16 +458,14 @@ local function findBall(): BasePart?
     return Workspace:FindFirstChild("GoobBall_" .. player.UserId) :: BasePart?
 end
 
+-- The mass the controller steers with. It is the ARENA run's mass, not the
+-- stored Goob's: handling is derived from how big you are RIGHT NOW, and the
+-- stored Goob has nothing to do with a round.
+local liveMass = 10
+
 local function bindBall(ball: BasePart?)
     currentBall = ball
-    local snap = Hud.getState()
-    local mass = 10
-    if snap then
-        for _, g in ipairs(snap.goobs) do
-            if g.isActive then mass = g.mass end
-        end
-    end
-    Roll.setBall(ball, mass)
+    Roll.setBall(ball, liveMass)
     local camera = Workspace.CurrentCamera
     if camera and ball then
         camera.CameraSubject = ball
@@ -511,13 +509,29 @@ Net.get("Effect").OnClientEvent:Connect(function(kind, a, b)
 end)
 
 Roll.bindInput()
+-- The touch thumbstick has to be BUILT, not just bound. Stick.build draws it
+-- into the HUD; without this call a phone player has keyboard handlers
+-- connected and no on-screen control to use them with.
+Stick.build(gui)
 Roll.onDash = function()
     Net.get("Dashed"):FireServer()
     Juice.play("catch", 0.6)
 end
 
+-- BIND WHATEVER IS ALREADY THERE, then keep looking until something is.
+--
+-- THE BUG THIS FIXES: the ball was bound from Workspace.ChildAdded alone. The
+-- server creates it on join, the client boots at roughly the same moment, and
+-- if the ball won the race the event had already fired before this script
+-- connected — so currentBall stayed nil forever. The old guard only re-bound
+-- when currentBall EXISTED and had been removed, so nil was a permanent state,
+-- Roll.step returned on its first line every frame, and the player could not
+-- move at all. Powers still worked, because those are server-side, which is
+-- exactly the shape the play-test reported.
+bindBall(findBall())
+
 RunService.RenderStepped:Connect(function(dt)
-    if currentBall and not currentBall.Parent then
+    if not currentBall or not currentBall.Parent then
         bindBall(findBall())
     end
     Roll.step(dt)
@@ -686,6 +700,10 @@ ArenaHud.on.leavePit = function() Net.get("PitLeave"):FireServer() end
 
 Net.get("ArenaSync").OnClientEvent:Connect(function(state)
     ArenaHud.setArena(state)
+    if state and state.mass then
+        liveMass = state.mass
+        Roll.setMass(liveMass)
+    end
 end)
 
 Net.get("CrateResult").OnClientEvent:Connect(function(result)

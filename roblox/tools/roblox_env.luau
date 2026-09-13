@@ -316,13 +316,27 @@ env.Random = {
 
 -- Enums are permissive here on purpose: tools/apicheck.py already validates
 -- every Enum.X.Y against Roblox's real API dump, so re-checking is wasted work.
+-- ENUM ITEMS ARE SINGLETONS, exactly as they are in Roblox.
+--
+-- This used to build a fresh table on every access, so `Enum.KeyCode.W` never
+-- equalled `Enum.KeyCode.W` and any table KEYED by an enum item — which is how
+-- a keymap is naturally written — could never be looked up. The game's input
+-- layer does precisely that, so its key handling was untestable here and its
+-- movement stayed broken across two play-tests with every suite green.
+--
+-- Caching the items makes identity comparison behave like the engine, which is
+-- the whole point of a stub.
 local enumCache = {}
 env.Enum = setmetatable({}, {
     __index = function(_, enumName)
         if not enumCache[enumName] then
+            local items = {}
             enumCache[enumName] = setmetatable({}, {
                 __index = function(_, item)
-                    return { EnumType = enumName, Name = item, Value = 0 }
+                    if not items[item] then
+                        items[item] = { EnumType = enumName, Name = item, Value = 0 }
+                    end
+                    return items[item]
                 end,
             })
         end

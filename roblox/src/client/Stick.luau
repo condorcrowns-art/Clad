@@ -74,7 +74,13 @@ local KEYMAP = {
     [Enum.KeyCode.D] = "D", [Enum.KeyCode.Right] = "D",
 }
 
+local bound = false
+
 local function bindHardware()
+    if bound then
+        return
+    end
+    bound = true
     UserInputService.InputBegan:Connect(function(input, processed)
         if processed then return end
         local k = KEYMAP[input.KeyCode]
@@ -185,6 +191,31 @@ function Stick.setTouchEnabled(on: boolean)
         base.Visible = false
         touchVector = Vector2.new(0, 0)
     end
+end
+
+-- WIRE IT UP. THIS LINE IS THE WHOLE MODULE.
+--
+-- bindHardware() connects the keyboard, gamepad and touch handlers that fill
+-- the `keys`, `gamepad` and `touchVector` values moveVector() reads. Without
+-- it every one of those stays at its initial zero, moveVector returns
+-- Vector3.zero on every frame, and Roll.step brakes the blob to a standstill —
+-- so the player cannot move AT ALL, while everything else works perfectly.
+--
+-- It was never called. The module was written, compiled, type-checked, listed
+-- in the build and imported by the controller, and none of its input handlers
+-- had ever run. Two play-tests reported "I can't move" because of this exact
+-- omission, and the second one came AFTER a commit whose message claimed to
+-- have fixed the first.
+--
+-- Calling it at require time is deliberate: there is no state to wait for, and
+-- an explicit start() is one more thing a caller can forget, which is the
+-- mistake this comment exists to stop repeating.
+bindHardware()
+
+-- True once the hardware handlers are connected. Exposed so a test can assert
+-- the wiring exists rather than trusting that somebody remembered.
+function Stick.isBound(): boolean
+    return bound
 end
 
 return Stick
