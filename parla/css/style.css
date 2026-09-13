@@ -365,6 +365,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   display: inline-flex; background: var(--bg-sunken);
   border-radius: var(--r-sm); padding: 3px; gap: 3px;
   min-width: 0; max-width: 100%;
+  /* Wrap rather than scroll. This used to be a horizontal scroller with the
+     scrollbar hidden, which meant four options in a narrow card showed three
+     and a half — "Pretty fluent" arriving as "Pretty flue" on the first screen
+     anybody sees, with nothing to suggest it could be scrolled and no way to
+     do it with a mouse. A second row is not elegant; a clipped word is worse. */
+  flex-wrap: wrap;
   overflow-x: auto; scrollbar-width: none;
 }
 .seg::-webkit-scrollbar { display: none; }

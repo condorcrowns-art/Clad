@@ -102,6 +102,45 @@ async function boot(browser, viewport) {
     check(what + ' stays inside a readable measure', n !== null && n <= 75, n + ' characters');
   }
 
+  /* ── Nothing is cut off inside a control ───────────────── */
+  console.log('\nSegmented controls\n');
+  // This was a horizontal scroller with the scrollbar hidden, so four options
+  // in a narrow card showed three and a half — "Pretty fluent" arriving as
+  // "Pretty flue" on the very first screen anybody sees, with nothing to
+  // suggest it scrolled and no way to scroll it with a mouse.
+  const segClipped = async () => page.evaluate(() =>
+    [...document.querySelectorAll('.seg')].flatMap(seg => {
+      const r = seg.getBoundingClientRect();
+      return [...seg.querySelectorAll('button')]
+        .filter(b => {
+          const br = b.getBoundingClientRect();
+          return br.right > r.right + 1 || br.left < r.left - 1;
+        })
+        .map(b => b.textContent);
+    }));
+  // The first screen anybody sees, before there is a nav to navigate with.
+  await page.evaluate(() => { localStorage.clear(); });
+  await page.goto(BASE + '/index.html', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(350);
+  let cut = await segClipped();
+  check('no option is cut off on the onboarding screen', cut.length === 0, cut.join(' | '));
+
+  await page.fill('.onboard input[type=text]', 'Condo');
+  await page.locator('button', { hasText: 'Start talking' }).click();
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    PARLA.ui.say = function () {};
+    PARLA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
+  });
+  // Straight to the view: this is a layout check, not a navigation one, and
+  // Settings lives behind a sheet that is hidden at this width.
+  for (const v of ['settings', 'review', 'conjugate', 'words']) {
+    await page.evaluate(x => PARLA.app.go(x), v);
+    await page.waitForTimeout(350);
+    cut = await segClipped();
+    check('nor on ' + v, cut.length === 0, cut.join(' | '));
+  }
+
   /* ── The nav, phone ────────────────────────────────────── */
   console.log('\nThe nav on a phone\n');
   const phone = await boot(browser, { width: 412, height: 915 });
