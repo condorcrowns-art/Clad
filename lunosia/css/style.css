@@ -182,7 +182,12 @@ h1 { font-size: 1.7rem; }
 h2 { font-size: 1.25rem; }
 h3 { font-size: 1rem; }
 p { margin: 0 0 .8em; }
-a { color: var(--accent); }
+/* --accent-text, not --accent, for the same reason the nav uses it: the brand
+ * pink is 4.35:1 on the light background, and small text needs 4.5:1 to be
+ * legible to anyone whose eyes are not perfect. The text tier is the same
+ * colour turned down until it passes. In dark mode the two are already the
+ * same value, so nothing changes there. */
+a { color: var(--accent-text); }
 
 .hidden { display: none !important; }
 .muted { color: var(--ink-soft); }

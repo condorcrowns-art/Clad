@@ -1,49 +1,66 @@
 # Putting AdSense on lunosia.com
 
-Nothing in the shipped app loads an ad script. Adding one is a deliberate act,
-and this file is the whole of it: what has to be true first, then the exact
-edits.
+Everything that can be done before you have a publisher id is done. This file
+is the rest: what to expect, the exact steps, and the two rules that get
+accounts banned permanently.
 
-## Read this part before you apply
+## What to expect
 
-**Approval is the hard part, not the code.** AdSense reviews a site for
-content a reader would want on its own. `lunosia.com` is an application, and
-what a crawler saw before this change was a heading, the word "Loading…" and
-thirty thousand words of JavaScript — which is the shape of site that gets
-"Low value content" back. That is why this change exists: `about.html` is a
-real page about the thing, the root page now says what the site is even with
-scripting off, and `privacy.html` is linked from both.
+**Approval is the hard part, not the code.** AdSense reviews a site for content
+a reader would want on its own. An application whose home page says "Loading…"
+until thirty thousand lines of JavaScript have run is the classic "Low value
+content" rejection, and that is what this site was.
 
-It may still be refused. An app with two prose pages is a thin site by
-AdSense's standards, and you can reapply after fixing whatever the rejection
-names — there is no limit on attempts and no cost to a rejection.
+It is not that any more. There are now eleven written pages and about 8,700
+words of original material — the grammar guides, the pronunciation guide, about,
+contact, privacy, terms — all cross-linked, all in the sitemap, all reachable
+from the app. That is a real site rather than an app with a privacy policy
+bolted on.
 
-**What it is worth if it does work.** Ads pay roughly $1–3 per thousand page
-views for this sort of traffic, and Google does not pay out until the balance
-reaches $100. A site with a handful of visitors a day earns pennies a month
-and will not reach the threshold. Do it because you want the site to be
-findable and explain itself, not because it is going to make money.
+It may still be refused. Reapplying costs nothing and there is no limit, and a
+rejection tells you what it objected to. Fix that and go again.
 
-## What has to be true before you apply
+**The money is negligible.** Roughly $1–3 per thousand page views for this kind
+of traffic, and Google does not pay out below $100. A site with a handful of
+visitors a day earns pennies a month and will not reach the threshold for
+years. Do this because you want the site findable and explaining itself. The
+site costs nothing to run either way.
 
-- [x] The site is live on a domain you own, over HTTPS.
-- [x] There is a page that explains what the site is (`about.html`).
-- [x] There is a privacy policy, and it is linked from the site (`privacy.html`).
-- [x] The privacy policy names a real contact address —
-      `Canarybears@gmail.com`. Programmes that pay you money require a
-      reachable contact, and a policy page without one is a common rejection
-      on its own. Watch that inbox after you apply; AdSense writes there.
-- [ ] You are 18 or over and have a Google account and a bank account that can
-      receive the payment, in your own name.
+## Before you apply
+
+- [x] Live on your own domain over HTTPS.
+- [x] A page explaining what the site is — `about.html`.
+- [x] Substantial original content — `guides/`, six pages built from the app's
+      own lessons.
+- [x] A privacy policy, linked from every page — `privacy.html`.
+- [x] Terms of use — `terms.html`.
+- [x] A contact page with a real address — `contact.html`, `Canarybears@gmail.com`.
+      Watch that inbox; it is where Google writes.
+- [x] Navigation on every page, header and footer, so nothing is an orphan.
+- [x] `robots.txt` and `sitemap.xml`, with `js/` and `css/` left crawlable so
+      Google renders the app rather than the empty shell.
+- [ ] **You are 18 or over**, with a Google account and a bank account in your
+      own name that can receive the payment.
+
+## Worth doing first, and free
+
+Before applying, put the site in **Google Search Console**
+(<https://search.google.com/search-console>) and submit `sitemap.xml`. It is
+free, takes ten minutes, and it means that when the reviewer looks, Google has
+already crawled and indexed the written pages rather than meeting them cold. It
+also tells you if anything is blocked or erroring.
 
 ## Applying
 
-1. Go to <https://adsense.google.com> and sign in with your Google account.
-2. Enter `lunosia.com` as the site and your country. The country **cannot be
-   changed later** — it sets the payment currency and the tax forms.
-3. AdSense gives you a verification snippet containing your publisher id, which
-   looks like `ca-pub-1234567890123456`. Keep that tab open.
-4. Paste the snippet into `index.html`, immediately after the `<link rel="stylesheet" href="css/fiesta.css">` line:
+1. <https://adsense.google.com>, sign in with your Google account.
+2. Enter `lunosia.com` and your country. **The country cannot be changed
+   later** — it fixes the payment currency and the tax forms.
+3. AdSense gives you a snippet containing your publisher id, of the form
+   `ca-pub-1234567890123456`. Keep that tab open.
+4. The snippet goes in the `<head>` of every page. The written pages are
+   generated, so add it once in `tools/build-pages.js` — in the `shell()`
+   function, just before `</head>` — and once by hand in `index.html` after the
+   stylesheet links:
 
    ```html
    <script async
@@ -51,29 +68,26 @@ findable and explain itself, not because it is going to make money.
      crossorigin="anonymous"></script>
    ```
 
-   Put the same three lines in the same place in `about.html` and
-   `privacy.html`, so the reviewer finds the site verified whichever page
-   they land on.
+   Then `node tools/build-pages.js` to rebuild, and bump `CACHE` in `sw.js` so
+   browsers pick the change up.
 
-5. Create `ads.txt` next to `index.html`, containing exactly one line with your
-   own publisher id in it:
+5. Create `ads.txt` next to `index.html` with one line:
 
    ```
    google.com, pub-YOUR-ID-HERE, DIRECT, f08c47fec0942fa0
    ```
 
    Note it is `pub-`, not `ca-pub-`, in this file. Without `ads.txt` AdSense
-   warns that your inventory is unauthorised and pays less for it.
+   flags your inventory as unauthorised and pays less for it.
 
-6. Commit and push. Cloudflare Pages redeploys on its own; give it a minute,
-   then confirm <https://lunosia.com/ads.txt> shows that line.
-7. Back in AdSense, click **Verify**. Review takes anywhere from a day to a
-   few weeks.
+6. Commit and push. Pages redeploys on its own; give it a minute, then check
+   <https://lunosia.com/ads.txt> shows that line.
+7. Back in AdSense, click **Verify**. Review takes a day to a few weeks.
 
-## Placing a unit, once you are approved
+## Placing a unit once approved
 
-Create an ad unit in AdSense, which gives you a slot id, then put the block
-where the unit belongs:
+Create an ad unit, which gives you a slot id, then put the block where it
+belongs:
 
 ```html
 <ins class="adsbygoogle"
@@ -85,26 +99,31 @@ where the unit belongs:
 <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
 ```
 
-`about.html` is the right place for the first one — it is the page a stranger
-actually reads. **Keep ads out of the conversation view.** An ad next to
-someone who is trying to speak Spanish out loud is the fastest way to make
-them stop, and a user who leaves is worth less than the $0.002 the impression
-paid.
+**The guides are the right place** — they are the pages a stranger actually
+reads, and the only ones anyone will arrive at from a search. One unit part-way
+down a guide, one at the end.
+
+**Keep ads out of the app**, and out of the conversation view above all. An ad
+next to someone trying to speak Spanish out loud is the fastest way to make them
+stop, and a user who leaves is worth less than the $0.002 the impression paid.
 
 ## Two rules that are not optional
 
-- **Never click your own ads**, and do not ask anyone else to. Google detects
-  it and the usual outcome is a permanent ban on the account, with the balance
-  forfeited.
-- **For visitors in the EU or UK, a consent banner has to run and be answered
-  before the ad script loads.** Loading it first is the violation, not
-  loading it without a banner at all. AdSense ships a free consent management
-  platform — turn it on in the AdSense console under Privacy & messaging
-  rather than writing one.
+- **Never click your own ads**, and never ask anyone else to. Google detects it
+  and the usual outcome is a permanent ban with the balance forfeited.
+- **For visitors in the EU or UK a consent banner must run and be answered
+  before the ad script loads.** Loading it first is the violation. AdSense ships
+  a free consent management platform — turn it on under Privacy & messaging
+  rather than writing one yourself.
 
-## If you would rather not
+## What not to do
 
-The site costs nothing to run. Cloudflare Pages is free at this traffic,
-Workers AI's free allowance covers the conversations, and the dictionary and
-grammar engine run in the reader's own browser. Nothing here needs ad revenue
-to stay up.
+**Do not generate a page per dictionary word.** Thirty-one thousand thin pages
+is precisely what Google's spam policy calls *scaled content abuse*, and since
+March 2024 it is a fast route to a permanent rejection that is much harder to
+come back from than "low value content". The six grouped guides exist for this
+reason: fewer pages, each worth reading.
+
+The same goes for adding filler pages to look bigger. If you want more content,
+write another guide — the material is there in the reading texts and the writing
+tasks, and `tools/build-pages.js` is where a new one would be added.

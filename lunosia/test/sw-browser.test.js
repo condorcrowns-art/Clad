@@ -67,7 +67,10 @@ const BASE = 'http://localhost:8791';
     return out;
   });
   let c = await cached();
-  check('the shell is cached', c.filter(x => /index\.html/.test(x)).length === 1);
+  // The app shell specifically — guides/index.html is cached too and matches a
+  // looser pattern.
+  check('the shell is cached', c.some(x => /\s\/index\.html$/.test(x)),
+    c.filter(x => /index\.html/.test(x)).join(', '));
   check('the dictionary is cached on the FIRST visit',
     c.some(x => /dict-es\.json/.test(x)), c.filter(x => /dict/.test(x)).join(', ') || 'not cached');
   check('it is kept apart from the shell',

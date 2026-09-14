@@ -20,7 +20,8 @@ const fail = [];
 const check = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  - ' + x : '')); if (!c) fail.push(n); };
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
-const PAGES = fs.readdirSync(ROOT).filter(f => f.endsWith('.html'));
+const PAGES = fs.readdirSync(ROOT).filter(f => f.endsWith('.html'))
+  .concat(fs.readdirSync(path.join(ROOT, 'guides')).map(f => 'guides/' + f));
 const SITE = 'https://lunosia.com/';
 
 console.log('\n— The static pages —\n');
@@ -48,10 +49,14 @@ PAGES.forEach(page => {
   // a crawler counts it against the site.
   const links = [];
   html.replace(/(?:href|src)="([^"]+)"/g, (_, u) => { links.push(u); return _; });
+  // Relative to the page, not to the root: a guide two directories in links to
+  // "../about.html", which does not exist at the root and does exist where the
+  // browser will look for it.
+  const dir = path.dirname(path.join(ROOT, page));
   links.filter(u => !/^(https?:|mailto:|data:|#)/.test(u)).forEach(u => {
     const target = u.split('#')[0].split('?')[0];
     if (!target) return;
-    check(page + '  → ' + target + ' exists', fs.existsSync(path.join(ROOT, target)));
+    check(page + '  → ' + target + ' exists', fs.existsSync(path.resolve(dir, target)));
   });
 
   // Placeholder publisher ids are how you get an AdSense application refused,
@@ -74,13 +79,72 @@ const locs = [];
 sitemap.replace(/<loc>([^<]+)<\/loc>/g, (_, u) => { locs.push(u); return _; });
 check('the sitemap lists the home page', locs.indexOf(SITE) !== -1);
 locs.forEach(u => {
-  const rel = u.slice(SITE.length) || 'index.html';
+  let rel = u.slice(SITE.length) || 'index.html';
+  if (rel.endsWith('/')) rel += 'index.html';
   check('sitemap → ' + rel + ' exists', fs.existsSync(path.join(ROOT, rel)), u);
 });
 PAGES.forEach(p => {
-  const url = p === 'index.html' ? SITE : SITE + p;
-  check(p + ' is in the sitemap', locs.indexOf(url) !== -1);
+  const url = p === 'index.html' ? SITE : SITE + p.replace(/(^|\/)index\.html$/, '$1');
+  check(p + ' is in the sitemap', locs.indexOf(url) !== -1, url);
 });
+
+console.log('\n— The site is navigable —\n');
+
+/* AdSense, and any reader, judges a site partly on whether it hangs together:
+ * whether every page can reach every other and whether anything is an orphan
+ * only a sitemap knows about. It is also just how a site should work. */
+const WRITTEN = PAGES.filter(p => p !== 'index.html');
+WRITTEN.forEach(p => {
+  const html = read(p);
+  check(p + ' has the site header', /class="site-head"/.test(html));
+  check(p + ' has the site footer', /class="site-foot"/.test(html));
+  ['about.html', 'contact.html', 'privacy.html', 'terms.html', 'guides/index.html']
+    .forEach(t => {
+      const leaf = t.split('/').pop();
+      check(p + '  can reach ' + t, html.indexOf(leaf) !== -1);
+    });
+});
+
+// And the app links out, or a stranger who types the address gets a form
+// asking their name and no way to find out what any of it is.
+const appLinks = read('index.html') + read('js/views-progress.js');
+['about.html', 'contact.html', 'privacy.html', 'guides/index.html'].forEach(t =>
+  check('the app links to ' + t, appLinks.indexOf(t) !== -1));
+
+console.log('\n— The written pages are worth reading —\n');
+
+// A page of three sentences is what "low value content" means. These are
+// generated from real lessons; if one comes out thin, the grouping is wrong.
+WRITTEN.forEach(p => {
+  const words = read(p).replace(/<script[\s\S]*?<\/script>/g, '')
+    .replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ')
+    .split(/\s+/).filter(Boolean).length;
+  check(p + ' is a substantial page', words >= 280, words + ' words');
+});
+
+console.log('\n— The guides match the lessons they came from —\n');
+
+/* The guides are generated from js/data/grammar-es.js. Edit a lesson, forget to
+ * rebuild, and the site teaches one thing while the app drills another — with
+ * nothing to notice it, because both halves work. */
+{
+  const os = require('os');
+  const cp = require('child_process');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lunosia-pages-'));
+  const r = cp.spawnSync(process.execPath, [path.join(ROOT, 'tools/build-pages.js')],
+    { env: Object.assign({}, process.env, { LUNOSIA_OUT_DIR: tmp, LUNOSIA_QUIET: '1' }) });
+  check('the generator runs', r.status === 0, String(r.stderr || '').slice(0, 300));
+
+  const stale = [];
+  WRITTEN.concat(['sitemap.xml']).forEach(f => {
+    const built = path.join(tmp, f);
+    if (!fs.existsSync(built)) return;      // hand-written pages are not generated
+    if (fs.readFileSync(built, 'utf8') !== read(f)) stale.push(f);
+  });
+  check('every generated page is up to date with the data', stale.length === 0,
+    stale.length ? stale.join(', ') + ' — run: node tools/build-pages.js' : '');
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
 
 console.log('\n— The page with scripting off —\n');
 

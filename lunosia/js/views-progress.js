@@ -207,6 +207,26 @@ window.LUNOSIA = window.LUNOSIA || {};
         m.note ? el('div.note', m.note) : null));
     }
 
+    /* The written side of the site, from the screen everyone lands on.
+     *
+     * It used to be reachable only from Settings, which meant a stranger who
+     * typed the address got a form asking their name and no way to find out
+     * what any of it was — and the guides, which are the best writing here,
+     * were effectively unpublished. New tab, because this screen may be one
+     * tap away from a conversation in progress. */
+    main.appendChild(el('div.small.muted', {
+      style: { marginTop: '26px', paddingTop: '14px',
+               borderTop: '1px solid var(--line-soft)',
+               display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+      el('a', { href: 'guides/index.html', target: '_blank', rel: 'noopener' },
+        'Grammar guides'),
+      el('span', '·'),
+      el('a', { href: 'about.html', target: '_blank', rel: 'noopener' }, 'About'),
+      el('span', '·'),
+      el('a', { href: 'contact.html', target: '_blank', rel: 'noopener' }, 'Contact'),
+      el('span', '·'),
+      el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy')));
+
     return main;
   }
 
@@ -1307,7 +1327,13 @@ window.LUNOSIA = window.LUNOSIA || {};
                  borderTop: '1px solid var(--line-soft)' } },
         el('a', { href: 'about.html', target: '_blank', rel: 'noopener' }, 'About Lunosia'),
         ' · ',
-        el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy'))
+        el('a', { href: 'guides/index.html', target: '_blank', rel: 'noopener' }, 'Guides'),
+        ' · ',
+        el('a', { href: 'contact.html', target: '_blank', rel: 'noopener' }, 'Contact'),
+        ' · ',
+        el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy'),
+        ' · ',
+        el('a', { href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms'))
     ));
 
     // A live microphone test must not keep listening after you navigate away.

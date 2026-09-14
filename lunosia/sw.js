@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'lunosia-v3';
+var CACHE = 'lunosia-v4';
 
 /* The dictionary is 1.5 MB and changes only when it is rebuilt, so it lives in
  * a cache of its own that deploys do not touch. In the single versioned cache
@@ -31,6 +31,16 @@ var ASSETS = [
   './icon.svg',
   './about.html',
   './privacy.html',
+  './css/page.css',
+  './contact.html',
+  './terms.html',
+  './guides/gender-and-agreement.html',
+  './guides/index.html',
+  './guides/past-and-subjunctive.html',
+  './guides/pronunciation.html',
+  './guides/ser-estar.html',
+  './guides/small-words.html',
+  './guides/verbs-that-differ.html',
   './js/data/vocab-es.js',
   './js/data/verbs-es.js',
   './js/data/grammar-es.js',
