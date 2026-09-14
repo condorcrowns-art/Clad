@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Parla — Privacy</title>
+<meta name="description" content="What Parla stores, where it stores it, and the one thing that leaves your device.">
+<link rel="canonical" href="https://lunosia.com/privacy.html">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/fiesta.css">
 <style>
@@ -16,12 +18,19 @@
 <body>
 <main>
   <h1>Privacy</h1>
-  <p class="updated">This describes what the app does. Check it still matches what you are running before publishing it.</p>
+  <p class="updated">Last updated 14 September 2026. This describes what the app
+     actually does; check it still matches what you are running before publishing it.</p>
 
   <h2>The short version</h2>
-  <p>Everything Parla knows about you is stored in your own browser and is never
-     sent anywhere — with one exception, which you have to switch on yourself,
-     described below.</p>
+  <p>Everything Parla knows about you — your progress, your words, your mistakes —
+     is stored in your own browser and is never sent anywhere. There is no account
+     and no server-side copy of any of it.</p>
+  <p>The one thing that does leave your device is the conversation itself. On this
+     site the conversation partner runs on Cloudflare's Workers AI, so what you say
+     to it is sent there to be answered. That is the default here, because it is the
+     only partner that works on a phone. You can switch it off in Settings — the
+     built-in partner runs entirely in the page. Both are described under
+     <a href="#partner">The conversation partner</a> below.</p>
 
   <h2>What is stored, and where</h2>
   <p>Parla keeps all of this in your browser's <code>localStorage</code>, on the
@@ -32,6 +41,9 @@
     <li>your progress: XP, streak, which of the 60 days you have done</li>
     <li>your vocabulary deck and its review schedule, including words you added yourself</li>
     <li>your mistake journal — corrections you have been given</li>
+    <li>which reading passages you have read and which listening clips you have heard</li>
+    <li>your writing tasks and the drafts you wrote for them</li>
+    <li>your pronunciation scores and which grammar lessons you have finished</li>
     <li>notes your conversation partner wrote about you, so it remembers you between sessions</li>
     <li>your settings, including any API key you enter</li>
   </ul>
@@ -61,7 +73,7 @@
      both under Creative Commons Attribution-ShareAlike. The built file carries the
      same licence.</p>
 
-  <h2>The conversation partner</h2>
+  <h2 id="partner">The conversation partner</h2>
   <ul>
     <li><strong>Built-in (scripted):</strong> runs entirely in the page. Nothing leaves the device.</li>
     <li><strong>Ollama:</strong> runs on a machine you control. Nothing leaves that machine.</li>
@@ -99,10 +111,14 @@
      subject to Google's own policies on ad serving.</p>
 
   <h2>Contact</h2>
-  <p>Add an address here before publishing. Advertising programmes generally
-     require a reachable contact.</p>
+  <p>Questions about this policy, or about anything the site does with your data,
+     go to <a href="mailto:CONTACT@EXAMPLE.COM">CONTACT@EXAMPLE.COM</a>.</p>
+  <!-- Replace both copies of CONTACT@EXAMPLE.COM above with a real address before
+       applying to any advertising programme. They require a reachable contact,
+       and a policy page that names none is a common rejection. -->
 
-  <p style="margin-top:34px"><a href="index.html">← Back to Parla</a></p>
+  <p style="margin-top:34px"><a href="index.html">← Back to Parla</a> &nbsp;·&nbsp;
+     <a href="about.html">What Parla is</a></p>
 </main>
 </body>
 </html>

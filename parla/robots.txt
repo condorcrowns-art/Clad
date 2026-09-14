@@ -1,0 +1,16 @@
+# Everything a reader would want is under / and linked from the pages below.
+# The rest of what Pages serves is the source tree — notes, tests, build
+# scripts — which is public but is not content and should not be indexed.
+#
+# js/ and css/ are deliberately NOT blocked. Google renders the page before
+# judging it, and a crawler that cannot fetch the scripts sees the same empty
+# shell a reader with scripting off would.
+
+User-agent: *
+Allow: /
+Disallow: /test/
+Disallow: /tools/
+Disallow: /*.md$
+Disallow: /*.ps1$
+
+Sitemap: https://lunosia.com/sitemap.xml

@@ -4,13 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Parla — learn Spanish by talking</title>
-<meta name="description" content="Speak Spanish out loud and get corrections. Free, offline-capable, no subscription.">
+<meta name="description" content="Speak Spanish out loud and get corrected by an engine that names the rule you broke. Reading, listening, writing, pronunciation and grammar too. Free, no account, works offline.">
 <meta name="theme-color" content="#e01a76">
+<link rel="canonical" href="https://lunosia.com/">
+<meta property="og:title" content="Parla — learn Spanish by talking">
+<meta property="og:description" content="Speak Spanish out loud and get corrected by an engine that names the rule you broke. Free, no account, works offline.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lunosia.com/">
+<meta property="og:site_name" content="Parla">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/fiesta.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗣️</text></svg>">
+<!-- With scripting off the chrome is furniture around nothing: a streak of
+     zero, a nav whose every button is dead, and the word "Loading…" that will
+     never stop. Hide it and leave only the explanation below. -->
+<noscript><style>
+  .topbar, .nav, #app, .sheet, .sheet-scrim { display: none !important; }
+</style></noscript>
 </head>
 <body>
 
@@ -23,6 +35,30 @@
 </div>
 
 <div id="app"><main><p class="muted">Loading…</p></main></div>
+
+<!-- Without scripting this page is one word long, which is no use to a reader
+     and no use to a crawler either. The real explanation lives on about.html;
+     this is the short version, in the markup, for anyone who never gets the
+     app. -->
+<noscript>
+  <main style="max-width:720px;margin:0 auto;padding:24px 20px 60px">
+    <h1>Parla — learn Spanish by talking</h1>
+    <p>Parla is a free Spanish trainer built around speaking. You hold a
+       conversation out loud with a partner who stays in character, and when you
+       get something wrong it tells you what to say instead and names the rule
+       you broke — then brings that sentence back days later until you can
+       produce the fix from memory.</p>
+    <p>It also covers reading (twelve graded stories, every word one tap from its
+       meaning), listening, writing, pronunciation and twenty grammar lessons
+       aimed at the mistakes English speakers actually make. There is no account
+       and no subscription, and after the first visit it works offline.</p>
+    <p>The app itself needs JavaScript, because the dictionary, the grammar
+       checker and the speech both run in your browser rather than on a server.
+       Turn scripting on for this site to use it.</p>
+    <p><a href="about.html">Read more about Parla</a> ·
+       <a href="privacy.html">Privacy</a></p>
+  </main>
+</noscript>
 
 <!-- Twelve tabs do not fit across a phone. The five marked data-primary stay on
      the bar at any width; the rest move into the More sheet below 620px and sit

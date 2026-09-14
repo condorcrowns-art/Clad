@@ -42,6 +42,20 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   const popText = await page.locator('.word-pop').innerText();
   check('it offers to teach the word', /Learn this/.test(popText), popText.replace(/\n/g, ' | '));
 
+  // The panel opens downwards, so on a short window it lands over the sticky
+  // microphone dock. It used to land *behind* it: the bubble's entry animation
+  // had fill `both`, which leaves a transform applied, which makes the bubble a
+  // stacking context, which traps the panel's z-index inside it. Visible,
+  // readable, and completely unclickable.
+  const reachable = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('.word-pop button')]
+      .find(b => /Learn this/.test(b.textContent));
+    const r = btn.getBoundingClientRect();
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return at === btn || btn.contains(at) ? 'the button' : (at && at.className) || 'nothing';
+  });
+  check('nothing is sitting on top of the panel', reachable === 'the button', reachable);
+
   const before = await page.evaluate(() => (PARLA.store.state.phrases || []).length);
   await page.locator('.word-pop button', { hasText: 'Learn this' }).click();
   await page.waitForTimeout(300);

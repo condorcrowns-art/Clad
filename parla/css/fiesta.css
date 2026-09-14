@@ -141,7 +141,12 @@ body::after {
 /* ── Entrances ──────────────────────────────────────────────
    Cards arrive in sequence rather than all at once. The delay is set inline
    by decor.js so any number of them stagger correctly. */
-.rise { animation: rise .32s var(--ease) both; }
+/* `backwards`, never `both`. `both` keeps the animation applied after it ends,
+   a still-applied transform is a stacking context even at the identity matrix,
+   and a stacking context traps any z-index inside it — which is how a panel
+   with z-index 40 ended up behind a dock with z-index 20. Every `to` below is
+   the element's natural resting state, so there is nothing to hold. */
+.rise { animation: rise .32s var(--ease) backwards; }
 @keyframes rise {
   from { opacity: 0; transform: translateY(7px); }
   to   { opacity: 1; transform: none; }
@@ -214,7 +219,7 @@ button:active { transform: scale(.97); }
   width: 18px; height: 3px; margin-left: -9px;
   border-radius: 3px;
   background: linear-gradient(90deg, var(--rosa), var(--amarillo));
-  animation: rise .3s var(--ease) both;
+  animation: rise .3s var(--ease) backwards;
 }
 .nav button { position: relative; }
 
@@ -263,8 +268,12 @@ button:active { transform: scale(.97); }
   100% { transform: scale(2.3); opacity: 0; }
 }
 
-/* ── Bubbles ────────────────────────────────────────────────*/
-.bubble { animation: bubble .34s var(--ease) both; }
+/* ── Bubbles ────────────────────────────────────────────────
+   The fill is `backwards`, not `both`, and that is load-bearing: a finished
+   `both` animation leaves `transform` applied, an applied transform makes the
+   element a stacking context, and the word panel inside a bubble could then
+   never paint above the microphone dock outside it. See the note at .rise. */
+.bubble { animation: bubble .34s var(--ease) backwards; }
 @keyframes bubble {
   from { opacity: 0; transform: translateY(8px) scale(.97); }
   to   { opacity: 1; transform: none; }
@@ -370,7 +379,7 @@ button:active { transform: scale(.97); }
   border: 1px solid var(--line);
   border-left: 3px solid var(--morado);
   box-shadow: var(--shadow);
-  animation: rise .28s var(--ease) both;
+  animation: rise .28s var(--ease) backwards;
 }
 .help-opt {
   display: flex; align-items: center; gap: 8px;
@@ -493,7 +502,7 @@ button:active { transform: scale(.97); }
   border-top: 3px solid var(--turquesa);
   box-shadow: var(--shadow-lg);
   cursor: default;
-  animation: rise .18s var(--ease) both;
+  animation: rise .18s var(--ease) backwards;
   text-align: left;
   font-family: var(--sans);
 }

@@ -231,26 +231,23 @@ settings → lunosia.com → Clear & reset.
 
 ## Google AdSense
 
-Two things to know before you spend time on it.
+There is a full walkthrough in **[ADSENSE.md](ADSENSE.md)** — what has to be
+true first, the exact snippets, where they go, and the two rules that get
+accounts banned. The short version:
 
-**It needs approval, and approval needs content.** AdSense reviews a site before
-serving ads, and single-page apps with little indexable text are commonly
-rejected. You will likely need a real landing page describing what Parla is,
-plus a privacy policy and an about page. That is a content job, not a code job.
+**Approval is the hard part, not the code.** AdSense reviews a site for content
+a reader would want on its own, and an application whose home page says
+"Loading…" until thirty thousand lines of JavaScript have run is the shape that
+gets "Low value content" back. The site now ships `about.html`, a `<noscript>`
+summary on the home page, `robots.txt` and `sitemap.xml` to give it something to
+read. It may still be refused; you can reapply as often as you like.
 
-**The privacy policy is not optional and is not boilerplate for this app.** It
-must say what Parla stores (everything, in your browser, via localStorage —
-progress, mistakes, the notes your partner keeps about you), that your typed and
-spoken turns are sent to Cloudflare's Workers AI when that partner is selected,
-and what Google's ad cookies do. If anyone in the EU or UK uses it you also need
-a consent banner before any ad script runs.
+**The privacy policy is already written for this app.** `privacy.html` says what
+is stored (everything, in your browser), that your turns go to Cloudflare's
+Workers AI on this site, and what Google's ad cookies do. One thing is missing:
+it says `CONTACT@EXAMPLE.COM` in two places and you must replace both with a
+real address before applying.
 
-`ads.html` in this folder is the ad slot markup and `privacy.html` is a starting
-privacy policy with the app-specific parts already written. Read the privacy
-policy before publishing it — it describes this app, but only you can say
-whether it describes what you intend to do with it.
-
-**Expect very little money.** A personal-use language app makes single-digit
-dollars a month at best. If the point is to cover a domain renewal, fine. If it
-is a reason to add tracking to a private study tool, it is a bad trade, and you
-already have the version with no ads in it.
+**Expect very little money.** Single-digit dollars a month at best, against a
+$100 payout threshold. The site costs nothing to run, so nothing here depends on
+the revenue.

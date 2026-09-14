@@ -1298,7 +1298,16 @@ window.PARLA = window.PARLA || {};
             PARLA.store.reset();
             location.reload();
           }
-        }, 'Erase everything'))
+        }, 'Erase everything')),
+
+      // Both open in a new tab: the app is a single page holding a conversation
+      // you may be halfway through, and navigating away from it loses the turn.
+      el('div.small.muted', {
+        style: { marginTop: '26px', paddingTop: '14px',
+                 borderTop: '1px solid var(--line-soft)' } },
+        el('a', { href: 'about.html', target: '_blank', rel: 'noopener' }, 'About Parla'),
+        ' · ',
+        el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy'))
     ));
 
     // A live microphone test must not keep listening after you navigate away.
