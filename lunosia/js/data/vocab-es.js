@@ -594,6 +594,186 @@ LUNOSIA.data.es.vocab = [
   ["no estoy seguro", "I'm not sure", "phrase", "No estoy seguro de eso.", "I'm not sure about that.", "debate|a2"],
   ["en cambio", "whereas / instead", "conj", "Yo, en cambio, prefiero el tren.", "I, on the other hand, prefer the train.", "debate|b1"],
   ["así que", "so", "conj", "Llovía, así que no salimos.", "It was raining, so we didn't go out.", "debate|a2"],
-  ["a pesar de", "in spite of", "prep", "A pesar del frío, salimos.", "In spite of the cold, we went out.", "debate|b1"]
+  ["a pesar de", "in spite of", "prep", "A pesar del frío, salimos.", "In spite of the cold, we went out.", "debate|b1"],
+  /* ══ Expansion: the everyday words a 521-word deck was missing ══
+     Chosen from the OpenSubtitles frequency list, filtered to content words
+     that are their own dictionary form, then read and written by hand — the
+     automatic glosses had "señor" as master, "lado" as face and "pasa" as
+     raisin, which is what happens when a frequency list meets a dictionary
+     with no one in between. */
+
+  /* ── Life, time and the world ─────────────────────────────── */
+  ["la vida", "life", "noun-f", "Así es la vida.", "That's life.", "people|a1"],
+  ["el mundo", "the world", "noun-m", "Todo el mundo lo sabe.", "Everybody knows it.", "people|a1"],
+  ["el día", "day", "noun-m", "¿Qué tal el día?", "How was your day?", "time|a1"],
+  ["la noche", "night", "noun-f", "Trabajo por la noche.", "I work at night.", "time|a1"],
+  ["la mañana", "morning", "noun-f", "Te llamo por la mañana.", "I'll call you in the morning.", "time|a1"],
+  ["la tarde", "afternoon / evening", "noun-f", "Nos vemos esta tarde.", "See you this afternoon.", "time|a1"],
+  ["la vez", "time (occasion)", "noun-f", "Otra vez, por favor.", "Again, please.", "time|a1"],
+  ["el momento", "moment", "noun-m", "Un momento, por favor.", "One moment, please.", "time|a1"],
+  ["el lugar", "place", "noun-m", "Es un lugar tranquilo.", "It's a quiet place.", "travel|a2"],
+  ["el sitio", "place / spot", "noun-m", "Guárdame un sitio.", "Save me a spot.", "travel|a2"],
+  ["el lado", "side", "noun-m", "Siéntate a mi lado.", "Sit next to me.", "directions|a1"],
+  ["la parte", "part", "noun-f", "Esa parte no la entiendo.", "That part I don't understand.", "describing|a2"],
+
+  /* ── People ────────────────────────────────────────────────── */
+  ["el señor", "sir / Mr / gentleman", "noun-m", "Buenos días, señor.", "Good morning, sir.", "polite|a1"],
+  ["la señora", "madam / Mrs / lady", "noun-f", "La señora ya ha pagado.", "The lady has already paid.", "polite|a1"],
+  ["el chico", "boy / young man", "noun-m", "Ese chico es mi vecino.", "That guy is my neighbour.", "people|a1"],
+  ["la chica", "girl / young woman", "noun-f", "La chica del piso de arriba.", "The girl from upstairs.", "people|a1"],
+  ["el tipo", "guy / type", "noun-m", "No es mi tipo de música.", "It isn't my kind of music.", "people|a2"],
+  ["la persona", "person", "noun-f", "Es buena persona.", "He's a good person.", "people|a1"],
+  ["el mayor", "the eldest / grown-up", "noun-m", "Mi hermano mayor vive en Cádiz.", "My older brother lives in Cádiz.", "family|a2"],
+
+  /* ── Things you talk about ────────────────────────────────── */
+  ["la verdad", "truth", "noun-f", "La verdad es que no lo sé.", "The truth is I don't know.", "conversation|a1"],
+  ["la razón", "reason", "noun-f", "Tienes razón.", "You're right.", "conversation|a1"],
+  ["el problema", "problem", "noun-m", "No hay ningún problema.", "There's no problem at all.", "conversation|a1"],
+  ["la manera", "way / manner", "noun-f", "No hay manera de saberlo.", "There's no way to know.", "conversation|a2"],
+  ["la forma", "way / shape", "noun-f", "Lo dijo de otra forma.", "He said it another way.", "conversation|a2"],
+  ["la idea", "idea", "noun-f", "Es buena idea.", "That's a good idea.", "opinion|a1"],
+  ["el favor", "favour", "noun-m", "¿Me haces un favor?", "Will you do me a favour?", "polite|a1"],
+  ["la suerte", "luck", "noun-f", "¡Buena suerte!", "Good luck!", "conversation|a1"],
+  ["la culpa", "fault / blame", "noun-f", "No es culpa tuya.", "It isn't your fault.", "conversation|a2"],
+  ["el caso", "case", "noun-m", "En ese caso, me quedo.", "In that case, I'll stay.", "debate|a2"],
+  ["el ejemplo", "example", "noun-m", "Por ejemplo, el tren.", "For example, the train.", "debate|a2"],
+  ["la duda", "doubt", "noun-f", "Sin duda.", "Without a doubt.", "debate|a2"],
+  ["el amor", "love", "noun-m", "Es una historia de amor.", "It's a love story.", "feelings|a2"],
+  ["el miedo", "fear", "noun-m", "Me da miedo volar.", "Flying scares me.", "feelings|a2"],
+  ["el cariño", "affection", "noun-m", "Le tengo mucho cariño.", "I'm very fond of him.", "feelings|b1"],
+
+  /* ── Describing ───────────────────────────────────────────── */
+  ["mejor", "better / best", "adj", "Este es mejor que el otro.", "This one is better than the other.", "describing|a1"],
+  ["peor", "worse / worst", "adj", "Hoy está peor que ayer.", "Today he's worse than yesterday.", "describing|a2"],
+  ["cierto", "true / certain", "adj", "Eso no es cierto.", "That isn't true.", "debate|a2"],
+  ["serio", "serious", "adj", "¿Lo dices en serio?", "Are you serious?", "conversation|a2"],
+  ["capaz", "capable / able", "adj", "No soy capaz de dormir.", "I can't manage to sleep.", "describing|b1"],
+  ["genial", "great / brilliant", "adj", "¡Qué genial!", "That's brilliant!", "conversation|a2"],
+  ["listo", "ready (estar) / clever (ser)", "adj", "¿Estás listo?", "Are you ready?", "describing|a1"],
+  ["libre", "free (not busy)", "adj", "¿Estás libre el jueves?", "Are you free on Thursday?", "time|a1"],
+  ["mojado", "wet", "adj", "Llegué mojado a casa.", "I got home wet.", "describing|a2"],
+  ["seco", "dry", "adj", "La ropa ya está seca.", "The clothes are dry now.", "home|a2"],
+  ["blando", "soft", "adj", "El pan está blando.", "The bread is soft.", "food|a2"],
+  ["duro", "hard / tough", "adj", "Ha sido un día duro.", "It's been a tough day.", "describing|a2"],
+  ["profundo", "deep", "adj", "El río es profundo aquí.", "The river is deep here.", "outdoors|b1"],
+  ["estrecho", "narrow / tight", "adj", "La calle es muy estrecha.", "The street is very narrow.", "directions|b1"],
+  ["ancho", "wide", "adj", "El pasillo es ancho.", "The corridor is wide.", "home|b1"],
+
+  /* ── Doing ────────────────────────────────────────────────── */
+  ["subir", "to go up / to upload", "verb", "Sube al segundo piso.", "Go up to the second floor.", "doing|a1"],
+  ["bajar", "to go down / to download", "verb", "Bajo en la próxima parada.", "I'm getting off at the next stop.", "doing|a1"],
+  ["entrar", "to go in / to enter", "verb", "¿Puedo entrar?", "May I come in?", "doing|a1"],
+  ["mover", "to move (something)", "verb", "¿Me ayudas a mover la mesa?", "Will you help me move the table?", "doing|a2"],
+  ["romper", "to break", "verb", "Se me rompió el móvil.", "My phone broke.", "doing|a2"],
+  ["coger", "to take / to catch", "verb", "Voy a coger el autobús.", "I'm going to catch the bus.", "travel|a1"],
+  ["tirar", "to throw / to throw away", "verb", "No tires eso.", "Don't throw that away.", "doing|a2"],
+  ["meter", "to put in", "verb", "Mete la ropa en la maleta.", "Put the clothes in the suitcase.", "doing|a2"],
+  ["sacar", "to take out", "verb", "Voy a sacar dinero.", "I'm going to take out some money.", "money|a2"],
+  ["prestar", "to lend", "verb", "¿Me prestas cinco euros?", "Will you lend me five euros?", "money|a2"],
+  ["cobrar", "to charge / to get paid", "verb", "Cobro a final de mes.", "I get paid at the end of the month.", "money|b1"],
+  ["deber", "to owe / ought to", "verb", "Te debo un café.", "I owe you a coffee.", "money|a2"],
+  ["entregar", "to hand in / to deliver", "verb", "Lo entrego el lunes.", "I'll hand it in on Monday.", "work|b1"],
+  ["quejarse", "to complain", "verb", "Se quejó del ruido.", "He complained about the noise.", "queja|b1"],
+  ["disculparse", "to apologise", "verb", "Se disculpó por el retraso.", "He apologised for the delay.", "polite|b1"],
+
+  /* ── Out and about ────────────────────────────────────────── */
+  ["el barrio", "neighbourhood", "noun-m", "Es un barrio muy tranquilo.", "It's a very quiet neighbourhood.", "home|a2"],
+  ["el centro", "town centre", "noun-m", "Trabajo en el centro.", "I work in the town centre.", "directions|a1"],
+  ["el ascensor", "lift / elevator", "noun-m", "El ascensor no funciona.", "The lift isn't working.", "home|a2"],
+  ["el techo", "ceiling / roof", "noun-m", "Hay una mancha en el techo.", "There's a stain on the ceiling.", "home|b1"],
+  ["el suelo", "floor / ground", "noun-m", "Se cayó al suelo.", "It fell on the floor.", "home|a2"],
+  ["la pared", "wall", "noun-f", "Cuelga el cuadro en esa pared.", "Hang the picture on that wall.", "home|a2"],
+  ["el cajón", "drawer", "noun-m", "Está en el cajón de arriba.", "It's in the top drawer.", "home|b1"],
+  ["la manta", "blanket", "noun-f", "¿Me trae una manta?", "Could you bring me a blanket?", "travel|a2"],
+  ["la almohada", "pillow", "noun-f", "La almohada es muy dura.", "The pillow is very hard.", "travel|a2"],
+  ["la toalla", "towel", "noun-f", "Necesito una toalla limpia.", "I need a clean towel.", "travel|a1"],
+
+  /* ── Weather and outdoors ─────────────────────────────────── */
+  ["el tiempo", "weather / time", "noun-m", "¿Qué tiempo hace?", "What's the weather like?", "weather|a1"],
+  ["la lluvia", "rain", "noun-f", "La lluvia no paró en todo el día.", "The rain didn't stop all day.", "weather|a2"],
+  ["el viento", "wind", "noun-m", "Hace mucho viento.", "It's very windy.", "weather|a1"],
+  ["la nieve", "snow", "noun-f", "La nieve llegó en enero.", "The snow came in January.", "weather|a2"],
+  ["el cielo", "sky", "noun-m", "El cielo está gris.", "The sky is grey.", "weather|a2"],
+  ["el sol", "sun", "noun-m", "Hoy hace sol.", "It's sunny today.", "weather|a1"],
+  ["la sombra", "shade / shadow", "noun-f", "Vamos a sentarnos a la sombra.", "Let's sit in the shade.", "outdoors|a2"],
+  ["el árbol", "tree", "noun-m", "Hay un árbol enorme delante.", "There's an enormous tree in front.", "outdoors|a1"],
+  ["el campo", "countryside / field", "noun-m", "Mis padres viven en el campo.", "My parents live in the countryside.", "outdoors|a2"],
+  ["el río", "river", "noun-m", "El río pasa por el centro.", "The river runs through the centre.", "outdoors|a2"],
+  ["el mar", "sea", "noun-m", "El mar está tranquilo hoy.", "The sea is calm today.", "outdoors|a1"],
+
+  /* ── Phone, internet, admin ───────────────────────────────── */
+  ["el móvil", "mobile phone", "noun-m", "Se me ha quedado sin batería el móvil.", "My phone has run out of battery.", "phone|a1"],
+  ["la llamada", "call", "noun-f", "Tengo una llamada perdida tuya.", "I have a missed call from you.", "phone|a2"],
+  ["el mensaje", "message", "noun-m", "Te dejo un mensaje.", "I'll leave you a message.", "phone|a1"],
+  ["la pantalla", "screen", "noun-f", "La pantalla se ha roto.", "The screen has broken.", "internet|a2"],
+  ["el archivo", "file", "noun-m", "El archivo pesa demasiado.", "The file is too big.", "internet|b1"],
+  ["la red", "network", "noun-f", "No hay red en el metro.", "There's no signal on the metro.", "internet|a2"],
+  ["el carné", "ID card / licence", "noun-m", "¿Me enseña el carné?", "Could you show me your ID?", "admin|a2"],
+  ["la factura", "bill / invoice", "noun-f", "La factura llega cada mes.", "The bill comes every month.", "money|a2"],
+  ["la cola", "queue", "noun-f", "Hay mucha cola.", "There's a long queue.", "shopping|a2"],
+
+  /* ── Food and eating out ──────────────────────────────────── */
+  ["la cuchara", "spoon", "noun-f", "¿Me trae una cuchara?", "Could you bring me a spoon?", "food|a1"],
+  ["el tenedor", "fork", "noun-m", "Falta un tenedor.", "There's a fork missing.", "food|a1"],
+  ["el cuchillo", "knife", "noun-m", "Este cuchillo no corta.", "This knife doesn't cut.", "food|a1"],
+  ["el vaso", "glass (tumbler)", "noun-m", "Un vaso de agua, por favor.", "A glass of water, please.", "food|a1"],
+  ["la taza", "cup / mug", "noun-f", "Una taza de té.", "A cup of tea.", "food|a1"],
+  ["la botella", "bottle", "noun-f", "Una botella de agua sin gas.", "A bottle of still water.", "food|a1"],
+  ["la servilleta", "napkin", "noun-f", "¿Me pasas una servilleta?", "Could you pass me a napkin?", "food|a2"],
+  ["el sabor", "flavour / taste", "noun-m", "Tiene un sabor raro.", "It has a strange taste.", "food|a2"],
+  ["la harina", "flour", "noun-f", "Falta harina.", "We're out of flour.", "food|b1"],
+  ["el aceite", "oil", "noun-m", "Aceite de oliva, por favor.", "Olive oil, please.", "food|a2"],
+  ["el ajo", "garlic", "noun-m", "Lleva mucho ajo.", "It has a lot of garlic in it.", "food|a2"],
+  ["la cebolla", "onion", "noun-f", "Corta la cebolla muy fina.", "Chop the onion very finely.", "food|a2"],
+
+  /* ── Health and the body ──────────────────────────────────── */
+  ["el pecho", "chest", "noun-m", "Siento presión en el pecho.", "I feel pressure in my chest.", "health|a2"],
+  ["la rodilla", "knee", "noun-f", "Me torcí la rodilla.", "I twisted my knee.", "health|a2"],
+  ["el hombro", "shoulder", "noun-m", "Tengo el hombro cargado.", "My shoulder is stiff.", "health|a2"],
+  ["la muela", "back tooth", "noun-f", "Me duele una muela.", "One of my back teeth hurts.", "health|a2"],
+  ["la tos", "cough", "noun-f", "Tengo mucha tos.", "I have a bad cough.", "health|a1"],
+  ["la herida", "wound / injury", "noun-f", "La herida no es grave.", "The wound isn't serious.", "health|a2"],
+  ["la vacuna", "vaccine", "noun-f", "Me puse la vacuna en octubre.", "I got the vaccine in October.", "health|b1"],
+
+  /* ── Work and study ───────────────────────────────────────── */
+  ["el contrato", "contract", "noun-m", "Firmé el contrato ayer.", "I signed the contract yesterday.", "work|b1"],
+  ["la jornada", "working day", "noun-f", "Trabajo media jornada.", "I work part time.", "work|b1"],
+  ["el curso", "course", "noun-m", "Hago un curso de español.", "I'm doing a Spanish course.", "study|a1"],
+  ["el apunte", "note (class)", "noun-m", "¿Me dejas los apuntes?", "Can I borrow your notes?", "study|b1"],
+  ["la nota", "mark / note", "noun-f", "Saqué buena nota.", "I got a good mark.", "study|a2"],
+  ["el aula", "classroom", "noun-f", "El aula está en el tercer piso.", "The classroom is on the third floor.", "study|b1"],
+  ["la beca", "grant / scholarship", "noun-f", "Me dieron una beca.", "They gave me a scholarship.", "study|b1"],
+
+  /* ── Feelings ─────────────────────────────────────────────── */
+  ["agobiado", "overwhelmed / stressed", "adj", "Estoy agobiado con el trabajo.", "I'm overwhelmed with work.", "feelings|b1"],
+  ["emocionado", "excited / moved", "adj", "Está muy emocionada con el viaje.", "She's very excited about the trip.", "feelings|a2"],
+  ["decepcionado", "disappointed", "adj", "Me quedé decepcionado.", "I was left disappointed.", "feelings|b1"],
+  ["celoso", "jealous", "adj", "No te pongas celoso.", "Don't get jealous.", "feelings|b1"],
+  ["avergonzado", "embarrassed", "adj", "Me sentí avergonzado.", "I felt embarrassed.", "feelings|b1"],
+  ["aliviado", "relieved", "adj", "Me quedé aliviado.", "I was relieved.", "feelings|b1"],
+  ["ponerse nervioso", "to get nervous", "phrase", "Me pongo nervioso al hablar.", "I get nervous when I speak.", "feelings|a2"],
+
+  /* ── Getting through a conversation ───────────────────────── */
+  ["es decir", "that is to say", "phrase", "Es decir, mañana.", "That is to say, tomorrow.", "conversation|b1"],
+  ["en serio", "seriously", "phrase", "¿En serio?", "Seriously?", "conversation|a1"],
+  ["ni idea", "no idea", "phrase", "Ni idea, lo siento.", "No idea, sorry.", "conversation|a2"],
+  ["menos mal", "thank goodness", "phrase", "Menos mal que viniste.", "Thank goodness you came.", "conversation|a2"],
+  ["qué va", "no way / not at all", "phrase", "¿Difícil? ¡Qué va!", "Difficult? Not at all!", "conversation|b1"],
+  ["vale la pena", "to be worth it", "phrase", "Vale la pena ir.", "It's worth going.", "opinion|b1"],
+  ["dar las gracias", "to thank", "phrase", "Le di las gracias.", "I thanked him.", "polite|a2"],
+  ["tener prisa", "to be in a hurry", "phrase", "Tengo prisa.", "I'm in a hurry.", "time|a1"],
+  ["dar una vuelta", "to go for a walk", "phrase", "Vamos a dar una vuelta.", "Let's go for a walk.", "doing|a2"],
+  ["ponerse de acuerdo", "to reach an agreement", "phrase", "No nos ponemos de acuerdo.", "We can't agree.", "debate|b1"],
+
+  /* ── Adverbs and connectors ───────────────────────────────── */
+  ["después", "afterwards / after", "adv", "Después vamos al cine.", "Afterwards we're going to the cinema.", "time|a1"],
+  ["antes", "before", "adv", "Antes vivía en Madrid.", "I used to live in Madrid.", "time|a1"],
+  ["enseguida", "right away", "adv", "Enseguida vuelvo.", "I'll be right back.", "time|a2"],
+  ["quizá", "perhaps", "adv", "Quizá tengas razón.", "Perhaps you're right.", "opinion|a2"],
+  ["seguramente", "probably", "adv", "Seguramente llegará tarde.", "He'll probably be late.", "opinion|a2"],
+  ["desde luego", "of course / certainly", "phrase", "Desde luego que sí.", "Absolutely.", "opinion|b1"],
+  ["al final", "in the end", "phrase", "Al final no fuimos.", "In the end we didn't go.", "connectors|a2"],
+  ["poco a poco", "little by little", "phrase", "Poco a poco se aprende.", "You learn little by little.", "study|a2"],
+  ["lo antes posible", "as soon as possible", "phrase", "Llámame lo antes posible.", "Call me as soon as possible.", "work|b1"]
 
 ];

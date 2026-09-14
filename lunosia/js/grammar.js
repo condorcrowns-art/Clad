@@ -601,12 +601,24 @@ window.LUNOSIA = window.LUNOSIA || {};
         }
       }
 
-      /* 10. False friends. The word exists, so nothing else will flag it. */
+      /* 10. False friends — advice, never a correction.
+       *
+       * These words are correct Spanish. "La ropa está limpia" and "la sopa
+       * está caliente" and "un viaje largo" are all right, and the checker was
+       * rewriting them to cuerda, jabón and grande: telling a learner their
+       * correct sentence was wrong, which is the one thing this engine is not
+       * allowed to do. Nothing in the sentence can tell us whether they meant
+       * the English word, so nothing in the sentence licenses a rewrite.
+       *
+       * The note still has value — it is the whole point of knowing the pair —
+       * so it is carried as `advisory`, shown where a learner looks a word up
+       * and never offered as a fix. */
       if (FALSE_FRIENDS[t.fold]) {
         var ff = FALSE_FRIENDS[t.fold];
         out.push({
-          original: text, fixed: splice(text, t, matchCase(t.raw, ff[0])),
-          wrong: t.raw, right: ff[0], note: ff[1], topic: 'falsefriends', weight: 4, soft: true
+          original: text, fixed: text,
+          wrong: t.raw, right: ff[0], note: ff[1], topic: 'falsefriends',
+          weight: 4, soft: true, advisory: true
         });
       }
     }
@@ -720,9 +732,10 @@ window.LUNOSIA = window.LUNOSIA || {};
       });
     }
 
-    // Strongest first; a fix that changes nothing is not a fix.
+    // Strongest first; a fix that changes nothing is not a fix — except an
+    // advisory, which never claimed to be one.
     return out
-      .filter(function (f) { return f.fixed && f.fixed.trim() !== text.trim(); })
+      .filter(function (f) { return f.advisory || (f.fixed && f.fixed.trim() !== text.trim()); })
       .sort(function (a, b) { return b.weight - a.weight; })
       .slice(0, 4);
   }
@@ -855,8 +868,16 @@ window.LUNOSIA = window.LUNOSIA || {};
     for (var round = 0; round < 4; round++) {
       var hits = check(current);
       var hit = null;
-      for (var i = 0; i < hits.length; i++) { if (!hits[i].soft) { hit = hits[i]; break; } }
-      if (!hit && round === 0 && hits.length) hit = hits[0];   // soft-only: still worth saying
+      for (var i = 0; i < hits.length; i++) {
+        if (!hits[i].soft && !hits[i].advisory) { hit = hits[i]; break; }
+      }
+      // A soft hit is still a mistake — a question with no opening ¿ is wrong.
+      // An advisory is not, so it can never become the correction.
+      if (!hit && round === 0) {
+        for (var j = 0; j < hits.length; j++) {
+          if (!hits[j].advisory) { hit = hits[j]; break; }
+        }
+      }
       if (!hit) break;
       if (hit.fixed === current) break;
       if (!first) first = hit;
@@ -882,8 +903,9 @@ window.LUNOSIA = window.LUNOSIA || {};
    * "fixes" correct Spanish is worse than no model, and this can veto it. */
   function agrees(original, fixed) {
     if (!ready()) return null;
-    var before = check(original).length;
-    var after = check(fixed).length;
+    var real = function (f) { return !f.advisory; };
+    var before = check(original).filter(real).length;
+    var after = check(fixed).filter(real).length;
     if (after > before) return false;      // the model made it worse
     return true;
   }
@@ -893,6 +915,13 @@ window.LUNOSIA = window.LUNOSIA || {};
     check: check,
     correct: correct,
     agrees: agrees,
+    /* The false-friend note for a word, for the screens where someone is
+     * asking what a word means — which is the only place the warning is
+     * unconditionally true. */
+    falseFriend: function (word) {
+      var ff = FALSE_FRIENDS[fold(String(word || '').toLowerCase())];
+      return ff ? ff[1] : null;
+    },
     topics: function () { return Object.keys(TOPIC_COUNT); }
   };
 

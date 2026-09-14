@@ -52,7 +52,6 @@ const G = ctx.LUNOSIA.grammar;
     ['yo gusto el café', 'me gusta', 'gustar'],
     ['roja casa', 'casa roja', 'wordorder'],
     ['veo nada', 'no veo nada', 'negation'],
-    ['estoy embarazada', 'avergonzada', 'falsefriends'],
     ['la comida es delicioso', 'deliciosa', 'agreement'],
     ['los libros son caro', 'caros', 'agreement'],
     ['la comida es muy delicioso', 'deliciosa', 'agreement']
@@ -254,6 +253,39 @@ const G = ctx.LUNOSIA.grammar;
   check('and every topic the checker can tag has a lesson behind it',
     G.topics().every(t => topics.indexOf(t) !== -1 || t === 'punctuation'),
     G.topics().filter(t => topics.indexOf(t) === -1).join(', '));
+
+  
+  /* ── False friends are advice, not corrections ────────────
+   *
+   * "Estoy embarazada" used to be rewritten to "avergonzada". But it is
+   * correct Spanish — it means "I am pregnant" — and the rewrite is a guess
+   * about what the learner meant, wrong for anyone who is in fact pregnant.
+   * The same rule was rewriting "la ropa está limpia" to "la cuerda", "la
+   * sopa está caliente" to "el jabón" and "un viaje largo" to "grande":
+   * telling people their correct sentence was wrong, which is the one thing
+   * this engine exists not to do.
+   *
+   * The pairs are still worth knowing, so the note survives where it is
+   * unconditionally true — when someone looks the word up.
+   */
+  console.log('\nFalse friends advise, they do not correct\n');
+
+  ['Estoy embarazada.', 'La ropa está limpia.', 'Tengo mucha ropa.',
+   'La sopa está caliente.', 'Es un viaje largo.', 'Es una persona sensible.',
+   'Voy a asistir a la reunión.', 'Actualmente vivo en Madrid.'
+  ].forEach(function (s) {
+    var fixed = G.correct(s);
+    check('“' + s + '” is left alone', !fixed || fixed.fixed === s,
+      fixed ? fixed.fixed : '');
+  });
+
+  [['ropa', /cuerda/], ['embarazada', /pregnant/i], ['sopa', /jab/],
+   ['largo', /grande/]].forEach(function (p) {
+    var note = G.falseFriend(p[0]);
+    check('looking up “' + p[0] + '” still warns you', !!note && p[1].test(note),
+      note || 'no note');
+  });
+  check('a word that is not a false friend has no note', !G.falseFriend('casa'));
 
   console.log(fail.length ? '\n' + fail.length + ' FAILED\n' : '\nAll checks passed.\n');
   process.exit(fail.length ? 1 : 0);

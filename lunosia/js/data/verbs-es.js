@@ -456,7 +456,20 @@ LUNOSIA.data.es = LUNOSIA.data.es || {};
   }
 
   /* Conjugate one verb in one tense -> array of 6 forms. */
-  function conjugate(inf, tense) {
+  /* `plain` forces the regular pattern, ignoring the compound rule.
+   *
+   * The compound rule is a guess from spelling, and spelling lies: "subir" is
+   * not sub- on "ir", "mandar" is not man- on "dar", "sudar" is not su- on
+   * "dar". Each was being conjugated as the irregular verb it merely rhymes
+   * with, so "sube", "subo" and "subió" resolved to nothing at all — and
+   * "subir" is inside the commonest five hundred words in the language.
+   *
+   * The answer is not a list of exceptions, which would be wrong again the
+   * next time someone adds a verb. It is that the compound reading gets to be
+   * tried first and does not get to be the only one: see matchVerb, which asks
+   * for the plain conjugation when the compound forms match nothing. A real
+   * compound matches on the first pass and never reaches the second. */
+  function conjugate(inf, tense, plain) {
     // "ir" is two letters long and is the verb a beginner meets first.
     if (!inf || inf.length < 2) return null;
     inf = String(inf).toLowerCase().trim();
@@ -464,7 +477,7 @@ LUNOSIA.data.es = LUNOSIA.data.es || {};
     // Reflexives conjugate as the bare verb; the pronoun moves to the front.
     var reflexive = /se$/.test(inf) && inf.length > 4 && ENDINGS[inf.slice(-4, -2)];
     if (reflexive) {
-      var inner = conjugate(inf.slice(0, -2), tense);
+      var inner = conjugate(inf.slice(0, -2), tense, plain);
       if (!inner) return null;
       var pron = ['me', 'te', 'se', 'nos', 'os', 'se'];
       return inner.map(function (f, i) {
@@ -472,10 +485,15 @@ LUNOSIA.data.es = LUNOSIA.data.es || {};
       });
     }
 
+    /* `plain` drops the compound *guess* and nothing else. A verb's own listed
+     * forms are facts, not guesses, and dropping those turned the second pass
+     * into a fiction generator: with ver's table ignored, the regular -er
+     * subjunctive produced "va", so "nosotros va al cine" was corrected to
+     * "veamos" instead of "vamos". */
     var irr = IRREGULAR[inf];
     if (irr && irr[tense]) return irr[tense].slice();
 
-    var c = compoundOf(inf);
+    var c = plain ? null : compoundOf(inf);
     if (c && IRREGULAR[c.base] && IRREGULAR[c.base][tense]) {
       return IRREGULAR[c.base][tense].map(function (f) { return accentFix(c.prefix, f, c.prefix + f); });
     }

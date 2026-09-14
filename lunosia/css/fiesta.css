@@ -1290,3 +1290,67 @@ main > .card > p,
   color: var(--ink-soft); margin-bottom: 3px;
 }
 .lookup-body { font-size: .9rem; line-height: 1.45; max-width: 60ch; }
+
+/* ── Feedback, which is the only animation anyone notices ────
+ *
+ * There were eleven keyframes in here and none of them fired at the moment a
+ * learner actually did something. A view swapped instantly, and a right or
+ * wrong answer changed a word from grey to green. Decoration on the edges of a
+ * screen is wallpaper; motion at the moment you act is the app answering you,
+ * and it is the difference between a page and a thing that feels alive.
+ *
+ * Everything here is short — 160 to 380ms — because feedback that outlasts the
+ * thought it is confirming stops being feedback and becomes a wait. */
+
+/* A view arriving. Enough to say "this is a different screen" and not enough
+ * to make a fast tap through the nav feel like wading. */
+#app > main { animation: view-in .22s var(--ease) backwards; }
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Right. A single confident pulse in the good colour — the shape of a nod. */
+.answer-state.ok,
+.q-opt.good,
+.check-mark.ok { animation: said-yes .38s var(--ease) backwards; }
+@keyframes said-yes {
+  0%   { transform: scale(.94); }
+  45%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Wrong. A short horizontal shake — the shape of a head shaking, and the one
+ * gesture that reads as "no" without needing to be read. Small amplitude: this
+ * is a correction, not a buzzer, and the learner is going to see a lot of it. */
+.answer-state.no,
+.q-opt.bad { animation: said-no .32s var(--ease) backwards; }
+@keyframes said-no {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-5px); }
+  45%      { transform: translateX(4px); }
+  70%      { transform: translateX(-2px); }
+}
+
+/* Nearly. A gentler lean than the shake, because "close" is not "no". */
+.answer-state.near { animation: said-nearly .34s var(--ease) backwards; }
+@keyframes said-nearly {
+  0%, 100% { transform: translateX(0); }
+  40%      { transform: translateX(3px); }
+}
+
+/* A correction arriving under a bubble is the most important thing on the
+   screen at that moment, and it used to appear with no more ceremony than a
+   line of chat. */
+.bubble .correction { animation: correction-in .3s var(--ease) .1s backwards; }
+@keyframes correction-in {
+  from { opacity: 0; transform: translateY(-4px) scaleY(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #app > main,
+  .answer-state.ok, .answer-state.no, .answer-state.near,
+  .q-opt.good, .q-opt.bad, .check-mark.ok,
+  .bubble .correction { animation: none !important; }
+}

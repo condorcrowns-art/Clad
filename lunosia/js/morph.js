@@ -149,17 +149,28 @@ window.LUNOSIA = window.LUNOSIA || {};
     }
     if (V.participle(inf) === word) return { tenseKey: 'participio', tense: 'Past participle', person: '', personIndex: -1 };
     if (V.gerund(inf) === word) return { tenseKey: 'gerundio', tense: 'Gerund', person: '', personIndex: -1 };
-    for (var t = 0; t < TENSE_KEYS.length; t++) {
-      var forms = V.conjugate(inf, TENSE_KEYS[t]);
-      if (!forms) continue;
-      for (var i = 0; i < 6; i++) {
-        if (forms[i] === word) {
-          return {
-            tenseKey: TENSE_KEYS[t],
-            tense: tenseLabels()[TENSE_KEYS[t]].label,
-            person: V.pronouns[i],
-            personIndex: i
-          };
+    /* Twice: once as the conjugator would have it, and once forcing the plain
+     * regular pattern.
+     *
+     * The second pass exists because the compound rule reads a verb's spelling
+     * and can be wrong about it — "subir" is not sub- on "ir" — and a verb
+     * conjugated as the wrong irregular matches none of its own forms, so the
+     * word resolved to nothing rather than to something arguable. A genuine
+     * compound matches on the first pass and never reaches the second, so this
+     * cannot cost obtener or prevenir anything. */
+    for (var pass = 0; pass < 2; pass++) {
+      for (var t = 0; t < TENSE_KEYS.length; t++) {
+        var forms = V.conjugate(inf, TENSE_KEYS[t], pass === 1);
+        if (!forms) continue;
+        for (var i = 0; i < 6; i++) {
+          if (forms[i] === word) {
+            return {
+              tenseKey: TENSE_KEYS[t],
+              tense: tenseLabels()[TENSE_KEYS[t]].label,
+              person: V.pronouns[i],
+              personIndex: i
+            };
+          }
         }
       }
     }

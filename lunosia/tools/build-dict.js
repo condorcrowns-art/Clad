@@ -105,6 +105,16 @@ const REGISTER = {
  * paragraph about crossing borders. A sense like this stays in the file, but
  * it does not get to decide what part of speech a word is, and it does not
  * get to be the first thing a learner reads. */
+/* Genders Wiktionary gets wrong, corrected by hand.
+ *
+ * The gender data is otherwise good — sixty-four nouns whose gender no one
+ * disputes came back with one error — but the grammar checker acts on gender,
+ * so a single wrong entry means telling a learner that "el carné" should be
+ * "la carné". Keep this list short and only for cases that are not arguable. */
+const GENDER_FIX = {
+  "carné": "m"
+};
+
 const DEMOTED = new Set(['pejorative', 'derogatory', 'offensive', 'ethnic slur', 'slur', 'vulgar']);
 
 const REGIONS = {
@@ -565,7 +575,7 @@ async function main() {
   /* Rows, not objects: at this size the repeated key names would be a third of
    * the file. [ term, pos, gender, glosses joined by " | ", register, region ] */
   const rows = kept.map(e => {
-    const row = [e.term, e.pos, e.gender || '', e.glosses.join(' | ')];
+    const row = [e.term, e.pos, GENDER_FIX[e.term] || e.gender || '', e.glosses.join(' | ')];
     if (e.reg || e.region) row.push(e.reg || '');
     if (e.region) row.push(e.region);
     return row;

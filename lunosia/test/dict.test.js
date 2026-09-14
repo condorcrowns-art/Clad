@@ -159,6 +159,45 @@ const M = ctx.LUNOSIA.morph;
   check('within a band', D.search({ band: [1, 100], limit: 200 }).every(e => e.band <= 100));
   check('a band is words, not phrases', D.band(1, 500, 500).every(e => !e.term.includes(' ')));
 
+  
+  /* ── Verbs that only look like compounds ──────────────────
+   *
+   * obtener, mantener and prevenir really are tener and venir with something
+   * on the front, and deriving them means one irregular entry buys twenty.
+   * The rule reads spelling, though, and spelling lies: "subir" is not sub- on
+   * "ir", "mandar" is not man- on "dar". Those were being conjugated as the
+   * irregular verb they merely rhyme with, so every form matched nothing —
+   * "sube", "subo", "subió" all came back empty, and subir is inside the
+   * commonest five hundred words in the language.
+   *
+   * Both halves matter. A fix that rescued subir by abandoning the compound
+   * rule would cost twenty irregular verbs their conjugations, so the real
+   * compounds are asserted here too.
+   */
+  console.log('\nVerbs that only look like compounds\n');
+
+  [['sube', 'subir'], ['subo', 'subir'], ['subes', 'subir'], ['subió', 'subir'],
+   ['subía', 'subir'], ['subimos', 'subir'], ['subiendo', 'subir'],
+   ['manda', 'mandar'], ['mando', 'mandar'], ['mandó', 'mandar'],
+   ['suda', 'sudar']
+  ].forEach(function (p) {
+    var got = M.analyse(p[0]).map(function (a) { return a.lemma; });
+    check('“' + p[0] + '” is a form of ' + p[1], got.indexOf(p[1]) !== -1,
+      got.join(' | ') || 'nothing');
+  });
+
+  console.log('\n...and the ones that really are\n');
+
+  [['mantiene', 'mantener'], ['mantuvo', 'mantener'], ['obtiene', 'obtener'],
+   ['obtuve', 'obtener'], ['contiene', 'contener'], ['detuvo', 'detener'],
+   ['previene', 'prevenir'], ['convino', 'convenir'], ['sonríe', 'sonreír'],
+   ['prevé', 'prever'], ['predice', 'predecir']
+  ].forEach(function (p) {
+    var got = M.analyse(p[0]).map(function (a) { return a.lemma; });
+    check('“' + p[0] + '” is still a form of ' + p[1], got.indexOf(p[1]) !== -1,
+      got.join(' | ') || 'nothing');
+  });
+
   console.log(fail.length ? '\n' + fail.length + ' FAILED\n' : '\nAll checks passed.\n');
   process.exit(fail.length ? 1 : 0);
 })();
