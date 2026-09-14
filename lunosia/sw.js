@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'lunosia-v4';
+var CACHE = 'lunosia-v5';
 
 /* The dictionary is 1.5 MB and changes only when it is rebuilt, so it lives in
  * a cache of its own that deploys do not touch. In the single versioned cache

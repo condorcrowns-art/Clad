@@ -20,6 +20,12 @@ const fail = [];
 const check = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  - ' + x : '')); if (!c) fail.push(n); };
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
+/* One publisher id, asserted everywhere it appears. It is written two ways —
+ * "ca-pub-..." in the script tag and "pub-..." in ads.txt — and mixing them up
+ * is silent: the page loads, the file serves, and AdSense quietly treats the
+ * inventory as unauthorised. */
+const PUBLISHER = 'ca-pub-6431955508681504';
+
 const PAGES = fs.readdirSync(ROOT).filter(f => f.endsWith('.html'))
   .concat(fs.readdirSync(path.join(ROOT, 'guides')).map(f => 'guides/' + f));
 const SITE = 'https://lunosia.com/';
@@ -59,10 +65,14 @@ PAGES.forEach(page => {
     check(page + '  → ' + target + ' exists', fs.existsSync(path.resolve(dir, target)));
   });
 
-  // Placeholder publisher ids are how you get an AdSense application refused,
-  // and a half-wired ad script is worse than no ad script.
-  check(page + ' ships no ad script', html.indexOf('adsbygoogle') === -1);
-  check(page + ' has no XXXX placeholder left in it', !/ca-pub-X/.test(html));
+  // AdSense verifies ownership by finding this on every page, so a page that
+  // misses it fails verification silently — the site looks fine and the
+  // account never goes live.
+  check(page + ' carries the AdSense snippet', /adsbygoogle\.js\?client=ca-pub-/.test(html));
+  const pub = /client=(ca-pub-[0-9]+)/.exec(html);
+  check(page + '  with the right publisher id', pub && pub[1] === PUBLISHER,
+    pub ? pub[1] : 'none');
+  check(page + '  and no placeholder left in it', !/ca-pub-(X|YOUR)/i.test(html));
 });
 
 console.log('\n— What a crawler is told —\n');
@@ -87,6 +97,27 @@ PAGES.forEach(p => {
   const url = p === 'index.html' ? SITE : SITE + p.replace(/(^|\/)index\.html$/, '$1');
   check(p + ' is in the sitemap', locs.indexOf(url) !== -1, url);
 });
+
+console.log('\n— Advertising —\n');
+
+const adsTxt = read('ads.txt');
+check('ads.txt names the publisher without the ca- prefix',
+  adsTxt.indexOf(PUBLISHER.replace(/^ca-/, '') + ',') !== -1, adsTxt.trim());
+check('  and does not carry the ca- form by mistake',
+  adsTxt.indexOf('ca-pub-') === -1, adsTxt.trim());
+check('  with the DIRECT relationship and Google\'s certification id',
+  /,\s*DIRECT,\s*f08c47fec0942fa0/.test(adsTxt), adsTxt.trim());
+check('robots.txt does not block ads.txt', !/Disallow:\s*\/ads\.txt/.test(robots));
+
+// A privacy page that says nothing leaves the device, on a site that loads a
+// Google script on every page, is not a small inaccuracy — it is the kind that
+// gets an advertising account closed.
+const priv0 = read('privacy.html');
+check('the privacy page discloses the ad script', /AdSense/.test(priv0));
+check('  and no longer claims the app makes no request of its own',
+  !/no request the app makes on its own\.?<\/p>/.test(priv0));
+check('  and links somewhere the reader can opt out',
+  /myadcenter\.google\.com|policies\.google\.com\/technologies\/ads/.test(priv0));
 
 console.log('\n— The site is navigable —\n');
 
