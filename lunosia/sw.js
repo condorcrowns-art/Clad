@@ -6,7 +6,18 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'lunosia-v2';
+var CACHE = 'lunosia-v3';
+
+/* The dictionary is 1.5 MB and changes only when it is rebuilt, so it lives in
+ * a cache of its own that deploys do not touch. In the single versioned cache
+ * it was evicted on every release: a phone on mobile data paid for the whole
+ * thing again each time a comma moved in the CSS.
+ *
+ * It is served stale-while-revalidate — answered instantly from the cache, with
+ * a fresh copy fetched behind it — so it is still current a visit later without
+ * anyone waiting on a megabyte. */
+var DATA = 'lunosia-data-v1';
+var DICT = 'js/data/dict-es.json';
 
 var ASSETS = [
   './',
@@ -60,13 +71,25 @@ self.addEventListener('install', function (e) {
       .then(function (c) { return c.addAll(ASSETS); })
       .then(function () { return self.skipWaiting(); })
   );
+
+  /* Warm the dictionary too, but off to one side: the shell must not wait on a
+   * megabyte, and the word bank should not need a second visit before it works
+   * on a train. Skipped when a copy is already there, so this costs nothing
+   * after the first install. */
+  e.waitUntil(
+    caches.open(DATA).then(function (c) {
+      return c.match(DICT).then(function (hit) {
+        return hit ? null : c.add(DICT).catch(function () { /* offline: later */ });
+      });
+    })
+  );
 });
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys().then(function (keys) {
       return Promise.all(keys.map(function (k) {
-        return k === CACHE ? null : caches.delete(k);
+        return (k === CACHE || k === DATA) ? null : caches.delete(k);
       }));
     }).then(function () { return self.clients.claim(); })
   );
@@ -83,6 +106,27 @@ self.addEventListener('fetch', function (e) {
   // cached, which would freeze "no neural voice installed" in place forever —
   // including for the person who then goes and installs one.
   if (/\/tts(\/|$)/.test(url.pathname)) return;
+
+  // Nor the site's own API. GET /api/chat is the probe that decides whether the
+  // app claims an AI partner is available; cached, it would answer from a
+  // snapshot of whether the binding existed the day it was first asked.
+  if (/^\/api(\/|$)/.test(url.pathname)) return;
+
+  // The dictionary: answer from the kept cache at once, and refresh behind it.
+  if (url.pathname.indexOf(DICT) !== -1 && url.origin === location.origin) {
+    e.respondWith(
+      caches.open(DATA).then(function (c) {
+        return c.match(e.request).then(function (hit) {
+          var live = fetch(e.request).then(function (res) {
+            if (res && res.ok) c.put(e.request, res.clone());
+            return res;
+          }).catch(function () { return hit || Response.error(); });
+          return hit || live;
+        });
+      })
+    );
+    return;
+  }
 
   e.respondWith(
     caches.match(e.request).then(function (hit) {

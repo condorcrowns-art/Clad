@@ -211,6 +211,135 @@ function talk(scenarioId, turns) {
     r[0].correction && /tengo/.test(r[0].correction.fixed),
     r[0].correction && r[0].correction.fixed);
 
+  /* ── Ten turns of every scenario ──────────────────────────
+   *
+   * The sixty-day plan asks for conversations of about ten turns, and every
+   * script is four or five beats long, so most of a real conversation is spent
+   * past the end of the script. That is exactly the stretch nobody looks at
+   * while writing one.
+   *
+   * Playing it found the café asking "¿para tomar aquí o para llevar?" on two
+   * turns running: the greeting fell through to the repair line, which is that
+   * question, and then the order matched the beat, whose reply ends with the
+   * same question. Neither line is wrong. Saying both is, and no test that
+   * checked lines in isolation could see it.
+   */
+  console.log('\nTen turns of every scenario\n');
+
+  // Ordinary learner input: a greeting, a name, some right Spanish, some
+  // wrong, a question, a silence. Nothing tuned to any one script.
+  const TURNS = ['hola', 'me llamo Condo', 'soy de Irlanda', 'si, por favor',
+                 'quiero uno con leche', 'no entiendo', 'yo tiene dos hermano',
+                 'esta bien, gracias', 'y tu?', 'nada mas'];
+
+  const scenarios = ctx.LUNOSIA.data.es.scenarios;
+  let worstDup = null, worstRun = 0, dupCount = 0;
+
+  for (const sc of scenarios) {
+    const said = await talk(sc.id, TURNS);
+    const lines = said.map(r => r.es);
+
+    // The same question twice running is the failure people actually notice.
+    for (let i = 1; i < lines.length; i++) {
+      const q = a => { const m = String(a).split(/(?<=[.!?])\s+/).filter(Boolean);
+        for (let j = m.length - 1; j >= 0; j--) if (/\?/.test(m[j])) return m[j];
+        return ''; };
+      const now = q(lines[i]), prev = q(lines[i - 1]);
+      if (now && now === prev) { dupCount++; worstDup = sc.id + ' turn ' + (i + 1) + ': ' + now; }
+      if (lines[i] && lines[i] === lines[i - 1]) { dupCount++; worstDup = sc.id + ' turn ' + (i + 1) + ' repeats itself'; }
+    }
+
+    // And no single line carrying most of a conversation.
+    const counts = {};
+    lines.forEach(l => { counts[l] = (counts[l] || 0) + 1; });
+    const most = Math.max(...Object.values(counts));
+    if (most > worstRun) { worstRun = most; if (most > 3) worstDup = worstDup || (sc.id + ': one line used ' + most + ' times'); }
+
+    check(sc.id + ' holds ten turns without repeating itself',
+      !Object.values(counts).some(n => n > 3) &&
+      lines.every((l, i) => i === 0 || l !== lines[i - 1]),
+      lines.length !== TURNS.length ? 'only ' + lines.length + ' replies' : '');
+  }
+
+  check('nothing asks the same question twice running, anywhere',
+    dupCount === 0, worstDup || '');
+  check('no line carries more than three turns of any conversation',
+    worstRun <= 3, 'worst was ' + worstRun);
+
+  /* ── The partner's own Spanish ────────────────────────────
+   *
+   * Every line in here is read by someone learning the language, next to a
+   * checker telling them where their own ¿ should go. These lines were ASCII —
+   * "?Como te llamas?", "?Adonde vas?", "no te he oido" — because they were
+   * typed as regex neighbours rather than as Spanish, and no test looked at
+   * the strings a scripted reply is assembled from.
+   */
+  console.log('\nThe Spanish the partner speaks\n');
+
+  const brainSrc = fs.readFileSync(ROOT + '/js/brain.js', 'utf8');
+  const spanish = [];
+  // es: '…' and es: ['…', '…']
+  brainSrc.replace(/\bes:\s*'((?:[^'\\]|\\.)*)'/g, (_, v) => { spanish.push(v); return _; });
+  brainSrc.replace(/\bes:\s*\[([^\]]*)\]/g, (_, arr) => {
+    arr.replace(/'((?:[^'\\]|\\.)*)'/g, (__, v) => { spanish.push(v); return __; });
+    return _;
+  });
+  check('there is Spanish in here to check', spanish.length > 25, spanish.length + ' lines');
+
+  // An opening ¿ for every closing ?. This is the first rule the app teaches.
+  const noOpener = spanish.filter(l => /\?/.test(l) &&
+    (l.match(/\?/g) || []).length > (l.match(/¿/g) || []).length);
+  check('every question opens with ¿', noOpener.length === 0, noOpener.join(' | '));
+
+  const noBang = spanish.filter(l => /!/.test(l) &&
+    (l.match(/!/g) || []).length > (l.match(/¡/g) || []).length);
+  check('every exclamation opens with ¡', noBang.length === 0, noBang.join(' | '));
+
+  /* Accents, in the two places where a missing one is unambiguous.
+   *
+   * Not everywhere: "que" and "cual" are accented as question words and bare
+   * as relative pronouns, so "¿Cómo has dicho que te llamas?" is correct and
+   * a blunt word list calls it a bug. A checker that cries wolf on correct
+   * Spanish is the thing this project refuses to ship, in its tests too. */
+  const flat = l => l.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const unaccented = [];
+
+  // Opening a question: an interrogative straight after ¿ is always accented.
+  const INTERROGATIVE = ['como', 'cuando', 'cuanto', 'cuanta', 'cuantos', 'cuantas',
+    'donde', 'adonde', 'quien', 'quienes', 'que', 'cual', 'cuales'];
+  spanish.forEach(l => {
+    const m = /¿\s*([A-Za-zÀ-ÿ]+)/.exec(l);
+    if (m && INTERROGATIVE.indexOf(flat(m[1])) !== -1 && flat(m[1]) === m[1].toLowerCase())
+      unaccented.push(l + '  (opens with "' + m[1] + '")');
+  });
+
+  // And words with no unaccented spelling at all, anywhere in the line.
+  const ALWAYS = ['oido', 'ultima', 'ultimo', 'aqui', 'alli', 'tambien', 'despues',
+    'telefono', 'numero', 'facil', 'dificil', 'estacion', 'habitacion', 'direccion',
+    'perdon', 'adios', 'mas', 'esta bien'];
+  spanish.forEach(l => {
+    ALWAYS.forEach(w => {
+      if (w === 'mas' || w === 'esta bien') return;   // "mas" = but; "esta" = this
+      const re = new RegExp('(^|[\\s¿¡])' + w + '($|[\\s?!,.])', 'i');
+      if (re.test(l)) unaccented.push(l + '  (' + w + ')');
+    });
+  });
+
+  check('no word has lost its accent', unaccented.length === 0,
+    [...new Set(unaccented)].join(' | '));
+
+  // And the app's own checker, which is the judge it applies to the learner.
+  const G = ctx.LUNOSIA.grammar;
+  const flagged = [];
+  spanish.forEach(l => {
+    const plain = l.replace(/\{[^}]*\}/g, '').trim();
+    if (plain.length < 6) return;
+    const fixed = G.correct(plain);
+    if (fixed && fixed.fixed && fixed.fixed !== plain) flagged.push(plain + ' -> ' + fixed.fixed);
+  });
+  check('the checker passes the partner\'s own Spanish', flagged.length === 0,
+    flagged.slice(0, 4).join(' | '));
+
   console.log(fail.length ? '\n' + fail.length + ' FAILED\n' : '\nAll partner checks passed\n');
   process.exit(fail.length ? 1 : 0);
 })();

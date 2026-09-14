@@ -121,29 +121,60 @@ window.LUNOSIA = window.LUNOSIA || {};
   /* Sentences the recogniser clearly truncated. Matching a script beat against
    * "Me llamo" would answer a question the learner never finished asking, so
    * the scripted partner asks for the rest first - same rule the LLM follows. */
+  /* These are written in real Spanish — opening ¿, accents and all. They were
+   * ASCII once ("?Como te llamas?", "?Adonde vas?"), which is a thing to put in
+   * front of a learner only if you want them to copy it. An app that corrects
+   * your punctuation has to get its own right.
+   *
+   * Each carries a second phrasing. The recogniser truncates in runs — a noisy
+   * room does not get quieter between turns — and hearing the identical
+   * sentence twice is what makes someone put the phone down. */
   var CUT_OFF = [
-    { re: /\bme llamo$/i,        es: 'Perdona, no te he oido. ?Como te llamas?', en: "Sorry, I didn't catch that. What's your name?" },
-    { re: /\bse llama$/i,        es: '?Como se llama?',                          en: 'What is their name?' },
-    { re: /\bquiero(?: un| una)?$/i, es: '?Que quieres exactamente?',            en: 'What exactly would you like?' },
-    { re: /\bnecesito(?: un| una)?$/i, es: '?Que necesitas?',                    en: 'What do you need?' },
-    { re: /\bvoy a$/i,           es: '?Adonde vas?',                             en: 'Where are you going?' },
-    { re: /\b(soy|estoy)$/i,     es: 'Perdona, ?como dices?',                    en: 'Sorry, what was that?' },
+    { re: /\bme llamo$/i,
+      es: ['Perdona, no te he oído. ¿Cómo te llamas?', '¿Cómo has dicho que te llamas?'],
+      en: ["Sorry, I didn't catch that. What's your name?", 'What did you say your name was?'] },
+    { re: /\bse llama$/i,
+      es: ['¿Cómo se llama?', 'Perdona, ¿el nombre?'],
+      en: ['What is their name?', 'Sorry — the name?'] },
+    { re: /\bquiero(?: un| una)?$/i,
+      es: ['¿Qué quieres exactamente?', 'Dime, ¿qué te pongo?'],
+      en: ['What exactly would you like?', 'Go on — what can I get you?'] },
+    { re: /\bnecesito(?: un| una)?$/i,
+      es: ['¿Qué necesitas?', 'Perdona, ¿qué era lo que necesitabas?'],
+      en: ['What do you need?', 'Sorry, what was it you needed?'] },
+    { re: /\bvoy a$/i,
+      es: ['¿Adónde vas?', 'Perdona, ¿adónde has dicho?'],
+      en: ['Where are you going?', 'Sorry, where did you say?'] },
+    { re: /\b(soy|estoy)$/i,
+      es: ['Perdona, ¿cómo dices?', '¿Perdón? No te he cogido la última parte.'],
+      en: ['Sorry, what was that?', "Sorry? I didn't get the last part."] },
     { re: /\b(un|una|el|la|los|las|de|con|para|por|mi|tu|y|o|que|muy|mas)$/i,
-      es: 'Perdona, no te he oido bien. ?Me lo repites?',                         en: "Sorry, I didn't hear you properly. Could you say that again?" }
+      es: ['Perdona, no te he oído bien. ¿Me lo repites?', 'Se ha cortado. ¿Otra vez, desde el principio?'],
+      en: ["Sorry, I didn't hear you properly. Could you say that again?",
+           'That cut out. Again, from the start?'] }
   ];
 
-  function cutOffReply(text) {
+  function cutOffReply(text, ctx) {
     var t = String(text || '').trim().replace(/[.,!?\u00bf\u00a1]+$/, '');
     if (!t || t.split(/\s+/).length > 8) return null;   // a long sentence is not a fragment
     for (var i = 0; i < CUT_OFF.length; i++) {
-      if (CUT_OFF[i].re.test(t)) {
-        return {
-          es: CUT_OFF[i].es, en: CUT_OFF[i].en,
-          askedToRepeat: true,
-          correction: null,          // never correct what you did not hear
-          source: 'scripted'
-        };
+      if (!CUT_OFF[i].re.test(t)) continue;
+      var c = CUT_OFF[i];
+      // Pick the phrasing this one has not just used.
+      var recent = ((ctx && ctx.history) || []).slice(-4)
+        .filter(function (h) { return h.role === 'partner'; })
+        .map(function (h) { return String(h.text || ''); });
+      var k = 0;
+      for (var v = 0; v < c.es.length; v++) {
+        if (recent.indexOf(c.es[v]) === -1) { k = v; break; }
+        k = (v + 1) % c.es.length;
       }
+      return {
+        es: c.es[k], en: c.en[k],
+        askedToRepeat: true,
+        correction: null,          // never correct what you did not hear
+        source: 'scripted'
+      };
     }
     return null;
   }
@@ -191,6 +222,28 @@ window.LUNOSIA = window.LUNOSIA || {};
       if (/\?/.test(parts[i])) return parts[i];
     }
     return parts[parts.length - 1] || String(line || '');
+  }
+
+  /* Strip a trailing question the partner has already asked in the last few
+   * turns, so a scripted line cannot ask the same thing twice running. Returns
+   * the line unchanged when there is nothing to drop, and keeps it unchanged
+   * when the question is the whole line — saying it again is better than
+   * saying nothing. */
+  function dropRepeatedQuestion(say, ctx) {
+    var q = lastQuestion(say.es);
+    if (!/\?/.test(q)) return say;
+    var asked = false;
+    (ctx.history || []).slice(-6).forEach(function (h) {
+      if (h.role === 'partner' && h.text &&
+          normalise(lastQuestion(h.text)) === normalise(q)) asked = true;
+    });
+    if (!asked) return say;
+
+    var es = say.es.slice(0, say.es.lastIndexOf(q)).trim();
+    if (!es) return say;
+    var enQ = lastQuestion(say.en);
+    var en = /\?/.test(enQ) ? say.en.slice(0, say.en.lastIndexOf(enQ)).trim() : say.en;
+    return { es: es, en: en || say.en };
   }
 
   /* Something they actually said, handed back. Not comprehension — but
@@ -308,7 +361,7 @@ window.LUNOSIA = window.LUNOSIA || {};
     var sc = ctx.scenario;
     var st = ctx.scriptState || (ctx.scriptState = { used: [], fb: 0 });
 
-    var cut = cutOffReply(ctx.text);
+    var cut = cutOffReply(ctx.text, ctx);
     if (cut) return cut;
 
     // A bare greeting: greet back and put the scene's own question again,
@@ -385,8 +438,15 @@ window.LUNOSIA = window.LUNOSIA || {};
 
     if (best && bestIdx !== -1) {
       st.used.push(bestIdx);
+      // A beat can end on the question the partner has only just asked — the
+      // café answers an order with "Marchando. ¿Para tomar aquí o para
+      // llevar?", and its own repair line is that question alone, so a
+      // customer who is greeted before ordering gets asked twice running.
+      // Both lines are right; saying both is not. Drop the second asking and
+      // keep the part that actually responds.
+      var said = dropRepeatedQuestion(best.say, ctx);
       return {
-        es: best.say.es, en: best.say.en,
+        es: said.es, en: said.en,
         correction: correctOffline(ctx.text),
         source: 'scripted'
       };
@@ -412,10 +472,39 @@ window.LUNOSIA = window.LUNOSIA || {};
     // a queue; a waiter saying "cuéntame más" has left the café.
     var scene = (sc.more || []).concat(sc.fallback || []);
     var pool = scene.length ? scene : KEEP_GOING;
+
+    /* What has already been asked — from the conversation itself, not from a
+     * note this function kept about its own last choice.
+     *
+     * The old guard compared a candidate against the previous *fallback*, so it
+     * could not see a scripted beat at all. A beat that ends "¿para tomar aquí
+     * o para llevar?" followed by a continuation that ends the same way asked
+     * the customer the identical question twice running, which is the single
+     * thing that most makes a partner feel like a machine. Beats and
+     * continuations are the same thing to the person reading them, so compare
+     * against everything the partner has actually said. */
+    var saidLately = {};
+    (ctx.history || []).slice(-8).forEach(function (h) {
+      if (h.role === 'partner' && h.text) saidLately[normalise(lastQuestion(h.text))] = 1;
+    });
+    if (st.lastFb) saidLately[normalise(lastQuestion(st.lastFb))] = 1;
+
     var fb = null;
     for (var f = 0; f < pool.length; f++) {
       var cand = pool[(st.fb + f) % pool.length];
-      if (cand.es !== st.lastFb) { fb = cand; st.fb = (st.fb + f + 1) % pool.length; break; }
+      if (!saidLately[normalise(lastQuestion(cand.es))]) {
+        fb = cand; st.fb = (st.fb + f + 1) % pool.length; break;
+      }
+    }
+    // Every line in the pool has been used recently: take the oldest rather
+    // than repeat the one just said.
+    if (!fb) {
+      for (var g2 = 0; g2 < pool.length; g2++) {
+        var c2 = pool[(st.fb + g2) % pool.length];
+        if (normalise(lastQuestion(c2.es)) !== normalise(lastQuestion(st.lastFb || ''))) {
+          fb = c2; st.fb = (st.fb + g2 + 1) % pool.length; break;
+        }
+      }
     }
     if (!fb) fb = pool[0] || { es: 'Sigue, te escucho.', en: 'Go on, I am listening.' };
     st.lastFb = fb.es;
@@ -428,7 +517,16 @@ window.LUNOSIA = window.LUNOSIA || {};
     // Avoid the line about to be said as well as the last one: "¿La pregunta?
     // ¿Tiene alguna pregunta para nosotros?" is the echo tripping over the
     // reply it is introducing.
-    var echo = echoWord(ctx.text, fb.es + ' ' + ((lastSaid && lastSaid.text) || ''));
+    /* Only when the line it introduces has nothing of its own to ask.
+     *
+     * A generic "cuéntame más" is improved by opening with a word they just
+     * used. A scene line that already asks something is not: "¿El libro? ¿Con
+     * leche fría o caliente?" is two unrelated questions in a row, and reads
+     * as a fault rather than as listening. */
+    var generic = !scene.length || !/\?/.test(fb.es);
+    var echo = generic
+      ? echoWord(ctx.text, fb.es + ' ' + ((lastSaid && lastSaid.text) || ''))
+      : null;
     return {
       es: (echo ? '¿' + echo.word.charAt(0).toUpperCase() + echo.word.slice(1) + '? ' : '') + fb.es,
       en: (echo ? echo.lemma + '? ' : '') + fb.en,
