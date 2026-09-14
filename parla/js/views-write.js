@@ -1,4 +1,4 @@
-/* Parla — writing
+/* Lunosia — writing
  *
  * The app could talk, listen, read, drill and correct, and had nowhere to
  * *produce* Spanish in your own time. Speaking is production too, but it is
@@ -23,22 +23,22 @@
  *   not the same as "this is good Spanish". So the model answers are always
  *   there afterwards, and they are the part that covers what rules cannot.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   var LEVEL_NAME = { a1: 'Starting out', a2: 'Getting going', b1: 'Finding your feet' };
 
-  function doneOf(id) { return (PARLA.store.state.writing || {})[id] || null; }
+  function doneOf(id) { return (LUNOSIA.store.state.writing || {})[id] || null; }
 
   /* ── The list ─────────────────────────────────────────────*/
   function viewWrite() {
     init();
     var main = el('main');
-    var tasks = PARLA.data.es.writing || [];
+    var tasks = LUNOSIA.data.es.writing || [];
 
     main.appendChild(el('h1', 'Write'));
     main.appendChild(el('p.muted',
@@ -63,7 +63,7 @@ window.PARLA = window.PARLA || {};
       group.forEach(function (t) {
         var p = doneOf(t.id);
         list.appendChild(el('button.read-card' + (p ? '.read-done' : ''),
-          { onclick: function () { PARLA.app.go('task', { id: t.id }); } },
+          { onclick: function () { LUNOSIA.app.go('task', { id: t.id }); } },
           el('div.read-main',
             el('div.read-title.es', t.ask),
             el('div.read-blurb', t.en),
@@ -81,19 +81,19 @@ window.PARLA = window.PARLA || {};
   /* ── One task ─────────────────────────────────────────────*/
   function viewTask(params) {
     init();
-    var t = (PARLA.data.es.writingById || {})[(params || {}).id];
+    var t = (LUNOSIA.data.es.writingById || {})[(params || {}).id];
     var main = el('main');
 
     if (!t) {
       main.appendChild(ui.empty('✍️', 'No such task',
         'It may have been renamed. Pick one from the list.'));
       main.appendChild(el('div.btn-row',
-        el('button.primary', { onclick: function () { PARLA.app.go('write'); } }, 'Back to the list')));
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('write'); } }, 'Back to the list')));
       return main;
     }
 
     main.appendChild(el('div.crumb',
-      el('button.ghost.small-btn', { onclick: function () { PARLA.app.go('write'); } }, '← Write'),
+      el('button.ghost.small-btn', { onclick: function () { LUNOSIA.app.go('write'); } }, '← Write'),
       ui.levelTag(t.level)));
     main.appendChild(el('div.card.write-ask',
       el('div.row',
@@ -149,9 +149,9 @@ window.PARLA = window.PARLA || {};
     function check() {
       var text = box.value.trim();
       if (!text) { ui.toast('Write something first.', 'bad'); return; }
-      if (!PARLA.grammar || !PARLA.grammar.ready()) {
+      if (!LUNOSIA.grammar || !LUNOSIA.grammar.ready()) {
         ui.toast('The dictionary is still loading — try again in a moment.', 'bad');
-        PARLA.dict.load();
+        LUNOSIA.dict.load();
         return;
       }
 
@@ -164,8 +164,8 @@ window.PARLA = window.PARLA || {};
       var list = el('div.stack');
 
       lines.forEach(function (line) {
-        var fix = PARLA.brain.correctOffline(line);
-        if (!fix || PARLA.brain.normalise(fix.fixed) === PARLA.brain.normalise(line)) {
+        var fix = LUNOSIA.brain.correctOffline(line);
+        if (!fix || LUNOSIA.brain.normalise(fix.fixed) === LUNOSIA.brain.normalise(line)) {
           list.appendChild(el('div.write-line.ok',
             el('div.es', line),
             el('div.small.faint', 'No rule fired on this one.')));
@@ -175,7 +175,7 @@ window.PARLA = window.PARLA || {};
         // Straight into the fix queue: a mistake you made writing is worth
         // exactly as much as one you made speaking, and this is the machinery
         // that brings it back.
-        PARLA.store.rememberMistake({
+        LUNOSIA.store.rememberMistake({
           es: line, fix: fix.fixed, note: fix.note || '',
           topic: (fix.topics && fix.topics[0]) || fix.topic || null,
           from: 'writing', scenario: t.id
@@ -184,7 +184,7 @@ window.PARLA = window.PARLA || {};
           el('div.es.write-was', line),
           el('div.es.write-now', fix.fixed),
           el('div.small.muted', fix.note || ''),
-          fix.topics && fix.topics.length && PARLA.data.es.grammarByTopic
+          fix.topics && fix.topics.length && LUNOSIA.data.es.grammarByTopic
             ? lessonLink(fix.topics[0])
             : null));
       });
@@ -204,17 +204,17 @@ window.PARLA = window.PARLA || {};
               'Spanish”. The rules check agreement, person, ser against estar — not ' +
               'whether anyone would say it this way. The answer below is for that part.'))));
 
-      PARLA.store.markWritten(t.id, caught);
+      LUNOSIA.store.markWritten(t.id, caught);
       reveal(false);
       out.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
 
     function lessonLink(topic) {
-      var lesson = PARLA.data.es.grammarByTopic[topic];
+      var lesson = LUNOSIA.data.es.grammarByTopic[topic];
       if (!lesson) return null;
       return el('div.btn-row', { style: { marginTop: '6px' } },
         el('button.tiny-btn', {
-          onclick: function () { PARLA.app.go('lesson', { id: lesson.id }); }
+          onclick: function () { LUNOSIA.app.go('lesson', { id: lesson.id }); }
         }, '📐 ' + lesson.title));
     }
 
@@ -232,19 +232,19 @@ window.PARLA = window.PARLA || {};
       });
       out.appendChild(models);
       out.appendChild(el('div.btn-row', { style: { marginTop: '14px' } },
-        el('button.primary', { onclick: function () { PARLA.app.go('write'); } }, 'Another one'),
-        el('button', { onclick: function () { PARLA.app.go('review'); } }, 'Review')));
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('write'); } }, 'Another one'),
+        el('button', { onclick: function () { LUNOSIA.app.go('review'); } }, 'Review')));
       if (alone) out.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
 
     // The dictionary is what the checker runs on, so start it arriving now
     // rather than when the reader presses the button.
-    if (PARLA.dict && !PARLA.dict.ready()) PARLA.dict.load();
+    if (LUNOSIA.dict && !LUNOSIA.dict.ready()) LUNOSIA.dict.load();
 
     return main;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.write = viewWrite;
-  PARLA.views.task = viewTask;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.write = viewWrite;
+  LUNOSIA.views.task = viewTask;
 })();

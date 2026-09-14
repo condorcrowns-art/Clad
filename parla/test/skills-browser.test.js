@@ -26,8 +26,8 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   await page.fill('.onboard input[type=text]', 'Condo');
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(400);
-  await page.evaluate(() => { PARLA.ui.say = function () {}; PARLA.speech.speak = function () {}; });
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => { LUNOSIA.ui.say = function () {}; LUNOSIA.speech.speak = function () {}; });
+  await page.evaluate(() => LUNOSIA.dict.load());
 
   console.log('Before you have done anything\n');
   await goTo(page, 'progress');
@@ -45,7 +45,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
 
   console.log('\nOnce there is a pattern\n');
   await page.evaluate(() => {
-    const s = PARLA.store;
+    const s = LUNOSIA.store;
     s.state.progress.totals.sessions = 12;
     s.state.progress.totals.minutes = 84;
     s.markRead('perro', 3, 3); s.markRead('autobus', 2, 3); s.markRead('cocina', 3, 3);
@@ -84,8 +84,8 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   await page.evaluate(() => {
     // Six written tasks: writing is no longer the neglected one.
     ['presentarse','familia','gustos','rutina','casa','comida']
-      .forEach(id => PARLA.store.markWritten(id, 0));
-    PARLA.store.save();
+      .forEach(id => LUNOSIA.store.markWritten(id, 0));
+    LUNOSIA.store.save();
   });
   await goTo(page, 'progress');
   await page.waitForTimeout(500);

@@ -1,15 +1,22 @@
-/* Parla — persistence
+/* Lunosia — persistence
  *
  * Everything lives in localStorage under one key. No account, no server, no
  * telemetry: your progress never leaves your machine. Export/import exists so
  * you can move it between browsers yourself.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
 
-  var KEY = 'parla.save.v1';
+  var KEY = 'lunosia.save.v1';
+
+  /* The app was called Parla until the rename. Anyone who used it before that
+   * has their whole save — words, streak, every review card — under the old
+   * key, and renaming without looking there would have silently wiped it. Read
+   * it once, write it back under the new name, and delete the old one. */
+  var OLD_KEY = 'parla.save.v1';
+
   var SCHEMA = 1;
 
   function defaults() {
@@ -119,11 +126,18 @@ window.PARLA = window.PARLA || {};
     var base = defaults();
     try {
       var raw = localStorage.getItem(KEY);
+      if (!raw) {
+        raw = localStorage.getItem(OLD_KEY);
+        if (raw) {
+          localStorage.setItem(KEY, raw);
+          localStorage.removeItem(OLD_KEY);
+        }
+      }
       if (raw) merge(base, JSON.parse(raw));
     } catch (e) {
       // Corrupt or unavailable storage (private mode, cleared data) — start fresh
       // rather than leaving the app in a broken state.
-      console.warn('Parla: could not read save, starting fresh.', e);
+      console.warn('Lunosia: could not read save, starting fresh.', e);
     }
     state = base;
     return state;
@@ -134,7 +148,7 @@ window.PARLA = window.PARLA || {};
       localStorage.setItem(KEY, JSON.stringify(state));
       return true;
     } catch (e) {
-      console.warn('Parla: could not write save.', e);
+      console.warn('Lunosia: could not write save.', e);
       return false;
     }
   }
@@ -271,7 +285,7 @@ window.PARLA = window.PARLA || {};
 
     // Schedule it. A fresh card is due immediately, which is the point.
     state.srs = state.srs || {};
-    if (!state.srs[key]) state.srs[key] = PARLA.srs.fresh ? PARLA.srs.fresh() : null;
+    if (!state.srs[key]) state.srs[key] = LUNOSIA.srs.fresh ? LUNOSIA.srs.fresh() : null;
     if (!state.srs[key]) {
       state.srs[key] = { reps: 0, interval: 0, ease: 2.3, due: Date.now(), lapses: 0 };
     } else {
@@ -296,7 +310,7 @@ window.PARLA = window.PARLA || {};
 
   function gradeMistake(m, ok) {
     var key = mistakeKey(m);
-    state.srs[key] = PARLA.srs.grade(state.srs[key], ok ? 4 : 1);
+    state.srs[key] = LUNOSIA.srs.grade(state.srs[key], ok ? 4 : 1);
     state.progress.totals.reviews++;
     save();
   }
@@ -368,12 +382,12 @@ window.PARLA = window.PARLA || {};
   function mergeJSON(text) {
     var incoming = typeof text === 'string' ? JSON.parse(text) : text;
     if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
-      throw new Error('not a Parla save');
+      throw new Error('not a Lunosia save');
     }
     // A file with none of these is not a save, and importing it would quietly
     // do nothing while reporting success.
     if (!incoming.progress && !incoming.srs && !incoming.phrases) {
-      throw new Error('not a Parla save');
+      throw new Error('not a Lunosia save');
     }
     var got = { words: 0, mistakes: 0, cards: 0, texts: 0, days: 0, sessions: 0 };
 
@@ -536,7 +550,7 @@ window.PARLA = window.PARLA || {};
     return { level: n, into: xp - floor, need: ceil - floor };
   }
 
-  PARLA.store = {
+  LUNOSIA.store = {
     load: load,
     save: save,
     get state() { return state; },

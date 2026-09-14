@@ -1,4 +1,4 @@
-/* Parla — pronunciation
+/* Lunosia — pronunciation
  *
  * The speaking drill used to say "Heard: pero — expected perro", which tells
  * you what you already knew. What you need is the next sentence: *your rr came
@@ -9,33 +9,33 @@
  *   Hear it   two words that differ in one sound; pick the one you heard
  *   Say it    say a word, and be told which sound broke, not just that one did
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   var COST = { high: 'Worth fixing first', medium: 'Worth fixing', low: 'Polish' };
 
   function scoreOf(id) {
-    var s = (PARLA.store.state.sounds || {})[id];
+    var s = (LUNOSIA.store.state.sounds || {})[id];
     if (!s || !s.tries) return null;
     return Math.round(s.ok * 100 / s.tries);
   }
 
   function record(id, ok) {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var all = st.sounds || (st.sounds = {});
     var s = all[id] || (all[id] = { tries: 0, ok: 0 });
     s.tries++;
     if (ok) s.ok++;
-    PARLA.store.save();
+    LUNOSIA.store.save();
   }
 
   /* Sounds the app has actually caught you missing, most missed first. */
   function troubled() {
-    var all = PARLA.store.state.sounds || {};
+    var all = LUNOSIA.store.state.sounds || {};
     return Object.keys(all)
       .filter(function (id) { return all[id].tries >= 3 && all[id].ok / all[id].tries < 0.7; })
       .sort(function (a, b) {
@@ -47,7 +47,7 @@ window.PARLA = window.PARLA || {};
   function viewSay() {
     init();
     var main = el('main');
-    var sounds = PARLA.data.es.sounds;
+    var sounds = LUNOSIA.data.es.sounds;
     var weak = troubled();
 
     main.appendChild(el('h1', 'Sounds'));
@@ -60,7 +60,7 @@ window.PARLA = window.PARLA || {};
       main.appendChild(ui.sectionTitle('Yours to fix'));
       var mine = el('div.stack');
       weak.slice(0, 3).forEach(function (id) {
-        var s = PARLA.data.es.soundsById[id];
+        var s = LUNOSIA.data.es.soundsById[id];
         if (s) mine.appendChild(card(s));
       });
       main.appendChild(mine);
@@ -73,7 +73,7 @@ window.PARLA = window.PARLA || {};
 
     function card(s) {
       var pct = scoreOf(s.id);
-      return el('button.sound-card', { onclick: function () { PARLA.app.go('sound', { id: s.id }); } },
+      return el('button.sound-card', { onclick: function () { LUNOSIA.app.go('sound', { id: s.id }); } },
         el('div.sound-symbol.es', s.symbol),
         el('div.sound-main',
           el('div.sound-title', s.title),
@@ -88,13 +88,13 @@ window.PARLA = window.PARLA || {};
   /* ── One sound ────────────────────────────────────────────*/
   function viewSound(params) {
     init();
-    var st = PARLA.store.state;
-    var s = PARLA.data.es.soundsById[(params && params.id)] || PARLA.data.es.sounds[0];
-    var P = PARLA.phon;
+    var st = LUNOSIA.store.state;
+    var s = LUNOSIA.data.es.soundsById[(params && params.id)] || LUNOSIA.data.es.sounds[0];
+    var P = LUNOSIA.phon;
     var main = el('main');
 
     main.appendChild(el('div.row', { style: { marginBottom: '6px' } },
-      el('button.ghost', { onclick: function () { PARLA.app.go('say'); } }, '← Sounds'),
+      el('button.ghost', { onclick: function () { LUNOSIA.app.go('say'); } }, '← Sounds'),
       el('div.spacer'),
       (function () { var p = scoreOf(s.id); return p != null ? el('span.chip', p + '%') : null; })()));
 
@@ -216,7 +216,7 @@ window.PARLA = window.PARLA || {};
 
         micBtn.onclick = function () {
           if (listening) { listening.stop(); return; }
-          if (!PARLA.speech.supported) {
+          if (!LUNOSIA.speech.supported) {
             ui.clear(verdict);
             verdict.appendChild(ui.banner('warn',
               'This browser has no speech recognition. Chrome, Edge or Safari, over ' +
@@ -225,14 +225,14 @@ window.PARLA = window.PARLA || {};
           }
           micBtn.textContent = '⏹ Listening…';
           ui.clear(verdict);
-          listening = PARLA.speech.listen({
+          listening = LUNOSIA.speech.listen({
             lang: 'es', silenceMs: 900,
             onpartial: function (t) { verdict.textContent = t; },
             onfinal: function (heard, conf, alts) { judge(word, heard, alts, verdict); },
             onerror: function (k) {
               ui.clear(verdict);
-              verdict.appendChild(el('div.answer-state.no', PARLA.speech.micError
-                ? PARLA.speech.micError(k) : ('Microphone: ' + k)));
+              verdict.appendChild(el('div.answer-state.no', LUNOSIA.speech.micError
+                ? LUNOSIA.speech.micError(k) : ('Microphone: ' + k)));
             },
             onend: function () { listening = null; micBtn.textContent = '🎙 Say it'; }
           });
@@ -241,9 +241,9 @@ window.PARLA = window.PARLA || {};
         box.appendChild(el('div.btn-row', { style: { justifyContent: 'center', marginTop: '10px' } },
           ui.speakBtn(word, '🔊 Hear it'),
           el('button', { onclick: function () {
-            PARLA.speech.speak(word, { lang: 'es', rate: 0.55,
-              voiceRoles: PARLA.store.state.settings.voiceRoles,
-              pitchScale: PARLA.store.state.settings.voicePitch });
+            LUNOSIA.speech.speak(word, { lang: 'es', rate: 0.55,
+              voiceRoles: LUNOSIA.store.state.settings.voiceRoles,
+              pitchScale: LUNOSIA.store.state.settings.voicePitch });
           } }, '🐢 Slower'),
           el('button', { onclick: function () { i++; draw(); } }, 'Skip →')));
         box.appendChild(micBtn);
@@ -278,10 +278,10 @@ window.PARLA = window.PARLA || {};
             el('div', el('span.small.faint', 'came out '), el('span.say-ipa-inline.no', '/' + best.gotIpa + '/'))));
 
           /* The diagnosis. This is the whole point of the screen. */
-          var named = best.problems.filter(function (pr) { return PARLA.data.es.soundsById[pr.sound]; });
+          var named = best.problems.filter(function (pr) { return LUNOSIA.data.es.soundsById[pr.sound]; });
           if (named.length) {
             named.slice(0, 2).forEach(function (pr) {
-              var sd = PARLA.data.es.soundsById[pr.sound];
+              var sd = LUNOSIA.data.es.soundsById[pr.sound];
               out.appendChild(el('div.diagnosis',
                 el('div.row',
                   el('span.sound-symbol.es', sd.symbol),
@@ -290,7 +290,7 @@ window.PARLA = window.PARLA || {};
                     el('div.small.muted', sd.mouth))),
                 sd.id !== s.id
                   ? el('button.ghost.small-btn', { style: { marginTop: '6px' },
-                      onclick: function () { PARLA.app.go('sound', { id: sd.id }); } },
+                      onclick: function () { LUNOSIA.app.go('sound', { id: sd.id }); } },
                       'Work on ' + sd.title.toLowerCase() + ' →')
                   : null));
             });
@@ -316,7 +316,7 @@ window.PARLA = window.PARLA || {};
     }
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.say = viewSay;
-  PARLA.views.sound = viewSound;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.say = viewSay;
+  LUNOSIA.views.sound = viewSound;
 })();

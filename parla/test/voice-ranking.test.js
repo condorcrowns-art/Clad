@@ -27,7 +27,7 @@ const voices = [
 vm.runInContext('__voices = ' + JSON.stringify(voices) + ';', ctx);
 vm.runInContext('speechSynthesis.onvoiceschanged && speechSynthesis.onvoiceschanged();', ctx);
 
-const S = ctx.PARLA.speech;
+const S = ctx.LUNOSIA.speech;
 // force a refresh now that voices exist
 const list = S.voicesFor('es');
 

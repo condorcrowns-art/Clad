@@ -1,4 +1,4 @@
-/* Parla — fix it again
+/* Lunosia — fix it again
  *
  * The screen that makes a correction worth something. Every mistake the app has
  * caught — from the grammar checker, from the conversation partner, from a
@@ -10,12 +10,12 @@
  * nothing on its own; being corrected and then made to produce the right
  * version, days later, from memory, is the whole mechanism.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   function norm(s) {
     return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -24,12 +24,12 @@ window.PARLA = window.PARLA || {};
 
   function viewFix() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
-    var queue = PARLA.store.dueMistakes(20);
+    var queue = LUNOSIA.store.dueMistakes(20);
 
     main.appendChild(el('div.row', { style: { marginBottom: '6px' } },
-      el('button.ghost', { onclick: function () { PARLA.app.go('review'); } }, '← Review'),
+      el('button.ghost', { onclick: function () { LUNOSIA.app.go('review'); } }, '← Review'),
       el('div.spacer')));
 
     if (!queue.length) {
@@ -43,7 +43,7 @@ window.PARLA = window.PARLA || {};
           : 'Have a conversation. Anything the checker or your partner corrects lands ' +
             'here, and comes back until you can produce it yourself.'));
       main.appendChild(el('div.btn-row', { style: { justifyContent: 'center' } },
-        el('button.primary', { onclick: function () { PARLA.app.go('scenarios'); } }, 'Go talk')));
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('scenarios'); } }, 'Go talk')));
       return main;
     }
 
@@ -64,10 +64,10 @@ window.PARLA = window.PARLA || {};
           ? 'Every one. These are not your mistakes any more.'
           : 'The ones you missed come back tomorrow.'),
         el('div.btn-row', { style: { justifyContent: 'center', marginTop: '14px' } },
-          el('button.primary', { onclick: function () { PARLA.app.go('scenarios'); } }, 'Go talk'),
-          el('button', { onclick: function () { PARLA.app.go('review'); } }, 'Review words'))));
-      PARLA.store.creditDay(queue.length * 4);
-      PARLA.store.save();
+          el('button.primary', { onclick: function () { LUNOSIA.app.go('scenarios'); } }, 'Go talk'),
+          el('button', { onclick: function () { LUNOSIA.app.go('review'); } }, 'Review words'))));
+      LUNOSIA.store.creditDay(queue.length * 4);
+      LUNOSIA.store.save();
     }
 
     function draw() {
@@ -101,14 +101,14 @@ window.PARLA = window.PARLA || {};
         if (ok) right++;
         state.className = 'answer-state ' + (ok ? 'ok' : 'no');
         state.textContent = ok ? '✓ ' + m.fix : '✗ ' + m.fix;
-        PARLA.store.gradeMistake(m, ok);
+        LUNOSIA.store.gradeMistake(m, ok);
 
         if (m.note) card.appendChild(el('div.hint', { style: { marginTop: '8px' } }, m.note));
-        if (m.topic && PARLA.data.es.grammarByTopic[m.topic]) {
-          var lesson = PARLA.data.es.grammarByTopic[m.topic];
+        if (m.topic && LUNOSIA.data.es.grammarByTopic[m.topic]) {
+          var lesson = LUNOSIA.data.es.grammarByTopic[m.topic];
           card.appendChild(el('div.btn-row', { style: { marginTop: '8px' } },
             el('button.ghost', {
-              onclick: function () { PARLA.app.go('lesson', { id: lesson.id }); }
+              onclick: function () { LUNOSIA.app.go('lesson', { id: lesson.id }); }
             }, '📖 ' + lesson.title)));
         }
         card.appendChild(el('div.btn-row', { style: { marginTop: '10px' } },
@@ -141,6 +141,6 @@ window.PARLA = window.PARLA || {};
     return main;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.fix = viewFix;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.fix = viewFix;
 })();

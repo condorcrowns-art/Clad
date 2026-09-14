@@ -9,8 +9,8 @@ const ctx = makeSandbox();
 vm.runInContext('globalThis.fetch = function(){ return Promise.reject(new Error("no network")); };', ctx);
 load(ctx, 'js/data/vocab-es.js', 'js/data/verbs-es.js', 'js/data/scenarios-es.js', 'js/brain.js');
 
-const B = ctx.PARLA.brain;
-const sc = ctx.PARLA.data.es.scenarios[0];
+const B = ctx.LUNOSIA.brain;
+const sc = ctx.LUNOSIA.data.es.scenarios[0];
 const settings = { brain: 'scripted', correctionStyle: 'gentle', level: 'a1' };
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};

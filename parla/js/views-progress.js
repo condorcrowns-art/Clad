@@ -1,10 +1,10 @@
-/* Parla — home, the 60-day challenge, stats, mistakes and settings */
-window.PARLA = window.PARLA || {};
+/* Lunosia — home, the 60-day challenge, stats, mistakes and settings */
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   /* ── Onboarding ─────────────────────────────────────────── */
 
@@ -12,12 +12,12 @@ window.PARLA = window.PARLA || {};
 
   function viewOnboard() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var draft = { name: '', level: 'a1', avatar: COLOURS[0] };
 
     var wrap = el('div.onboard');
     wrap.appendChild(el('div.logo', '🗣️'));
-    wrap.appendChild(el('h1.center', 'Parla'));
+    wrap.appendChild(el('h1.center', 'Lunosia'));
     wrap.appendChild(el('p.center.muted',
       'Learn Spanish the only way that actually works: by opening your mouth. ' +
       'Free, private, and yours forever.'));
@@ -60,8 +60,8 @@ window.PARLA = window.PARLA || {};
         st.profile.level = draft.level;
         st.profile.avatar = draft.avatar;
         st.profile.created = Date.now();
-        PARLA.store.save();
-        PARLA.app.go('home');
+        LUNOSIA.store.save();
+        LUNOSIA.app.go('home');
       }
     }, 'Start talking'));
 
@@ -78,21 +78,21 @@ window.PARLA = window.PARLA || {};
 
   function viewHome() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
-    var challenge = PARLA.data.es.challenge;
+    var challenge = LUNOSIA.data.es.challenge;
     var day = Math.min(st.progress.challengeDay, challenge.length - 1);
     var d = challenge[day];
-    var doneToday = st.progress.lastDay === PARLA.store.today();
+    var doneToday = st.progress.lastDay === LUNOSIA.store.today();
 
     var hour = new Date().getHours();
     var greet = hour < 12 ? 'Buenos días' : (hour < 20 ? 'Buenas tardes' : 'Buenas noches');
 
     // A painted wall to open on. Decorative and optional - without decor.js the
     // greeting simply stands on its own, which is what it did before.
-    if (PARLA.decor) {
+    if (LUNOSIA.decor) {
       var streak = st.progress.streak;
-      main.appendChild(PARLA.decor.mural(
+      main.appendChild(LUNOSIA.decor.mural(
         greet + ', ' + (st.profile.name || 'amigo'),
         doneToday
           ? 'You have already practised today — anything more is a bonus.'
@@ -101,9 +101,9 @@ window.PARLA = window.PARLA || {};
       ));
     }
 
-    main.appendChild(el('h1', { class: PARLA.decor ? 'sr-head' : '' },
+    main.appendChild(el('h1', { class: LUNOSIA.decor ? 'sr-head' : '' },
       greet + ', ' + (st.profile.name || 'amigo') + '.'));
-    if (!PARLA.decor) {
+    if (!LUNOSIA.decor) {
       main.appendChild(el('p.muted', doneToday
         ? 'You have already practised today — anything more is a bonus.'
         : 'You have not spoken Spanish yet today.'));
@@ -122,7 +122,7 @@ window.PARLA = window.PARLA || {};
       el('h2', { style: { marginTop: '10px' } }, d[0]),
       el('p.muted', d[1]),
       el('button.primary.big.wide', {
-        onclick: function () { PARLA.app.go('talk', { id: d[3], day: day }); }
+        onclick: function () { LUNOSIA.app.go('talk', { id: d[3], day: day }); }
       }, doneToday ? 'Practise again' : 'Start day ' + (day + 1))
     );
     var second = secondCard(d);
@@ -133,39 +133,39 @@ window.PARLA = window.PARLA || {};
     main.appendChild(card);
 
     /* quick actions */
-    var keys = PARLA.data.es.vocab.map(function (v) { return v[0]; });
-    var s = PARLA.srs.stats(keys, st.srs);
+    var keys = LUNOSIA.data.es.vocab.map(function (v) { return v[0]; });
+    var s = LUNOSIA.srs.stats(keys, st.srs);
     var due = s.due + Math.min(12, s.fresh);
 
     main.appendChild(ui.sectionTitle('Quick practice'));
     main.appendChild(el('div.grid.three',
-      quick('💬', 'Free talk', 'Any scenario', function () { PARLA.app.go('scenarios'); }),
+      quick('💬', 'Free talk', 'Any scenario', function () { LUNOSIA.app.go('scenarios'); }),
       quick('🔁', 'Review words', due + ' card' + (due === 1 ? '' : 's') + ' waiting',
-        function () { PARLA.app.go('review'); }),
-      quick('🧩', 'Drill verbs', 'Conjugation trainer', function () { PARLA.app.go('conjugate'); }),
-      quick('📖', 'Read a story', readBlurb(), function () { PARLA.app.go('read'); }),
+        function () { LUNOSIA.app.go('review'); }),
+      quick('🧩', 'Drill verbs', 'Conjugation trainer', function () { LUNOSIA.app.go('conjugate'); }),
+      quick('📖', 'Read a story', readBlurb(), function () { LUNOSIA.app.go('read'); }),
       quick('🎧', 'Listen', hearBlurb(), function () {
         // Straight into the next one you have not heard. A tile called Listen
         // that lands you on a list is a tile that lied.
-        var next = (PARLA.data.es.reading || []).filter(function (t) {
-          return !((PARLA.store.state.reading || {})[t.id] || {}).heardAsked;
+        var next = (LUNOSIA.data.es.reading || []).filter(function (t) {
+          return !((LUNOSIA.store.state.reading || {})[t.id] || {}).heardAsked;
         })[0];
-        PARLA.app.go(next ? 'listen' : 'read', next ? { id: next.id } : null);
+        LUNOSIA.app.go(next ? 'listen' : 'read', next ? { id: next.id } : null);
       }),
-      quick('✍️', 'Write something', writeBlurb(), function () { PARLA.app.go('write'); }),
-      quick('🎮', 'Play a game', 'Four minutes', function () { PARLA.app.go('games'); }),
-      quick('📚', 'Word bank', dictBlurb(), function () { PARLA.app.go('words'); }),
-      quick('📐', 'Grammar', grammarBlurb(), function () { PARLA.app.go('grammar'); }),
-      quick('👄', 'Sounds', soundsBlurb(), function () { PARLA.app.go('say'); }),
-      quick('🔎', 'Look something up', 'Any word, any form', function () { PARLA.app.go('coach'); })
+      quick('✍️', 'Write something', writeBlurb(), function () { LUNOSIA.app.go('write'); }),
+      quick('🎮', 'Play a game', 'Four minutes', function () { LUNOSIA.app.go('games'); }),
+      quick('📚', 'Word bank', dictBlurb(), function () { LUNOSIA.app.go('words'); }),
+      quick('📐', 'Grammar', grammarBlurb(), function () { LUNOSIA.app.go('grammar'); }),
+      quick('👄', 'Sounds', soundsBlurb(), function () { LUNOSIA.app.go('say'); }),
+      quick('🔎', 'Look something up', 'Any word, any form', function () { LUNOSIA.app.go('coach'); })
     ));
 
     /* The mistakes that are due. This is the highest-value thing on the screen
      * when it is here, so it goes above everything except the day's task. */
-    var dueFix = PARLA.store.dueMistakes(50);
+    var dueFix = LUNOSIA.store.dueMistakes(50);
     if (dueFix.length) {
       main.appendChild(el('button.fix-banner', {
-        onclick: function () { PARLA.app.go('fix'); }
+        onclick: function () { LUNOSIA.app.go('fix'); }
       },
         el('div.row',
           el('span.fix-emoji', '🎯'),
@@ -179,7 +179,7 @@ window.PARLA = window.PARLA || {};
     }
 
     /* at a glance */
-    var lp = PARLA.store.levelProgress();
+    var lp = LUNOSIA.store.levelProgress();
     main.appendChild(ui.sectionTitle('Where you are'));
     main.appendChild(el('div.card',
       el('div.row',
@@ -200,7 +200,7 @@ window.PARLA = window.PARLA || {};
 
     if (st.mistakes.length) {
       main.appendChild(ui.sectionTitle('Last thing you got wrong',
-        el('button.ghost', { onclick: function () { PARLA.app.go('mistakes'); } }, 'All →')));
+        el('button.ghost', { onclick: function () { LUNOSIA.app.go('mistakes'); } }, 'All →')));
       var m = st.mistakes[0];
       main.appendChild(el('div.mistake',
         el('div.was', m.es), el('div.now.es', m.fix),
@@ -234,8 +234,8 @@ window.PARLA = window.PARLA || {};
     var pair = day && day[5];
     if (!pair) return null;
     var kind = pair[0], id = pair[1];
-    var d = PARLA.data.es;
-    var st = PARLA.store.state;
+    var d = LUNOSIA.data.es;
+    var st = LUNOSIA.store.state;
 
     if (kind === 'read' || kind === 'listen') {
       var text = (d.readingById || {})[id];
@@ -247,7 +247,7 @@ window.PARLA = window.PARLA || {};
         title: text.title,
         sub: text.minutes + ' min · ' + text.blurb,
         done: kind === 'read' ? !!r.asked : !!r.heardAsked,
-        go: function () { PARLA.app.go(kind === 'read' ? 'text' : 'listen', { id: id }); }
+        go: function () { LUNOSIA.app.go(kind === 'read' ? 'text' : 'listen', { id: id }); }
       };
     }
     if (kind === 'write') {
@@ -257,7 +257,7 @@ window.PARLA = window.PARLA || {};
         kind: kind, icon: '✍️', what: 'Write',
         title: task.ask, sub: task.en,
         done: !!(st.writing || {})[id],
-        go: function () { PARLA.app.go('task', { id: id }); }
+        go: function () { LUNOSIA.app.go('task', { id: id }); }
       };
     }
     if (kind === 'sound') {
@@ -268,7 +268,7 @@ window.PARLA = window.PARLA || {};
         kind: kind, icon: '👄', what: 'Work on a sound',
         title: snd.title, sub: snd.letters,
         done: !!(sc && sc.tries >= 4),
-        go: function () { PARLA.app.go('sound', { id: id }); }
+        go: function () { LUNOSIA.app.go('sound', { id: id }); }
       };
     }
     if (kind === 'lesson') {
@@ -279,7 +279,7 @@ window.PARLA = window.PARLA || {};
         kind: kind, icon: '📐', what: 'Grammar',
         title: les.title, sub: les.sub || les.rule,
         done: !!(gs && gs.tries >= 3),
-        go: function () { PARLA.app.go('lesson', { id: id }); }
+        go: function () { LUNOSIA.app.go('lesson', { id: id }); }
       };
     }
     return null;
@@ -302,8 +302,8 @@ window.PARLA = window.PARLA || {};
 
   function viewChallenge() {
     init();
-    var st = PARLA.store.state;
-    var challenge = PARLA.data.es.challenge;
+    var st = LUNOSIA.store.state;
+    var challenge = LUNOSIA.data.es.challenge;
     var done = st.progress.challengeDone;
     var cur = st.progress.challengeDay;
     var main = el('main');
@@ -332,7 +332,7 @@ window.PARLA = window.PARLA || {};
           title: challenge[idx][0] + (locked ? ' (locked)' : ''),
           onclick: function () {
             if (locked) { ui.toast('Finish day ' + (cur + 1) + ' first.', 'warn'); return; }
-            PARLA.app.go('talk', { id: challenge[idx][3], day: idx });
+            LUNOSIA.app.go('talk', { id: challenge[idx][3], day: idx });
           }
         }, String(idx + 1)));
       })(i);
@@ -345,9 +345,9 @@ window.PARLA = window.PARLA || {};
     for (var j = cur; j < Math.min(cur + 6, challenge.length); j++) {
       (function (idx) {
         var d = challenge[idx];
-        var sc = PARLA.data.es.scenarios.filter(function (s) { return s.id === d[3]; })[0];
+        var sc = LUNOSIA.data.es.scenarios.filter(function (s) { return s.id === d[3]; })[0];
         list.appendChild(el('button.scenario', {
-          onclick: function () { PARLA.app.go('talk', { id: d[3], day: idx }); }
+          onclick: function () { LUNOSIA.app.go('talk', { id: d[3], day: idx }); }
         },
           el('span.emoji', sc ? sc.emoji : '💬'),
           el('span.txt',
@@ -368,7 +368,7 @@ window.PARLA = window.PARLA || {};
 
   /* One line for the word-bank tile, honest about whether it is there yet. */
   function dictBlurb() {
-    var D = PARLA.dict;
+    var D = LUNOSIA.dict;
     if (!D) return 'Browse and search';
     if (D.ready()) return D.size().toLocaleString() + ' words';
     if (D.failure()) return 'not loaded';
@@ -392,7 +392,7 @@ window.PARLA = window.PARLA || {};
   }
 
   function soundsBlurb() {
-    var all = PARLA.store.state.sounds || {};
+    var all = LUNOSIA.store.state.sounds || {};
     var weak = Object.keys(all).filter(function (id) {
       return all[id].tries >= 3 && all[id].ok / all[id].tries < 0.7;
     });
@@ -402,9 +402,9 @@ window.PARLA = window.PARLA || {};
   /* Both of these lead with what is left rather than what is done: "9 to go"
    * is a reason to open the screen and "3 read" is a pat on the back. */
   function readBlurb() {
-    var all = (PARLA.data.es.reading || []);
+    var all = (LUNOSIA.data.es.reading || []);
     var done = all.filter(function (t) {
-      return ((PARLA.store.state.reading || {})[t.id] || {}).asked;
+      return ((LUNOSIA.store.state.reading || {})[t.id] || {}).asked;
     }).length;
     if (!all.length) return 'Short stories';
     if (!done) return all.length + ' short stories';
@@ -412,23 +412,23 @@ window.PARLA = window.PARLA || {};
   }
 
   function hearBlurb() {
-    var all = (PARLA.data.es.reading || []);
+    var all = (LUNOSIA.data.es.reading || []);
     var done = all.filter(function (t) {
-      return ((PARLA.store.state.reading || {})[t.id] || {}).heardAsked;
+      return ((LUNOSIA.store.state.reading || {})[t.id] || {}).heardAsked;
     }).length;
     if (!done) return 'The same stories, no text';
     return done === all.length ? 'All ' + all.length + ' heard' : done + ' heard by ear';
   }
 
   function writeBlurb() {
-    var all = (PARLA.data.es.writing || []);
-    var done = Object.keys(PARLA.store.state.writing || {}).length;
+    var all = (LUNOSIA.data.es.writing || []);
+    var done = Object.keys(LUNOSIA.store.state.writing || {}).length;
     if (!done) return all.length + ' things to write';
     return done === all.length ? 'All ' + all.length + ' written' : (all.length - done) + ' left';
   }
 
   function grammarBlurb() {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var hits = {};
     (st.mistakes || []).forEach(function (m) { if (m.topic) hits[m.topic] = 1; });
     var n = Object.keys(hits).length;
@@ -448,12 +448,12 @@ window.PARLA = window.PARLA || {};
    * counters nobody reads.
    */
   function skills() {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var t = st.progress.totals;
-    var texts = PARLA.data.es.reading || [];
-    var tasks = PARLA.data.es.writing || [];
-    var lessons = PARLA.data.es.grammar || [];
-    var sounds = PARLA.data.es.sounds || [];
+    var texts = LUNOSIA.data.es.reading || [];
+    var tasks = LUNOSIA.data.es.writing || [];
+    var lessons = LUNOSIA.data.es.grammar || [];
+    var sounds = LUNOSIA.data.es.sounds || [];
     var r = st.reading || {}, w = st.writing || {};
     var sndScores = st.sounds || {}, lessonScores = st.grammar || {};
 
@@ -491,7 +491,7 @@ window.PARLA = window.PARLA || {};
 
     var grid = el('div.skill-grid');
     all.forEach(function (s) {
-      grid.appendChild(el('button.skill', { onclick: function () { PARLA.app.go(s.go); } },
+      grid.appendChild(el('button.skill', { onclick: function () { LUNOSIA.app.go(s.go); } },
         el('div.skill-top',
           el('span.skill-icon', s.icon),
           el('span.skill-name', s.name)),
@@ -508,7 +508,7 @@ window.PARLA = window.PARLA || {};
      * "speaking" has no ceiling to be behind on. */
     var measured = all.filter(function (s) { return s.of; });
     var anyDone = measured.some(function (s) { return s.done > 0; }) ||
-      PARLA.store.state.progress.totals.sessions > 0;
+      LUNOSIA.store.state.progress.totals.sessions > 0;
     if (anyDone) {
       var weakest = measured.slice().sort(function (a, b) {
         return (a.done / a.of) - (b.done / b.of);
@@ -516,7 +516,7 @@ window.PARLA = window.PARLA || {};
       var others = measured.filter(function (s) { return s !== weakest; });
       var behind = others.every(function (s) { return s.done / s.of > weakest.done / weakest.of; });
       if (behind) {
-        wrap.appendChild(el('button.fix-banner', { onclick: function () { PARLA.app.go(weakest.go); } },
+        wrap.appendChild(el('button.fix-banner', { onclick: function () { LUNOSIA.app.go(weakest.go); } },
           el('div.row',
             el('span.fix-emoji', weakest.icon),
             el('div',
@@ -535,11 +535,11 @@ window.PARLA = window.PARLA || {};
 
   function viewProgress() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
-    var keys = PARLA.data.es.vocab.map(function (v) { return v[0]; });
-    var s = PARLA.srs.stats(keys, st.srs);
-    var lp = PARLA.store.levelProgress();
+    var keys = LUNOSIA.data.es.vocab.map(function (v) { return v[0]; });
+    var s = LUNOSIA.srs.stats(keys, st.srs);
+    var lp = LUNOSIA.store.levelProgress();
     var t = st.progress.totals;
 
     main.appendChild(el('h1', 'Your progress'));
@@ -577,11 +577,11 @@ window.PARLA = window.PARLA || {};
     /* How much of the language, rather than how much of the shipped list. This
      * is the number that actually tracks whether Spanish is getting easier:
      * the thousand commonest words are most of what anyone says. */
-    var D = PARLA.dict;
+    var D = LUNOSIA.dict;
     if (D && D.ready()) {
-      var norm = PARLA.brain.normalise;
+      var norm = LUNOSIA.brain.normalise;
       var have = Object.create(null);
-      (PARLA.data.es.vocab || []).forEach(function (v) {
+      (LUNOSIA.data.es.vocab || []).forEach(function (v) {
         have[norm(v[0])] = 1;
         have[norm(String(v[0]).replace(/^(el|la|los|las)\s+/, ''))] = 1;
       });
@@ -593,7 +593,7 @@ window.PARLA = window.PARLA || {};
       var c10 = D.coverage(isKnown, 10000);
 
       main.appendChild(ui.sectionTitle('How much of the language', 
-        el('button.ghost', { onclick: function () { PARLA.app.go('words'); } }, 'Word bank →')));
+        el('button.ghost', { onclick: function () { LUNOSIA.app.go('words'); } }, 'Word bank →')));
       main.appendChild(el('div.grid.three.tight',
         ui.stat(c1.pct + '%', 'of the top 1,000'),
         ui.stat(c3.pct + '%', 'of the top 3,000'),
@@ -623,7 +623,7 @@ window.PARLA = window.PARLA || {};
       main.appendChild(ui.sectionTitle('Recent sessions'));
       var stack = el('div.stack');
       st.history.slice(0, 12).forEach(function (h) {
-        var sc = PARLA.data.es.scenarios.filter(function (x) { return x.id === h.scenarioId; })[0];
+        var sc = LUNOSIA.data.es.scenarios.filter(function (x) { return x.id === h.scenarioId; })[0];
         // Title on its own line, the numbers under it: on a phone this row used
         // to wrap in the middle of "+16 xp".
         stack.appendChild(el('div.card.session-row', { style: { padding: '10px 14px' } },
@@ -636,8 +636,8 @@ window.PARLA = window.PARLA || {};
     }
 
     main.appendChild(el('div.btn-row', { style: { marginTop: '22px' } },
-      el('button', { onclick: function () { PARLA.app.go('mistakes'); } }, 'Mistake journal'),
-      el('button', { onclick: function () { PARLA.app.go('settings'); } }, 'Settings')
+      el('button', { onclick: function () { LUNOSIA.app.go('mistakes'); } }, 'Mistake journal'),
+      el('button', { onclick: function () { LUNOSIA.app.go('settings'); } }, 'Settings')
     ));
 
     return main;
@@ -647,7 +647,7 @@ window.PARLA = window.PARLA || {};
 
   function viewMistakes() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
 
     main.appendChild(el('h1', 'Mistake journal'));
@@ -667,14 +667,14 @@ window.PARLA = window.PARLA || {};
         onclick: function () {
           if (!confirm('Clear the whole mistake journal? This cannot be undone.')) return;
           st.mistakes = [];
-          PARLA.store.save();
-          PARLA.app.go('mistakes');
+          LUNOSIA.store.save();
+          LUNOSIA.app.go('mistakes');
         }
       }, 'Clear')));
 
     var stack = el('div.stack');
     st.mistakes.forEach(function (m) {
-      var sc = PARLA.data.es.scenarios.filter(function (x) { return x.id === m.scenario; })[0];
+      var sc = LUNOSIA.data.es.scenarios.filter(function (x) { return x.id === m.scenario; })[0];
       stack.appendChild(el('div.mistake',
         el('div.was', m.es),
         el('div.now.es', m.fix),
@@ -694,7 +694,7 @@ window.PARLA = window.PARLA || {};
 
   function viewSettings() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var s = st.settings;
     var main = el('main');
 
@@ -713,11 +713,11 @@ window.PARLA = window.PARLA || {};
         ['gemini', 'Gemini']
       ], s.brain, function (v) {
         s.brain = v;
-        PARLA.brain.health.checked = false;
-        PARLA.store.save();
+        LUNOSIA.brain.health.checked = false;
+        LUNOSIA.store.save();
         renderBrain();
-        PARLA.app.paintChips();
-        PARLA.app.checkBrainHealth();
+        LUNOSIA.app.paintChips();
+        LUNOSIA.app.checkBrainHealth();
       }),
       'All four are free. Built-in works offline with no setup; the rest give you a real AI partner. ' +
       'On a phone, use “This site”.'));
@@ -729,7 +729,7 @@ window.PARLA = window.PARLA || {};
         onclick: function () {
           testOut.innerHTML = '';
           testOut.appendChild(ui.banner('info', 'Testing…'));
-          PARLA.brain.testBackend(s).then(function (r) {
+          LUNOSIA.brain.testBackend(s).then(function (r) {
             testOut.innerHTML = '';
             testOut.appendChild(ui.banner(r.ok ? 'good' : 'bad', r.detail));
           });
@@ -758,13 +758,13 @@ window.PARLA = window.PARLA || {};
       if (s.brain === 'ollama') {
         var url = el('input', { type: 'url', value: s.ollamaUrl });
         url.onchange = function () {
-          s.ollamaUrl = url.value.trim(); PARLA.store.save(); loadModels();
+          s.ollamaUrl = url.value.trim(); LUNOSIA.store.save(); loadModels();
         };
 
         brainBody.appendChild(ui.banner('info',
           '<strong>Unlimited, private, and free forever.</strong> Because this page runs in a ' +
           'browser, Ollama must be told to accept it — it needs <code>OLLAMA_ORIGINS</code> set to ' +
-          '<code>*</code>. Without that the browser is blocked by CORS and Parla silently falls ' +
+          '<code>*</code>. Without that the browser is blocked by CORS and Lunosia silently falls ' +
           'back to the scripted partner.'));
         brainBody.appendChild(ui.field('Ollama URL', url));
 
@@ -775,14 +775,14 @@ window.PARLA = window.PARLA || {};
 
         modelSel.onchange = function () {
           s.ollamaModel = modelSel.value;
-          PARLA.store.save();
-          PARLA.app.paintChips();
+          LUNOSIA.store.save();
+          LUNOSIA.app.paintChips();
         };
 
         function loadModels() {
           ui.clear(modelSel);
           modelNote.textContent = 'Looking for installed models…';
-          PARLA.brain.detectOllama(s).then(function (d) {
+          LUNOSIA.brain.detectOllama(s).then(function (d) {
             ui.clear(modelSel);
             if (!d.ok) {
               modelSel.appendChild(el('option', { value: '' }, 'Ollama not reachable'));
@@ -803,7 +803,7 @@ window.PARLA = window.PARLA || {};
             if (!s.ollamaModel || d.models.indexOf(s.ollamaModel) === -1) {
               s.ollamaModel = d.best;
               modelSel.value = d.best;
-              PARLA.store.save();
+              LUNOSIA.store.save();
             }
             modelNote.textContent = 'Bigger models speak better Spanish but reply more slowly. ' +
               'qwen2.5 handles Spanish notably better than llama3.2 at the same size.';
@@ -812,9 +812,9 @@ window.PARLA = window.PARLA || {};
         loadModels();
       } else if (s.brain === 'gemini') {
         var key = el('input', { type: 'password', value: s.geminiKey, placeholder: 'AIza…' });
-        key.onchange = function () { s.geminiKey = key.value.trim(); PARLA.store.save(); };
+        key.onchange = function () { s.geminiKey = key.value.trim(); LUNOSIA.store.save(); };
         var gm = el('input', { type: 'text', value: s.geminiModel });
-        gm.onchange = function () { s.geminiModel = gm.value.trim(); PARLA.store.save(); };
+        gm.onchange = function () { s.geminiModel = gm.value.trim(); LUNOSIA.store.save(); };
 
         brainBody.appendChild(ui.banner('info',
           '<strong>Free, no credit card.</strong> Get a key at ' +
@@ -841,7 +841,7 @@ window.PARLA = window.PARLA || {};
           ['gentle', 'Gentle'],
           ['strict', 'Everything'],
           ['off', 'Leave me alone']
-        ], s.correctionStyle, function (v) { s.correctionStyle = v; PARLA.store.save(); }),
+        ], s.correctionStyle, function (v) { s.correctionStyle = v; LUNOSIA.store.save(); }),
         'Gentle only flags what would actually confuse a native speaker.')
     ));
 
@@ -856,8 +856,8 @@ window.PARLA = window.PARLA || {};
     /* Neural voices from Piper come first: they are the reason the app stopped
      * sounding like a 2009 satnav, so they should be the obvious pick. The
      * browser's own voices stay listed underneath as the fallback. */
-    PARLA.speech.onVoicesReady(function () {
-      var list = PARLA.speech.allVoicesFor(st.profile.target || 'es');
+    LUNOSIA.speech.onVoicesReady(function () {
+      var list = LUNOSIA.speech.allVoicesFor(st.profile.target || 'es');
       ui.clear(voiceSel);
       if (!list.length) {
         voiceSel.appendChild(el('option', { value: '' }, 'No Spanish voice found'));
@@ -884,7 +884,7 @@ window.PARLA = window.PARLA || {};
     });
     voiceSel.onchange = function () {
       s.voiceURI = voiceSel.value;
-      PARLA.store.save();
+      LUNOSIA.store.save();
       ui.say('Hola, así sueno yo. ¿Te gusta esta voz?');
     };
 
@@ -894,7 +894,7 @@ window.PARLA = window.PARLA || {};
       s.rate = parseFloat(rate.value);
       rateOut.textContent = s.rate.toFixed(2) + '×';
     };
-    rate.onchange = function () { PARLA.store.save(); ui.say('Hablo a esta velocidad.'); };
+    rate.onchange = function () { LUNOSIA.store.save(); ui.say('Hablo a esta velocidad.'); };
     voiceCard.appendChild(ui.field('Speaking speed', el('div', rate, rateOut),
       'Slower is easier to follow. 0.9 is a good place to start.'));
 
@@ -905,8 +905,8 @@ window.PARLA = window.PARLA || {};
     var castCard = el('div.card');
     function drawCast() {
       ui.clear(castCard);
-      var voices = PARLA.speech.piper.available
-        ? PARLA.speech.piperVoicesFor(st.profile.target || 'es') : [];
+      var voices = LUNOSIA.speech.piper.available
+        ? LUNOSIA.speech.piperVoicesFor(st.profile.target || 'es') : [];
 
       if (!voices.length) {
         castCard.appendChild(el('div.hint',
@@ -916,7 +916,7 @@ window.PARLA = window.PARLA || {};
 
       castCard.appendChild(el('div.hint',
         'Your partner is a different person in every scenario — Marta the barista, ' +
-        'Javi at the party. Tell Parla which of your installed voices sounds like ' +
+        'Javi at the party. Tell Lunosia which of your installed voices sounds like ' +
         'a woman and which sounds like a man, and it will cast them accordingly. ' +
         'Press play to hear each one.'));
 
@@ -933,8 +933,8 @@ window.PARLA = window.PARLA || {};
         });
         sel.onchange = function () {
           st.settings.voiceRoles[key] = sel.value;
-          PARLA.store.save();
-          PARLA.speech.speak(
+          LUNOSIA.store.save();
+          LUNOSIA.speech.speak(
             key === 'f' ? 'Hola, soy yo. ¿Te suena bien mi voz?'
                         : 'Hola, ¿qué tal? Soy yo el que habla.',
             { lang: 'es', voiceRoles: st.settings.voiceRoles,
@@ -945,7 +945,7 @@ window.PARLA = window.PARLA || {};
       });
 
       castCard.appendChild(el('div.hint',
-        'If only one voice fits, leave the other on “No preference” — Parla will ' +
+        'If only one voice fits, leave the other on “No preference” — Lunosia will ' +
         'shift the pitch instead. Not perfect, but better than everyone sounding ' +
         'like the same person.'));
     }
@@ -966,7 +966,7 @@ window.PARLA = window.PARLA || {};
       pitchOut.textContent = pitchLabel(st.settings.voicePitch);
     };
     pitch.onchange = function () {
-      PARLA.store.save();
+      LUNOSIA.store.save();
       ui.say('Así sueno con esta edad de voz.', null, { gender: '', age: 'adult' });
     };
     castCard.appendChild(ui.field('Voice age', el('div', pitch, pitchOut),
@@ -979,23 +979,23 @@ window.PARLA = window.PARLA || {};
       el('button', { onclick: function () { ui.say('Buenos días. ¿Qué tal estás hoy?'); } }, '🔊 Test voice'),
       el('button', {
         onclick: function () {
-          var list = PARLA.speech.allVoicesFor(st.profile.target || 'es');
+          var list = LUNOSIA.speech.allVoicesFor(st.profile.target || 'es');
           if (!list.length) return;
           s.voiceURI = list[0].id;
           voiceSel.value = s.voiceURI;
-          PARLA.store.save();
+          LUNOSIA.store.save();
           ui.say('Hola, así sueno yo.');
         }
       }, 'Use the best available')));
 
     // Two different problems wear the same symptom, so say which one it is.
-    // The install advice is for the machine Parla is served from; on a phone
+    // The install advice is for the machine Lunosia is served from; on a phone
     // there is no Piper to install and never will be, so it is not offered.
     var local = typeof location !== 'undefined' &&
       (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ||
        location.protocol === 'file:');
 
-    if (PARLA.speech.piper.available) {
+    if (LUNOSIA.speech.piper.available) {
       voiceCard.appendChild(ui.banner('good',
         '<strong>Neural voice installed.</strong> Speech is generated on this machine, ' +
         'so nothing you say or hear leaves the computer.'));
@@ -1009,7 +1009,7 @@ window.PARLA = window.PARLA || {};
     } else {
       voiceCard.appendChild(el('div.hint',
         'These are your device\'s own Spanish voices. Android\'s are decent; the neural ' +
-        'voice only exists on the computer Parla is installed on.'));
+        'voice only exists on the computer Lunosia is installed on.'));
     }
     main.appendChild(voiceCard);
     main.appendChild(castCard);
@@ -1039,7 +1039,7 @@ window.PARLA = window.PARLA || {};
         memCard.appendChild(list);
         memCard.appendChild(el('div.btn-row', { style: { marginTop: '10px' } },
           el('button', { onclick: function () {
-            PARLA.store.forgetAll();
+            LUNOSIA.store.forgetAll();
             drawMemory();
             ui.toast('Forgotten. Your partner starts fresh.', 'good');
           } }, 'Forget everything')));
@@ -1082,9 +1082,9 @@ window.PARLA = window.PARLA || {};
       micLive.hidden = true;
       micOut.appendChild(el('div.small.muted', { style: { marginTop: '10px' } }, 'Checking…'));
 
-      PARLA.speech.recheckMic();
-      PARLA.speech.micReport().then(function (r) {
-        return PARLA.speech.ensureMic(true).then(function (m) { return [r, m]; });
+      LUNOSIA.speech.recheckMic();
+      LUNOSIA.speech.micReport().then(function (r) {
+        return LUNOSIA.speech.ensureMic(true).then(function (m) { return [r, m]; });
       }).then(function (pair) {
         var r = pair[0], m = pair[1];
         ui.clear(micOut);
@@ -1119,7 +1119,7 @@ window.PARLA = window.PARLA || {};
       var heard = el('div.mic-live-text', 'Say something in Spanish…');
       micLive.appendChild(heard);
 
-      var handle = PARLA.speech.listen({
+      var handle = LUNOSIA.speech.listen({
         lang: st.profile.target || 'es',
         silenceMs: 5000, noSpeechMs: 6000, maxMs: 9000,
         onpartial: function (t) { heard.textContent = t; heard.className = 'mic-live-text live'; },
@@ -1152,7 +1152,7 @@ window.PARLA = window.PARLA || {};
       s.micPauseMs = parseInt(pause.value, 10);
       pauseOut.textContent = (s.micPauseMs / 1000).toFixed(1) + 's';
     };
-    pause.onchange = function () { PARLA.store.save(); };
+    pause.onchange = function () { LUNOSIA.store.save(); };
 
     main.appendChild(el('div.card',
       ui.field('Pause before your turn ends', el('div', pause, pauseOut),
@@ -1160,19 +1160,19 @@ window.PARLA = window.PARLA || {};
         'cut off while thinking mid-sentence — the partner would rather wait than ' +
         'answer half a question.'),
       toggle('Reopen the microphone automatically', s.autoListen, function (v) {
-        s.autoListen = v; PARLA.store.save();
+        s.autoListen = v; LUNOSIA.store.save();
       }, 'Hands-free: the mic reopens as soon as your partner finishes speaking.'),
       toggle('Show English translations', s.showTranslations, function (v) {
-        s.showTranslations = v; PARLA.store.save();
+        s.showTranslations = v; LUNOSIA.store.save();
       }, 'Turn this off once you can cope — it is the fastest way to improve.'),
       toggle('Drill vosotros', s.drillVosotros === true, function (v) {
-        s.drillVosotros = v; PARLA.store.save();
+        s.drillVosotros = v; LUNOSIA.store.save();
       }, 'Vosotros is used in Spain and almost nowhere else. Off, the conjugation ' +
          'trainer spends its time on the five forms you will actually say — the ' +
          'tables on Ask and Verbs still show all six either way.'),
       ui.field('Your level',
         ui.segmented([['a1', 'A1'], ['a2', 'A2'], ['b1', 'B1'], ['b2', 'B2']],
-          st.profile.level, function (v) { st.profile.level = v; PARLA.store.save(); }),
+          st.profile.level, function (v) { st.profile.level = v; LUNOSIA.store.save(); }),
         'Controls how hard your partner pushes and which verbs you get drilled on.')
     ));
 
@@ -1181,7 +1181,7 @@ window.PARLA = window.PARLA || {};
     main.appendChild(el('div.card',
       ui.field('Theme',
         ui.segmented([['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], s.theme, function (v) {
-          s.theme = v; PARLA.store.save(); PARLA.app.applyTheme();
+          s.theme = v; LUNOSIA.store.save(); LUNOSIA.app.applyTheme();
         }))
     ));
 
@@ -1195,7 +1195,7 @@ window.PARLA = window.PARLA || {};
      */
     main.appendChild(ui.sectionTitle('Your progress'));
 
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var counts = [
       (st.phrases || []).length + ' words',
       Object.keys(st.srs || {}).length + ' cards',
@@ -1218,7 +1218,7 @@ window.PARLA = window.PARLA || {};
 
     function fileName() {
       var d = new Date();
-      return 'parla-' + d.getFullYear() + '-' +
+      return 'lunosia-' + d.getFullYear() + '-' +
         String(d.getMonth() + 1).padStart(2, '0') + '-' +
         String(d.getDate()).padStart(2, '0') + '.json';
     }
@@ -1226,9 +1226,9 @@ window.PARLA = window.PARLA || {};
     function bringIn(text) {
       var got;
       try {
-        got = PARLA.store.mergeJSON(text);
+        got = LUNOSIA.store.mergeJSON(text);
       } catch (e) {
-        ui.toast('That is not a Parla save file.', 'bad');
+        ui.toast('That is not a Lunosia save file.', 'bad');
         return;
       }
       // Say what actually arrived. "Imported" tells you nothing about whether
@@ -1243,7 +1243,7 @@ window.PARLA = window.PARLA || {};
       ui.toast(bits.length ? 'Merged in ' + bits.join(', ') + '.'
                            : 'Nothing new in that file — you already had all of it.',
                'good');
-      PARLA.app.go('progress');
+      LUNOSIA.app.go('progress');
     }
 
     main.appendChild(el('div.card',
@@ -1255,7 +1255,7 @@ window.PARLA = window.PARLA || {};
       el('div.btn-row',
         el('button.primary', {
           onclick: function () {
-            var blob = new Blob([PARLA.store.exportJSON()], { type: 'application/json' });
+            var blob = new Blob([LUNOSIA.store.exportJSON()], { type: 'application/json' });
             var a = el('a', { href: URL.createObjectURL(blob), download: fileName() });
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
@@ -1264,7 +1264,7 @@ window.PARLA = window.PARLA || {};
         }, '⬇ Save a copy'),
         el('button', {
           onclick: function () {
-            navigator.clipboard && navigator.clipboard.writeText(PARLA.store.exportJSON())
+            navigator.clipboard && navigator.clipboard.writeText(LUNOSIA.store.exportJSON())
               .then(function () { ui.toast('Copied to the clipboard.'); })
               .catch(function () { ui.toast('Could not copy.', 'bad'); });
           }
@@ -1295,7 +1295,7 @@ window.PARLA = window.PARLA || {};
         el('button.danger', {
           onclick: function () {
             if (!confirm('Erase all progress, words, and settings? This cannot be undone.')) return;
-            PARLA.store.reset();
+            LUNOSIA.store.reset();
             location.reload();
           }
         }, 'Erase everything')),
@@ -1305,7 +1305,7 @@ window.PARLA = window.PARLA || {};
       el('div.small.muted', {
         style: { marginTop: '26px', paddingTop: '14px',
                  borderTop: '1px solid var(--line-soft)' } },
-        el('a', { href: 'about.html', target: '_blank', rel: 'noopener' }, 'About Parla'),
+        el('a', { href: 'about.html', target: '_blank', rel: 'noopener' }, 'About Lunosia'),
         ' · ',
         el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy'))
     ));
@@ -1313,7 +1313,7 @@ window.PARLA = window.PARLA || {};
     // A live microphone test must not keep listening after you navigate away.
     main._onLeave = function () {
       if (main._micTest) { main._micTest.abort(); main._micTest = null; }
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
     };
 
     return main;
@@ -1329,11 +1329,11 @@ window.PARLA = window.PARLA || {};
       hint ? el('div.hint', { style: { marginLeft: '24px' } }, hint) : null);
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.onboard = viewOnboard;
-  PARLA.views.home = viewHome;
-  PARLA.views.challenge = viewChallenge;
-  PARLA.views.progress = viewProgress;
-  PARLA.views.mistakes = viewMistakes;
-  PARLA.views.settings = viewSettings;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.onboard = viewOnboard;
+  LUNOSIA.views.home = viewHome;
+  LUNOSIA.views.challenge = viewChallenge;
+  LUNOSIA.views.progress = viewProgress;
+  LUNOSIA.views.mistakes = viewMistakes;
+  LUNOSIA.views.settings = viewSettings;
 })();

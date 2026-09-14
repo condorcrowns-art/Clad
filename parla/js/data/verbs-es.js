@@ -1,4 +1,4 @@
-/* Parla — Spanish verb engine
+/* Lunosia — Spanish verb engine
  *
  * Not a table of forms: a model of how Spanish builds them. That distinction
  * is the difference between conjugating fifty verbs and conjugating any verb
@@ -21,9 +21,9 @@
  *
  * Everything runs backwards too: see identify().
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
 (function () {
   'use strict';
@@ -615,8 +615,8 @@ PARLA.data.es = PARLA.data.es || {};
     var hit = reverse[strip(word)];
     if (hit) return { verb: hit.verb, tense: hit.tense, person: hit.person };
     // Not one of the fifty: ask the general engine, if it has been loaded.
-    if (PARLA.morph && PARLA.morph.ready()) {
-      var a = PARLA.morph.analyse(word);
+    if (LUNOSIA.morph && LUNOSIA.morph.ready()) {
+      var a = LUNOSIA.morph.analyse(word);
       for (var i = 0; i < a.length; i++) {
         if (a[i].pos === 'v' && a[i].tense) {
           return { verb: a[i].lemma, tense: a[i].tense, person: a[i].person || '' };
@@ -648,7 +648,7 @@ PARLA.data.es = PARLA.data.es || {};
     return null;
   }
 
-  PARLA.data.es.verbs = {
+  LUNOSIA.data.es.verbs = {
     list: VERBS,
     pronouns: PRONOUNS,
     tenses: TENSES,

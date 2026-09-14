@@ -29,10 +29,10 @@ findable and explain itself, not because it is going to make money.
 - [x] The site is live on a domain you own, over HTTPS.
 - [x] There is a page that explains what the site is (`about.html`).
 - [x] There is a privacy policy, and it is linked from the site (`privacy.html`).
-- [ ] **The privacy policy names a real contact address.** It currently says
-      `CONTACT@EXAMPLE.COM` in two places. Replace both. Programmes that pay
-      you money require a reachable contact, and a policy page without one is
-      a common rejection on its own.
+- [x] The privacy policy names a real contact address —
+      `Canarybears@gmail.com`. Programmes that pay you money require a
+      reachable contact, and a policy page without one is a common rejection
+      on its own. Watch that inbox after you apply; AdSense writes there.
 - [ ] You are 18 or over and have a Google account and a bank account that can
       receive the payment, in your own name.
 

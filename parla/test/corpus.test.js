@@ -4,7 +4,7 @@
  */
 const { makeSandbox, load } = require('./harness');
 const D = load(makeSandbox(), 'js/data/vocab-es.js', 'js/data/verbs-es.js',
-                              'js/data/scenarios-es.js', 'js/data/challenge-es.js').PARLA.data.es;
+                              'js/data/scenarios-es.js', 'js/data/challenge-es.js').LUNOSIA.data.es;
 
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};

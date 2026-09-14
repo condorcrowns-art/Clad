@@ -70,7 +70,7 @@ vm.runInContext(`
 `, ctx);
 
 load(ctx, 'js/speech.js');
-vm.runInContext('PARLA.speech._setPiper(false, []);', ctx);
+vm.runInContext('LUNOSIA.speech._setPiper(false, []);', ctx);
 
 const run = (c) => vm.runInContext(c, ctx);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -87,7 +87,7 @@ async function begin(opts) {
   run('if (globalThis.__h) { try { __h.abort(); } catch (e) {} }');
   run('__recs = []; globalThis.__final = null; globalThis.__conf = null; globalThis.__ends = 0; ' +
       'globalThis.__partials = []; globalThis.__errs = []; globalThis.__details = [];');
-  run(`globalThis.__h = PARLA.speech.listen({
+  run(`globalThis.__h = LUNOSIA.speech.listen({
     lang: 'es', ${opts || ''}
     onpartial: function (t) { __partials.push(t); },
     onfinal: function (t, c) { __final = t; __conf = c; },
@@ -177,25 +177,25 @@ const rec = (i) => `__recs[${i}]`;
 
   /* — the microphone itself refusing, before recognition even starts — */
   console.log('');
-  run('__micFail = "NotAllowedError"; PARLA.speech.recheckMic();');
+  run('__micFail = "NotAllowedError"; LUNOSIA.speech.recheckMic();');
   await begin('silenceMs: 400,');
   check('a browser-blocked microphone is caught before recognition starts',
     run('__errs').includes('blocked'), JSON.stringify(run('__errs')));
   check('and the turn ends rather than hanging', run('__ends') === 1);
 
-  run('__micFail = "NotFoundError"; PARLA.speech.recheckMic();');
+  run('__micFail = "NotFoundError"; LUNOSIA.speech.recheckMic();');
   await begin('silenceMs: 400,');
   check('no microphone at all is told apart from a refusal',
     run('__errs').includes('no-device'), JSON.stringify(run('__errs')));
   check('and says to check it is plugged in',
     /plugged in/.test(run('__details').join(' ')));
 
-  run('__micFail = "NotReadableError"; PARLA.speech.recheckMic();');
+  run('__micFail = "NotReadableError"; LUNOSIA.speech.recheckMic();');
   await begin('silenceMs: 400,');
   check('a microphone another app has open is its own case',
     run('__errs').includes('busy'), JSON.stringify(run('__errs')));
 
-  run('__micFail = null; PARLA.speech.recheckMic();');
+  run('__micFail = null; LUNOSIA.speech.recheckMic();');
 
   /* — nothing said at all — */
   await begin('silenceMs: 300, noSpeechMs: 200,');

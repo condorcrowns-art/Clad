@@ -1,4 +1,4 @@
-/* Parla — the word bank
+/* Lunosia — the word bank
  *
  * Thirty-one thousand words, and the honest question a learner has about them:
  * which ones do I not know yet, and which of those matter most?
@@ -9,12 +9,12 @@
  * bands you can work through, shows how much of each you already have, and
  * lets you take a word into your deck with one tap.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   var BANDS = [
     [1, 250, 'First 250', 'Where every conversation starts.'],
@@ -39,10 +39,10 @@ window.PARLA = window.PARLA || {};
 
   /* Everything already in the deck, as a lookup. */
   function knownSet() {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var set = Object.create(null);
-    var norm = PARLA.brain.normalise;
-    (PARLA.data.es.vocab || []).forEach(function (v) {
+    var norm = LUNOSIA.brain.normalise;
+    (LUNOSIA.data.es.vocab || []).forEach(function (v) {
       set[norm(v[0])] = 1;
       set[norm(String(v[0]).replace(/^(el|la|los|las)\s+/, ''))] = 1;
     });
@@ -52,9 +52,9 @@ window.PARLA = window.PARLA || {};
 
   function viewWords(params) {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
-    var D = PARLA.dict;
+    var D = LUNOSIA.dict;
 
     main.appendChild(el('h1', 'Word bank'));
 
@@ -68,12 +68,12 @@ window.PARLA = window.PARLA || {};
             'after that it works offline.'
           : 'About half a megabyte, once. After that it is offline for good.'));
       main.appendChild(loading);
-      D.load().then(function () { PARLA.app.go('words', params); });
+      D.load().then(function () { LUNOSIA.app.go('words', params); });
       return main;
     }
 
     var known = knownSet();
-    var norm = PARLA.brain.normalise;
+    var norm = LUNOSIA.brain.normalise;
     var isKnown = function (term) {
       return !!(known[norm(term)] || known[norm(String(term).replace(/^(el|la|los|las)\s+/, ''))]);
     };
@@ -110,7 +110,7 @@ window.PARLA = window.PARLA || {};
       var have = words.filter(function (w) { return isKnown(w.term); }).length;
       var pct = words.length ? Math.round(have * 100 / words.length) : 0;
       bandGrid.appendChild(el('button.band-card', {
-        onclick: function () { PARLA.app.go('words', { band: b[0] + '-' + b[1] }); }
+        onclick: function () { LUNOSIA.app.go('words', { band: b[0] + '-' + b[1] }); }
       },
         el('div.row',
           el('strong', b[2]),
@@ -159,7 +159,7 @@ window.PARLA = window.PARLA || {};
     if (band) {
       toggles.appendChild(el('span.chip.hot', 'band ' + band[0] + '–' + band[1]));
       toggles.appendChild(el('button.ghost', { onclick: function () {
-        band = null; PARLA.app.go('words');
+        band = null; LUNOSIA.app.go('words');
       } }, 'clear'));
     }
     controls.appendChild(toggles);
@@ -204,14 +204,14 @@ window.PARLA = window.PARLA || {};
           have
             ? el('span.chip.good', '✓')
             : el('button.primary.small-btn', { onclick: function () {
-                PARLA.store.addWord(article + e.term, e.glosses[0], '', '');
+                LUNOSIA.store.addWord(article + e.term, e.glosses[0], '', '');
                 known[norm(e.term)] = 1;
                 ui.toast('“' + e.term + '” added', 'good');
                 draw();
               } }, '+'),
           el('button.ghost.small-btn', {
             title: 'Everything about this word',
-            onclick: function () { PARLA.app.go('coach', { q: e.term }); }
+            onclick: function () { LUNOSIA.app.go('coach', { q: e.term }); }
           }, '›'));
         list.appendChild(row);
       });
@@ -228,6 +228,6 @@ window.PARLA = window.PARLA || {};
     return main;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.words = viewWords;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.words = viewWords;
 })();

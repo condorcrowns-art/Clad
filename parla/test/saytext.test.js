@@ -2,7 +2,7 @@
  * undoes a whole neural model's worth of realism, because a person would never
  * say it that way. */
 const { makeSandbox, load } = require('./harness');
-const T = load(makeSandbox(), 'js/saytext.js').PARLA.saytext;
+const T = load(makeSandbox(), 'js/saytext.js').LUNOSIA.saytext;
 
 const fail = [];
 function eq(name, got, want) {

@@ -1,4 +1,4 @@
-# Parla 🗣️
+# Lunosia 🗣️
 
 **Learn Spanish by talking.** You speak out loud, an AI partner answers in Spanish, and you get
 corrected as you go. Then the words you fumbled come back as flashcards until they stick.
@@ -8,12 +8,12 @@ pure HTML, CSS and vanilla JS.
 
 ## Windows: one command
 
-Open **PowerShell as Administrator** and paste this. It downloads Parla, installs
+Open **PowerShell as Administrator** and paste this. It downloads Lunosia, installs
 Ollama, configures it for the browser, pulls a model matched to your RAM, and opens the app.
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-$z="$env:TEMP\parla.zip"; $d="$HOME\Parla"
+$z="$env:TEMP\parla.zip"; $d="$HOME\Lunosia"
 Invoke-WebRequest "https://github.com/condorcrowns-art/Clad/archive/refs/heads/claude/victor-ai-familiarity-rf2730.zip" -OutFile $z
 Expand-Archive $z $d -Force
 cd (Get-ChildItem "$d\*\parla" -Directory | Select-Object -First 1).FullName
@@ -22,7 +22,7 @@ Get-ChildItem -Recurse | Unblock-File
 ```
 
 Re-running it is safe - every step skips itself if already done. Afterwards, to just
-start the app again: `cd $HOME\Parla\*\parla; .\serve.ps1`
+start the app again: `cd $HOME\Lunosia\*\parla; .\serve.ps1`
 
 ## macOS / Linux
 
@@ -111,7 +111,7 @@ conversation stay in one accent rather than drifting between Madrid and Mexico C
 
 "It doesn't work" has half a dozen causes and the browser reports almost none of
 them — `not-allowed` covers a denied permission, a blocked page, an unplugged
-microphone and one another app is holding. So Parla asks for the microphone
+microphone and one another app is holding. So Lunosia asks for the microphone
 through `getUserMedia` *before* recognition does, which turns that into a real
 error name, and then says the remedy in plain words on screen next to the mic
 rather than in a console nobody opens.
@@ -386,7 +386,7 @@ that constantly. Browsers default to ending the turn at the **first pause** —
 so a beginner saying *"Me llamo…"* and pausing to remember how the sentence goes
 has `Me llamo` submitted as a finished thought.
 
-Parla runs recognition continuously and decides for itself. Your turn ends after
+Lunosia runs recognition continuously and decides for itself. Your turn ends after
 a real silence — 1.6 seconds by default, adjustable in Settings → Practice, up
 to 4 seconds if you like to think mid-sentence. Chrome also stops recognition on
 its own every few seconds no matter what the flag says; that gets restarted
@@ -439,13 +439,13 @@ OLLAMA_ORIGINS="*" ollama serve
 ```
 
 `OLLAMA_ORIGINS` is the part everyone misses. Ollama refuses cross-origin browser
-requests by default, so without it Parla cannot reach a perfectly healthy Ollama and
+requests by default, so without it Lunosia cannot reach a perfectly healthy Ollama and
 falls back to the scripted partner. The app detects this at startup and says so
 rather than degrading silently.
 
 **Model choice matters a lot.** `qwen2.5` holds a Spanish conversation noticeably
 better than `llama3.2` at the same size - llama3.2:3b tends to drift into English and
-repeat stock phrases. Parla ranks whatever you have installed and picks the best one
+repeat stock phrases. Lunosia ranks whatever you have installed and picks the best one
 automatically; you never have to type a model name.
 
 **VRAM decides speed, not system RAM.** A 14B model on a GPU answers in ~2 seconds;
@@ -750,7 +750,7 @@ exist, as do the 521 curated corpus words.
   genuinely suppletive verb needs a row in `IRREGULAR`.
 - **A scenario** — append an object to `scenarios-es.js`. `role`/`setting`/`goals` brief the LLM;
   `script` beats make it work offline. Give it a `fallback` or two.
-- **French** — the engines are already language-parameterised (`PARLA.speech.langs` has `fr`).
+- **French** — the engines are already language-parameterised (`LUNOSIA.speech.langs` has `fr`).
   Add `js/data/*-fr.js` files in the same shapes and a language switch in settings.
 
 Bump `CACHE` in `sw.js` whenever you change a shipped file, or browsers will serve the old one.
@@ -779,7 +779,7 @@ node test/dict.test.js             # the dictionary, and unpicking any word form
 node test/hosted.test.js           # the Workers AI partner, and what happens without it
 
 node -e "const{makeSandbox,load}=require('./test/harness');
-  const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').PARLA.data.es;
+  const d=load(makeSandbox(),'js/data/vocab-es.js','js/data/verbs-es.js').LUNOSIA.data.es;
   console.log(d.vocab.length, d.verbs.conjugate('tener','presente'));"
 ```
 
@@ -977,7 +977,7 @@ The sixty-day challenge is the spine: it is on the home screen, it has its own
 tab, and it is what someone who wants to be told what to do will follow. It had
 quietly become narrower than everything around it — sixty days of nothing but
 conversation meant a learner following it literally never opened the reading,
-the listening, the writing or the sounds. Four of the six things Parla can
+the listening, the writing or the sounds. Four of the six things Lunosia can
 teach, invisible to the person most likely to do as they are told.
 
 Every day now carries a second task, sitting quietly under the day's
@@ -1111,7 +1111,7 @@ the phone's. It merges now, and the rule throughout is that neither side loses:
   sounds right on a laptop is not what sounds right on a phone
 
 Merging the same file twice does nothing the second time and says so. A file
-that is not a Parla save is refused whole rather than half-applied. Pick the
+that is not a Lunosia save is refused whole rather than half-applied. Pick the
 file with the file picker on either device; the paste box is still there for
 when moving a file between them is the hard part.
 

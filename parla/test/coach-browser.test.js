@@ -57,19 +57,19 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.waitForTimeout(900);
   check('a word the built-in list knows comes back with a meaning',
     /bill/i.test(await page.locator('.ask-en').innerText()));
-  const before = await page.evaluate(() => (PARLA.store.state.phrases || []).length);
+  const before = await page.evaluate(() => (LUNOSIA.store.state.phrases || []).length);
   const learn = page.locator('.ask-card button', { hasText: 'Learn this' });
   const alreadyHave = (await page.locator('.ask-card button', { hasText: 'Already in your deck' }).count()) === 1;
   check('a word already in the shipped list is not offered twice', alreadyHave);
   check('and nothing was duplicated into the deck',
-    (await page.evaluate(() => (PARLA.store.state.phrases || []).length)) === before);
+    (await page.evaluate(() => (LUNOSIA.store.state.phrases || []).length)) === before);
 
   await goTo(page, 'coach');
   await page.waitForTimeout(300);
   check('past questions are offered again', (await page.locator('.ask-chip').count()) > 0);
 
   console.log('\nFlip cards\n');
-  await page.evaluate(() => PARLA.app.go('review'));
+  await page.evaluate(() => LUNOSIA.app.go('review'));
   await page.waitForTimeout(400);
   await page.locator('.seg button', { hasText: 'ES→EN' }).click();
   await page.waitForTimeout(250);
@@ -92,14 +92,14 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   console.log('\nUndo\n');
   check('undo is offered after grading',
     (await page.locator('button', { hasText: 'Undo last card' }).count()) === 1);
-  const deckBefore = await page.evaluate(() => JSON.stringify(PARLA.store.state.srs));
+  const deckBefore = await page.evaluate(() => JSON.stringify(LUNOSIA.store.state.srs));
   await page.keyboard.press('u');
   await page.waitForTimeout(350);
   const word3 = await page.locator('.face.front .prompt').innerText();
   check('undo goes back to the card you just graded', word3 === word1, word3);
-  const deckAfter = await page.evaluate(() => JSON.stringify(PARLA.store.state.srs));
+  const deckAfter = await page.evaluate(() => JSON.stringify(LUNOSIA.store.state.srs));
   check('and puts the schedule back exactly as it was', deckAfter !== deckBefore);
-  const restored = await page.evaluate(() => Object.keys(PARLA.store.state.srs).length);
+  const restored = await page.evaluate(() => Object.keys(LUNOSIA.store.state.srs).length);
   check('with no leftover card', typeof restored === 'number');
 
   check('no page errors', errs.length === 0, errs.slice(0, 2).join(' | '));

@@ -31,12 +31,12 @@ function check(n, c, x) { console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''
   await page.waitForTimeout(400);
 
   console.log('\n== Piper detection (' + (EXPECT_PIPER ? 'installed' : 'absent') + ') ==');
-  const avail = await page.evaluate(() => PARLA.speech.piper.available);
+  const avail = await page.evaluate(() => LUNOSIA.speech.piper.available);
   check('probe result matches the server', avail === EXPECT_PIPER, String(avail));
 
   console.log('\n== Settings voice list ==');
   await page.click('#nav a[data-view=progress], #nav [data-view=progress]').catch(() => {});
-  await page.evaluate(() => PARLA.app.go('settings'));
+  await page.evaluate(() => LUNOSIA.app.go('settings'));
   await page.waitForTimeout(600);
 
   const opts = await page.$$eval('select option', os => os.map(o => ({ v: o.value, t: o.textContent })));
@@ -67,7 +67,7 @@ function check(n, c, x) { console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''
   console.log('\n== Speaking ==');
   await page.evaluate(() => fetch('/__seen').then(r => r.json())); // warm
   const before = (await (await page.request.get(BASE + '/__seen')).json()).length;
-  await page.evaluate(() => PARLA.ui.say('Buenos dias, como estas?'));
+  await page.evaluate(() => LUNOSIA.ui.say('Buenos dias, como estas?'));
   await page.waitForTimeout(900);
   const seen = await (await page.request.get(BASE + '/__seen')).json();
 
@@ -77,14 +77,14 @@ function check(n, c, x) { console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''
     check('with the text', last.text === 'Buenos dias, como estas?', last.text);
     check('and the es-ES voice', last.voice === 'es_ES-davefx-medium', last.voice);
     check('and the saved rate', last.rate === 0.9, String(last.rate));
-    const played = await page.evaluate(() => PARLA.speech.isSpeaking());
+    const played = await page.evaluate(() => LUNOSIA.speech.isSpeaking());
     check('audio element is live', played === true || played === false); // just must not throw
   } else {
     check('no /tts traffic when piper is absent', seen.length === before);
   }
 
   console.log('\n== Nothing else broke ==');
-  await page.evaluate(() => PARLA.app.go('home'));
+  await page.evaluate(() => LUNOSIA.app.go('home'));
   await page.waitForTimeout(300);
   check('home still renders', await page.locator('h1').first().isVisible());
 

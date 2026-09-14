@@ -1,4 +1,4 @@
-/* Parla — the sounds English speakers get wrong
+/* Lunosia — the sounds English speakers get wrong
  *
  * Not the Spanish sound system, which is small and mostly easy. These are the
  * ten places an English mouth does something else by reflex, ordered by how
@@ -16,11 +16,11 @@
  *   tell     what the recogniser tends to return when you get it wrong, which
  *            is what js/phon.js matches against to name the problem
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
-PARLA.data.es.sounds = [
+LUNOSIA.data.es.sounds = [
 
   { id: 'rr', symbol: 'rr', title: 'The rolled r', cost: 'high',
     letters: 'rr, and r at the start of a word',
@@ -210,8 +210,8 @@ PARLA.data.es.sounds = [
   }
 ];
 
-PARLA.data.es.soundsById = (function () {
+LUNOSIA.data.es.soundsById = (function () {
   var m = {};
-  PARLA.data.es.sounds.forEach(function (s) { m[s.id] = s; });
+  LUNOSIA.data.es.sounds.forEach(function (s) { m[s.id] = s; });
   return m;
 })();

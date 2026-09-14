@@ -1,4 +1,4 @@
-/* Parla — the things that actually block English speakers
+/* Lunosia — the things that actually block English speakers
  *
  * Sixty days of conversation is a schedule, not a syllabus. Nothing in it ever
  * stops and explains why "soy cansado" is wrong, and a learner who is never
@@ -18,11 +18,11 @@
  *   topic    the id the grammar checker tags a correction with, so a mistake
  *            in conversation can open the page that explains it
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
-PARLA.data.es.grammar = [
+LUNOSIA.data.es.grammar = [
 
   { id: 'serestar', topic: 'serestar', level: 'a1', title: 'ser vs estar',
     sub: 'Two verbs for "to be", and the difference is not optional',
@@ -446,8 +446,8 @@ PARLA.data.es.grammar = [
 
 /* Quick lookup by the id the grammar checker tags a correction with, so a
  * mistake made in conversation can open the lesson that explains it. */
-PARLA.data.es.grammarByTopic = (function () {
+LUNOSIA.data.es.grammarByTopic = (function () {
   var map = {};
-  PARLA.data.es.grammar.forEach(function (g) { map[g.topic] = g; });
+  LUNOSIA.data.es.grammar.forEach(function (g) { map[g.topic] = g; });
   return map;
 })();

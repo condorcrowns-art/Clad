@@ -1,4 +1,4 @@
-/* Parla — the conversation brain
+/* Lunosia — the conversation brain
  *
  * One interface, three backends, all free:
  *
@@ -12,7 +12,7 @@
  * Every backend returns the same shape:
  *   { es, en, correction: { original, fixed, note } | null, source }
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -87,8 +87,8 @@ window.PARLA = window.PARLA || {};
      * and it can say which rule it applied, which is what turns a correction
      * into a lesson. The hand-written patterns below are what is left: fixed
      * expressions that no amount of agreement checking would catch. */
-    if (PARLA.grammar && PARLA.grammar.ready()) {
-      var g = PARLA.grammar.correct(text);
+    if (LUNOSIA.grammar && LUNOSIA.grammar.ready()) {
+      var g = LUNOSIA.grammar.correct(text);
       if (g) return g;
     }
 
@@ -215,7 +215,7 @@ window.PARLA = window.PARLA || {};
   ).split(' ').forEach(function (w) { NOT_WORTH_ECHOING[w] = 1; });
 
   function echoWord(text, avoid) {
-    if (!PARLA.dict || !PARLA.dict.ready() || !PARLA.morph) return null;
+    if (!LUNOSIA.dict || !LUNOSIA.dict.ready() || !LUNOSIA.morph) return null;
     var already = words(avoid || '');
     var ws = words(text).filter(function (w) {
       // Something they introduced: a word the partner just said back at them
@@ -223,7 +223,7 @@ window.PARLA = window.PARLA || {};
       return w.length >= 4 && !NOT_WORTH_ECHOING[w] && already.indexOf(w) === -1;
     });
     for (var i = ws.length - 1; i >= 0; i--) {
-      var a = PARLA.morph.analyse(ws[i]);
+      var a = LUNOSIA.morph.analyse(ws[i]);
       if (!a.length) continue;
       var top = a[0];
       // A noun the learner chose is the thing they were talking about; a
@@ -265,7 +265,7 @@ window.PARLA = window.PARLA || {};
   /* The Spanish inside an English question, looked up. Quoted first, since
    * that is what someone asking about a word actually types. */
   function askedAbout(text) {
-    if (!PARLA.dict || !PARLA.dict.ready() || !PARLA.morph) return null;
+    if (!LUNOSIA.dict || !LUNOSIA.dict.ready() || !LUNOSIA.morph) return null;
     var raw = String(text || '');
     var quoted = raw.match(/["'“”«»]([^"'“”«»]{1,40})["'“”«»]/);
     var cands = [];
@@ -288,7 +288,7 @@ window.PARLA = window.PARLA || {};
 
     for (var i = 0; i < cands.length; i++) {
       var c = cands[i];
-      var a = PARLA.morph.analyse(c);
+      var a = LUNOSIA.morph.analyse(c);
       if (!a.length) continue;
       var top = a[0];
       var gloss = (top.entry && top.entry.glosses && top.entry.glosses[0]) || top.en;
@@ -738,13 +738,13 @@ window.PARLA = window.PARLA || {};
      * is the most damaging thing a language app can do. The rules engine gets
      * a veto: if the sentence it proposes has more errors in it than the one
      * the learner wrote, the correction is dropped. */
-    if (corr && corr.fixed && PARLA.grammar && PARLA.grammar.ready()) {
-      if (PARLA.grammar.agrees(original || corr.original || '', corr.fixed) === false) corr = null;
+    if (corr && corr.fixed && LUNOSIA.grammar && LUNOSIA.grammar.ready()) {
+      if (LUNOSIA.grammar.agrees(original || corr.original || '', corr.fixed) === false) corr = null;
     }
     /* And where the rules *do* have something to say, they say it better: an
      * exact rule with a named reason beats a paraphrase. */
-    if (PARLA.grammar && PARLA.grammar.ready() && original) {
-      var sure = PARLA.grammar.correct(original);
+    if (LUNOSIA.grammar && LUNOSIA.grammar.ready() && original) {
+      var sure = LUNOSIA.grammar.correct(original);
       if (sure) corr = sure;
     }
 
@@ -925,7 +925,7 @@ window.PARLA = window.PARLA || {};
   function lookupLocal(word, lang) {
     var target = normalise(word);
     if (!target) return null;
-    var data = PARLA.data && PARLA.data[lang || 'es'];
+    var data = LUNOSIA.data && LUNOSIA.data[lang || 'es'];
     if (!data) return null;
 
     var vocab = data.vocab || [];
@@ -968,8 +968,8 @@ window.PARLA = window.PARLA || {};
 
   /* One reading of a surface form, in the shape the rest of the app expects. */
   function morphLookup(word) {
-    if (!PARLA.morph || !PARLA.morph.ready()) return null;
-    var a = PARLA.morph.analyse(word);
+    if (!LUNOSIA.morph || !LUNOSIA.morph.ready()) return null;
+    var a = LUNOSIA.morph.analyse(word);
     if (!a.length) return null;
     var top = a[0];
     if (!top.en) return null;
@@ -1149,7 +1149,7 @@ window.PARLA = window.PARLA || {};
     if (!word) return null;
 
     var local = lookupLocal(word, lang || 'es');
-    var data = PARLA.data && PARLA.data[lang || 'es'];
+    var data = LUNOSIA.data && LUNOSIA.data[lang || 'es'];
     var out = {
       term: word,
       en: local ? local.en : '',
@@ -1174,8 +1174,8 @@ window.PARLA = window.PARLA || {};
     /* The dictionary. Thirty-one thousand headwords with gender, register and
      * where a word is said - and, through the morphology engine, every form of
      * every one of them. All of it offline, none of it a guess. */
-    if (PARLA.morph && PARLA.morph.ready()) {
-      var readings = PARLA.morph.analyse(word);
+    if (LUNOSIA.morph && LUNOSIA.morph.ready()) {
+      var readings = LUNOSIA.morph.analyse(word);
       if (readings.length) {
         var top = readings[0];
         var e = top.entry;
@@ -1230,7 +1230,7 @@ window.PARLA = window.PARLA || {};
           // compounds of the irregular verbs, so "exact" means something
           // stronger than it used to: the engine knows *why* this verb bends.
           out.conjugationExact = !!verbs.isIrregular(inf) ||
-            !!(PARLA.dict && PARLA.dict.ready() && PARLA.dict.isVerb(inf)) ||
+            !!(LUNOSIA.dict && LUNOSIA.dict.ready() && LUNOSIA.dict.isVerb(inf)) ||
             !!(data.vocab || []).filter(function (v) { return v[0] === inf; })[0];
         }
       }
@@ -1609,10 +1609,10 @@ window.PARLA = window.PARLA || {};
 
     // Boot-time probe already found the backend dead — go straight to scripted
     // rather than making every single turn wait on a failing request.
-    if (PARLA.brain.health.checked && !PARLA.brain.health.ok) {
+    if (LUNOSIA.brain.health.checked && !LUNOSIA.brain.health.ok) {
       var quick = scriptedReply(ctx);
       quick.degraded = true;
-      quick.error = PARLA.brain.health.detail;
+      quick.error = LUNOSIA.brain.health.detail;
       return Promise.resolve(quick);
     }
 
@@ -1675,7 +1675,7 @@ window.PARLA = window.PARLA || {};
     return Promise.resolve({ ok: true, detail: 'Scripted mode needs no setup — it always works.' });
   }
 
-  PARLA.brain = {
+  LUNOSIA.brain = {
     reply: reply,
     testBackend: testBackend,
     detectOllama: detectOllama,

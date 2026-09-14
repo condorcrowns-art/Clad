@@ -25,8 +25,8 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   await page.fill('.onboard input[type=text]', 'Condo');
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(400);
-  await page.evaluate(() => { PARLA.ui.say = function () {}; PARLA.speech.speak = function () {}; });
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => { LUNOSIA.ui.say = function () {}; LUNOSIA.speech.speak = function () {}; });
+  await page.evaluate(() => LUNOSIA.dict.load());
 
   console.log('The list\n');
   await goTo(page, 'write');
@@ -78,16 +78,16 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
     all.some(t => /pequeña/.test(t)), all.join(' / ').replace(/\n/g, ' '));
 
   console.log('\nInto the queue, not a journal\n');
-  const mistakes = await page.evaluate(() => PARLA.store.state.mistakes.map(m => ({
+  const mistakes = await page.evaluate(() => LUNOSIA.store.state.mistakes.map(m => ({
     es: m.es, fix: m.fix, topic: m.topic, from: m.from })));
   check('all three are on file', mistakes.length === 3, JSON.stringify(mistakes.map(m => m.topic)));
   check('each knows which grammar point it was', mistakes.every(m => m.topic));
   check('and that it came from writing', mistakes.every(m => m.from === 'writing'));
   check('each has a schedule of its own',
-    await page.evaluate(() => PARLA.store.state.mistakes.every(m =>
-      !!PARLA.store.state.srs[PARLA.store.mistakeKey(m)])));
+    await page.evaluate(() => LUNOSIA.store.state.mistakes.every(m =>
+      !!LUNOSIA.store.state.srs[LUNOSIA.store.mistakeKey(m)])));
   check('so they are due to come back',
-    (await page.evaluate(() => PARLA.store.dueMistakes(50).length)) === 3);
+    (await page.evaluate(() => LUNOSIA.store.dueMistakes(50).length)) === 3);
 
   await goTo(page, 'review');
   await page.waitForTimeout(400);
@@ -96,7 +96,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
     await page.locator('.fix-banner').innerText());
 
   console.log('\nWhat it will not claim\n');
-  await page.evaluate(() => PARLA.app.go('task', { id: 'familia' }));
+  await page.evaluate(() => LUNOSIA.app.go('task', { id: 'familia' }));
   await page.waitForTimeout(400);
   await page.fill('.write-box', 'Tengo dos hermanas y un hermano pequeño.');
   await page.locator('button', { hasText: 'Check it' }).click();
@@ -114,7 +114,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   check('along with the grammar the question was testing',
     /drags its article/.test(await page.locator('main').innerText()));
 
-  const written = await page.evaluate(() => PARLA.store.state.writing);
+  const written = await page.evaluate(() => LUNOSIA.store.state.writing);
   check('a clean run is recorded as clean',
     written.familia && written.familia.clean === true, JSON.stringify(written));
 

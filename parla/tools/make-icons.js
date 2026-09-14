@@ -1,7 +1,7 @@
 /* Render the app icons.
  *
  * Chrome on Android will not offer "Add to Home Screen" for a manifest whose
- * only icon is an inline SVG, which is exactly the case Parla shipped with —
+ * only icon is an inline SVG, which is exactly the case Lunosia shipped with —
  * so the one platform this is meant to be installed on was the one that would
  * not install it. This renders real PNGs at the two sizes Android looks for.
  *

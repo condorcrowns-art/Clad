@@ -1,4 +1,4 @@
-/* Parla — listening
+/* Lunosia — listening
  *
  * Reading a sentence and hearing one are different skills, and the second is
  * the one that fails you in a real conversation. On the page, Spanish arrives
@@ -17,12 +17,12 @@
  * answering them off the audio alone is a genuinely different result from
  * answering them off the page. It is kept separately for that reason.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   /* Multipliers on whatever speed the user has already chosen, so someone who
    * likes a slow voice everywhere does not end up at a crawl here. */
@@ -30,14 +30,14 @@ window.PARLA = window.PARLA || {};
 
   function viewListen(params) {
     init();
-    var t = (PARLA.data.es.readingById || {})[(params || {}).id];
+    var t = (LUNOSIA.data.es.readingById || {})[(params || {}).id];
     var main = el('main');
 
     if (!t) {
       main.appendChild(ui.empty('🎧', 'No such text',
         'It may have been renamed. Pick one from the list.'));
       main.appendChild(el('div.btn-row',
-        el('button.primary', { onclick: function () { PARLA.app.go('read'); } }, 'Back to the list')));
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('read'); } }, 'Back to the list')));
       return main;
     }
 
@@ -48,9 +48,9 @@ window.PARLA = window.PARLA || {};
     var caught = 0;             // lines you said you caught
 
     main.appendChild(el('div.crumb',
-      el('button.ghost.small-btn', { onclick: function () { PARLA.app.go('read'); } }, '← Read'),
+      el('button.ghost.small-btn', { onclick: function () { LUNOSIA.app.go('read'); } }, '← Read'),
       ui.levelTag(t.level),
-      el('button.ghost.small-btn', { onclick: function () { PARLA.app.go('text', { id: t.id }); } },
+      el('button.ghost.small-btn', { onclick: function () { LUNOSIA.app.go('text', { id: t.id }); } },
         '📖 Read it instead')));
     main.appendChild(el('h1', 'Listen: ' + t.title));
     main.appendChild(el('p.muted',
@@ -80,7 +80,7 @@ window.PARLA = window.PARLA || {};
 
     function speakLine(then) {
       played++;
-      var base = PARLA.store.state.settings.rate || 0.9;
+      var base = LUNOSIA.store.state.settings.rate || 0.9;
       ui.say(t.lines[at][0], then, null, { rate: base * speed });
       paintPlayed();
     }
@@ -179,11 +179,11 @@ window.PARLA = window.PARLA || {};
       }
 
       function report() {
-        PARLA.store.markHeard(t.id, right, t.ask.length, caught);
+        LUNOSIA.store.markHeard(t.id, right, t.ask.length, caught);
         ui.clear(slot);
         // Understanding a text you only heard is a different result from
         // understanding one you read, and worth more.
-        var readScore = (PARLA.store.state.reading[t.id] || {}).right;
+        var readScore = (LUNOSIA.store.state.reading[t.id] || {}).right;
         slot.appendChild(ui.banner(right >= t.ask.length - 1 ? 'good' : 'warn',
           el('div',
             el('strong', right + ' of ' + t.ask.length + ' right, from the audio alone'),
@@ -194,17 +194,17 @@ window.PARLA = window.PARLA || {};
               : 'Listen once more with the text in front of you on the Read screen, ' +
                 'then come back and do it blind.'))));
         slot.appendChild(el('div.btn-row', { style: { marginTop: '14px' } },
-          el('button.primary', { onclick: function () { PARLA.app.go('read'); } }, 'Another text'),
-          el('button', { onclick: function () { PARLA.app.go('listen', { id: t.id }); } },
+          el('button.primary', { onclick: function () { LUNOSIA.app.go('read'); } }, 'Another text'),
+          el('button', { onclick: function () { LUNOSIA.app.go('listen', { id: t.id }); } },
             'Listen again'),
-          el('button', { onclick: function () { PARLA.app.go('text', { id: t.id }); } },
+          el('button', { onclick: function () { LUNOSIA.app.go('text', { id: t.id }); } },
             'Read it')));
       }
     }
 
     draw();
 
-    main._onLeave = function () { PARLA.speech.cancel(); };
+    main._onLeave = function () { LUNOSIA.speech.cancel(); };
     return main;
   }
 
@@ -217,6 +217,6 @@ window.PARLA = window.PARLA || {};
     return out;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.listen = viewListen;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.listen = viewListen;
 })();

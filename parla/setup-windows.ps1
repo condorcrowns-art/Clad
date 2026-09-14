@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  One-shot Windows setup for Parla: installs Ollama, configures it for the
+  One-shot Windows setup for Lunosia: installs Ollama, configures it for the
   browser, pulls a Spanish-capable model, and starts the app.
 
 .DESCRIPTION
@@ -10,7 +10,7 @@
   What it does:
     1. Installs Ollama via winget (skipped if already installed)
     2. Sets OLLAMA_ORIGINS=* machine-wide, so the browser is allowed to talk
-       to it. Without this Ollama refuses the request and Parla falls back to
+       to it. Without this Ollama refuses the request and Lunosia falls back to
        its scripted partner.
     3. Restarts Ollama so it picks that variable up
     4. Detects your GPU and picks a model sized to VRAM (not system RAM -
@@ -46,7 +46,7 @@ function Ok($text)       { Write-Host "    OK  $text" -ForegroundColor Green }
 function Note($text)     { Write-Host "    --  $text" -ForegroundColor DarkGray }
 function Warn($text)     { Write-Host "    !!  $text" -ForegroundColor Yellow }
 
-Write-Host "`n=== Parla setup ===" -ForegroundColor Magenta
+Write-Host "`n=== Lunosia setup ===" -ForegroundColor Magenta
 
 # Admin is needed to set a machine-wide env var and to bind the HTTP port.
 $isAdmin = ([Security.Principal.WindowsPrincipal] `
@@ -238,7 +238,7 @@ if (-not $SkipOllama) {
       }
     } catch { }
 
-    # A typical Parla reply is ~40 tokens, so this timing is representative.
+    # A typical Lunosia reply is ~40 tokens, so this timing is representative.
     # Judged on the warm number: a slow disk can add seconds to the first load
     # without saying anything about how the conversation will feel.
     $secs = $warmSecs
@@ -330,7 +330,7 @@ if ($SkipVoice) {
     $hfBase = 'https://huggingface.co/rhasspy/piper-voices/resolve/main'
     # Four voices, not one. Your partner is a different person in every
     # scenario, and one voice reading every part is the detail that quietly
-    # tells you nobody was paying attention. Parla casts them by character;
+    # tells you nobody was paying attention. Lunosia casts them by character;
     # Settings -> Voice lets you say which sounds like a woman and which a man,
     # since the model cards do not record it and the app cannot hear itself.
     $wanted = @(
@@ -376,7 +376,7 @@ if ($SkipVoice) {
                              '--output_file', ('"' + $outWav + '"')) `
              -RedirectStandardInput $inTxt -NoNewWindow -Wait -PassThru
       if ($p.ExitCode -eq 0 -and (Test-Path $outWav -PathType Leaf)) {
-        Ok "neural voice working - Parla will use it instead of the Windows voices"
+        Ok "neural voice working - Lunosia will use it instead of the Windows voices"
       } else {
         Warn "piper is installed but did not produce audio; the app will use browser voices"
       }
@@ -416,12 +416,12 @@ if ($SkipVoice) {
     }
   } catch {
     Warn "Neural voice setup failed: $($_.Exception.Message)"
-    Warn "Not fatal - Parla falls back to your browser's voices. Re-run this to retry."
+    Warn "Not fatal - Lunosia falls back to your browser's voices. Re-run this to retry."
   }
 }
 $ProgressPreference = $oldProgress
 
-Step 9 "Starting Parla"
+Step 9 "Starting Lunosia"
 $serve = Join-Path $PSScriptRoot 'serve.ps1'
 if (-not (Test-Path $serve)) {
   Write-Host "    Could not find serve.ps1 next to this script." -ForegroundColor Red
@@ -443,7 +443,7 @@ Write-Host @"
   Nothing here costs money: the model, the voice and the server all run
   locally, and nothing you say leaves this computer.
 
-  Leave this window open while you use Parla. Ctrl+C stops it.
+  Leave this window open while you use Lunosia. Ctrl+C stops it.
 
 "@ -ForegroundColor Green
 

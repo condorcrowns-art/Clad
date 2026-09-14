@@ -1,4 +1,4 @@
-/* Parla — speech in and out
+/* Lunosia — speech in and out
  *
  * Recognition is a native browser API, which is why this app can be free:
  * SpeechRecognition gives speech-to-text with no API key and no per-minute
@@ -16,7 +16,7 @@
  * A saved voice is a plain browser voiceURI, or 'piper:<voice-id>'. If Piper
  * is installed and nothing is saved yet, Piper wins by default.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -308,8 +308,8 @@ window.PARLA = window.PARLA || {};
      * 204" and "Son 3,20 EUR" are read as digits and symbols by every engine
      * there is, and one mangled number undoes a whole neural model's worth of
      * realism. The text on screen is untouched - this is the speech layer. */
-    if (PARLA.saytext && opts.raw !== true) {
-      text = PARLA.saytext.forSpeech(text);
+    if (LUNOSIA.saytext && opts.raw !== true) {
+      text = LUNOSIA.saytext.forSpeech(text);
     }
 
     if (!text) {
@@ -771,7 +771,7 @@ window.PARLA = window.PARLA || {};
     return r;
   }
 
-  PARLA.speech = {
+  LUNOSIA.speech = {
     supported: !!SR,
     ttsSupported: 'speechSynthesis' in window,
     secure: window.isSecureContext !== false,

@@ -31,20 +31,20 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 3, has
   await page.waitForTimeout(400);
   // Nothing here should try to make a sound.
   await page.evaluate(() => {
-    PARLA.ui.say = function () {}; PARLA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
+    LUNOSIA.ui.say = function () {}; LUNOSIA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
   });
 
   // The default only flips to the hosted partner on a public https origin; a
   // test server is http://localhost, so ask for it the way a phone would get it.
   await page.evaluate(() => {
-    PARLA.store.state.settings.brain = 'hosted';
-    PARLA.brain.health.checked = false;
-    PARLA.store.save();
+    LUNOSIA.store.state.settings.brain = 'hosted';
+    LUNOSIA.brain.health.checked = false;
+    LUNOSIA.store.save();
   });
 
   console.log(MODE === 'nobinding' ? 'With no AI binding\n' : 'On the deployed site\n');
 
-  const probe = await page.evaluate(() => PARLA.brain.hostedAvailable());
+  const probe = await page.evaluate(() => LUNOSIA.brain.hostedAvailable());
   if (MODE === 'nobinding') {
     check('the app can tell the binding is missing', probe.ok === false, JSON.stringify(probe));
     check('and says what to do about it', /binding/i.test(probe.detail || ''), probe.detail);
@@ -54,7 +54,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 3, has
       (probe.models || []).some(m => /^@cf\//.test(m)), (probe.models || []).join(', '));
   }
 
-  await page.evaluate(() => PARLA.app.go('scenarios'));
+  await page.evaluate(() => LUNOSIA.app.go('scenarios'));
   await page.waitForTimeout(300);
   await page.locator('button.scenario').first().click();
   await page.waitForTimeout(500);
@@ -71,7 +71,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 3, has
     check('the conversation still works without the binding', bubbles.length >= 2, last);
     check('and it does not show a raw error to the user',
       !/no-binding|HTTP \d|undefined|\[object/.test(last), last);
-    const src = await page.evaluate(() => PARLA.store.state.settings.brain);
+    const src = await page.evaluate(() => LUNOSIA.store.state.settings.brain);
     check('the setting is left alone so it works again once the binding is added',
       src === 'hosted', src);
   } else {

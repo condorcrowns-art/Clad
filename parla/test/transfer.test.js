@@ -31,9 +31,63 @@ function freshStore() {
     globalThis.console = console;
   `, ctx);
   load(ctx, 'js/srs.js', 'js/store.js');
-  vm.runInContext('PARLA.store.load();', ctx);
-  return ctx.PARLA.store;
+  vm.runInContext('LUNOSIA.store.load();', ctx);
+  return ctx.LUNOSIA.store;
 }
+
+/* — the rename must not cost anyone their progress —
+ *
+ * The app was called Parla and its save lived under `parla.save.v1`. Anyone
+ * who used it before the rename has everything — every word, every review
+ * card, the streak — under that key, on their own device, with no server copy
+ * to fall back on. A rename that just started reading a new key would have
+ * looked, to them, exactly like the app wiping itself.
+ */
+(function () {
+  const ctx = makeSandbox();
+  vm.runInContext(`
+    globalThis.fetch = function(){ return Promise.reject(new Error('no network')); };
+    var __ls = {};
+    globalThis.localStorage = {
+      getItem: function (k) { return __ls[k] == null ? null : __ls[k]; },
+      setItem: function (k, v) { __ls[k] = String(v); },
+      removeItem: function (k) { delete __ls[k]; },
+      __all: function () { return __ls; }
+    };
+    globalThis.console = console;
+    // A save written by the app under its old name.
+    __ls['parla.save.v1'] = JSON.stringify({
+      schema: 1,
+      profile: { name: 'Condo' },
+      progress: { xp: 1234, streak: 9, challengeDone: [0, 1, 2, 3] },
+      phrases: [{ es: 'la escalera', en: 'the stairs', when: 1 }]
+    });
+  `, ctx);
+  load(ctx, 'js/srs.js', 'js/store.js');
+  vm.runInContext('LUNOSIA.store.load();', ctx);
+  const st = ctx.LUNOSIA.store.state;
+
+  console.log('\nAn old Parla save on the device\n');
+  check('the streak survives the rename', st.progress.streak === 9, String(st.progress.streak));
+  check('the XP survives', st.progress.xp === 1234, String(st.progress.xp));
+  check('the words survive', (st.phrases || []).length === 1,
+    (st.phrases || []).length + ' words');
+  check('the days done survive', (st.progress.challengeDone || []).length === 4);
+  check('the name survives', st.profile.name === 'Condo', st.profile.name);
+
+  const keys = vm.runInContext('Object.keys(localStorage.__all())', ctx);
+  check('it is now stored under the new name', keys.indexOf('lunosia.save.v1') !== -1, keys.join(', '));
+  check('and the old key is cleared, so it cannot be read twice',
+    keys.indexOf('parla.save.v1') === -1, keys.join(', '));
+
+  // Saving must not resurrect the old key, or a later version reading it would
+  // find a stale copy of a save that has since moved on.
+  ctx.LUNOSIA.store.state.progress.xp = 2000;
+  ctx.LUNOSIA.store.save();
+  const after = vm.runInContext('Object.keys(localStorage.__all())', ctx);
+  check('writing afterwards touches only the new key',
+    after.length === 1 && after[0] === 'lunosia.save.v1', after.join(', '));
+})();
 
 /* — the phone — */
 const phone = freshStore();

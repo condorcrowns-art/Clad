@@ -1,4 +1,4 @@
-/* Parla — the grammar screen
+/* Lunosia — the grammar screen
  *
  * Twenty things that trip English speakers up, each one earning its place by
  * being a mistake the checker has actually seen someone make. The list is
@@ -10,18 +10,18 @@
  * learner would have given, because recognising your own error is most of
  * learning not to make it.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   var LEVELS = { a1: 'A1', a2: 'A2', b1: 'B1', b2: 'B2' };
 
   /* How many times the checker has caught this topic in your conversations. */
   function tally() {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var out = {};
     (st.mistakes || []).forEach(function (m) {
       if (m.topic) out[m.topic] = (out[m.topic] || 0) + 1;
@@ -30,15 +30,15 @@ window.PARLA = window.PARLA || {};
   }
 
   function mastery(id) {
-    var g = PARLA.store.state.grammar || {};
+    var g = LUNOSIA.store.state.grammar || {};
     return g[id] || { seen: 0, right: 0, wrong: 0 };
   }
 
   function viewGrammar() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
-    var lessons = PARLA.data.es.grammar;
+    var lessons = LUNOSIA.data.es.grammar;
     var hits = tally();
 
     main.appendChild(el('h1', 'Grammar that trips you up'));
@@ -69,7 +69,7 @@ window.PARLA = window.PARLA || {};
     function card(l, caught) {
       var m = mastery(l.id);
       var pct = m.seen ? Math.round(m.right * 100 / m.seen) : 0;
-      return el('button.gram-card', { onclick: function () { PARLA.app.go('lesson', { id: l.id }); } },
+      return el('button.gram-card', { onclick: function () { LUNOSIA.app.go('lesson', { id: l.id }); } },
         el('div.row',
           el('div.gram-title', l.title),
           el('div.spacer'),
@@ -84,15 +84,15 @@ window.PARLA = window.PARLA || {};
   /* ── One lesson ───────────────────────────────────────────*/
   function viewLesson(params) {
     init();
-    var st = PARLA.store.state;
-    var l = (PARLA.data.es.grammar || []).filter(function (x) {
+    var st = LUNOSIA.store.state;
+    var l = (LUNOSIA.data.es.grammar || []).filter(function (x) {
       return x.id === (params && params.id);
     })[0];
     var main = el('main');
     if (!l) { main.appendChild(el('p', 'No such lesson.')); return main; }
 
     main.appendChild(el('div.row', { style: { marginBottom: '6px' } },
-      el('button.ghost', { onclick: function () { PARLA.app.go('grammar'); } }, '← Grammar'),
+      el('button.ghost', { onclick: function () { LUNOSIA.app.go('grammar'); } }, '← Grammar'),
       el('div.spacer'),
       el('span.level-tag.' + l.level, LEVELS[l.level])));
 
@@ -146,11 +146,11 @@ window.PARLA = window.PARLA || {};
       if (ok) m.right++; else m.wrong++;
       // A rule you have just got wrong is a rule to revisit, so it goes into
       // the same deck as everything else rather than being forgotten.
-      if (!ok) PARLA.store.rememberMistake({
+      if (!ok) LUNOSIA.store.rememberMistake({
         es: l.drill[order[at]][0].replace('___', l.drill[order[at]][1]),
         fix: '', note: l.drill[order[at]][3], topic: l.topic, from: 'lesson'
       });
-      PARLA.store.save();
+      LUNOSIA.store.save();
     }
 
     function draw() {
@@ -164,11 +164,11 @@ window.PARLA = window.PARLA || {};
             : 'Worth coming back to — the ones you missed are in your review deck now.'),
           el('div.btn-row', { style: { justifyContent: 'center', marginTop: '14px' } },
             el('button.primary', { onclick: function () {
-              at = 0; right = 0; PARLA.app.go('lesson', { id: l.id });
+              at = 0; right = 0; LUNOSIA.app.go('lesson', { id: l.id });
             } }, 'Again'),
-            el('button', { onclick: function () { PARLA.app.go('grammar'); } }, 'Other lessons'))));
-        PARLA.store.creditDay(order.length * 3);
-        PARLA.store.save();
+            el('button', { onclick: function () { LUNOSIA.app.go('grammar'); } }, 'Other lessons'))));
+        LUNOSIA.store.creditDay(order.length * 3);
+        LUNOSIA.store.save();
         return;
       }
 
@@ -216,7 +216,7 @@ window.PARLA = window.PARLA || {};
     return main;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.grammar = viewGrammar;
-  PARLA.views.lesson = viewLesson;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.grammar = viewGrammar;
+  LUNOSIA.views.lesson = viewLesson;
 })();

@@ -20,17 +20,17 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   await page.fill('.onboard input[type=text]', 'Condo');
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(400);
-  await page.evaluate(() => { PARLA.ui.say = function () {}; PARLA.speech.speak = function () {}; });
+  await page.evaluate(() => { LUNOSIA.ui.say = function () {}; LUNOSIA.speech.speak = function () {}; });
 
   console.log('Arriving\n');
   check('the app starts without waiting for a megabyte of dictionary',
     await page.locator('#nav').isVisible());
-  const loaded = await page.evaluate(() => PARLA.dict.load());
+  const loaded = await page.evaluate(() => LUNOSIA.dict.load());
   check('the dictionary loads on demand', loaded === true);
-  const size = await page.evaluate(() => PARLA.dict.size());
+  const size = await page.evaluate(() => LUNOSIA.dict.size());
   check('with the whole language in it', size > 25000, size.toLocaleString() + ' words');
   check('and the morphology engine comes up with it',
-    await page.evaluate(() => PARLA.morph.ready()));
+    await page.evaluate(() => LUNOSIA.morph.ready()));
 
   console.log('\nThe word bank\n');
   await goTo(page, 'words');
@@ -66,15 +66,15 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
     await page.locator('.wb-meta').first().innerText());
 
   console.log('\nInto the deck\n');
-  const before = await page.evaluate(() => (PARLA.store.state.phrases || []).length);
+  const before = await page.evaluate(() => (LUNOSIA.store.state.phrases || []).length);
   const term = await page.locator('.wb-row:not(.have) .wb-term').first().innerText();
   await page.locator('.wb-row:not(.have) button.primary').first().click();
   await page.waitForTimeout(400);
-  const after = await page.evaluate(() => (PARLA.store.state.phrases || []).length);
+  const after = await page.evaluate(() => (LUNOSIA.store.state.phrases || []).length);
   check('a word taken from the bank lands in the deck', after === before + 1,
     before + ' -> ' + after + '  (' + term + ')');
   check('and it is saved, not just shown',
-    await page.evaluate(() => JSON.parse(localStorage.getItem('parla.save.v1')).phrases.length > 0));
+    await page.evaluate(() => JSON.parse(localStorage.getItem('lunosia.save.v1')).phrases.length > 0));
   check('the row now says you have it', (await page.locator('.wb-row.have').count()) > 0);
 
   console.log('\nAsk, with a dictionary behind it\n');

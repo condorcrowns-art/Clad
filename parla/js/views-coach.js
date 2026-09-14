@@ -1,4 +1,4 @@
-/* Parla — ask it anything
+/* Lunosia — ask it anything
  *
  * The shipped word list is 521 words. The model knows the language. Capping a
  * lookup at a hand-typed list was the wrong instinct, so this screen takes any
@@ -11,16 +11,16 @@
  * are instant, free, and never wrong. The model fills in the rest, which is
  * most of the language.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   function viewCoach(params) {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
     var pending = 0;
 
@@ -31,7 +31,7 @@ window.PARLA = window.PARLA || {};
     var dictLine = el('div.small.faint', { style: { marginBottom: '10px' } });
     main.appendChild(dictLine);
     function paintDict() {
-      var D = PARLA.dict;
+      var D = LUNOSIA.dict;
       if (!D) return;
       if (D.ready()) {
         dictLine.textContent = D.size().toLocaleString() + ' words offline, no model needed.';
@@ -97,14 +97,14 @@ window.PARLA = window.PARLA || {};
       input.value = query;
 
       st.asked = [query].concat((st.asked || []).filter(function (q) { return q !== query; })).slice(0, 20);
-      PARLA.store.save();
+      LUNOSIA.store.save();
 
       var mine = ++pending;
       hideStarter();
       ui.clear(out);
       out.appendChild(el('div.card', el('div.muted', 'Looking it up…')));
 
-      PARLA.brain.explain({
+      LUNOSIA.brain.explain({
         query: query,
         lang: st.profile.target || 'es',
         settings: Object.assign({}, st.settings, { level: st.profile.level })
@@ -112,7 +112,7 @@ window.PARLA = window.PARLA || {};
         if (mine !== pending) return;             // a newer question won
         ui.clear(out);
         out.appendChild(res ? render(res) : notFound(query));
-        if (PARLA.decor) PARLA.decor.reveal(out);
+        if (LUNOSIA.decor) LUNOSIA.decor.reveal(out);
       });
     }
 
@@ -124,7 +124,7 @@ window.PARLA = window.PARLA || {};
           'works backwards to a word either. Check the spelling — or connect an ' +
           'AI partner in Settings, which can answer for things a dictionary cannot.'),
         el('div.btn-row',
-          el('button', { onclick: function () { PARLA.app.go('settings'); } }, 'Settings')));
+          el('button', { onclick: function () { LUNOSIA.app.go('settings'); } }, 'Settings')));
     }
 
     function render(r) {
@@ -218,11 +218,11 @@ window.PARLA = window.PARLA || {};
       // Compare with the article off both sides, or "cuenta" gets a second
       // card next to the "la cuenta" already in the deck.
       var bare = function (t) {
-        return PARLA.brain.normalise(String(t).replace(/^(el|la|los|las|un|una)\s+/i, ''));
+        return LUNOSIA.brain.normalise(String(t).replace(/^(el|la|los|las|un|una)\s+/i, ''));
       };
       var already = (st.phrases || []).some(function (p) {
         return bare(p.es) === bare(headword);
-      }) || !!(PARLA.data.es.vocab || []).filter(function (v) {
+      }) || !!(LUNOSIA.data.es.vocab || []).filter(function (v) {
         return bare(v[0]) === bare(headword);
       })[0];
 
@@ -236,15 +236,15 @@ window.PARLA = window.PARLA || {};
               'Needs a meaning first')
           : el('button.primary', { onclick: function () {
               var ex0 = (r.examples || [])[0] || {};
-              PARLA.store.addWord(article + headword === headword ? headword : headword,
+              LUNOSIA.store.addWord(article + headword === headword ? headword : headword,
                                   r.en, ex0.es || '', ex0.en || '');
               ui.toast('“' + headword + '” added to your deck', 'good');
-              PARLA.app.go('coach', { q: r.term });
+              LUNOSIA.app.go('coach', { q: r.term });
             } }, '+ Learn this'),
-        el('button', { onclick: function () { PARLA.app.go('review'); } }, 'Go review')));
+        el('button', { onclick: function () { LUNOSIA.app.go('review'); } }, 'Go review')));
 
       if (r.partial) {
-        var D2 = PARLA.dict;
+        var D2 = LUNOSIA.dict;
         card.appendChild(el('div.hint', { style: { marginTop: '10px' } },
           D2 && D2.ready()
             ? 'From the ' + D2.size().toLocaleString() + '-word dictionary and the grammar ' +
@@ -257,7 +257,7 @@ window.PARLA = window.PARLA || {};
     }
 
     function conjugationBlock(inf, r) {
-      var V = PARLA.data.es.verbs;
+      var V = LUNOSIA.data.es.verbs;
       var block = el('div.ask-block');
       var tenses = Object.keys(r.conjugation);
       var shown = 'presente';
@@ -331,6 +331,6 @@ window.PARLA = window.PARLA || {};
     euphemism: 'a polite way of putting it', humorous: 'jokey'
   };
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.coach = viewCoach;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.coach = viewCoach;
 })();

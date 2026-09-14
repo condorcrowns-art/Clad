@@ -1,4 +1,4 @@
-/* Parla — study games
+/* Lunosia — study games
  *
  * Drills you will actually open when you have four minutes on a bus. They run
  * entirely in the page: no model, no microphone, no network, so they work
@@ -6,18 +6,18 @@
  * desk. Every one of them feeds the same spaced-repetition deck as the review
  * screen, so playing is studying and not a detour from it.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   /* The pool every game draws from: the shipped corpus plus everything you
    * have picked up yourself, weighted towards what you are weakest on. */
   function pool(st, want) {
     var items = [];
-    (PARLA.data.es.vocab || []).forEach(function (v) {
+    (LUNOSIA.data.es.vocab || []).forEach(function (v) {
       if (v[1]) items.push({ es: v[0], en: v[1], ex: v[3] });
     });
     (st.phrases || []).forEach(function (p) {
@@ -49,14 +49,14 @@ window.PARLA = window.PARLA || {};
     // Games grade gently: getting it right in a game is weaker evidence than
     // producing it cold in review, and getting it wrong under time pressure is
     // not the same as not knowing it.
-    st.srs[key] = PARLA.srs.grade(st.srs[key], right ? 4 : 2);
+    st.srs[key] = LUNOSIA.srs.grade(st.srs[key], right ? 4 : 2);
     st.progress.totals.reviews++;
   }
 
   /* ── The menu ─────────────────────────────────────────────*/
   function viewGames() {
     init();
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var main = el('main');
 
     main.appendChild(el('h1', 'Games'));
@@ -73,7 +73,7 @@ window.PARLA = window.PARLA || {};
 
     var grid = el('div.grid.two', { style: { marginTop: '18px' } });
     games.forEach(function (g) {
-      grid.appendChild(el('button.game-card', { onclick: function () { PARLA.app.go('game', { id: g[0] }); } },
+      grid.appendChild(el('button.game-card', { onclick: function () { LUNOSIA.app.go('game', { id: g[0] }); } },
         el('div.game-emoji', g[1]),
         el('div',
           el('div.game-name', g[2]),
@@ -97,7 +97,7 @@ window.PARLA = window.PARLA || {};
   function shell(title, sub) {
     var main = el('main');
     var head = el('div.row', { style: { marginBottom: '10px' } },
-      el('button.ghost', { onclick: function () { PARLA.app.go('games'); } }, '← Games'),
+      el('button.ghost', { onclick: function () { LUNOSIA.app.go('games'); } }, '← Games'),
       el('div.spacer'));
     var score = el('span.chip.hot', '0');
     var timer = el('span.chip', '—');
@@ -112,13 +112,13 @@ window.PARLA = window.PARLA || {};
   }
 
   function finish(s, gameId, points, lines) {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var best = st.gameBest || (st.gameBest = {});
     var record = points > (best[gameId] || 0);
     if (record) best[gameId] = points;
-    PARLA.store.creditDay(Math.round(points / 4));
-    PARLA.store.save();
-    if (record && PARLA.decor) PARLA.decor.confetti(110);
+    LUNOSIA.store.creditDay(Math.round(points / 4));
+    LUNOSIA.store.save();
+    if (record && LUNOSIA.decor) LUNOSIA.decor.confetti(110);
 
     ui.clear(s.body);
     s.body.appendChild(el('div.card.center',
@@ -126,8 +126,8 @@ window.PARLA = window.PARLA || {};
       el('div.muted', record ? 'A new best.' : 'Best so far: ' + (best[gameId] || 0)),
       lines ? el('div.small.muted', { style: { marginTop: '8px' } }, lines) : null,
       el('div.btn-row', { style: { marginTop: '16px', justifyContent: 'center' } },
-        el('button.primary', { onclick: function () { PARLA.app.go('game', { id: gameId }); } }, 'Again'),
-        el('button', { onclick: function () { PARLA.app.go('games'); } }, 'Other games'))));
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('game', { id: gameId }); } }, 'Again'),
+        el('button', { onclick: function () { LUNOSIA.app.go('games'); } }, 'Other games'))));
   }
 
   function countdown(s, seconds, onTick, onDone) {
@@ -145,7 +145,7 @@ window.PARLA = window.PARLA || {};
 
   /* ── Pairs ────────────────────────────────────────────────*/
   function gameMatch(s) {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var words = pool(st, 8);
     var picked = null, matched = 0, moves = 0, stop = null;
 
@@ -205,7 +205,7 @@ window.PARLA = window.PARLA || {};
 
   /* ── Word rush and El-or-la share a question loop ─────────*/
   function quizLoop(s, opts) {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var items = pool(st, 60);
     var i = 0, score = 0, streak = 0, best = 0, stop = null, locked = false;
 
@@ -228,7 +228,7 @@ window.PARLA = window.PARLA || {};
             el('p', 'Not enough words for this one yet.'),
             el('p.small.muted', 'Learn a few more nouns and come back.'),
             el('div.btn-row', { style: { justifyContent: 'center', marginTop: '12px' } },
-              el('button.primary', { onclick: function () { PARLA.app.go('games'); } }, 'Other games'))));
+              el('button.primary', { onclick: function () { LUNOSIA.app.go('games'); } }, 'Other games'))));
           if (stop) stop();
           return;
         }
@@ -302,7 +302,7 @@ window.PARLA = window.PARLA || {};
 
   /* ── Dictation ────────────────────────────────────────────*/
   function gameDictate(s) {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var items = pool(st, 20);
     var i = 0, score = 0, done = 0;
 
@@ -319,7 +319,7 @@ window.PARLA = window.PARLA || {};
       box.appendChild(el('div.btn-row', { style: { justifyContent: 'center', marginTop: '10px' } },
         el('button', { onclick: function () { ui.say(it.es); } }, '🔊 Again'),
         el('button', { onclick: function () {
-          PARLA.speech.speak(it.es, { lang: 'es', rate: 0.6,
+          LUNOSIA.speech.speak(it.es, { lang: 'es', rate: 0.6,
             voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch });
         } }, '🐢 Slower')));
 
@@ -376,12 +376,12 @@ window.PARLA = window.PARLA || {};
 
     s.main._onLeave = function () {
       if (stop) stop();
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
     };
     return s.main;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.games = viewGames;
-  PARLA.views.game = viewGame;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.games = viewGames;
+  LUNOSIA.views.game = viewGame;
 })();

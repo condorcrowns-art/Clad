@@ -23,13 +23,13 @@ const raw = JSON.parse(fs.readFileSync(ROOT + '/js/data/dict-es.json', 'utf8'));
 ctx.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(raw) });
 vm.runInContext('globalThis.fetch = fetch;', ctx);
 
-const G = ctx.PARLA.grammar;
+const G = ctx.LUNOSIA.grammar;
 
 (async () => {
   console.log('Before the dictionary is loaded\n');
   check('it stands down rather than guessing', G.ready() === false && G.check('la problema').length === 0);
 
-  await ctx.PARLA.dict.load();
+  await ctx.LUNOSIA.dict.load();
   console.log('\nCatching what English speakers get wrong\n');
 
   const shouldCatch = [
@@ -203,9 +203,9 @@ const G = ctx.PARLA.grammar;
       Object.keys(o).forEach(k => { if (k !== 'en') walk(o[k]); });
     }
   };
-  (ctx.PARLA.data.es.scenarios || []).forEach(sc => { walk(sc.opener); walk(sc.script); walk(sc.fallback); });
-  (ctx.PARLA.data.es.vocab || []).forEach(v => { if (v[3]) lines.push(v[3]); });
-  (ctx.PARLA.data.es.grammar || []).forEach(g => {
+  (ctx.LUNOSIA.data.es.scenarios || []).forEach(sc => { walk(sc.opener); walk(sc.script); walk(sc.fallback); });
+  (ctx.LUNOSIA.data.es.vocab || []).forEach(v => { if (v[3]) lines.push(v[3]); });
+  (ctx.LUNOSIA.data.es.grammar || []).forEach(g => {
     g.pairs.forEach(pr => { if (pr[0] && !/✗/.test(pr[1] || '')) lines.push(pr[0]); });
   });
   const corpus = lines.filter(x => typeof x === 'string' && x.split(/\s+/).length >= 3);
@@ -240,7 +240,7 @@ const G = ctx.PARLA.grammar;
     G.agrees('el problema es difícil', 'la problema es difícil') === false);
 
   console.log('\nThe curriculum\n');
-  const gram = ctx.PARLA.data.es.grammar;
+  const gram = ctx.LUNOSIA.data.es.grammar;
   check('twenty lessons', gram.length === 20, String(gram.length));
   check('every one says why an English speaker gets it wrong', gram.every(g => (g.why || '').length > 40));
   check('every one has a rule in one sentence', gram.every(g => g.rule && g.rule.length < 160));

@@ -22,13 +22,13 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(400);
   await page.evaluate(() => {
-    PARLA.ui.say = function () {};
-    PARLA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
+    LUNOSIA.ui.say = function () {};
+    LUNOSIA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
   });
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => LUNOSIA.dict.load());
 
   console.log('Corrected while talking\n');
-  check('the grammar engine is up', await page.evaluate(() => PARLA.grammar.ready()));
+  check('the grammar engine is up', await page.evaluate(() => LUNOSIA.grammar.ready()));
 
   await goTo(page, 'scenarios');
   await page.locator('button.scenario').first().click();
@@ -66,16 +66,16 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.waitForTimeout(800);
 
   console.log('\nScheduled, not filed away\n');
-  const stored = await page.evaluate(() => PARLA.store.state.mistakes.map(m => ({
+  const stored = await page.evaluate(() => LUNOSIA.store.state.mistakes.map(m => ({
     es: m.es, fix: m.fix, topic: m.topic })));
   check('every correction is on file', stored.length === 3, String(stored.length));
   check('each one knows which grammar point it was',
     stored.every(m => m.topic), JSON.stringify(stored.map(m => m.topic)));
   check('and each has a schedule of its own',
-    await page.evaluate(() => PARLA.store.state.mistakes.every(m =>
-      !!PARLA.store.state.srs[PARLA.store.mistakeKey(m)])));
+    await page.evaluate(() => LUNOSIA.store.state.mistakes.every(m =>
+      !!LUNOSIA.store.state.srs[LUNOSIA.store.mistakeKey(m)])));
   check('all three are due right now',
-    (await page.evaluate(() => PARLA.store.dueMistakes(50).length)) === 3);
+    (await page.evaluate(() => LUNOSIA.store.dueMistakes(50).length)) === 3);
 
   console.log('\nSurfaced where you will see it\n');
   await goTo(page, 'home');
@@ -104,7 +104,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   check('and a way into the lesson behind it',
     (await page.locator('main button', { hasText: '📖' }).count()) === 1);
 
-  const dueBefore = await page.evaluate(() => PARLA.store.dueMistakes(50).length);
+  const dueBefore = await page.evaluate(() => LUNOSIA.store.dueMistakes(50).length);
   await page.locator('button', { hasText: 'Next' }).click();
   await page.waitForTimeout(400);
 
@@ -115,10 +115,10 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.waitForTimeout(400);
   check('a right answer is accepted', await page.locator('.answer-state.ok').isVisible());
   check('and the one you got right is no longer due',
-    (await page.evaluate(() => PARLA.store.dueMistakes(50).length)) < dueBefore,
-    dueBefore + ' -> ' + await page.evaluate(() => PARLA.store.dueMistakes(50).length));
+    (await page.evaluate(() => LUNOSIA.store.dueMistakes(50).length)) < dueBefore,
+    dueBefore + ' -> ' + await page.evaluate(() => LUNOSIA.store.dueMistakes(50).length));
   check('while the one you missed still is',
-    await page.evaluate(() => PARLA.store.dueMistakes(50).some(m => m.fix)));
+    await page.evaluate(() => LUNOSIA.store.dueMistakes(50).some(m => m.fix)));
 
   console.log('\nThe grammar behind it\n');
   await goTo(page, 'grammar');
@@ -136,14 +136,14 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   check('shows the pair side by side', (await page.locator('.pair').count()) >= 2);
   check('and ends in a drill', (await page.locator('.quiz-opt').count()) >= 2);
 
-  const before = await page.evaluate(() => (PARLA.store.state.grammar || {}));
+  const before = await page.evaluate(() => (LUNOSIA.store.state.grammar || {}));
   const opts = await page.locator('.quiz-opt').allInnerTexts();
   await page.locator('.quiz-opt').first().click();
   await page.waitForTimeout(400);
   check('answering explains the answer', await page.locator('.answer-state').isVisible(),
     opts.join('/'));
   check('and is recorded against the lesson',
-    await page.evaluate(() => Object.keys(PARLA.store.state.grammar || {}).length > 0),
+    await page.evaluate(() => Object.keys(LUNOSIA.store.state.grammar || {}).length > 0),
     JSON.stringify(before));
 
   console.log('\nOn a phone\n');

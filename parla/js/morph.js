@@ -1,4 +1,4 @@
-/* Parla — Spanish morphology
+/* Lunosia — Spanish morphology
  *
  * A dictionary knows "pedir". A learner hears "pidiéndoselo". Between those
  * two facts sits every reason a beginner gives up on looking words up, and
@@ -13,13 +13,13 @@
  *
  * Nothing here needs a model, a network or a microphone.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
 
-  function dict() { return PARLA.dict; }
-  function verbs() { return PARLA.data && PARLA.data.es && PARLA.data.es.verbs; }
+  function dict() { return LUNOSIA.dict; }
+  function verbs() { return LUNOSIA.data && LUNOSIA.data.es && LUNOSIA.data.es.verbs; }
   function ready() { return !!(dict() && dict().ready() && verbs()); }
 
   function fold(w) {
@@ -629,7 +629,7 @@ window.PARLA = window.PARLA || {};
     });
   }
 
-  PARLA.morph = {
+  LUNOSIA.morph = {
     ready: ready,
     analyse: analyse,
     best: best,

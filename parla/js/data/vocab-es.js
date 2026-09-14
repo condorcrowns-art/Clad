@@ -1,4 +1,4 @@
-/* Parla — Spanish vocabulary corpus
+/* Lunosia — Spanish vocabulary corpus
  *
  * Format: [es, en, pos, example_es, example_en, tags]
  *   pos    — noun-m | noun-f | verb | adj | adv | prep | conj | interj | phrase | num | pron
@@ -7,11 +7,11 @@
  * Adding words: just append rows. The SRS, drills and TTS pick them up
  * automatically — nothing else needs to change.
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
-PARLA.data.es.vocab = [
+LUNOSIA.data.es.vocab = [
 
   /* ── Greetings & politeness ───────────────────────────────── */
   ["hola", "hello", "interj", "¡Hola! ¿Qué tal?", "Hi! How's it going?", "greetings|a1"],

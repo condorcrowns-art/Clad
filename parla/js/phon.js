@@ -1,4 +1,4 @@
-/* Parla — Spanish phonology
+/* Lunosia — Spanish phonology
  *
  * Speech recognition tells you it heard "pero" when you meant "perro". That is
  * a pass/fail verdict and it teaches nothing: the learner already knew they got
@@ -24,7 +24,7 @@
  * speakers). Defaults are Latin American, because that is who the learner in
  * front of this is most likely to be talking to.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -370,7 +370,7 @@ window.PARLA = window.PARLA || {};
     return SOUND_TEST[id] ? !!SOUND_TEST[id](w, phonemes(w)) : false;
   }
 
-  PARLA.phon = {
+  LUNOSIA.phon = {
     dialect: dialect,
     phonemes: phonemes,
     ipa: ipa,

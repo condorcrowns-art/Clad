@@ -1,10 +1,10 @@
-/* Parla — vocabulary review and the conjugation trainer */
-window.PARLA = window.PARLA || {};
+/* Lunosia — vocabulary review and the conjugation trainer */
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   /* ── Vocabulary review (SRS) ────────────────────────────── */
 
@@ -62,8 +62,8 @@ window.PARLA = window.PARLA || {};
 
   function viewReview() {
     init();
-    var st = PARLA.store.state;
-    var vocab = PARLA.data.es.vocab;
+    var st = LUNOSIA.store.state;
+    var vocab = LUNOSIA.data.es.vocab;
 
     /* The deck is the word list PLUS the phrases you reached for in
      * conversation and could not produce. Those are the best review candidates
@@ -86,10 +86,10 @@ window.PARLA = window.PARLA || {};
     var keys = Object.keys(items);
     // Phrases you personally got stuck on go to the front of the new-card pile.
     keys.sort(function (a, b) { return (items[b].mine ? 1 : 0) - (items[a].mine ? 1 : 0); });
-    var queue = PARLA.srs.buildQueue(keys, st.srs, { maxNew: 12, maxTotal: 40 });
+    var queue = LUNOSIA.srs.buildQueue(keys, st.srs, { maxNew: 12, maxTotal: 40 });
 
     var main = el('main.drill');
-    var stats = PARLA.srs.stats(keys, st.srs);
+    var stats = LUNOSIA.srs.stats(keys, st.srs);
 
     if (!queue.length) {
       main.appendChild(el('h1', 'Nothing due'));
@@ -102,7 +102,7 @@ window.PARLA = window.PARLA || {};
         ui.stat(stats.leeches, 'trouble')
       ));
       main.appendChild(el('div.btn-row', { style: { marginTop: '16px' } },
-        el('button.primary', { onclick: function () { PARLA.app.go('scenarios'); } }, 'Go talk instead')));
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('scenarios'); } }, 'Go talk instead')));
       return main;
     }
 
@@ -126,10 +126,10 @@ window.PARLA = window.PARLA || {};
       var c = st.srs[key];
       var it = items[key];
       if (!c || (c.reps || 0) === 0) return 'recall';
-      if (PARLA.srs.isLeech(c)) return 'recall';
+      if (LUNOSIA.srs.isLeech(c)) return 'recall';
       if ((c.reps || 0) <= 2) return 'listen';
       if (it.exEs && clozeOf(it) && (c.reps % 2 === 0)) return 'cloze';
-      if ((c.reps || 0) >= 5 && c.reps % 3 === 0 && PARLA.speech.supported) return 'speak';
+      if ((c.reps || 0) >= 5 && c.reps % 3 === 0 && LUNOSIA.speech.supported) return 'speak';
       return 'produce';
     }
 
@@ -157,9 +157,9 @@ window.PARLA = window.PARLA || {};
     // all six fit; on a desktop it stays one row.
     // Mistakes are due before words are. Being corrected and then never made
     // to produce the fix is where most language apps quietly give up.
-    var dueFix = PARLA.store.dueMistakes(50);
+    var dueFix = LUNOSIA.store.dueMistakes(50);
     if (dueFix.length) {
-      main.appendChild(el('button.fix-banner', { onclick: function () { PARLA.app.go('fix'); } },
+      main.appendChild(el('button.fix-banner', { onclick: function () { LUNOSIA.app.go('fix'); } },
         el('div.row',
           el('span.fix-emoji', '🎯'),
           el('div',
@@ -202,11 +202,11 @@ window.PARLA = window.PARLA || {};
         card: st.srs[key] ? JSON.parse(JSON.stringify(st.srs[key])) : null,
         correct: correctCount, streak: streak
       };
-      st.srs[key] = PARLA.srs.grade(st.srs[key], q);
+      st.srs[key] = LUNOSIA.srs.grade(st.srs[key], q);
       st.progress.totals.reviews++;
       if (q >= 3) { correctCount++; streak++; if (streak > bestStreak) bestStreak = streak; }
       else streak = 0;
-      PARLA.store.save();
+      LUNOSIA.store.save();
       i++; revealed = false; typedState = null; typedText = '';
       if (listenHandle) { listenHandle.abort(); listenHandle = null; }
       if (i >= queue.length) return done();
@@ -224,13 +224,13 @@ window.PARLA = window.PARLA || {};
       streak = lastGrade.streak;
       revealed = false; typedState = null; typedText = '';
       lastGrade = null;
-      PARLA.store.save();
+      LUNOSIA.store.save();
       render();
     }
 
     function done() {
-      PARLA.store.creditDay(queue.length * 3);
-      if (PARLA.decor && correctCount === queue.length) PARLA.decor.confetti(90);
+      LUNOSIA.store.creditDay(queue.length * 3);
+      if (LUNOSIA.decor && correctCount === queue.length) LUNOSIA.decor.confetti(90);
       ui.clear(cardWrap);
       ui.clear(head);
       bar.remove();
@@ -242,8 +242,8 @@ window.PARLA = window.PARLA || {};
         ui.stat('+' + queue.length * 3, 'xp')
       ));
       cardWrap.appendChild(el('div.btn-row', { style: { marginTop: '18px' } },
-        el('button.primary', { onclick: function () { PARLA.app.go('scenarios'); } }, 'Now go talk'),
-        el('button', { onclick: function () { PARLA.app.go('home'); } }, 'Home')
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('scenarios'); } }, 'Now go talk'),
+        el('button', { onclick: function () { LUNOSIA.app.go('home'); } }, 'Home')
       ));
     }
 
@@ -336,7 +336,7 @@ window.PARLA = window.PARLA || {};
             title: 'Slowly',
             onclick: function (e) {
               e.stopPropagation();
-              PARLA.speech.speak(it.es, {
+              LUNOSIA.speech.speak(it.es, {
                 lang: 'es', rate: 0.6,
                 voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch
               });
@@ -406,13 +406,13 @@ window.PARLA = window.PARLA || {};
 
         var micB = el('button.primary', { style: { marginTop: '6px' } }, '🎙 Speak');
         micB.onclick = function () {
-          if (!PARLA.speech.supported) {
+          if (!LUNOSIA.speech.supported) {
             verdict.textContent = 'No microphone in this browser — use another mode.';
             return;
           }
           if (listenHandle) { listenHandle.stop(); return; }
           micB.textContent = '⏹ Stop';
-          listenHandle = PARLA.speech.listen({
+          listenHandle = LUNOSIA.speech.listen({
             lang: 'es',
             silenceMs: 1200,
             onpartial: function (t) { verdict.textContent = t; },
@@ -427,20 +427,20 @@ window.PARLA = window.PARLA || {};
               // "Expected X, heard Y" is a verdict, not a lesson. The phonology
               // engine can say which sound the difference sits on, and that is
               // something you can go and practise.
-              if (!hit && PARLA.phon && PARLA.data.es.soundsById) {
-                var cmp = PARLA.phon.compare(it.es, String(t).trim().toLowerCase());
+              if (!hit && LUNOSIA.phon && LUNOSIA.data.es.soundsById) {
+                var cmp = LUNOSIA.phon.compare(it.es, String(t).trim().toLowerCase());
                 var named = (cmp.problems || []).filter(function (pr) {
-                  return PARLA.data.es.soundsById[pr.sound];
+                  return LUNOSIA.data.es.soundsById[pr.sound];
                 });
                 if (named.length) {
-                  var sd = PARLA.data.es.soundsById[named[0].sound];
+                  var sd = LUNOSIA.data.es.soundsById[named[0].sound];
                   verdict.appendChild(el('div.diagnosis',
                     el('div.row',
                       el('span.sound-symbol.es', sd.symbol),
                       el('div', el('div.diag-title', sd.tell),
                         el('div.small.muted', sd.mouth))),
                     el('button.ghost.small-btn', { style: { marginTop: '6px' },
-                      onclick: function () { PARLA.app.go('sound', { id: sd.id }); } },
+                      onclick: function () { LUNOSIA.app.go('sound', { id: sd.id }); } },
                       'Drill this sound →')));
                 }
               }
@@ -500,7 +500,7 @@ window.PARLA = window.PARLA || {};
         state.appendChild(el('span.chip',
           (c.interval || 0) < 1 ? 'due again today'
             : 'next in ' + Math.round(c.interval) + ' day' + (Math.round(c.interval) === 1 ? '' : 's')));
-        if (PARLA.srs.isLeech(c)) state.appendChild(el('span.chip.bad-chip', '⚠ trouble word'));
+        if (LUNOSIA.srs.isLeech(c)) state.appendChild(el('span.chip.bad-chip', '⚠ trouble word'));
       }
       cardWrap.appendChild(state);
     }
@@ -531,7 +531,7 @@ window.PARLA = window.PARLA || {};
 
     main._onLeave = function () {
       if (listenHandle) listenHandle.abort();
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
       document.removeEventListener('keydown', onKey);
     };
     return main;
@@ -541,8 +541,8 @@ window.PARLA = window.PARLA || {};
 
   function viewConjugate() {
     init();
-    var st = PARLA.store.state;
-    var V = PARLA.data.es.verbs;
+    var st = LUNOSIA.store.state;
+    var V = LUNOSIA.data.es.verbs;
     var main = el('main');
 
     var tenseKeys = Object.keys(V.tenses);
@@ -658,8 +658,8 @@ window.PARLA = window.PARLA || {};
       if (ok) { right++; streak++; if (streak > best) best = streak; }
       else streak = 0;
       st.progress.totals.conjugations++;
-      if (asked % 5 === 0) PARLA.store.creditDay(10);
-      PARLA.store.save();
+      if (asked % 5 === 0) LUNOSIA.store.creditDay(10);
+      LUNOSIA.store.save();
       scoreChip.firstChild.textContent = '🔥 streak ' + streak;
       scoreChip.lastChild.textContent = right + ' / ' + asked;
     }
@@ -690,7 +690,7 @@ window.PARLA = window.PARLA || {};
 
       function check(val) {
         if (checked) return;
-        var ok = PARLA.brain.normalise(val) === PARLA.brain.normalise(c.answer);
+        var ok = LUNOSIA.brain.normalise(val) === LUNOSIA.brain.normalise(c.answer);
         checked = true;
         score(ok);
         ui.clear(verdict);
@@ -725,12 +725,12 @@ window.PARLA = window.PARLA || {};
         el('button.primary', { onclick: function () { check(input.value); } }, 'Check'),
         el('button', { onclick: function () { check(''); } }, "Don't know"));
 
-      if (PARLA.speech.supported) {
+      if (LUNOSIA.speech.supported) {
         var micB = el('button', '🎙 Say it');
         micB.onclick = function () {
           if (listenHandle) { listenHandle.stop(); return; }
           micB.textContent = '⏹';
-          listenHandle = PARLA.speech.listen({
+          listenHandle = LUNOSIA.speech.listen({
             lang: 'es',
             onpartial: function (t) { input.value = t; },
             onfinal: function (t) { input.value = t; check(t); },
@@ -748,12 +748,12 @@ window.PARLA = window.PARLA || {};
 
     main._onLeave = function () {
       if (listenHandle) listenHandle.abort();
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
     };
     return main;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.review = viewReview;
-  PARLA.views.conjugate = viewConjugate;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.review = viewReview;
+  LUNOSIA.views.conjugate = viewConjugate;
 })();

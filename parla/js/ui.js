@@ -1,9 +1,9 @@
-/* Parla — shared UI helpers
+/* Lunosia — shared UI helpers
  *
  * A tiny DOM toolkit rather than a framework. Views are plain functions that
  * return an element; the router swaps them into #app.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -54,9 +54,9 @@ window.PARLA = window.PARLA || {};
    * drill slows the voice down without changing the speed the rest of the app
    * speaks at. */
   function say(text, onend, character, extra) {
-    var s = PARLA.store.state.settings;
+    var s = LUNOSIA.store.state.settings;
     var o = {
-      lang: PARLA.store.state.profile.target || 'es',
+      lang: LUNOSIA.store.state.profile.target || 'es',
       voiceURI: s.voiceURI,
       voiceRoles: s.voiceRoles,
       pitchScale: s.voicePitch,
@@ -65,7 +65,7 @@ window.PARLA = window.PARLA || {};
       onend: onend
     };
     if (extra) Object.keys(extra).forEach(function (k) { o[k] = extra[k]; });
-    PARLA.speech.speak(text, o);
+    LUNOSIA.speech.speak(text, o);
   }
 
   /* A small ▶ button that reads a Spanish string aloud. */
@@ -161,8 +161,8 @@ window.PARLA = window.PARLA || {};
    * reachable and the scripted engine will answer instead. Returns null when
    * everything is fine. */
   function brainBanner() {
-    var s = PARLA.store.state.settings;
-    var h = PARLA.brain.health;
+    var s = LUNOSIA.store.state.settings;
+    var h = LUNOSIA.brain.health;
     if (s.brain === 'scripted' || !h.checked || h.ok) return null;
 
     /* One line, and the wall of text behind a disclosure. This used to open
@@ -183,9 +183,9 @@ window.PARLA = window.PARLA || {};
       el('div.btn-row', { style: { marginTop: '8px' } },
         el('button.tiny-btn', {
           onclick: function () {
-            PARLA.app.checkBrainHealth().then(function () { PARLA.app.go(PARLA.app.view()); });
+            LUNOSIA.app.checkBrainHealth().then(function () { LUNOSIA.app.go(LUNOSIA.app.view()); });
           } }, 'Retry'),
-        el('button.tiny-btn', { onclick: function () { PARLA.app.go('settings'); } }, 'Settings')));
+        el('button.tiny-btn', { onclick: function () { LUNOSIA.app.go('settings'); } }, 'Settings')));
 
     var toggle = el('button.tiny-btn', {
       'aria-expanded': 'false',
@@ -201,7 +201,7 @@ window.PARLA = window.PARLA || {};
     return b;
   }
 
-  PARLA.ui = {
+  LUNOSIA.ui = {
     brainBanner: brainBanner,
     el: el, clear: clear, say: say, speakBtn: speakBtn, levelTag: levelTag,
     stat: stat, bar: bar, banner: banner, empty: empty, sectionTitle: sectionTitle,

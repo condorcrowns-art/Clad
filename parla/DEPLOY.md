@@ -1,4 +1,4 @@
-# Putting Parla on lunosia.com
+# Putting Lunosia on lunosia.com
 
 The app is static files plus one small function. Hosting it is free, it works on
 the S11, and the AI partner comes with it — no PC involved, nothing running at
@@ -244,9 +244,8 @@ read. It may still be refused; you can reapply as often as you like.
 
 **The privacy policy is already written for this app.** `privacy.html` says what
 is stored (everything, in your browser), that your turns go to Cloudflare's
-Workers AI on this site, and what Google's ad cookies do. One thing is missing:
-it says `CONTACT@EXAMPLE.COM` in two places and you must replace both with a
-real address before applying.
+Workers AI on this site, what Google's ad cookies do, and where to write
+(`Canarybears@gmail.com`). Nothing is left to fill in.
 
 **Expect very little money.** Single-digit dollars a month at best, against a
 $100 payout threshold. The site costs nothing to run, so nothing here depends on

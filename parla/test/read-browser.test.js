@@ -25,11 +25,11 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   const said = [];
   await page.evaluate(() => {
     window.__said = [];
-    PARLA.ui.say = function (t, cb) { window.__said.push(t); if (cb) setTimeout(cb, 5); };
-    PARLA.speech.speak = function (t, o) { window.__said.push(t); if (o && o.onend) setTimeout(o.onend, 5); };
-    PARLA.speech.cancel = function () {};
+    LUNOSIA.ui.say = function (t, cb) { window.__said.push(t); if (cb) setTimeout(cb, 5); };
+    LUNOSIA.speech.speak = function (t, o) { window.__said.push(t); if (o && o.onend) setTimeout(o.onend, 5); };
+    LUNOSIA.speech.cancel = function () {};
   });
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => LUNOSIA.dict.load());
 
   console.log('The shelf\n');
   await goTo(page, 'read');
@@ -84,21 +84,21 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   const offline = await page.evaluate(() => {
     // No model, no network: the dictionary and the morphology engine are the
     // whole apparatus.
-    const was = PARLA.brain.translate;
-    PARLA.brain.translate = () => Promise.reject(new Error('no'));
-    const r = PARLA.morph.analyse('escalera');
-    PARLA.brain.translate = was;
+    const was = LUNOSIA.brain.translate;
+    LUNOSIA.brain.translate = () => Promise.reject(new Error('no'));
+    const r = LUNOSIA.morph.analyse('escalera');
+    LUNOSIA.brain.translate = was;
     return r.length > 0;
   });
   check('it never needed the model to do it', offline);
 
   await page.locator('.word-pop button.primary').click();
   await page.waitForTimeout(300);
-  const deck = await page.evaluate(() => PARLA.store.state.phrases.map(p => p.es));
+  const deck = await page.evaluate(() => LUNOSIA.store.state.phrases.map(p => p.es));
   check('adding a word puts the dictionary form in the deck',
     deck.some(w => /tener/.test(w)), deck.slice(0, 3).join(' / '));
   const ctx = await page.evaluate(() =>
-    (PARLA.store.state.phrases.find(p => /tener/.test(p.es)) || {}).exEs || '');
+    (LUNOSIA.store.state.phrases.find(p => /tener/.test(p.es)) || {}).exEs || '');
   check('with the sentence it turned up in', ctx.length > 5, ctx);
 
   console.log('\nHearing it\n');
@@ -118,10 +118,10 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   await page.locator('button', { hasText: 'I have read it' }).click();
   await page.waitForTimeout(500);
   check('the questions arrive', await page.locator('.q-text').isVisible());
-  const nq = await page.evaluate(() => PARLA.data.es.readingById.perro.ask.length);
+  const nq = await page.evaluate(() => LUNOSIA.data.es.readingById.perro.ask.length);
 
   for (let i = 0; i < nq; i++) {
-    const rightText = await page.evaluate(i => PARLA.data.es.readingById.perro.ask[i][1], i);
+    const rightText = await page.evaluate(i => LUNOSIA.data.es.readingById.perro.ask[i][1], i);
     await page.locator('.q-opt', { hasText: rightText }).first().click();
     await page.waitForTimeout(200);
     if (i === 0) {
@@ -135,15 +135,15 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   }
   await page.waitForTimeout(300);
 
-  const saved = await page.evaluate(() => PARLA.store.state.reading.perro);
+  const saved = await page.evaluate(() => LUNOSIA.store.state.reading.perro);
   check('the score is kept', saved && saved.right === nq && saved.asked === nq,
     JSON.stringify(saved));
   check('and the words worth keeping are offered', await page.locator('.wb-row').first().isVisible());
 
-  const before = await page.evaluate(() => PARLA.store.state.phrases.length);
+  const before = await page.evaluate(() => LUNOSIA.store.state.phrases.length);
   await page.locator('button', { hasText: /^Add all/ }).click();
   await page.waitForTimeout(400);
-  const after = await page.evaluate(() => PARLA.store.state.phrases.length);
+  const after = await page.evaluate(() => LUNOSIA.store.state.phrases.length);
   check('all of them at once, for the reader who wants the deck not the decisions',
     after > before, before + ' -> ' + after);
 

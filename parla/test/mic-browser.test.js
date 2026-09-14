@@ -24,7 +24,7 @@ async function boot(ctx) {
   let page = await boot(ctx);
   const errs = []; page.on('pageerror', e => errs.push(String(e)));
 
-  await page.evaluate(() => PARLA.app.go('settings'));
+  await page.evaluate(() => LUNOSIA.app.go('settings'));
   await page.waitForTimeout(500);
   check('there is a microphone check to run',
     (await page.locator('button', { hasText: 'Test microphone' }).count()) === 1);
@@ -55,7 +55,7 @@ async function boot(ctx) {
       return Promise.reject(e);
     };
   });
-  await page.evaluate(() => PARLA.app.go('settings'));
+  await page.evaluate(() => LUNOSIA.app.go('settings'));
   await page.waitForTimeout(400);
   await page.locator('button', { hasText: 'Test microphone' }).click();
   await page.waitForTimeout(1200);
@@ -65,7 +65,7 @@ async function boot(ctx) {
     /padlock/i.test(blocked), (blocked.match(/.*padlock.*/i)||[''])[0].slice(0, 80));
 
   console.log('\nIn the conversation\n');
-  await page.evaluate(() => PARLA.app.go('talk', { id: 'cafe' }));
+  await page.evaluate(() => LUNOSIA.app.go('talk', { id: 'cafe' }));
   await page.waitForTimeout(400);
   await page.locator('.mic').click();
   await page.waitForTimeout(700);

@@ -24,11 +24,11 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   // Nothing should make a noise, and the microphone is replaced by something
   // that returns exactly what the test wants heard.
   await page.evaluate(() => {
-    PARLA.ui.say = function () {};
-    PARLA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
+    LUNOSIA.ui.say = function () {};
+    LUNOSIA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
     window.__heard = null;
-    PARLA.speech.supported = true;
-    PARLA.speech.listen = function (o) {
+    LUNOSIA.speech.supported = true;
+    LUNOSIA.speech.listen = function (o) {
       setTimeout(function () {
         if (o.onfinal) o.onfinal(window.__heard, 0.9, []);
         if (o.onend) o.onend();
@@ -66,7 +66,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.waitForTimeout(300);
   check('answering says which it was', (await page.locator('.answer-state').count()) >= 1);
   check('and is recorded against the sound',
-    await page.evaluate(() => Object.keys(PARLA.store.state.sounds || {}).length > 0));
+    await page.evaluate(() => Object.keys(LUNOSIA.store.state.sounds || {}).length > 0));
 
   console.log('\nSaying it, and being told what broke\n');
   const word = (await page.locator('.say-word').innerText()).replace(/·/g, '').trim();
@@ -82,7 +82,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
     /That is it/.test(await page.locator('.answer-state.ok').last().innerText().catch(() => '')));
 
   // Now mispronounce it in a specific, diagnosable way: a trill as a tap.
-  await page.evaluate(() => PARLA.app.go('sound', { id: 'rr' }));
+  await page.evaluate(() => LUNOSIA.app.go('sound', { id: 'rr' }));
   await page.waitForTimeout(400);
   await page.evaluate(() => {
     // Find a word on the screen whose trill can be flattened to a tap.
@@ -104,7 +104,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   check('with something to do about it', /tongue|air|flutter/i.test(diag));
 
   console.log('\nIt keeps score\n');
-  const scores = await page.evaluate(() => PARLA.store.state.sounds);
+  const scores = await page.evaluate(() => LUNOSIA.store.state.sounds);
   check('attempts are counted per sound', Object.keys(scores).length >= 1, JSON.stringify(scores));
   check('and both right and wrong are recorded',
     Object.values(scores).some(s => s.tries > s.ok) || Object.values(scores).some(s => s.ok > 0),
@@ -115,7 +115,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.waitForTimeout(400);
   const spoke = await page.evaluate(() => {
     // The speak mode is one of the review modes; check the wiring exists.
-    return typeof PARLA.phon.compare === 'function' && !!PARLA.data.es.soundsById;
+    return typeof LUNOSIA.phon.compare === 'function' && !!LUNOSIA.data.es.soundsById;
   });
   check('the same engine is available to it', spoke);
 

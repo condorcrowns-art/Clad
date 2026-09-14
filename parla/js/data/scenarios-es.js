@@ -1,4 +1,4 @@
-/* Parla — Spanish conversation scenarios
+/* Lunosia — Spanish conversation scenarios
  *
  * Each scenario serves two masters:
  *   1. It briefs the LLM backends (role, setting, goals) so an AI partner
@@ -9,11 +9,11 @@
  *
  * Beat matching is accent- and case-insensitive (see brain.js normalise()).
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
-PARLA.data.es.scenarios = [
+LUNOSIA.data.es.scenarios = [
 
   /* ── Food & drink ─────────────────────────────────────────── */
   {

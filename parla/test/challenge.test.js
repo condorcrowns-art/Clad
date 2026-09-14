@@ -4,7 +4,7 @@
  * tab, and it is what a learner who wants to be told what to do will follow.
  * It had become narrower than the app — sixty days of nothing but conversation
  * meant someone following it literally never opened the reading, the
- * listening, the writing or the sounds, four of the six things Parla can
+ * listening, the writing or the sounds, four of the six things Lunosia can
  * teach.
  *
  * These check the pairing holds together, and above all that every id resolves.
@@ -21,7 +21,7 @@ const check = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x 
 
 const ctx = load(makeSandbox(),
   ...fs.readdirSync(ROOT + '/js/data').filter(f => f.endsWith('.js')).map(f => 'js/data/' + f));
-const d = ctx.PARLA.data.es;
+const d = ctx.LUNOSIA.data.es;
 const days = d.challenge;
 
 console.log('The plan\n');

@@ -23,10 +23,10 @@ async function boot(browser, viewport) {
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(400);
   await page.evaluate(() => {
-    PARLA.ui.say = function () {};
-    PARLA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
+    LUNOSIA.ui.say = function () {};
+    LUNOSIA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
   });
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => LUNOSIA.dict.load());
   return { page, errs };
 }
 
@@ -79,7 +79,7 @@ async function boot(browser, viewport) {
   // the reading lines at 104 — on the one screen whose whole purpose is
   // sustained reading.
   const measure = async (view, sel, id) => {
-    await page.evaluate(([v, i]) => PARLA.app.go(v, i ? { id: i } : null), [view, id]);
+    await page.evaluate(([v, i]) => LUNOSIA.app.go(v, i ? { id: i } : null), [view, id]);
     await page.waitForTimeout(350);
     return page.evaluate(s => {
       const e = document.querySelector(s);
@@ -91,7 +91,7 @@ async function boot(browser, viewport) {
       return Math.round(e.getBoundingClientRect().width / per);
     }, sel);
   };
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => LUNOSIA.dict.load());
   for (const [view, sel, id, what] of [
     ['read', 'main > p', null, 'the shelf blurb'],
     ['text', '.rd-es', 'taxi', 'a line of a story'],
@@ -129,13 +129,13 @@ async function boot(browser, viewport) {
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(400);
   await page.evaluate(() => {
-    PARLA.ui.say = function () {};
-    PARLA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
+    LUNOSIA.ui.say = function () {};
+    LUNOSIA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
   });
   // Straight to the view: this is a layout check, not a navigation one, and
   // Settings lives behind a sheet that is hidden at this width.
   for (const v of ['settings', 'review', 'conjugate', 'words']) {
-    await page.evaluate(x => PARLA.app.go(x), v);
+    await page.evaluate(x => LUNOSIA.app.go(x), v);
     await page.waitForTimeout(350);
     cut = await segClipped();
     check('nor on ' + v, cut.length === 0, cut.join(' | '));
@@ -305,7 +305,7 @@ async function boot(browser, viewport) {
   check('vosotros is not drilled by default — it is Spain-only',
     persons.length >= 4 && persons.indexOf('vosotros') === -1, persons.join(', '));
   await page.evaluate(() => {
-    PARLA.store.state.settings.drillVosotros = true; PARLA.store.save(); PARLA.app.go('conjugate');
+    LUNOSIA.store.state.settings.drillVosotros = true; LUNOSIA.store.save(); LUNOSIA.app.go('conjugate');
   });
   await page.waitForTimeout(400);
   const persons2 = await page.evaluate(async () => {
@@ -325,7 +325,7 @@ async function boot(browser, viewport) {
   check('and it comes back when you ask for it', persons2.indexOf('vosotros') !== -1,
     persons2.join(', '));
   await page.evaluate(() => {
-    PARLA.store.state.settings.drillVosotros = false; PARLA.store.save();
+    LUNOSIA.store.state.settings.drillVosotros = false; LUNOSIA.store.save();
   });
 
   /* ── Landscape ─────────────────────────────────────────── */

@@ -33,8 +33,8 @@ vm.runInContext(`
 `, ctx);
 load(ctx, 'js/data/vocab-es.js', 'js/data/verbs-es.js', 'js/data/scenarios-es.js', 'js/brain.js');
 
-const B = ctx.PARLA.brain;
-const sc = ctx.PARLA.data.es.scenarios[0];
+const B = ctx.LUNOSIA.brain;
+const sc = ctx.LUNOSIA.data.es.scenarios[0];
 const run = c => vm.runInContext(c, ctx);
 const set = (k, v) => run(k + ' = ' + JSON.stringify(v) + ';');
 const fail = [];

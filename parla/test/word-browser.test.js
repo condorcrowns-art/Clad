@@ -12,7 +12,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.fill('.onboard input[type=text]', 'Condo');
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(400);
-  await page.evaluate(() => PARLA.app.go('talk', { id: 'cafe' }));
+  await page.evaluate(() => LUNOSIA.app.go('talk', { id: 'cafe' }));
   await page.waitForTimeout(500);
 
   console.log('Tap a word\n');
@@ -24,11 +24,11 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   // Pick a word that is genuinely not in the deck yet - most of the opener is,
   // which is the app behaving correctly and makes for a useless test.
   const target = await page.evaluate(() => {
-    const norm = s => PARLA.brain.normalise(s);
-    const known = new Set(PARLA.data.es.vocab.map(v => norm(v[0])));
+    const norm = s => LUNOSIA.brain.normalise(s);
+    const known = new Set(LUNOSIA.data.es.vocab.map(v => norm(v[0])));
     const words = [...document.querySelectorAll('.bubble.them .body .word')].map(w => w.textContent);
     for (const w of words) {
-      const hit = PARLA.brain.lookupLocal(w, 'es');
+      const hit = LUNOSIA.brain.lookupLocal(w, 'es');
       const lemma = hit ? hit.lemma : w;
       if (!known.has(norm(lemma)) && !known.has(norm(w))) return w;
     }
@@ -56,38 +56,38 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   });
   check('nothing is sitting on top of the panel', reachable === 'the button', reachable);
 
-  const before = await page.evaluate(() => (PARLA.store.state.phrases || []).length);
+  const before = await page.evaluate(() => (LUNOSIA.store.state.phrases || []).length);
   await page.locator('.word-pop button', { hasText: 'Learn this' }).click();
   await page.waitForTimeout(300);
-  const after = await page.evaluate(() => (PARLA.store.state.phrases || []).length);
+  const after = await page.evaluate(() => (LUNOSIA.store.state.phrases || []).length);
   check('learning it adds one word to the deck', after === before + 1, before + ' -> ' + after);
-  const added = await page.evaluate(() => PARLA.store.state.phrases[0]);
+  const added = await page.evaluate(() => LUNOSIA.store.state.phrases[0]);
   check('with the sentence it was actually said in',
     added.exEs && added.exEs.length > 10, added.exEs);
   check('the panel closes afterwards', await page.locator('.word-pop').count() === 0);
 
   console.log('\nIt reaches the deck\n');
-  await page.evaluate(() => PARLA.app.go('review'));
+  await page.evaluate(() => LUNOSIA.app.go('review'));
   await page.waitForTimeout(400);
   const inDeck = await page.evaluate(() => {
-    const mined = PARLA.store.state.phrases[0].es;
+    const mined = LUNOSIA.store.state.phrases[0].es;
     const items = {};
-    PARLA.data.es.vocab.forEach(v => items[v[0]] = 1);
-    (PARLA.store.state.phrases || []).forEach(p => items[p.es] = 1);
+    LUNOSIA.data.es.vocab.forEach(v => items[v[0]] = 1);
+    (LUNOSIA.store.state.phrases || []).forEach(p => items[p.es] = 1);
     return Object.keys(items).indexOf(mined) !== -1;
   });
   check('the mined word is in the review pool', inDeck);
 
   console.log('\nAlready known\n');
-  await page.evaluate(() => PARLA.app.go('talk', { id: 'cafe' }));
+  await page.evaluate(() => LUNOSIA.app.go('talk', { id: 'cafe' }));
   await page.waitForTimeout(500);
   // A word already in the shipped deck must not be offered as new.
   const known = await page.evaluate(() => {
-    const norm = s => PARLA.brain.normalise(s);
-    const have = new Set(PARLA.data.es.vocab.map(v => norm(v[0])));
+    const norm = s => LUNOSIA.brain.normalise(s);
+    const have = new Set(LUNOSIA.data.es.vocab.map(v => norm(v[0])));
     const words = [...document.querySelectorAll('.bubble.them .body .word')].map(w => w.textContent);
     for (const w of words) {
-      const hit = PARLA.brain.lookupLocal(w, 'es');
+      const hit = LUNOSIA.brain.lookupLocal(w, 'es');
       if (hit && have.has(norm(hit.lemma))) return w;
     }
     return null;

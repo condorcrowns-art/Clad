@@ -1,6 +1,6 @@
 /* Cloudflare Pages, faked well enough to be worth trusting.
  *
- * Serves parla/ as static files and routes /api/chat through the *real*
+ * Serves the app as static files and routes /api/chat through the *real*
  * functions/api/chat.js, so the thing under test is the code that will run on
  * the edge rather than a stand-in for it. The Workers AI binding is faked; the
  * function's model-walking, trimming, and error shapes are not.

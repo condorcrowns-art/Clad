@@ -29,12 +29,12 @@ vm.runInContext(`
 `, ctx);
 load(ctx, 'js/data/vocab-es.js', 'js/data/verbs-es.js', 'js/data/scenarios-es.js', 'js/speech.js');
 
-const S = ctx.PARLA.speech;
+const S = ctx.LUNOSIA.speech;
 const VOICES = [
   { id: 'es_ES-davefx-medium',   name: 'davefx',   locale: 'es_ES', lang: 'es', quality: 'medium' },
   { id: 'es_ES-sharvard-medium', name: 'sharvard', locale: 'es_ES', lang: 'es', quality: 'medium' }
 ];
-vm.runInContext('PARLA.speech._setPiper(true, ' + JSON.stringify(VOICES) + ');', ctx);
+vm.runInContext('LUNOSIA.speech._setPiper(true, ' + JSON.stringify(VOICES) + ');', ctx);
 
 const run = c => vm.runInContext(c, ctx);
 const tick = () => new Promise(r => setTimeout(r, 5));
@@ -42,7 +42,7 @@ const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};
 
 const cast = (character, roles, base) =>
-  JSON.parse(run('JSON.stringify(PARLA.speech.castVoice("es", "", ' +
+  JSON.parse(run('JSON.stringify(LUNOSIA.speech.castVoice("es", "", ' +
     JSON.stringify(character) + ', ' + JSON.stringify(roles || {}) + ', ' + (base || 1) + '))'));
 
 (async function () {
@@ -79,7 +79,7 @@ const cast = (character, roles, base) =>
 
   /* — it reaches the wire — */
   run('__tts = [];');
-  run(`PARLA.speech.speak('Hola', { lang: 'es', character: { gender: 'f', age: 'young' },
+  run(`LUNOSIA.speech.speak('Hola', { lang: 'es', character: { gender: 'f', age: 'young' },
         voiceRoles: ${JSON.stringify(roles)}, pitchScale: 1 });`);
   await tick();
   const sent = JSON.parse(run('JSON.stringify(__tts[0] || {})'));
@@ -87,19 +87,19 @@ const cast = (character, roles, base) =>
   check('and carries a pitch above 1 for a young character', sent.pitch > 1, String(sent.pitch));
 
   /* — with no neural voice, the browser still gets the age — */
-  run('PARLA.speech._setPiper(false, []); __spoken = [];');
-  run("PARLA.speech.speak('Hola', { lang: 'es', character: { gender: 'm', age: 'young' } });");
+  run('LUNOSIA.speech._setPiper(false, []); __spoken = [];');
+  run("LUNOSIA.speech.speak('Hola', { lang: 'es', character: { gender: 'm', age: 'young' } });");
   await tick();
   const spokenYoung = JSON.parse(run('JSON.stringify(__spoken[0] || {})')).pitch;
   run('__spoken = [];');
-  run("PARLA.speech.speak('Hola', { lang: 'es', character: { gender: 'm', age: 'older' } });");
+  run("LUNOSIA.speech.speak('Hola', { lang: 'es', character: { gender: 'm', age: 'older' } });");
   await tick();
   const spokenOld = JSON.parse(run('JSON.stringify(__spoken[0] || {})')).pitch;
   check('browser voices carry the age too', spokenYoung > spokenOld, spokenYoung + ' vs ' + spokenOld);
   check('and stay inside what the API accepts', spokenYoung <= 2 && spokenOld >= 0.5);
 
   /* — every scenario is cast — */
-  const scenarios = JSON.parse(run('JSON.stringify(PARLA.data.es.scenarios.map(function(s){return {id:s.id,role:s.role,voice:s.voice};}))'));
+  const scenarios = JSON.parse(run('JSON.stringify(LUNOSIA.data.es.scenarios.map(function(s){return {id:s.id,role:s.role,voice:s.voice};}))'));
   const uncast = scenarios.filter(s => !s.voice || !s.voice.gender || !s.voice.age);
   check('every scenario has a cast character', uncast.length === 0,
     uncast.map(s => s.id).join(', '));

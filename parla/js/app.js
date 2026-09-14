@@ -1,5 +1,5 @@
-/* Parla — bootstrap and router */
-window.PARLA = window.PARLA || {};
+/* Lunosia — bootstrap and router */
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -10,23 +10,23 @@ window.PARLA = window.PARLA || {};
   var NAV = ['home', 'scenarios', 'review', 'conjugate', 'challenge', 'progress'];
 
   function applyTheme() {
-    var t = PARLA.store.state.settings.theme;
+    var t = LUNOSIA.store.state.settings.theme;
     if (t === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', t);
   }
 
   function paintChips() {
-    var st = PARLA.store.state;
+    var st = LUNOSIA.store.state;
     var streak = document.querySelector('#chipStreak span');
     if (streak) streak.textContent = String(st.progress.streak);
 
     var lvl = document.getElementById('chipLevel');
-    if (lvl) lvl.textContent = 'LV ' + PARLA.store.level();
+    if (lvl) lvl.textContent = 'LV ' + LUNOSIA.store.level();
 
     var brain = document.getElementById('chipBrain');
     if (brain) {
       var names = { scripted: 'built-in', ollama: 'ollama', gemini: 'gemini', hosted: 'this site' };
-      var h = PARLA.brain.health;
+      var h = LUNOSIA.brain.health;
       var label = names[st.settings.brain] || st.settings.brain;
       var cls = 'chip';
 
@@ -79,7 +79,7 @@ window.PARLA = window.PARLA || {};
   function buildSheet() {
     var e = sheetEls();
     if (!e.grid) return;
-    PARLA.ui.clear(e.grid);
+    LUNOSIA.ui.clear(e.grid);
     var items = [];
     Array.prototype.forEach.call(navEl.querySelectorAll('button[data-view]'), function (b) {
       if (b.hasAttribute('data-primary')) return;
@@ -124,24 +124,24 @@ window.PARLA = window.PARLA || {};
   function escSheet(ev) { if (ev.key === 'Escape') closeSheet(); }
 
   function go(view, params) {
-    var fn = PARLA.views[view];
-    if (!fn) { console.warn('Parla: no view named', view); return; }
+    var fn = LUNOSIA.views[view];
+    if (!fn) { console.warn('Lunosia: no view named', view); return; }
 
     // Let the outgoing view tear down microphones and speech.
     if (current && typeof current._onLeave === 'function') {
       try { current._onLeave(); } catch (e) { /* ignore */ }
     }
-    PARLA.speech.cancel();
+    LUNOSIA.speech.cancel();
 
     closeSheet();
     currentView = view;
     currentParams = params || {};
     var node = fn(currentParams);
-    PARLA.ui.clear(appEl);
+    LUNOSIA.ui.clear(appEl);
     appEl.appendChild(node);
     // Cards arrive in sequence rather than all at once. Decorative only, and
     // guarded so a missing decor.js leaves a plain, working app.
-    if (PARLA.decor) PARLA.decor.reveal(node);
+    if (LUNOSIA.decor) LUNOSIA.decor.reveal(node);
     current = node;
 
     paintChips();
@@ -158,7 +158,7 @@ window.PARLA = window.PARLA || {};
     var raw = (location.hash || '').replace(/^#/, '');
     if (!raw) return null;
     var bits = raw.split('/');
-    if (!PARLA.views[bits[0]]) return null;
+    if (!LUNOSIA.views[bits[0]]) return null;
     // Deep links into a conversation need the scenario, not a half-built session.
     if (bits[0] === 'talk' && !bits[1]) return null;
     if (bits[0] === 'summary') return null;
@@ -169,9 +169,9 @@ window.PARLA = window.PARLA || {};
     appEl = document.getElementById('app');
     navEl = document.getElementById('nav');
 
-    PARLA.store.load();
+    LUNOSIA.store.load();
 
-    if (PARLA.decor) PARLA.decor.install();
+    if (LUNOSIA.decor) LUNOSIA.decor.install();
     applyTheme();
 
     navEl.addEventListener('click', function (e) {
@@ -190,8 +190,8 @@ window.PARLA = window.PARLA || {};
     // needs it, so it is fetched once the page has settled. After that it is in
     // the service worker's cache and every later visit — including offline
     // ones — has thirty-one thousand words available instantly.
-    if (PARLA.dict) {
-      var warm = function () { PARLA.dict.load(); };
+    if (LUNOSIA.dict) {
+      var warm = function () { LUNOSIA.dict.load(); };
       if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 4000 });
       else setTimeout(warm, 1500);
     }
@@ -211,10 +211,10 @@ window.PARLA = window.PARLA || {};
     // Stop speech when the tab is hidden — nothing worse than a voice from a
     // background tab.
     document.addEventListener('visibilitychange', function () {
-      if (document.hidden) PARLA.speech.cancel();
+      if (document.hidden) LUNOSIA.speech.cancel();
     });
 
-    if (!PARLA.store.state.profile.created) {
+    if (!LUNOSIA.store.state.profile.created) {
       go('onboard');
     } else {
       var h = fromHash();
@@ -243,8 +243,8 @@ window.PARLA = window.PARLA || {};
    * their partner is unavailable *before* they start a conversation with it —
    * rather than silently degrading mid-sentence. */
   function checkBrainHealth() {
-    var s = PARLA.store.state.settings;
-    var h = PARLA.brain.health;
+    var s = LUNOSIA.store.state.settings;
+    var h = LUNOSIA.brain.health;
     var was = h.checked ? h.ok : null;
 
     if (s.brain === 'scripted') {
@@ -255,7 +255,7 @@ window.PARLA = window.PARLA || {};
     }
 
     if (s.brain === 'ollama') {
-      return PARLA.brain.detectOllama(s).then(function (d) {
+      return LUNOSIA.brain.detectOllama(s).then(function (d) {
         h.checked = true;
         h.ok = d.ok && d.models.length > 0;
         if (!d.ok) {
@@ -268,7 +268,7 @@ window.PARLA = window.PARLA || {};
           // Adopt the best installed model unless the user pinned one.
           if (!s.ollamaModel || d.models.indexOf(s.ollamaModel) === -1) {
             s.ollamaModel = d.best;
-            PARLA.store.save();
+            LUNOSIA.store.save();
           }
         }
         paintChips();
@@ -286,7 +286,7 @@ window.PARLA = window.PARLA || {};
     return Promise.resolve(h);
   }
 
-  PARLA.app = {
+  LUNOSIA.app = {
     go: go, applyTheme: applyTheme, paintChips: paintChips,
     checkBrainHealth: checkBrainHealth,
     view: function () { return currentView; },

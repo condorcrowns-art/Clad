@@ -43,13 +43,13 @@ load(ctx, 'js/srs.js', 'js/store.js',
   'js/dict.js', 'js/morph.js', 'js/grammar.js', 'js/brain.js');
 const raw = JSON.parse(fs.readFileSync(ROOT + '/js/data/dict-es.json', 'utf8'));
 ctx.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(raw) });
-vm.runInContext('globalThis.fetch = fetch; PARLA.store.load();', ctx);
+vm.runInContext('globalThis.fetch = fetch; LUNOSIA.store.load();', ctx);
 
-const B = ctx.PARLA.brain;
+const B = ctx.LUNOSIA.brain;
 
 function talk(scenarioId, turns) {
-  const sc = ctx.PARLA.data.es.scenarios.filter(s => s.id === scenarioId)[0];
-  const st = ctx.PARLA.store.state;
+  const sc = ctx.LUNOSIA.data.es.scenarios.filter(s => s.id === scenarioId)[0];
+  const st = ctx.LUNOSIA.store.state;
   st.settings.brain = 'scripted';
   const history = [];
   const scriptState = { used: [], fb: 0 };
@@ -69,7 +69,7 @@ function talk(scenarioId, turns) {
 }
 
 (async () => {
-  await ctx.PARLA.dict.load();
+  await ctx.LUNOSIA.dict.load();
 
   console.log('Saying hello\n');
   let r = await talk('presentarse', ['hola', 'me llamo Condo', 'soy de Irlanda']);
@@ -107,7 +107,7 @@ function talk(scenarioId, turns) {
                   'creo que sí', 'perfecto', 'muy bien', 'hasta luego'];
   const offenders = [];
   const generic = [];
-  for (const sc of ctx.PARLA.data.es.scenarios) {
+  for (const sc of ctx.LUNOSIA.data.es.scenarios) {
     const lines = (await talk(sc.id, filler)).map(x => x.es);
     lines.forEach((line, i) => {
       if (i > 0 && line === lines[i - 1]) offenders.push(sc.id + ' repeated: ' + line);
@@ -181,7 +181,7 @@ function talk(scenarioId, turns) {
     !/piss|urinat/i.test(r[0].note || ''), r[0].note);
 
   console.log('\nThe word it looks up\n');
-  const M = ctx.PARLA.morph;
+  const M = ctx.LUNOSIA.morph;
   // "trabajas" was read as the feminine plural of "trabajo" — a masculine noun
   // that has no feminine at all — and that reading beat the tú-form of
   // trabajar on frequency.
@@ -203,7 +203,7 @@ function talk(scenarioId, turns) {
       a.slice(0, 2).map(x => x.lemma + ' (' + (x.why || '') + ')').join(' | '));
   });
   check('and the fact comes from the dictionary, not from the ending',
-    ctx.PARLA.dict.hasFeminine('amigo') && !ctx.PARLA.dict.hasFeminine('trabajo'));
+    ctx.LUNOSIA.dict.hasFeminine('amigo') && !ctx.LUNOSIA.dict.hasFeminine('trabajo'));
 
   console.log('\nStill correcting real Spanish\n');
   r = await talk('presentarse', ['yo tiene hambre']);

@@ -9,8 +9,8 @@
  */
 const { makeSandbox, load } = require('./harness');
 const ctx = load(makeSandbox(), 'js/phon.js', 'js/data/sounds-es.js');
-const P = ctx.PARLA.phon;
-const SOUNDS = ctx.PARLA.data.es.sounds;
+const P = ctx.LUNOSIA.phon;
+const SOUNDS = ctx.LUNOSIA.data.es.sounds;
 
 const fail = [];
 const check = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  - ' + x : '')); if (!c) fail.push(n); };
@@ -156,7 +156,7 @@ check('and the stress pairs differ only in stress',
 
 check('every sound the engine can name has coaching behind it',
   ['rr','r','j','n-tilde','b-v','d','ll','vowels','h','stress']
-    .every(id => !!ctx.PARLA.data.es.soundsById[id]));
+    .every(id => !!ctx.LUNOSIA.data.es.soundsById[id]));
 
 console.log('\nIt does not fall over\n');
 check('an empty word is empty', P.ipa('') === '' && P.syllables('').length === 0);

@@ -1,18 +1,18 @@
-/* Parla — scenario picker and the conversation itself */
-window.PARLA = window.PARLA || {};
+/* Lunosia — scenario picker and the conversation itself */
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
 
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   /* ── Scenario picker ────────────────────────────────────── */
 
   function viewScenarios(params) {
     init();
     var main = el('main');
-    var scenarios = PARLA.data.es.scenarios;
+    var scenarios = LUNOSIA.data.es.scenarios;
 
     main.appendChild(el('h1', 'Choose something to talk about'));
     main.appendChild(el('p.muted',
@@ -21,12 +21,12 @@ window.PARLA = window.PARLA || {};
     var bb = ui.brainBanner();
     if (bb) main.appendChild(bb);
 
-    if (!PARLA.speech.supported) {
+    if (!LUNOSIA.speech.supported) {
       main.appendChild(ui.banner('warn',
         '<strong>Speech recognition is not available in this browser.</strong> ' +
         'You can still do everything by typing. For the microphone, use Chrome, Edge or Safari ' +
         'and open the app over <code>http://localhost</code> or <code>https://</code>.'));
-    } else if (!PARLA.speech.secure) {
+    } else if (!LUNOSIA.speech.secure) {
       main.appendChild(ui.banner('warn',
         'The microphone needs a secure context. Open this page via <code>http://localhost:8000</code> ' +
         'rather than <code>file://</code>.'));
@@ -45,7 +45,7 @@ window.PARLA = window.PARLA || {};
       var grid = el('div.grid.two');
       byCat[c].forEach(function (s) {
         grid.appendChild(el('button.scenario', {
-          onclick: function () { PARLA.app.go('talk', { id: s.id, day: params && params.day }); }
+          onclick: function () { LUNOSIA.app.go('talk', { id: s.id, day: params && params.day }); }
         },
           el('span.emoji', s.emoji),
           el('span.txt', el('strong', s.title), el('span', s.setting)),
@@ -62,12 +62,12 @@ window.PARLA = window.PARLA || {};
 
   function viewTalk(params) {
     init();
-    var st = PARLA.store.state;
-    var scenarios = PARLA.data.es.scenarios;
+    var st = LUNOSIA.store.state;
+    var scenarios = LUNOSIA.data.es.scenarios;
     var sc = scenarios.filter(function (s) { return s.id === (params && params.id); })[0] || scenarios[0];
     var challengeDay = params && params.day != null ? params.day : null;
     var minTurns = challengeDay != null
-      ? (PARLA.data.es.challenge[challengeDay] || [])[4] || 4
+      ? (LUNOSIA.data.es.challenge[challengeDay] || [])[4] || 4
       : 4;
 
     var session = {
@@ -125,8 +125,8 @@ window.PARLA = window.PARLA || {};
     // and pressing it still puts the cursor in the typing box rather than
     // doing nothing.
     micBtn = el('button.mic', {
-      'data-state': PARLA.speech.supported ? 'idle' : 'off',
-      title: PARLA.speech.supported
+      'data-state': LUNOSIA.speech.supported ? 'idle' : 'off',
+      title: LUNOSIA.speech.supported
         ? 'Hold a conversation'
         : 'This browser has no speech recognition — type your reply instead',
       onclick: toggleMic
@@ -136,7 +136,7 @@ window.PARLA = window.PARLA || {};
     micCancel = el('button.mic-cancel', {
       title: 'Discard what you just said', hidden: true, onclick: cancelListening
     }, '✕');
-    micLabel = el('div.mic-label', PARLA.speech.supported
+    micLabel = el('div.mic-label', LUNOSIA.speech.supported
       ? 'Tap and speak in Spanish — pause when you are done'
       : 'No speech recognition in this browser — type your reply below');
     // The fix for a broken microphone is never obvious, so when one breaks the
@@ -222,7 +222,7 @@ window.PARLA = window.PARLA || {};
         }
       });
 
-      PARLA.brain.translate({
+      LUNOSIA.brain.translate({
         word: word,
         sentence: sentence,
         lang: st.profile.target || 'es',
@@ -236,7 +236,7 @@ window.PARLA = window.PARLA || {};
             'No translation available. You can still add it and look it up later.'));
         } else {
           body.appendChild(el('div.word-en', res.en));
-          if (res.lemma && PARLA.brain.normalise(res.lemma) !== PARLA.brain.normalise(word)) {
+          if (res.lemma && LUNOSIA.brain.normalise(res.lemma) !== LUNOSIA.brain.normalise(word)) {
             body.appendChild(el('div.small.muted', 'from ' + res.lemma));
           }
           if (res.note) body.appendChild(el('div.small.faint', res.note));
@@ -244,9 +244,9 @@ window.PARLA = window.PARLA || {};
 
         var lemma = (res && res.lemma) || word;
         var already = (st.phrases || []).some(function (p) {
-          return PARLA.brain.normalise(p.es) === PARLA.brain.normalise(lemma);
-        }) || !!(PARLA.data.es.vocab || []).filter(function (v) {
-          return PARLA.brain.normalise(v[0]) === PARLA.brain.normalise(lemma);
+          return LUNOSIA.brain.normalise(p.es) === LUNOSIA.brain.normalise(lemma);
+        }) || !!(LUNOSIA.data.es.vocab || []).filter(function (v) {
+          return LUNOSIA.brain.normalise(v[0]) === LUNOSIA.brain.normalise(lemma);
         })[0];
 
         body.appendChild(el('div.btn-row', { style: { marginTop: '8px' } },
@@ -256,7 +256,7 @@ window.PARLA = window.PARLA || {};
             : el('button.primary', { onclick: function () {
                 // The sentence it appeared in becomes its example. Authentic
                 // context beats anything a corpus author invents.
-                PARLA.store.addWord(lemma, (res && res.en) || '', sentence, '');
+                LUNOSIA.store.addWord(lemma, (res && res.en) || '', sentence, '');
                 ui.toast('“' + lemma + '” added to your deck', 'good');
                 closeWord();
               } }, '+ Learn this')));
@@ -281,7 +281,7 @@ window.PARLA = window.PARLA || {};
       );
       // The slow button re-speaks at a reduced rate.
       b.querySelector('.tools').lastChild.onclick = function () {
-        PARLA.speech.speak(es, {
+        LUNOSIA.speech.speak(es, {
           lang: 'es', voiceURI: st.settings.voiceURI,
           voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch,
           character: sc.voice,
@@ -313,7 +313,7 @@ window.PARLA = window.PARLA || {};
               session.history.filter(function (m) { return m.role === 'user' && m.text === text; }).slice(-1)[0]);
             if (i !== -1) session.history.splice(i, 1);
             session.turns = Math.max(0, session.turns - 1);
-            session.words = Math.max(0, session.words - PARLA.brain.words(text).length);
+            session.words = Math.max(0, session.words - LUNOSIA.brain.words(text).length);
             bubble.remove();
             typeInput.value = text;
             typeInput.focus();
@@ -325,7 +325,7 @@ window.PARLA = window.PARLA || {};
       scrollDown();
       session.history.push({ role: 'user', text: text });
       session.turns++;
-      session.words += PARLA.brain.words(text).length;
+      session.words += LUNOSIA.brain.words(text).length;
     }
 
     /* "Here is how you say what you just said." Distinct from a correction:
@@ -357,7 +357,7 @@ window.PARLA = window.PARLA || {};
       );
       thread.appendChild(card);
       // It is a phrase they clearly could not produce, so it belongs in the deck.
-      if (PARLA.store.rememberPhrase) PARLA.store.rememberPhrase(s2.es, s2.en);
+      if (LUNOSIA.store.rememberPhrase) LUNOSIA.store.rememberPhrase(s2.es, s2.en);
       scrollDown();
     }
 
@@ -429,7 +429,7 @@ window.PARLA = window.PARLA || {};
     }
 
     function startListening() {
-      if (!PARLA.speech.supported) {
+      if (!LUNOSIA.speech.supported) {
         typeInput.focus();
         micLabel.textContent = 'No microphone here — type instead.';
         return;
@@ -437,12 +437,12 @@ window.PARLA = window.PARLA || {};
       var partial = '';
       var errored = false;
 
-      listenHandle = PARLA.speech.listen({
+      listenHandle = LUNOSIA.speech.listen({
         lang: st.profile.target || 'es',
         // How long a pause means "finished" rather than "thinking". Beginners
         // hesitate mid-sentence, and cutting them off there is what made the
         // partner answer half-sentences as though they were whole ones.
-        silenceMs: st.settings.micPauseMs || PARLA.speech.defaultPauseMs || 1600,
+        silenceMs: st.settings.micPauseMs || LUNOSIA.speech.defaultPauseMs || 1600,
 
         onstart: function () {
           errored = false;
@@ -485,11 +485,11 @@ window.PARLA = window.PARLA || {};
 
     function maybeAutoListen() {
       if (session.ended) return;
-      if (!st.settings.autoListen || !PARLA.speech.supported) return;
+      if (!st.settings.autoListen || !LUNOSIA.speech.supported) return;
       // Long enough that the tail of the spoken reply - and its echo off the
       // desk - is not picked up as the first word of the answer.
       setTimeout(function () {
-        if (!session.ended && !listenHandle && !PARLA.speech.isSpeaking()) startListening();
+        if (!session.ended && !listenHandle && !LUNOSIA.speech.isSpeaking()) startListening();
       }, 500);
     }
 
@@ -498,7 +498,7 @@ window.PARLA = window.PARLA || {};
      * drill than a flashcard, and the deck already knows what is not sticking. */
     function weakWords() {
       var deck = st.srs || {};
-      var vocab = (PARLA.data[st.profile.target || 'es'] || {}).vocab || [];
+      var vocab = (LUNOSIA.data[st.profile.target || 'es'] || {}).vocab || [];
       var now = Date.now();
       var scored = [];
 
@@ -533,7 +533,7 @@ window.PARLA = window.PARLA || {};
       helpBox.hidden = false;
       helpBox.appendChild(el('div.small.muted', 'Thinking of a few…'));
 
-      PARLA.brain.suggest({
+      LUNOSIA.brain.suggest({
         scenario: sc,
         history: session.history,
         settings: Object.assign({}, st.settings, { level: st.profile.level })
@@ -582,7 +582,7 @@ window.PARLA = window.PARLA || {};
       if (!text || session.ended) return;
       if (listenHandle) { listenHandle.abort(); listenHandle = null; }
 
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
       helpBox.hidden = true;
       // A confidence score only exists when a recogniser produced the text.
       addUser(text, confidence != null);
@@ -591,13 +591,13 @@ window.PARLA = window.PARLA || {};
 
       // A name is worth catching ourselves rather than trusting the model to,
       // since it is the one fact whose absence makes the partner feel broken.
-      var spokenName = PARLA.brain.extractName(text);
+      var spokenName = LUNOSIA.brain.extractName(text);
       if (spokenName && st.memory.name !== spokenName) {
         st.memory.name = spokenName;
-        PARLA.store.save();
+        LUNOSIA.store.save();
       }
 
-      PARLA.brain.reply({
+      LUNOSIA.brain.reply({
         scenario: sc,
         history: session.history.slice(0, -1),
         text: text,
@@ -620,12 +620,12 @@ window.PARLA = window.PARLA || {};
           session.warned = true;
           // The backend died after boot said it was fine — refresh the health
           // state so the status chip stops claiming everything is well.
-          if (PARLA.app.checkBrainHealth) PARLA.app.checkBrainHealth();
+          if (LUNOSIA.app.checkBrainHealth) LUNOSIA.app.checkBrainHealth();
           // One line in the middle of a conversation. The detail belongs in
           // Settings, not stacked three paragraphs deep between two turns.
           thread.appendChild(ui.banner('warn',
             'Lost the ' + st.settings.brain + ' partner mid-conversation — carrying on with ' +
-            'the built-in one. <button class="tiny-btn" onclick="PARLA.app.go(\'settings\')">' +
+            'the built-in one. <button class="tiny-btn" onclick="LUNOSIA.app.go(\'settings\')">' +
             'Settings</button>'));
         }
 
@@ -646,7 +646,7 @@ window.PARLA = window.PARLA || {};
         if (out.askedToRepeat) session.turns = Math.max(0, session.turns - 1);
 
         // Anything it learned about this person outlives the session.
-        if (out.remember && out.remember.length) PARLA.store.remember(out.remember);
+        if (out.remember && out.remember.length) LUNOSIA.store.remember(out.remember);
 
         if (session.turns >= minTurns && !session.hinted) {
           session.hinted = true;
@@ -661,7 +661,7 @@ window.PARLA = window.PARLA || {};
       if (session.ended) return;
       session.ended = true;
       if (listenHandle) listenHandle.abort();
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
 
       var mins = Math.max(0.5, (Date.now() - session.started) / 60000);
       var xp = session.turns * 8 + (session.turns >= minTurns ? 25 : 0);
@@ -676,7 +676,7 @@ window.PARLA = window.PARLA || {};
       // Straight into the schedule, not into a journal nobody reads.
       session.corrections.forEach(function (c) {
         if (!c.fixed) return;
-        PARLA.store.rememberMistake({
+        LUNOSIA.store.rememberMistake({
           es: c.original, fix: c.fixed, note: c.note, topic: c.topic || null,
           scenario: sc.id, from: 'conversation'
         });
@@ -696,20 +696,20 @@ window.PARLA = window.PARLA || {};
         if (challengeDay === p.challengeDay) p.challengeDay = Math.min(59, p.challengeDay + 1);
       }
 
-      var levelBefore = PARLA.store.level();   // reads live state, so take it first
-      PARLA.store.creditDay(xp);
+      var levelBefore = LUNOSIA.store.level();   // reads live state, so take it first
+      LUNOSIA.store.creditDay(xp);
 
       // Mark the moments actually worth marking: banking a session that met
       // its goal, and crossing a level. Not every turn - constant celebration
       // is the same as none.
-      if (PARLA.decor) {
-        var levelled = PARLA.store.level() > levelBefore;
-        if (levelled) PARLA.decor.confetti(140);
-        else if (session.turns >= minTurns) PARLA.decor.confetti(60);
+      if (LUNOSIA.decor) {
+        var levelled = LUNOSIA.store.level() > levelBefore;
+        if (levelled) LUNOSIA.decor.confetti(140);
+        else if (session.turns >= minTurns) LUNOSIA.decor.confetti(60);
       }
-      PARLA.store.save();
+      LUNOSIA.store.save();
 
-      PARLA.app.go('summary', {
+      LUNOSIA.app.go('summary', {
         turns: session.turns, xp: xp, mins: mins,
         corrections: session.corrections, scenario: sc.title,
         completedDay: completedDay, day: challengeDay,
@@ -719,7 +719,7 @@ window.PARLA = window.PARLA || {};
 
     main._onLeave = function () {
       if (listenHandle) listenHandle.abort();
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
       closeWord();
       session.ended = true;
     };
@@ -766,16 +766,16 @@ window.PARLA = window.PARLA || {};
     }
 
     main.appendChild(el('div.btn-row', { style: { marginTop: '20px' } },
-      el('button.primary', { onclick: function () { PARLA.app.go('scenarios'); } }, 'Talk again'),
-      el('button', { onclick: function () { PARLA.app.go('home'); } }, 'Home'),
-      el('button', { onclick: function () { PARLA.app.go('challenge'); } }, '60-day plan')
+      el('button.primary', { onclick: function () { LUNOSIA.app.go('scenarios'); } }, 'Talk again'),
+      el('button', { onclick: function () { LUNOSIA.app.go('home'); } }, 'Home'),
+      el('button', { onclick: function () { LUNOSIA.app.go('challenge'); } }, '60-day plan')
     ));
 
     return main;
   }
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.scenarios = viewScenarios;
-  PARLA.views.talk = viewTalk;
-  PARLA.views.summary = viewSummary;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.scenarios = viewScenarios;
+  LUNOSIA.views.talk = viewTalk;
+  LUNOSIA.views.summary = viewSummary;
 })();

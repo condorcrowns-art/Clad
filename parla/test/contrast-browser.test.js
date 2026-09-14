@@ -85,28 +85,28 @@ const AUDIT = () => {
     await page.locator('button', { hasText: 'Start talking' }).click();
     await page.waitForTimeout(500);
     await page.evaluate(() => {
-      PARLA.ui.say = function (t, cb) { if (cb) setTimeout(cb, 5); };
-      PARLA.speech.speak = function (t, o) { if (o && o.onend) setTimeout(o.onend, 5); };
-      PARLA.speech.cancel = function () {};
+      LUNOSIA.ui.say = function (t, cb) { if (cb) setTimeout(cb, 5); };
+      LUNOSIA.speech.speak = function (t, o) { if (o && o.onend) setTimeout(o.onend, 5); };
+      LUNOSIA.speech.cancel = function () {};
     });
-    await page.evaluate(() => PARLA.dict.load());
+    await page.evaluate(() => LUNOSIA.dict.load());
 
     // The states that only exist once you have done something — a completed
     // challenge day, a text you have read, a mistake waiting. Those carry the
     // saturated fills, which is exactly where white text used to sit.
     await page.evaluate(() => {
-      PARLA.store.state.progress.challengeDone = [0, 1, 2];
-      PARLA.store.state.progress.challengeDay = 3;
-      PARLA.store.markRead('perro', 3, 3);
-      PARLA.store.markHeard('perro', 2, 3, 7);
-      PARLA.store.markWritten('presentarse', 0);
-      PARLA.store.rememberMistake({ es: 'soy cansado', fix: 'estoy cansado',
+      LUNOSIA.store.state.progress.challengeDone = [0, 1, 2];
+      LUNOSIA.store.state.progress.challengeDay = 3;
+      LUNOSIA.store.markRead('perro', 3, 3);
+      LUNOSIA.store.markHeard('perro', 2, 3, 7);
+      LUNOSIA.store.markWritten('presentarse', 0);
+      LUNOSIA.store.rememberMistake({ es: 'soy cansado', fix: 'estoy cansado',
         note: 'ser/estar', topic: 'serestar' });
-      PARLA.store.save();
+      LUNOSIA.store.save();
     });
 
     for (const v of VIEWS) {
-      await page.evaluate(x => PARLA.app.go(x), v);
+      await page.evaluate(x => LUNOSIA.app.go(x), v);
       await page.waitForTimeout(350);
       const bad = await page.evaluate(AUDIT);
       check(v + ' is legible',

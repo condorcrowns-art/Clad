@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Serves the Parla folder over http://localhost:8000 with no dependencies,
+  Serves the Lunosia folder over http://localhost:8000 with no dependencies,
   and exposes a local neural text-to-speech endpoint at /tts.
 
 .DESCRIPTION
@@ -297,7 +297,7 @@ try {
 }
 
 Write-Host ""
-Write-Host "  Parla is running at $prefix" -ForegroundColor Green
+Write-Host "  Lunosia is running at $prefix" -ForegroundColor Green
 Write-Host "  Serving: $root"
 if ($piperExe) {
   $vc = @(Get-PiperVoices).Count
@@ -460,7 +460,7 @@ try {
         if ($ok -and (Test-Path $wav -PathType Leaf)) {
           $bytes = [System.IO.File]::ReadAllBytes($wav)
           $response.ContentType = 'audio/wav'
-          $response.Headers.Add('X-Parla-Voice', $voice.id)
+          $response.Headers.Add('X-Lunosia-Voice', $voice.id)
           $response.ContentLength64 = $bytes.Length
           $response.OutputStream.Write($bytes, 0, $bytes.Length)
         } else {
@@ -504,5 +504,5 @@ try {
 } finally {
   $listener.Stop()
   $listener.Close()
-  Write-Host "Parla server stopped." -ForegroundColor Yellow
+  Write-Host "Lunosia server stopped." -ForegroundColor Yellow
 }

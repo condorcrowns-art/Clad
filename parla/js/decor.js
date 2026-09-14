@@ -1,4 +1,4 @@
-/* Parla — the fiesta, drawn rather than downloaded
+/* Lunosia — the fiesta, drawn rather than downloaded
  *
  * Every ornament here is generated from geometry: papel picado cut from
  * circles and triangles, a Talavera lattice built from eight-fold rosettes, a
@@ -11,7 +11,7 @@
  *
  * If this file fails to load, the app is plain and entirely functional.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -293,7 +293,7 @@ window.PARLA = window.PARLA || {};
     }
   }
 
-  PARLA.decor = {
+  LUNOSIA.decor = {
     install: install,
     mural: mural,
     confetti: confetti,

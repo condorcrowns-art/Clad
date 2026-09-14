@@ -1,4 +1,4 @@
-/* Parla — things to read
+/* Lunosia — things to read
  *
  * The app could talk, drill, correct and coach, and had nothing at all to
  * read. That is a real gap: extended input is how vocabulary stops being
@@ -18,11 +18,11 @@
  *
  * Every sentence in this file has been run through the grammar checker.
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
-PARLA.data.es.reading = [
+LUNOSIA.data.es.reading = [
 
   { id: 'perro', level: 'a1', minutes: 2, title: 'El perro del tercero',
     blurb: 'A dog on the stairs, and nobody claims it.',
@@ -353,8 +353,8 @@ PARLA.data.es.reading = [
   }
 ];
 
-PARLA.data.es.readingById = (function () {
+LUNOSIA.data.es.readingById = (function () {
   var m = {};
-  PARLA.data.es.reading.forEach(function (r) { m[r.id] = r; });
+  LUNOSIA.data.es.reading.forEach(function (r) { m[r.id] = r; });
   return m;
 })();

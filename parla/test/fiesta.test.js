@@ -42,7 +42,7 @@ async function onboard(page) {
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check('nothing overflows sideways', overflow <= 1, overflow + 'px');
 
-  await page.evaluate(() => PARLA.app.go('talk', { id: PARLA.data.es.scenarios[0].id }));
+  await page.evaluate(() => LUNOSIA.app.go('talk', { id: LUNOSIA.data.es.scenarios[0].id }));
   await page.waitForTimeout(400);
   const dockBg = await page.evaluate(() => getComputedStyle(document.querySelector('.mic-dock')).backgroundColor);
   check('the dock is opaque, so the thread cannot show through it',
@@ -69,7 +69,7 @@ async function onboard(page) {
   const swaying = await page.evaluate(() =>
     getComputedStyle(document.querySelector('.papel svg')).animationName);
   check('the bunting stops swaying', swaying === 'none', swaying);
-  const confettiPieces = await page.evaluate(() => { PARLA.decor.confetti(50); return document.querySelectorAll('.confetti').length; });
+  const confettiPieces = await page.evaluate(() => { LUNOSIA.decor.confetti(50); return document.querySelectorAll('.confetti').length; });
   check('confetti is not fired at all', confettiPieces === 0, String(confettiPieces));
   check('but the colour stays', await page.locator('.mural').isVisible());
   await rm.close();
@@ -108,7 +108,7 @@ async function onboard(page) {
     const out = {};
     for (const [view, sel] of [['read', '.read-card'], ['say', '.sound-card'],
                                ['grammar', '.gram-card'], ['words', '.band-card']]) {
-      PARLA.app.go(view);
+      LUNOSIA.app.go(view);
       await new Promise(r => setTimeout(r, 250));
       const e = document.querySelector(sel);
       if (!e) { out[view] = 'missing'; continue; }

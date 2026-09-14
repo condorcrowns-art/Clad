@@ -13,7 +13,7 @@ const fs = require('fs');
 
 const ctx = load(makeSandbox(),
   ...fs.readdirSync(__dirname + '/../js/data').filter(f => f.endsWith('.js')).map(f => 'js/data/' + f));
-const V = ctx.PARLA.data.es.verbs;
+const V = ctx.LUNOSIA.data.es.verbs;
 
 const fail = [];
 const check = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  - ' + x : '')); if (!c) fail.push(n); };

@@ -32,16 +32,16 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   await page.locator('button', { hasText: 'Start talking' }).click();
   await page.waitForTimeout(500);
   await page.evaluate(() => {
-    PARLA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
+    LUNOSIA.speech.speak = function (t, o) { if (o && o.onend) o.onend(); };
   });
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => LUNOSIA.dict.load());
 
   console.log('It knows\n');
   check('speech is reported unsupported',
-    (await page.evaluate(() => PARLA.speech.supported)) === false);
+    (await page.evaluate(() => LUNOSIA.speech.supported)) === false);
 
   console.log('\nThe conversation still works, by typing\n');
-  await page.evaluate(() => PARLA.app.go('talk', { id: 'presentarse' }));
+  await page.evaluate(() => LUNOSIA.app.go('talk', { id: 'presentarse' }));
   await page.waitForTimeout(800);
   check('the typing box is there', await page.locator('.type-fallback input').isVisible());
   check('and the label says to use it',
@@ -73,14 +73,14 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
     ['games', '.game-card, .scenario', 'the games'],
     ['progress', '.skill', 'the stats']
   ]) {
-    await page.evaluate(v => PARLA.app.go(v), view);
+    await page.evaluate(v => LUNOSIA.app.go(v), view);
     await page.waitForTimeout(400);
     check(what + ' works', (await page.locator(sel).count()) > 0);
   }
 
   // Tapping a word is the dictionary and the morphology engine, neither of
   // which has anything to do with the microphone.
-  await page.evaluate(() => PARLA.app.go('text', { id: 'perro' }));
+  await page.evaluate(() => LUNOSIA.app.go('text', { id: 'perro' }));
   await page.waitForTimeout(500);
   await page.locator('.rd-es .word', { hasText: 'tiene' }).first().click();
   await page.waitForTimeout(400);

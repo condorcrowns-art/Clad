@@ -21,8 +21,8 @@ const raw = JSON.parse(fs.readFileSync(ROOT + '/js/data/dict-es.json', 'utf8'));
 ctx.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(raw) });
 vm.runInContext('globalThis.fetch = fetch;', ctx);
 
-const D = ctx.PARLA.dict;
-const M = ctx.PARLA.morph;
+const D = ctx.LUNOSIA.dict;
+const M = ctx.LUNOSIA.morph;
 
 (async () => {
   console.log('The file itself\n');

@@ -9,7 +9,7 @@ const { makeSandbox, load } = require('./harness');
 const ctx = makeSandbox();
 vm.runInContext('globalThis.fetch = function(){ return Promise.reject(new Error("no network")); };', ctx);
 load(ctx, 'js/data/vocab-es.js', 'js/data/verbs-es.js', 'js/data/scenarios-es.js', 'js/brain.js');
-const B = ctx.PARLA.brain;
+const B = ctx.LUNOSIA.brain;
 const fail = [];
 const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''));if(!c)fail.push(n);};
 
@@ -17,7 +17,7 @@ const check = (n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:''))
   console.log('Asking about a word\n');
 
   /* — the conjugation engine is not limited to the drill list — */
-  const drillVerbs = new Set(ctx.PARLA.data.es.verbs.list.map(r => r[0]));
+  const drillVerbs = new Set(ctx.LUNOSIA.data.es.verbs.list.map(r => r[0]));
   ['madrugar', 'charlar', 'compartir', 'aprender'].forEach(v => {
     const r = B._explainLocal(v, 'es');
     check('"' + v + '" conjugates' + (drillVerbs.has(v) ? '' : ' even though it is not in the drill list'),

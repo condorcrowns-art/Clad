@@ -1,4 +1,4 @@
-/* Parla — the 60-day speaking challenge
+/* Lunosia — the 60-day speaking challenge
  *
  * One prompt per day, ordered so grammar arrives when you actually need it.
  * Each day: a speaking task, a grammar focus, and a linked scenario to run.
@@ -22,11 +22,11 @@
  * A text is always read before it is heard: perro on day 7, and again without
  * the text on day 19.
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
-PARLA.data.es.challenge = [
+LUNOSIA.data.es.challenge = [
   /* Week 1 — survive a first exchange */
   ['Say hello and your name', 'Greet your partner, say your name, and ask for theirs.', 'me llamo / ¿cómo te llamas?', 'presentarse', 3, ['write', 'presentarse']],
   ['Say where you are from', 'Introduce yourself and say what country and city you are from.', 'ser + de', 'presentarse', 3, ['lesson', 'serestar']],

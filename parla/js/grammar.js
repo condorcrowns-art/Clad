@@ -1,4 +1,4 @@
-/* Parla — the grammar checker
+/* Lunosia — the grammar checker
  *
  * Correcting a learner's Spanish was, until now, a 7B model's opinion plus
  * twenty-nine regular expressions that matched exact strings. Both are the
@@ -22,13 +22,13 @@
  * The model still has a job: word choice, register, whether the sentence
  * answers the question. Those are not decidable and this does not touch them.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
 
-  function dict() { return PARLA.dict; }
-  function morph() { return PARLA.morph; }
+  function dict() { return LUNOSIA.dict; }
+  function morph() { return LUNOSIA.morph; }
   function ready() { return !!(dict() && dict().ready() && morph() && morph().ready()); }
 
   function fold(w) {
@@ -463,7 +463,7 @@ window.PARLA = window.PARLA || {};
         // tú-imperative, and a word with two jobs is not a mistake.
         if (verbReadings.length && !verbReadings.some(function (r) { return r.personIndex === wantP; })) {
           var r0 = verbReadings[0];
-          var forms = PARLA.data.es.verbs.conjugate(r0.lemma, r0.tenseKey);
+          var forms = LUNOSIA.data.es.verbs.conjugate(r0.lemma, r0.tenseKey);
           if (forms && forms[wantP] && forms[wantP] !== '—' && forms[wantP] !== next.low) {
             out.push(finding(text, next, forms[wantP],
               'With “' + t.low + '” the verb takes the ' + PERSON_NAME[wantP] + ' form: “' +
@@ -888,7 +888,7 @@ window.PARLA = window.PARLA || {};
     return true;
   }
 
-  PARLA.grammar = {
+  LUNOSIA.grammar = {
     ready: ready,
     check: check,
     correct: correct,

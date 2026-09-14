@@ -1,4 +1,4 @@
-/* Parla — turning written Spanish into speakable Spanish
+/* Lunosia — turning written Spanish into speakable Spanish
  *
  * Text-to-speech reads what it is given. "Habitación 204" becomes "habitación
  * two oh four" or a flat digit-by-digit recital; "Son 3,20 €" becomes noise.
@@ -10,7 +10,7 @@
  * Spanish speaker would actually say, before it ever reaches the synthesiser.
  * Purely a speech layer — the text on screen is left exactly as written.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -230,7 +230,7 @@ window.PARLA = window.PARLA || {};
     return out.map(function (x) { return x.trim(); }).filter(Boolean);
   }
 
-  PARLA.saytext = {
+  LUNOSIA.saytext = {
     forSpeech: forSpeech,
     numberToWords: numberToWords,
     timeToWords: timeToWords,

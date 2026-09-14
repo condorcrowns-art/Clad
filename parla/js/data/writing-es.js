@@ -1,4 +1,4 @@
-/* Parla — things to write
+/* Lunosia — things to write
  *
  * The app could talk, listen, read, correct and coach, and had nowhere to
  * *produce* Spanish in your own time. Speaking is production too, but it is
@@ -22,11 +22,11 @@
  * Every Spanish sentence in this file is run through the grammar checker by
  * test/writing.test.js.
  */
-window.PARLA = window.PARLA || {};
-PARLA.data = PARLA.data || {};
-PARLA.data.es = PARLA.data.es || {};
+window.LUNOSIA = window.LUNOSIA || {};
+LUNOSIA.data = LUNOSIA.data || {};
+LUNOSIA.data.es = LUNOSIA.data.es || {};
 
-PARLA.data.es.writing = [
+LUNOSIA.data.es.writing = [
 
   /* ── A1 ──────────────────────────────────────────────────*/
   { id: 'presentarse', level: 'a1', minutes: 3,
@@ -305,8 +305,8 @@ PARLA.data.es.writing = [
             'cuenta de que llevaba dos años pronunciándolo mal.'] }
 ];
 
-PARLA.data.es.writingById = (function () {
+LUNOSIA.data.es.writingById = (function () {
   var m = {};
-  PARLA.data.es.writing.forEach(function (w) { m[w.id] = w; });
+  LUNOSIA.data.es.writing.forEach(function (w) { m[w.id] = w; });
   return m;
 })();

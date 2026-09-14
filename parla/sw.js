@@ -1,4 +1,4 @@
-/* Parla — offline cache
+/* Lunosia — offline cache
  *
  * The whole app is a handful of static files, so we cache them all on install
  * and serve cache-first. That makes the built-in scripted partner, the SRS and
@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'parla-v22';
+var CACHE = 'lunosia-v1';
 
 var ASSETS = [
   './',

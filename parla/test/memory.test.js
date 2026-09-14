@@ -20,11 +20,11 @@ vm.runInContext(`
 `, ctx);
 load(ctx, 'js/store.js', 'js/data/vocab-es.js', 'js/data/verbs-es.js',
           'js/data/scenarios-es.js', 'js/brain.js');
-vm.runInContext('PARLA.store.load();', ctx);
+vm.runInContext('LUNOSIA.store.load();', ctx);
 
-const S = ctx.PARLA.store;
-const B = ctx.PARLA.brain;
-const sc = ctx.PARLA.data.es.scenarios[0];
+const S = ctx.LUNOSIA.store;
+const B = ctx.LUNOSIA.brain;
+const sc = ctx.LUNOSIA.data.es.scenarios[0];
 
 const fail = [];
 function check(n, c, x) { console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  - '+x:'')); if(!c) fail.push(n); }

@@ -10,14 +10,14 @@ const fail=[]; const check=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?
   await page.waitForTimeout(400);
 
   console.log('== Typed production ==');
-  await page.evaluate(()=>PARLA.app.go('review'));
+  await page.evaluate(()=>LUNOSIA.app.go('review'));
   await page.waitForTimeout(300);
   await page.locator('.seg button',{hasText:'EN→ES'}).click();
   await page.waitForTimeout(200);
   check('typed input appears', await page.locator('.answer-input').isVisible());
   const want = await page.evaluate(()=>{
-    const v=PARLA.data.es.vocab, deck=PARLA.store.state.srs;
-    const q=PARLA.srs.buildQueue(v.map(r=>r[0]),deck,{maxNew:12,maxTotal:40});
+    const v=LUNOSIA.data.es.vocab, deck=LUNOSIA.store.state.srs;
+    const q=LUNOSIA.srs.buildQueue(v.map(r=>r[0]),deck,{maxNew:12,maxTotal:40});
     return q[0];
   });
   await page.fill('.answer-input', want);
@@ -30,8 +30,8 @@ const fail=[]; const check=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?
   await page.locator('.grade-row button.g4').click();
   await page.waitForTimeout(250);
   const want2 = await page.evaluate(()=>{
-    const v=PARLA.data.es.vocab, deck=PARLA.store.state.srs;
-    const q=PARLA.srs.buildQueue(v.map(r=>r[0]),deck,{maxNew:12,maxTotal:40});
+    const v=LUNOSIA.data.es.vocab, deck=LUNOSIA.store.state.srs;
+    const q=LUNOSIA.srs.buildQueue(v.map(r=>r[0]),deck,{maxNew:12,maxTotal:40});
     return q[0];
   });
   console.log('\n== Near miss ==');
@@ -64,12 +64,12 @@ const fail=[]; const check=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(x?
   console.log('\n== Mixed picks per card ==');
   const modes = await page.evaluate(()=>{
     // Age the deck so the mixed mode has strong cards to escalate.
-    const v=PARLA.data.es.vocab.slice(0,30);
-    v.forEach((r,i)=>{ PARLA.store.state.srs[r[0]]={ease:2.5,interval:1,due:0,reps:i%7,lapses:0}; });
-    PARLA.store.save();
+    const v=LUNOSIA.data.es.vocab.slice(0,30);
+    v.forEach((r,i)=>{ LUNOSIA.store.state.srs[r[0]]={ease:2.5,interval:1,due:0,reps:i%7,lapses:0}; });
+    LUNOSIA.store.save();
     return true;
   });
-  await page.evaluate(()=>PARLA.app.go('review'));
+  await page.evaluate(()=>LUNOSIA.app.go('review'));
   await page.waitForTimeout(300);
   await page.locator('.seg button',{hasText:'Mixed'}).click();
   await page.waitForTimeout(250);

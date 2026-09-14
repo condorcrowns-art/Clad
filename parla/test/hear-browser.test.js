@@ -26,11 +26,11 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   await page.waitForTimeout(400);
   await page.evaluate(() => {
     window.__said = [];
-    PARLA.ui.say = function (t, cb, c, x) { window.__said.push([t, x && x.rate]); if (cb) setTimeout(cb, 5); };
-    PARLA.speech.speak = function (t, o) { window.__said.push([t, o && o.rate]); if (o && o.onend) setTimeout(o.onend, 5); };
-    PARLA.speech.cancel = function () {};
+    LUNOSIA.ui.say = function (t, cb, c, x) { window.__said.push([t, x && x.rate]); if (cb) setTimeout(cb, 5); };
+    LUNOSIA.speech.speak = function (t, o) { window.__said.push([t, o && o.rate]); if (o && o.onend) setTimeout(o.onend, 5); };
+    LUNOSIA.speech.cancel = function () {};
   });
-  await page.evaluate(() => PARLA.dict.load());
+  await page.evaluate(() => LUNOSIA.dict.load());
 
   console.log('Getting there from the reader\n');
   await goTo(page, 'read');
@@ -61,7 +61,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
     await page.locator('.hear-played').innerText());
 
   console.log('\nThe speed control\n');
-  const base = await page.evaluate(() => PARLA.store.state.settings.rate);
+  const base = await page.evaluate(() => LUNOSIA.store.state.settings.rate);
   const heardAt = r => page.evaluate(() => window.__said.slice(-1)[0][1]);
   check('the default is slower than natural', (await heardAt()) < base,
     (await heardAt()) + ' vs ' + base);
@@ -79,7 +79,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   check('and Natural is the speed the rest of the app speaks at', natural === base,
     natural + ' vs ' + base);
   check('changing it here does not change the app-wide setting',
-    (await page.evaluate(() => PARLA.store.state.settings.rate)) === base);
+    (await page.evaluate(() => LUNOSIA.store.state.settings.rate)) === base);
 
   console.log('\nLooking, when you want to\n');
   await page.locator('button', { hasText: 'Show me' }).click();
@@ -91,13 +91,13 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   check('which is a second tap away', await page.locator('.hear-en').isVisible());
 
   console.log('\nThrough the text\n');
-  const lines = await page.evaluate(() => PARLA.data.es.readingById.perro.lines.length);
+  const lines = await page.evaluate(() => LUNOSIA.data.es.readingById.perro.lines.length);
   await page.locator('button', { hasText: 'Caught it' }).click();
   await page.waitForTimeout(250);
   check('moving on hides the text again', !(await page.locator('.hear-es').isVisible()));
   check('and plays the next line',
     (await page.evaluate(() => window.__said.slice(-1)[0][0])) !==
-    (await page.evaluate(() => PARLA.data.es.readingById.perro.lines[0][0])));
+    (await page.evaluate(() => LUNOSIA.data.es.readingById.perro.lines[0][0])));
 
   for (let i = 1; i < lines; i++) {
     await page.locator('button', { hasText: i % 2 ? 'Missed it' : 'Caught it' }).click();
@@ -110,9 +110,9 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
 
   console.log('\nThe same questions, off the audio\n');
   check('the questions follow', await page.locator('.q-text').isVisible());
-  const nq = await page.evaluate(() => PARLA.data.es.readingById.perro.ask.length);
+  const nq = await page.evaluate(() => LUNOSIA.data.es.readingById.perro.ask.length);
   for (let i = 0; i < nq; i++) {
-    const right = await page.evaluate(i => PARLA.data.es.readingById.perro.ask[i][1], i);
+    const right = await page.evaluate(i => LUNOSIA.data.es.readingById.perro.ask[i][1], i);
     await page.locator('.q-opt', { hasText: right }).first().click();
     await page.waitForTimeout(200);
     await page.locator('.q-opt').locator('..').locator('..').locator('..')
@@ -121,7 +121,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   }
   await page.waitForTimeout(300);
 
-  const rec = await page.evaluate(() => PARLA.store.state.reading.perro);
+  const rec = await page.evaluate(() => LUNOSIA.store.state.reading.perro);
   check('the listening score is kept', rec && rec.heardRight === nq, JSON.stringify(rec));
   // Understanding a text you only heard is a different result from
   // understanding one you could look at, so it does not overwrite the other.
@@ -139,7 +139,7 @@ const PHONE = { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, has
   check('the card shows the listening score', /🎧 3\/3/.test(card), card.replace(/\n/g, ' | '));
 
   console.log('\nOn a phone\n');
-  await page.evaluate(() => PARLA.app.go('listen', { id: 'taxi' }));
+  await page.evaluate(() => LUNOSIA.app.go('listen', { id: 'taxi' }));
   await page.waitForTimeout(400);
   check('nothing runs off the side',
     (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);

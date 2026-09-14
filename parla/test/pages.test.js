@@ -130,7 +130,7 @@ assets.forEach(a => {
 
 // Browsers keep serving the old cache until the name changes, so a shipped
 // change with a stale CACHE name reaches nobody who has visited before.
-check('the cache name is versioned', /var CACHE = 'parla-v(\d+)'/.test(sw),
+check('the cache name is versioned', /var CACHE = 'lunosia-v(\d+)'/.test(sw),
   (/var CACHE = '([^']+)'/.exec(sw) || [])[1]);
 
 console.log('\n— The privacy policy matches the app —\n');

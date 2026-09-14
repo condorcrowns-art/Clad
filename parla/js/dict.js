@@ -1,4 +1,4 @@
-/* Parla — the dictionary
+/* Lunosia — the dictionary
  *
  * 31,000 Spanish headwords with meanings, gender, register and a frequency
  * band, built from open Wiktionary and subtitle-corpus data by
@@ -11,7 +11,7 @@
  * vulgar and where it is said are all facts, and facts should not cost a round
  * trip to someone's GPU.
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -211,7 +211,7 @@ window.PARLA = window.PARLA || {};
     return { have: have, total: total, pct: total ? Math.round(have * 100 / total) : 0 };
   }
 
-  PARLA.dict = {
+  LUNOSIA.dict = {
     load: load, ready: ready, size: size, ranked: rankedCount, failure: failure,
     get: get, all: all, isVerb: isVerb, verbFor: verbFor, search: search, band: band,
     hasFeminine: hasFeminine,

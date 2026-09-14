@@ -1,4 +1,4 @@
-/* Parla — reading
+/* Lunosia — reading
  *
  * The one activity a learner will do voluntarily for twenty minutes, and the
  * app had nothing for it. Drills build the pieces; reading is where the pieces
@@ -15,24 +15,24 @@
  *   read   the shelf: twelve texts, A1 to B1
  *   text   one of them, with audio, tap-to-understand and questions
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
   var el, ui;
-  function init() { ui = PARLA.ui; el = ui.el; }
+  function init() { ui = LUNOSIA.ui; el = ui.el; }
 
   var LEVEL_NAME = { a1: 'Starting out', a2: 'Getting going', b1: 'Finding your feet' };
 
   function progressOf(id) {
-    return (PARLA.store.state.reading || {})[id] || null;
+    return (LUNOSIA.store.state.reading || {})[id] || null;
   }
 
   /* ── The shelf ────────────────────────────────────────────*/
   function viewRead() {
     init();
     var main = el('main');
-    var texts = PARLA.data.es.reading || [];
+    var texts = LUNOSIA.data.es.reading || [];
 
     main.appendChild(el('h1', 'Read'));
     main.appendChild(el('p.muted',
@@ -63,7 +63,7 @@ window.PARLA = window.PARLA || {};
     function card(t) {
       var p = progressOf(t.id);
       return el('div.read-card' + (p ? '.read-done' : ''),
-        el('button.read-open', { onclick: function () { PARLA.app.go('text', { id: t.id }); } },
+        el('button.read-open', { onclick: function () { LUNOSIA.app.go('text', { id: t.id }); } },
           el('div.read-main',
             el('div.read-title', t.title),
             el('div.read-blurb', t.blurb),
@@ -73,7 +73,7 @@ window.PARLA = window.PARLA || {};
               p && p.asked ? el('span.chip.good', '📖 ' + p.right + '/' + p.asked) : null,
               p && p.heardAsked ? el('span.chip.good', '🎧 ' + p.heardRight + '/' + p.heardAsked) : null))),
         el('button.read-hear', { title: 'Listen to it without the text',
-          onclick: function () { PARLA.app.go('listen', { id: t.id }); } }, '🎧'));
+          onclick: function () { LUNOSIA.app.go('listen', { id: t.id }); } }, '🎧'));
     }
 
     return main;
@@ -82,14 +82,14 @@ window.PARLA = window.PARLA || {};
   /* ── One text ─────────────────────────────────────────────*/
   function viewText(params) {
     init();
-    var t = (PARLA.data.es.readingById || {})[(params || {}).id];
+    var t = (LUNOSIA.data.es.readingById || {})[(params || {}).id];
     var main = el('main');
 
     if (!t) {
       main.appendChild(ui.empty('📖', 'No such text',
         'It may have been renamed. Pick one from the list.'));
       main.appendChild(el('div.btn-row',
-        el('button.primary', { onclick: function () { PARLA.app.go('read'); } }, 'Back to the list')));
+        el('button.primary', { onclick: function () { LUNOSIA.app.go('read'); } }, 'Back to the list')));
       return main;
     }
 
@@ -98,7 +98,7 @@ window.PARLA = window.PARLA || {};
     var stopPlay = null;
 
     main.appendChild(el('div.crumb',
-      el('button.ghost.small-btn', { onclick: function () { PARLA.app.go('read'); } }, '← Read'),
+      el('button.ghost.small-btn', { onclick: function () { LUNOSIA.app.go('read'); } }, '← Read'),
       ui.levelTag(t.level)));
     main.appendChild(el('h1', t.title));
     main.appendChild(el('p.muted', t.blurb));
@@ -114,7 +114,7 @@ window.PARLA = window.PARLA || {};
       });
     } }, '👁 Show English');
     main.appendChild(el('div.btn-row.read-tools', playBtn, enBtn,
-      el('button', { onclick: function () { stop(); PARLA.app.go('listen', { id: t.id }); } },
+      el('button', { onclick: function () { stop(); LUNOSIA.app.go('listen', { id: t.id }); } },
         '🎧 Listen without the text')));
     main.appendChild(el('p.small.faint.read-hint',
       'Tap a word for its meaning. Tap the line for the translation.'));
@@ -173,7 +173,7 @@ window.PARLA = window.PARLA || {};
       playing = false;
       playBtn.textContent = '▶ Read it to me';
       rows.forEach(function (r) { r.classList.remove('now'); });
-      PARLA.speech.cancel();
+      LUNOSIA.speech.cancel();
     }
 
     /* — the questions — */
@@ -229,7 +229,7 @@ window.PARLA = window.PARLA || {};
       }
 
       function finish() {
-        PARLA.store.markRead(t.id, right, t.ask.length);
+        LUNOSIA.store.markRead(t.id, right, t.ask.length);
         var pct = Math.round(right * 100 / t.ask.length);
         ui.clear(slot);
         slot.appendChild(ui.banner(pct >= 67 ? 'good' : 'warn',
@@ -243,10 +243,10 @@ window.PARLA = window.PARLA || {};
         slot.appendChild(wordBank());
         quiz.scrollIntoView({ block: 'start', behavior: 'smooth' });
         slot.appendChild(el('div.btn-row', { style: { marginTop: '14px' } },
-          el('button.primary', { onclick: function () { PARLA.app.go('listen', { id: t.id }); } },
+          el('button.primary', { onclick: function () { LUNOSIA.app.go('listen', { id: t.id }); } },
             '🎧 Now hear it without the text'),
-          el('button', { onclick: function () { PARLA.app.go('read'); } }, 'Another text'),
-          el('button', { onclick: function () { PARLA.app.go('text', { id: t.id }); } },
+          el('button', { onclick: function () { LUNOSIA.app.go('read'); } }, 'Another text'),
+          el('button', { onclick: function () { LUNOSIA.app.go('text', { id: t.id }); } },
             'Read it again')));
       }
     }
@@ -266,9 +266,9 @@ window.PARLA = window.PARLA || {};
           el('div.wb-main', el('div.wb-term.es', w[0]), el('div.wb-en', w[1])),
           have ? el('span.chip.good', '✓')
                : el('button.primary.small-btn', { onclick: function () {
-                   PARLA.store.addWord(w[0], w[1], sentenceWith(w[0]), '');
+                   LUNOSIA.store.addWord(w[0], w[1], sentenceWith(w[0]), '');
                    ui.toast('“' + w[0] + '” added', 'good');
-                   PARLA.app.go('text', { id: t.id });
+                   LUNOSIA.app.go('text', { id: t.id });
                  } }, '+'));
         list.appendChild(row);
       });
@@ -280,10 +280,10 @@ window.PARLA = window.PARLA || {};
         wrap.appendChild(el('div.btn-row',
           el('button', { onclick: function () {
             missing.forEach(function (w) {
-              PARLA.store.addWord(w[0], w[1], sentenceWith(w[0]), '');
+              LUNOSIA.store.addWord(w[0], w[1], sentenceWith(w[0]), '');
             });
             ui.toast(missing.length + ' words added', 'good');
-            PARLA.app.go('text', { id: t.id });
+            LUNOSIA.app.go('text', { id: t.id });
           } }, 'Add all ' + missing.length)));
       }
       return wrap;
@@ -301,7 +301,7 @@ window.PARLA = window.PARLA || {};
 
     function known(es) {
       var n = norm(String(es).replace(/^(el|la|los|las|un|una)\s+/, ''));
-      return (PARLA.store.state.phrases || []).some(function (p) {
+      return (LUNOSIA.store.state.phrases || []).some(function (p) {
         return norm(String(p.es).replace(/^(el|la|los|las|un|una)\s+/, '')) === n;
       });
     }
@@ -357,9 +357,9 @@ window.PARLA = window.PARLA || {};
 
     // The dictionary and the morphology engine, not the model: this has to
     // work on a train.
-    var reads = PARLA.morph.ready() ? PARLA.morph.analyse(word) : [];
+    var reads = LUNOSIA.morph.ready() ? LUNOSIA.morph.analyse(word) : [];
     if (!reads.length) {
-      body.appendChild(el('div.small.muted', PARLA.morph.ready()
+      body.appendChild(el('div.small.muted', LUNOSIA.morph.ready()
         ? 'Not in the dictionary. It may be a name.'
         : 'The dictionary is still loading. Try again in a moment.'));
       return;
@@ -389,7 +389,7 @@ window.PARLA = window.PARLA || {};
     }
 
     var lemma = top.lemma || word;
-    var already = (PARLA.store.state.phrases || []).some(function (p) {
+    var already = (LUNOSIA.store.state.phrases || []).some(function (p) {
       return norm(p.es).replace(/^(el|la) /, '') === norm(lemma);
     });
 
@@ -398,12 +398,12 @@ window.PARLA = window.PARLA || {};
       already
         ? el('button', { disabled: 'disabled' }, '✓ In your deck')
         : el('button.primary', { onclick: function () {
-            PARLA.store.addWord(art + lemma, glosses[0] || top.en || '', sentence, '');
+            LUNOSIA.store.addWord(art + lemma, glosses[0] || top.en || '', sentence, '');
             ui.toast('“' + lemma + '” added', 'good');
             closeWord();
           } }, '+ Add'),
       el('button.ghost', { title: 'Everything about this word',
-        onclick: function () { closeWord(); PARLA.app.go('coach', { q: lemma }); } }, '›')));
+        onclick: function () { closeWord(); LUNOSIA.app.go('coach', { q: lemma }); } }, '›')));
   }
 
   /* "to have · to have, possess an object" is one meaning written twice, and
@@ -441,7 +441,7 @@ window.PARLA = window.PARLA || {};
     if (pop && !pop.contains(e.target) && !e.target.classList.contains('word')) closeWord();
   });
 
-  PARLA.views = PARLA.views || {};
-  PARLA.views.read = viewRead;
-  PARLA.views.text = viewText;
+  LUNOSIA.views = LUNOSIA.views || {};
+  LUNOSIA.views.read = viewRead;
+  LUNOSIA.views.text = viewText;
 })();

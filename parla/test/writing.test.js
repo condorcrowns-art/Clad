@@ -24,9 +24,9 @@ ctx.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(raw) }
 vm.runInContext('globalThis.fetch = fetch;', ctx);
 
 (async () => {
-  await ctx.PARLA.dict.load();
-  const G = ctx.PARLA.grammar;
-  const tasks = ctx.PARLA.data.es.writing;
+  await ctx.LUNOSIA.dict.load();
+  const G = ctx.LUNOSIA.grammar;
+  const tasks = ctx.LUNOSIA.data.es.writing;
 
   console.log('The tasks\n');
   check('twenty-four of them', tasks.length === 24, String(tasks.length));
@@ -76,7 +76,7 @@ vm.runInContext('globalThis.fetch = fetch;', ctx);
     salud: /(duele|duelen)/, mananana: /voy a/, comparar: /(más|mejor|tan)/
   };
   Object.keys(proof).forEach(id => {
-    const t = ctx.PARLA.data.es.writingById[id];
+    const t = ctx.LUNOSIA.data.es.writingById[id];
     check(id + ' really forces what it claims',
       !!t && t.model.some(m => proof[id].test(m.toLowerCase())),
       t && t.model.join(' / '));

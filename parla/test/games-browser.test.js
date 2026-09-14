@@ -27,21 +27,21 @@ async function boot(browser) {
   // to the speech layer - so record what they asked for instead of playing it.
   await page.evaluate(() => {
     window.__spoken = [];
-    PARLA.ui.say = function (t) { window.__spoken.push(String(t)); };
-    PARLA.speech.speak = function (t) { window.__spoken.push(String(t)); };
-    PARLA.speech.cancel = function () {};
+    LUNOSIA.ui.say = function (t) { window.__spoken.push(String(t)); };
+    LUNOSIA.speech.speak = function (t) { window.__spoken.push(String(t)); };
+    LUNOSIA.speech.cancel = function () {};
   });
   return { page, errs };
 }
 
 /* Spanish -> English, exactly as the games build their tiles. */
 const MAP = `(() => { const m = {};
-  (PARLA.data.es.vocab || []).forEach(v => { if (v[1]) m[v[0]] = v[1]; });
-  (PARLA.store.state.phrases || []).forEach(p => { if (p.en) m[p.es] = p.en; });
+  (LUNOSIA.data.es.vocab || []).forEach(v => { if (v[1]) m[v[0]] = v[1]; });
+  (LUNOSIA.store.state.phrases || []).forEach(p => { if (p.en) m[p.es] = p.en; });
   return m; })()`;
 
 async function open(page, id) {
-  await page.evaluate(g => PARLA.app.go('game', { id: g }), id);
+  await page.evaluate(g => LUNOSIA.app.go('game', { id: g }), id);
   await page.waitForTimeout(350);
 }
 
@@ -58,7 +58,7 @@ async function open(page, id) {
   check('nothing overflows the phone',
     (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);
 
-  const reviewsBefore = await page.evaluate(() => PARLA.store.state.progress.totals.reviews);
+  const reviewsBefore = await page.evaluate(() => LUNOSIA.store.state.progress.totals.reviews);
 
   /* ── Pairs ─────────────────────────────────────────────── */
   console.log('\nPairs\n');
@@ -95,10 +95,10 @@ async function open(page, id) {
 
   await page.waitForTimeout(400);
   check('clearing the board ends the game', await page.locator('.game-final').isVisible());
-  const banked = await page.evaluate(() => PARLA.store.state.gameBest.match);
+  const banked = await page.evaluate(() => LUNOSIA.store.state.gameBest.match);
   check('and banks a score', banked > 0, String(banked));
   check('which survives a reload', await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('parla.save.v1')).gameBest.match > 0));
+    JSON.parse(localStorage.getItem('lunosia.save.v1')).gameBest.match > 0));
   check('it offers another round', (await page.locator('button', { hasText: 'Again' }).count()) === 1);
 
   /* ── Word rush ─────────────────────────────────────────── */
@@ -166,7 +166,7 @@ async function open(page, id) {
   const gender = await page.evaluate(async () => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const article = {};
-    (PARLA.data.es.vocab || []).forEach(v => {
+    (LUNOSIA.data.es.vocab || []).forEach(v => {
       const m = /^(el|la)\s+(.+)$/i.exec(v[0]);
       if (m) article[m[2]] = m[1].toLowerCase();
     });
@@ -212,17 +212,17 @@ async function open(page, id) {
   check('a wrong answer shows what it was', verdict.includes(heard2), verdict);
   check('and its meaning too', verdict.includes('—'), verdict);
   check('a second Check does not double-count', await page.evaluate(async () => {
-    const before = PARLA.store.state.progress.totals.reviews;
+    const before = LUNOSIA.store.state.progress.totals.reviews;
     [...document.querySelectorAll('button')].find(b => b.textContent === 'Check').click();
-    return PARLA.store.state.progress.totals.reviews === before;
+    return LUNOSIA.store.state.progress.totals.reviews === before;
   }));
 
   /* ── It is all one deck ────────────────────────────────── */
   console.log('\nOne deck\n');
   const after = await page.evaluate(() => ({
-    reviews: PARLA.store.state.progress.totals.reviews,
-    cards: Object.keys(PARLA.store.state.srs).length,
-    due: Object.values(PARLA.store.state.srs).filter(c => c.due).length
+    reviews: LUNOSIA.store.state.progress.totals.reviews,
+    cards: Object.keys(LUNOSIA.store.state.srs).length,
+    due: Object.values(LUNOSIA.store.state.srs).filter(c => c.due).length
   }));
   check('playing counts as reviewing', after.reviews > reviewsBefore,
     reviewsBefore + ' -> ' + after.reviews);

@@ -1,4 +1,4 @@
-/* Parla — spaced repetition (SM-2)
+/* Lunosia — spaced repetition (SM-2)
  *
  * This is the piece Victor does not really have, and it is the difference
  * between "I recognise that word" and "I can say that word". Cards you get
@@ -7,7 +7,7 @@
  * Grades map to the four review buttons:
  *   0 again · 3 hard · 4 good · 5 easy
  */
-window.PARLA = window.PARLA || {};
+window.LUNOSIA = window.LUNOSIA || {};
 
 (function () {
   'use strict';
@@ -112,7 +112,7 @@ window.PARLA = window.PARLA || {};
     return s;
   }
 
-  PARLA.srs = {
+  LUNOSIA.srs = {
     newCard: newCard,
     grade: grade,
     isDue: isDue,

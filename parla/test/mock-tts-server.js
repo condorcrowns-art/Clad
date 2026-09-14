@@ -1,4 +1,4 @@
-/* Static server for parla/ that also stands in for the /tts endpoints
+/* Static server for the app that also stands in for the /tts endpoints
  * serve.ps1 exposes, so the browser half can be tested without Windows. */
 const http = require('http');
 const fs = require('fs');
@@ -68,8 +68,8 @@ http.createServer((req, res) => {
       if (j.pitch && j.pitch !== 1) setWavRate(b, j.pitch);
       res.writeHead(200, {
         'Content-Type':'audio/wav', 'Content-Length':b.length,
-        'X-Parla-Voice': j.voice || '', 'X-Parla-Rate': String(b.readUInt32LE(24)),
-        'X-Parla-Sentences': String(parts.length)
+        'X-Lunosia-Voice': j.voice || '', 'X-Lunosia-Rate': String(b.readUInt32LE(24)),
+        'X-Lunosia-Sentences': String(parts.length)
       });
       res.end(b);
     });

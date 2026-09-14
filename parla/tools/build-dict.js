@@ -24,7 +24,7 @@
  *       node tools/build-dict.js --offline    fails rather than reaching the network
  *
  * The output is committed, so the app never touches any of this at runtime and
- * nobody has to run this to use Parla.
+ * nobody has to run this to use Lunosia.
  */
 'use strict';
 const fs = require('fs');
