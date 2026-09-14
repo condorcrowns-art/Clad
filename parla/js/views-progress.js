@@ -1093,7 +1093,10 @@ window.PARLA = window.PARLA || {};
           r.secure ? r.origin : 'Browsers only give a microphone to https:// or localhost. ' +
                                 'You are on ' + r.origin));
         micOut.appendChild(line(r.recognition, 'Speech recognition available',
-          r.recognition ? '' : 'This browser has no SpeechRecognition. Use Chrome or Edge.'));
+          r.recognition ? ''
+            : 'This browser has no speech recognition. Chrome, Edge, Safari and ' +
+              'Samsung Internet have it; Firefox does not. Everything else in ' +
+              'the app works here, and you can type your side of a conversation.'));
         micOut.appendChild(line(
           r.permission === 'granted' ? true : r.permission === 'denied' ? false : null,
           'Permission: ' + r.permission,

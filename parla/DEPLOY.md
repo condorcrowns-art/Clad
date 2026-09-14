@@ -144,6 +144,31 @@ Progress is stored per device, in the browser. The phone and the PC keep
 separate decks — there is no account and no sync, which is also why there is
 nothing to leak.
 
+### Which browsers it works in
+
+Everything works everywhere current: the dictionary, the grammar checker, the
+reading and listening, the writing, the games, the whole conversation by
+typing. Firefox 113, Safari 16.2 and Chrome 111 are the floors, set by
+`color-mix()` in the stylesheet — all three shipped in 2023.
+
+The one real exception is **speaking**. `SpeechRecognition` is a Chromium and
+Safari API; Firefox has never shipped it and shows no sign of doing so, and
+there is no polyfill that does not involve paying someone for cloud
+transcription. So in Firefox the microphone is rendered visibly off, says why
+when you point at it, and puts the cursor in the typing box if you press it
+anyway — a full-strength microphone button that cannot work is a trap, because
+you have to press it to find out.
+
+`test/nomic-browser.test.js` runs the app with the API deleted and checks that
+every other screen still works and nothing throws.
+
+| | Speaking | Everything else |
+|---|---|---|
+| Chrome, Edge, Opera | yes | yes |
+| Safari 16.2+ (macOS, iOS) | yes | yes |
+| Samsung Internet | yes | yes |
+| Firefox 113+ | no — type instead | yes |
+
 ### Why Piper does not come with it
 
 A page served over **https** is forbidden by every browser from calling

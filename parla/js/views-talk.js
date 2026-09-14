@@ -120,7 +120,17 @@ window.PARLA = window.PARLA || {};
       dock.appendChild(pb);
     }
 
-    micBtn = el('button.mic', { 'data-state': 'idle', title: 'Hold a conversation', onclick: toggleMic }, '🎙');
+    // A full-strength microphone button that cannot work is a trap: in Firefox
+    // you have to press it to find out. Rendered off from the start instead,
+    // and pressing it still puts the cursor in the typing box rather than
+    // doing nothing.
+    micBtn = el('button.mic', {
+      'data-state': PARLA.speech.supported ? 'idle' : 'off',
+      title: PARLA.speech.supported
+        ? 'Hold a conversation'
+        : 'This browser has no speech recognition — type your reply instead',
+      onclick: toggleMic
+    }, '🎙');
     // Speech recognition mishears. Without a way out, a garbled sentence had to
     // be sent and then argued with; this throws it away instead.
     micCancel = el('button.mic-cancel', {
@@ -128,7 +138,7 @@ window.PARLA = window.PARLA || {};
     }, '✕');
     micLabel = el('div.mic-label', PARLA.speech.supported
       ? 'Tap and speak in Spanish — pause when you are done'
-      : 'Type your reply below');
+      : 'No speech recognition in this browser — type your reply below');
     // The fix for a broken microphone is never obvious, so when one breaks the
     // exact remedy goes on screen next to it rather than in a console.
     micHelp = el('div.mic-help', { hidden: true });

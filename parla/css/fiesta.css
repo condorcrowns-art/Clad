@@ -239,6 +239,13 @@ button:active { transform: scale(.97); }
 }
 .mic[data-state="listening"] { background: linear-gradient(140deg, var(--turquesa), var(--verde)); }
 .mic[data-state="thinking"]  { background: linear-gradient(140deg, var(--morado), var(--azul)); }
+/* No speech recognition in this browser. Still tappable — it moves the cursor
+   into the typing box — but it should not look like the main way in. */
+.mic[data-state="off"] {
+  background: var(--bg-sunken); color: var(--ink-faint);
+  box-shadow: none; border: 1px solid var(--line);
+}
+.mic[data-state="off"]:hover { filter: none; transform: none; }
 .mic-row::before, .mic-row::after {
   content: '';
   position: absolute;
