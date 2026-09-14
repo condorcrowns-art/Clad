@@ -293,7 +293,7 @@ if ($SkipVoice) {
       $url = ''
       try {
         $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/rhasspy/piper/releases/latest' `
-                 -Headers @{ 'User-Agent' = 'parla-setup' } -TimeoutSec 30
+                 -Headers @{ 'User-Agent' = 'lunosia-setup' } -TimeoutSec 30
         $hit = $rel.assets | Where-Object { $_.name -match 'windows.*amd64.*\.zip$' } | Select-Object -First 1
         if ($hit) { $url = $hit.browser_download_url }
       } catch { }
@@ -302,7 +302,7 @@ if ($SkipVoice) {
         $url = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip'
       }
 
-      $zip = Join-Path $env:TEMP 'parla-piper.zip'
+      $zip = Join-Path $env:TEMP 'lunosia-piper.zip'
       Note "downloading piper (about 20 MB)"
       Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 600
 
@@ -366,8 +366,8 @@ if ($SkipVoice) {
     # Prove it actually speaks, rather than assuming the files are enough.
     if ($installed -gt 0 -and (Test-Path $piperExe -PathType Leaf)) {
       $testVoice = Get-ChildItem $voicesDir -Filter '*.onnx' -File | Select-Object -First 1
-      $inTxt = Join-Path $env:TEMP 'parla-tts-check.txt'
-      $outWav = Join-Path $env:TEMP 'parla-tts-check.wav'
+      $inTxt = Join-Path $env:TEMP 'lunosia-tts-check.txt'
+      $outWav = Join-Path $env:TEMP 'lunosia-tts-check.wav'
       [System.IO.File]::WriteAllText($inTxt, 'Hola, buenos dias.',
         (New-Object System.Text.UTF8Encoding($false)))
       Remove-Item $outWav -Force -ErrorAction SilentlyContinue
@@ -425,7 +425,7 @@ Step 9 "Starting Lunosia"
 $serve = Join-Path $PSScriptRoot 'serve.ps1'
 if (-not (Test-Path $serve)) {
   Write-Host "    Could not find serve.ps1 next to this script." -ForegroundColor Red
-  Write-Host "    Are you running this from inside the 'parla' folder?"
+  Write-Host "    Are you running this from inside the 'lunosia' folder?"
   exit 1
 }
 

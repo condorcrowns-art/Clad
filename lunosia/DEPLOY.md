@@ -19,7 +19,7 @@ Cloudflare Pages, from the repo, free, and it redeploys itself on every push.
    - Framework preset: **None**
    - **Production branch: `claude/victor-ai-familiarity-rf2730`**
    - Build command: *(leave empty — there is no build step)*
-   - **Root directory: `parla`**
+   - **Root directory: `lunosia`**
    - **Build output directory: *(leave empty)***
 4. Deploy, then **Custom domains → Set up a domain → `lunosia.com`**
 
@@ -43,14 +43,14 @@ HTTPS is issued automatically.
 This one cost an hour, so it is worth being precise about.
 
 Pages looks for `functions/` relative to the **root directory**, *not* the build
-output directory. The app lives in `parla/` and so does the function, at
-`parla/functions/api/chat.js`.
+output directory. The app lives in `lunosia/` and so does the function, at
+`lunosia/functions/api/chat.js`.
 
-Set **root directory to `parla`** and leave **build output directory empty**.
+Set **root directory to `lunosia`** and leave **build output directory empty**.
 
-The tempting wrong answer — root directory empty, build output `parla` — gets
+The tempting wrong answer — root directory empty, build output `lunosia` — gets
 you a site that loads perfectly and a chatbot that is silently dead. Assets
-resolve from `parla/`, so every screen works; Pages looks for `/functions` at
+resolve from `lunosia/`, so every screen works; Pages looks for `/functions` at
 the repository root, finds nothing, and skips Functions entirely. `/api/chat`
 then falls through to the single-page app and returns `index.html`, so the
 endpoint answers 200 with HTML instead of 404 — which defeats most ways you
@@ -191,7 +191,7 @@ above properly.
 ```powershell
 winget install --id Cloudflare.cloudflared
 cloudflared tunnel login
-cloudflared tunnel create parla
+cloudflared tunnel create lunosia
 ```
 
 Route a subdomain — `ollama.lunosia.com` → `http://localhost:11434` — then in

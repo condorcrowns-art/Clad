@@ -236,8 +236,8 @@ function Get-GapMs($sentence) {
 function Invoke-Piper($piperExe, $voicePath, $text, $lengthScale, $outWav) {
   $tmp    = [System.IO.Path]::GetTempPath()
   $stamp  = [guid]::NewGuid().ToString('N')
-  $inTxt  = Join-Path $tmp "parla-tts-$stamp.txt"
-  $errTxt = Join-Path $tmp "parla-tts-$stamp.err"
+  $inTxt  = Join-Path $tmp "lunosia-tts-$stamp.txt"
+  $errTxt = Join-Path $tmp "lunosia-tts-$stamp.err"
 
   # Piper reads the text on stdin. Writing it to a UTF-8 file and redirecting
   # that file in sidesteps the console code page, which would otherwise mangle

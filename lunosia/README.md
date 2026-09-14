@@ -13,16 +13,16 @@ Ollama, configures it for the browser, pulls a model matched to your RAM, and op
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-$z="$env:TEMP\parla.zip"; $d="$HOME\Lunosia"
+$z="$env:TEMP\lunosia.zip"; $d="$HOME\Lunosia"
 Invoke-WebRequest "https://github.com/condorcrowns-art/Clad/archive/refs/heads/claude/victor-ai-familiarity-rf2730.zip" -OutFile $z
 Expand-Archive $z $d -Force
-cd (Get-ChildItem "$d\*\parla" -Directory | Select-Object -First 1).FullName
+cd (Get-ChildItem "$d\*\lunosia" -Directory | Select-Object -First 1).FullName
 Get-ChildItem -Recurse | Unblock-File
 .\setup-windows.ps1
 ```
 
 Re-running it is safe - every step skips itself if already done. Afterwards, to just
-start the app again: `cd $HOME\Lunosia\*\parla; .\serve.ps1`
+start the app again: `cd $HOME\Lunosia\*\lunosia; .\serve.ps1`
 
 ## macOS / Linux
 

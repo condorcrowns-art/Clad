@@ -150,6 +150,66 @@ check('it points at a contact address', /mailto:/.test(priv));
 check('the app links to it', /privacy\.html/.test(read('js/views-progress.js')));
 check('the app links to the about page', /about\.html/.test(read('js/views-progress.js')));
 
+console.log('\n— The name —\n');
+
+// The app was called Parla. The only place that name may still appear is the
+// save-key migration, which needs it by definition: an old save on someone's
+// phone is stored under it, and forgetting that key strands their progress.
+const MIGRATION = ['js/store.js', 'test/transfer.test.js'];
+// ...plus this file, which has to name it in order to check for it.
+const NAMED = MIGRATION.concat(['test/pages.test.js']);
+function walk(dir, out) {
+  fs.readdirSync(path.join(ROOT, dir) || ROOT, { withFileTypes: true }).forEach(e => {
+    const rel = dir ? dir + '/' + e.name : e.name;
+    // tools/cache is gitignored source data downloaded from Wiktionary and the
+    // frequency lists, where "parla" is a real Spanish word, not a leftover.
+    if (e.name === '.git' || e.name === 'node_modules' || rel === 'tools/cache') return;
+    if (e.isDirectory()) return walk(rel, out);
+    if (/\.(js|html|css|json|md|ps1|txt|xml|webmanifest)$/.test(e.name)) out.push(rel);
+  });
+  return out;
+}
+const strays = walk('', [])
+  .filter(f => f !== 'js/data/dict-es.json')   // "parla" is a real Spanish word in it
+  .filter(f => NAMED.indexOf(f) === -1)
+  .filter(f => /parla/i.test(read(f)));
+check('nothing still calls the app by its old name', strays.length === 0, strays.join(', '));
+check('  except the save-key migration, which must keep it',
+  MIGRATION.every(f => /parla\.save\.v1/.test(read(f))),
+  MIGRATION.filter(f => !/parla\.save\.v1/.test(read(f))).join(', '));
+
+console.log('\n— The icon and the colours —\n');
+
+const mani = JSON.parse(read('manifest.json'));
+check('the manifest is named for the app', mani.short_name === 'Lunosia', mani.short_name);
+
+// Three places declare the app's colour and they used to disagree: an orange
+// in the manifest, a pink in the markup, and a third cream for the splash.
+// The phone paints its chrome from one and the splash screen from another.
+const themeMeta = /<meta name="theme-color" content="([^"]+)"/.exec(index)[1];
+check('the manifest theme colour matches the markup',
+  mani.theme_color.toLowerCase() === themeMeta.toLowerCase(),
+  mani.theme_color + ' vs ' + themeMeta);
+const bg = /--bg:\s*(#[0-9a-f]{3,8})/i.exec(read('css/style.css'))[1];
+check('the splash background matches the page it becomes',
+  mani.background_color.toLowerCase() === bg.toLowerCase(),
+  mani.background_color + ' vs ' + bg);
+
+PAGES.forEach(p => check(p + ' declares the theme colour',
+  new RegExp('content="' + themeMeta + '"', 'i').test(read(p))));
+
+// Android crops a maskable icon to the centre circle. Pointing it at artwork
+// drawn to the corners gets the corners sliced off.
+mani.icons.forEach(i => check('icon exists: ' + i.src, fs.existsSync(path.join(ROOT, i.src))));
+const maskable = mani.icons.filter(i => /maskable/.test(i.purpose || ''));
+check('there is a maskable icon', maskable.length === 1);
+check('  and it is not the same file as the square one',
+  maskable.length === 1 && !mani.icons.some(i => i.purpose === 'any' && i.src === maskable[0].src),
+  maskable.length ? maskable[0].src : '');
+
+check('no page still uses the emoji placeholder favicon',
+  !PAGES.some(p => /rel="icon"[^>]*data:image\/svg\+xml,<svg/.test(read(p))));
+
 console.log('\n— Entry animations —\n');
 
 // An animation with fill `both` stays applied after it ends. Every entry

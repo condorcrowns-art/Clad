@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'lunosia-v1';
+var CACHE = 'lunosia-v2';
 
 var ASSETS = [
   './',
@@ -16,6 +16,8 @@ var ASSETS = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable-512.png',
+  './icon.svg',
   './about.html',
   './privacy.html',
   './js/data/vocab-es.js',
