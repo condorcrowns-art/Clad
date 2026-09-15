@@ -198,6 +198,59 @@ const M = ctx.LUNOSIA.morph;
       got.join(' | ') || 'nothing');
   });
 
+  
+  /* ── Stem-changing verbs ──────────────────────────────────
+   *
+   * Asking the engine for the él-form of twenty-seven well-known stem-changers
+   * got nothing back for sixteen of them. "Riega las plantas" is an ordinary
+   * sentence; "riega" resolved to no word at all, and so did "huele",
+   * "suelta", "adquiere" and "refuerza".
+   *
+   * Three of those needed classes the engine did not have: i→ie (adquirir,
+   * inquirir), o→ue with an h in front because no Spanish word begins "ue"
+   * (oler → huele), and e→ye for the same reason (errar → yerra). Both
+   * directions matter — the conjugator has to produce the form and the
+   * analyser has to get back from it — so both are asserted here.
+   */
+  console.log('\nStem-changing verbs, forwards and back\n');
+
+  [['regar', 'riega'], ['regar', 'riego'], ['plegar', 'pliega'], ['segar', 'siega'],
+   ['soltar', 'suelta'], ['reforzar', 'refuerza'], ['trocar', 'trueca'],
+   ['adquirir', 'adquiere'], ['adquirir', 'adquiero'], ['inquirir', 'inquiere'],
+   ['oler', 'huele'], ['oler', 'huelo'], ['oler', 'huelen'],
+   ['avergonzar', 'avergüenza'], ['errar', 'yerra'], ['errar', 'yerro'],
+   ['desaprobar', 'desaprueba'], ['engrosar', 'engruesa'], ['soterrar', 'sotierra']
+  ].forEach(function (p) {
+    var got = M.analyse(p[1]).map(function (a) { return a.lemma; });
+    check('“' + p[1] + '” is a form of ' + p[0], got.indexOf(p[0]) !== -1,
+      got.join(' | ') || 'nothing');
+  });
+
+  console.log('\n...and the classes that already worked still do\n');
+
+  [['pensar', 'piensa'], ['contar', 'cuenta'], ['pedir', 'pide'], ['jugar', 'juega'],
+   ['dormir', 'duerme'], ['volver', 'vuelve'], ['seguir', 'sigue'], ['sentir', 'siente'],
+   ['cerrar', 'cierra'], ['encontrar', 'encuentra'], ['poder', 'puede'],
+   ['querer', 'quiere'], ['empezar', 'empieza'], ['recordar', 'recuerda'], ['morir', 'muere']
+  ].forEach(function (p) {
+    var got = M.analyse(p[1]).map(function (a) { return a.lemma; });
+    check('“' + p[1] + '” is still a form of ' + p[0], got.indexOf(p[0]) !== -1,
+      got.join(' | ') || 'nothing');
+  });
+
+  // The whole present tense, because a class that breaks the stem in the wrong
+  // place still matches the one form a spot-check happens to ask for.
+  var V = ctx.LUNOSIA.data.es.verbs;
+  [['oler', 'huelo, hueles, huele, olemos, oléis, huelen'],
+   ['adquirir', 'adquiero, adquieres, adquiere, adquirimos, adquirís, adquieren'],
+   ['regar', 'riego, riegas, riega, regamos, regáis, riegan'],
+   ['errar', 'yerro, yerras, yerra, erramos, erráis, yerran'],
+   ['avergonzar', 'avergüenzo, avergüenzas, avergüenza, avergonzamos, avergonzáis, avergüenzan']
+  ].forEach(function (p) {
+    var got = (V.conjugate(p[0], 'presente') || []).join(', ');
+    check('the present of ' + p[0] + ' is right all the way through', got === p[1], got);
+  });
+
   console.log(fail.length ? '\n' + fail.length + ' FAILED\n' : '\nAll checks passed.\n');
   process.exit(fail.length ? 1 : 0);
 })();

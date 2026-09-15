@@ -61,9 +61,24 @@ window.LUNOSIA = window.LUNOSIA || {};
     if (ue >= 0) {
       out.push(stem.slice(0, ue) + 'o' + stem.slice(ue + 2));
       out.push(stem.slice(0, ue) + 'u' + stem.slice(ue + 2));   // jugar
+      // "huel" is "ol" with the h Spanish puts in front of a word-initial ue.
+      // Without this, "huele" led back to holer, holar, holir and no further.
+      if (ue === 1 && stem.charAt(0) === 'h') out.push('o' + stem.slice(3));
     }
+    // avergüenz -> avergonz: the dieresis keeps the u pronounced after g, and
+    // comes off again on the way back.
+    var ue2 = stem.lastIndexOf('üe');
+    if (ue2 >= 0) out.push(stem.slice(0, ue2) + 'o' + stem.slice(ue2 + 2));
     var ie = stem.lastIndexOf('ie');
-    if (ie >= 0) out.push(stem.slice(0, ie) + 'e' + stem.slice(ie + 2));
+    if (ie >= 0) {
+      out.push(stem.slice(0, ie) + 'e' + stem.slice(ie + 2));
+      // adquier -> adquir. Two verbs break i to ie rather than e to ie, and
+      // "adquiere" is an ordinary word that resolved to nothing without this.
+      out.push(stem.slice(0, ie) + 'i' + stem.slice(ie + 2));
+    }
+    // yerr -> err. errar breaks to *ye*, not ie, because no Spanish word starts
+    // "ie" — so there is no "ie" in the stem for the branch above to find.
+    if (stem.indexOf('ye') === 0) out.push('e' + stem.slice(2));
     var i = stem.lastIndexOf('i');
     if (i >= 0) out.push(stem.slice(0, i) + 'e' + stem.slice(i + 1));
     var u = stem.lastIndexOf('u');

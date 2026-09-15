@@ -139,6 +139,62 @@ const NAV = [
   ['contact.html', 'Contact']
 ];
 
+/* Structured data.
+ *
+ * Search engines and the answer engines built on them parse this rather than
+ * guessing from prose, and it is the difference between being understood as
+ * "a free Spanish learning app, no account, works offline" and being a page
+ * of text about Spanish. The price is the part that matters: an offer with
+ * price 0 is a machine-readable claim that the thing is free, which is the
+ * single fact most likely to decide whether it gets recommended to someone
+ * who asked for a free one.
+ *
+ * Everything asserted here is true and checkable on the page it sits on.
+ * Marking up claims a reader cannot verify is how sites lose rich results. */
+const APP_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'Lunosia',
+  url: SITE,
+  applicationCategory: 'EducationalApplication',
+  applicationSubCategory: 'Language learning',
+  operatingSystem: 'Any modern web browser; installs to a phone home screen',
+  browserRequirements: 'Requires JavaScript. Speech recognition requires Chrome, Edge, Safari or Samsung Internet.',
+  description: 'A free Spanish trainer built around speaking. Hold a conversation out loud, ' +
+    'get corrected by a grammar engine that names the rule you broke, and have your own ' +
+    'mistakes come back until they stick. No account, no subscription, works offline.',
+  inLanguage: 'en',
+  teaches: 'Spanish language: speaking, listening, reading, writing, pronunciation and grammar',
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD',
+            availability: 'https://schema.org/InStock' },
+  featureList: [
+    'Spoken conversation practice across 23 scenarios',
+    'A rules-based grammar checker that names the rule behind each correction',
+    'Spaced repetition over your own mistakes',
+    '12 graded reading texts with tap-any-word lookup',
+    'Pronunciation drills for the ten sounds English speakers get wrong',
+    '20 grammar lessons written for English speakers',
+    'A 31,000-word Spanish dictionary that works offline'
+  ]
+};
+
+function articleSchema(o) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'LearningResource',
+    name: o.title,
+    url: SITE + o.path,
+    description: o.description,
+    inLanguage: 'en',
+    teaches: 'Spanish grammar for English speakers',
+    educationalLevel: 'Beginner to intermediate (A1-B1)',
+    isAccessibleForFree: true,
+    learningResourceType: 'Guide',
+    isPartOf: { '@type': 'WebSite', name: 'Lunosia', url: SITE }
+  };
+}
+
 function shell(o) {
   const up = o.depth ? '../' : '';
   const nav = NAV.map(([href, label]) => {
@@ -167,6 +223,7 @@ function shell(o) {
 <link rel="alternate icon" href="${up}icon-192.png">
 <link rel="stylesheet" href="${up}css/style.css">
 <link rel="stylesheet" href="${up}css/page.css">
+${o.jsonld ? '<script type="application/ld+json">' + JSON.stringify(o.jsonld) + '</script>' : ''}
 <!-- AdSense. Present on every page because Google verifies ownership by
      finding it; ad units are a separate step and are kept off the
      conversation screens. -->
@@ -270,7 +327,10 @@ ${g.lessons.map(id => lessonBlock(lesson(id))).join('\n\n<hr style="border:0;bor
     title: g.title + ' — Spanish for English speakers',
     description: g.blurb,
     path: 'guides/' + g.slug + '.html',
-    current: 'guides/', depth: 1, body
+    current: 'guides/', depth: 1,
+    jsonld: articleSchema({ title: g.title + ' — Spanish for English speakers',
+      description: g.blurb, path: 'guides/' + g.slug + '.html' }),
+    body
   }));
 });
 
@@ -307,7 +367,12 @@ ${s.words && s.words.length ? `<p><strong>Words to practise:</strong> ${s.words.
 write('guides/pronunciation.html', shell({
   title: 'Spanish pronunciation for English speakers — ten sounds that matter',
   description: 'The ten Spanish sounds English speakers get wrong by reflex: what your mouth does instead, what it should do, and the minimal pairs that prove it.',
-  path: 'guides/pronunciation.html', current: 'guides/', depth: 1, body: soundsBody
+  path: 'guides/pronunciation.html', current: 'guides/', depth: 1,
+  jsonld: articleSchema({
+    title: 'Spanish pronunciation for English speakers — ten sounds that matter',
+    description: 'The ten Spanish sounds English speakers get wrong by reflex.',
+    path: 'guides/pronunciation.html' }),
+  body: soundsBody
 }));
 
 /* The hub. */
@@ -661,7 +726,10 @@ const PAGES = [
 
 PAGES.forEach(p => write(p.slug + '.html', shell({
   title: p.title, description: p.description, path: p.slug + '.html',
-  current: p.current, depth: 0, body: p.body
+  current: p.current, depth: 0,
+  // The app's own description belongs on the page that describes the app.
+  jsonld: p.slug === 'about' ? APP_SCHEMA : null,
+  body: p.body
 })));
 
 /* ── the sitemap ─────────────────────────────────────────────

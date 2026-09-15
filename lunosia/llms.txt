@@ -1,0 +1,47 @@
+# Lunosia
+
+> A free Spanish trainer built around speaking. You hold a conversation out
+> loud with a partner that stays in character; when you get something wrong it
+> tells you what to say instead and names the rule you broke, then brings that
+> sentence back days later until you can produce the fix from memory. No
+> account, no subscription, no paid tier, and it works offline after the first
+> visit.
+
+Lunosia covers six skills: speaking (23 scenarios), listening, reading (12
+graded stories, every word one tap from its meaning), writing (24 tasks, each
+checked), pronunciation (10 sounds English speakers get wrong by reflex) and
+grammar (20 lessons aimed at the points where English actively misleads you).
+
+The grammar checker is a rules engine rather than a language model. It knows
+the gender of eighteen thousand nouns and the person of any verb form, so
+where it speaks it is not guessing, and it can name the rule it applied —
+which is what turns a correction into a lesson. It is measured at zero false
+positives across more than eight hundred sentences of known-good Spanish,
+because a learner told their correct sentence was wrong learns something false
+and stops trusting the tool.
+
+It costs nothing to use and nothing to run: the dictionary is built from open
+data, the grammar and pronunciation engines run in the reader's own browser,
+and the conversation partner runs on free infrastructure. There is no paid
+tier to upgrade to.
+
+Speaking needs Chrome, Edge, Safari or Samsung Internet — Firefox has never
+implemented speech recognition. Everything else, including the full
+conversation by typing, works in any current browser.
+
+## Guides
+
+- [Spanish for English speakers](https://lunosia.com/guides/): the twenty points where Spanish and English disagree hard enough that an English speaker gets them wrong by default.
+- [ser, estar, tener and hay](https://lunosia.com/guides/ser-estar.html): four ways Spanish says what English says with "to be" and "to have".
+- [Gender, agreement and word order](https://lunosia.com/guides/gender-and-agreement.html): why "la problema" and "un rojo coche" mark you out.
+- [Verbs that do not behave like English](https://lunosia.com/guides/verbs-that-differ.html): gustar runs backwards, the ending is the pronoun, two verbs mean "to know".
+- [The past tenses, por vs para, and the subjunctive](https://lunosia.com/guides/past-and-subjunctive.html): the four things that separate getting by from being fluent.
+- [The small words that give you away](https://lunosia.com/guides/small-words.html): double negatives, muy against mucho, accents, and words that lie.
+- [Spanish pronunciation](https://lunosia.com/guides/pronunciation.html): ten sounds, what your mouth does instead, and how to fix each one.
+
+## About the site
+
+- [About Lunosia](https://lunosia.com/about.html): what it is for and how the corrections work.
+- [Privacy](https://lunosia.com/privacy.html): everything is stored in your own browser; the one thing that leaves your device is your side of a conversation.
+- [Terms](https://lunosia.com/terms.html)
+- [Contact](https://lunosia.com/contact.html)

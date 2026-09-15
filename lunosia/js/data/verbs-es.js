@@ -242,14 +242,21 @@ LUNOSIA.data.es = LUNOSIA.data.es || {};
     + 'querer entender perder defender encender extender tender ascender descender '
     + 'atender verter querer sentir mentir preferir referir sugerir herir advertir '
     + 'convertir divertir hervir invertir arrepentir consentir presentir digerir '
-    + 'discernir concernir').split(' ');
+    + 'discernir concernir '
+    // Missing until an audit asked for the él-form of twenty-seven known
+    // stem-changers and got nothing back for sixteen of them. "Riega las
+    // plantas" is an ordinary sentence and "riega" resolved to no word at all.
+    + 'regar plegar segar cegar soterrar restregar sosegar desterrar '
+    + 'encomendar remendar asentar escarmentar').split(' ');
 
   var STEM_UE = ('poder contar encontrar recordar volar mostrar costar probar soñar '
     + 'almorzar acostar acordar aprobar colgar comprobar consolar demostrar descontar '
     + 'esforzar forzar rogar sonar tostar volcar apostar renovar reprobar '
     + 'volver mover morder devolver envolver revolver soler doler llover moler '
     + 'oler resolver torcer cocer promover remover conmover '
-    + 'dormir morir').split(' ');
+    + 'dormir morir '
+    + 'soltar reforzar desaprobar engrosar trocar recontar resonar '
+    + 'sobresalir revolcar desollar desconsolar').split(' ');
 
   var STEM_I = ('pedir seguir servir repetir vestir medir competir conseguir corregir '
     + 'despedir elegir freír gemir impedir perseguir reír rendir reñir seguir sonreír '
@@ -257,9 +264,30 @@ LUNOSIA.data.es = LUNOSIA.data.es || {};
 
   var STEM_U = ['jugar'];
 
+  /* i -> ie. A class of exactly two verbs in modern Spanish, which is why it
+   * is easy to leave out, and why "adquiere" — an ordinary word — came back
+   * as nothing at all. */
+  var STEM_I_IE = ['adquirir', 'inquirir'];
+
+  /* o -> ue, but the u needs a dieresis after g so it is still pronounced:
+   * avergonzar -> avergüenza, not avergüenza's silent-u spelling. */
+  var STEM_UE_DIERESIS = ['avergonzar', 'degollar'];
+
+  /* oler is o -> ue with an h in front, because Spanish does not begin a word
+   * with ue: huelo, hueles, huele. It was in the o->ue list and every one of
+   * its stem-changed forms was wrong. */
+  var STEM_UE_H = ['oler'];
+
+  /* errar breaks to ye for the same reason: yerro, yerras, yerra. */
+  var STEM_E_YE = ['errar'];
+
   /* -ir stem-changers also change in the third persons of the preterite, in
    * the gerund, and throughout the past subjunctive: pedir -> pidió, durmiendo. */
   function stemClass(inf) {
+    if (indexOf(STEM_UE_H, inf) >= 0) return 'ue-h';
+    if (indexOf(STEM_UE_DIERESIS, inf) >= 0) return 'ue-dieresis';
+    if (indexOf(STEM_E_YE, inf) >= 0) return 'ye';
+    if (indexOf(STEM_I_IE, inf) >= 0) return 'i-ie';
     if (indexOf(STEM_IE, inf) >= 0) return 'ie';
     if (indexOf(STEM_UE, inf) >= 0) return 'ue';
     if (indexOf(STEM_I, inf) >= 0) return 'i';
@@ -273,7 +301,32 @@ LUNOSIA.data.es = LUNOSIA.data.es || {};
    * "uencontr": it is the *stressed* syllable that breaks, which is the last
    * one before the ending. */
   function breakStem(stem, kind) {
+    // A stem that begins with the broken vowel needs an h in front, because no
+    // Spanish word starts "ue": oler -> huele. And after a g the u needs a
+    // dieresis to stay pronounced: avergonzar -> avergüenza.
+    if (kind === 'ue-h') {
+      var atH = stem.lastIndexOf('o');
+      if (atH >= 0) {
+        var brokenH = stem.slice(0, atH) + 'ue' + stem.slice(atH + 1);
+        return atH === 0 ? 'h' + brokenH : brokenH;
+      }
+      return stem;
+    }
+    if (kind === 'ue-dieresis') {
+      var atD = stem.lastIndexOf('o');
+      if (atD >= 0) {
+        var before = stem.slice(0, atD);
+        return before + (/g$/.test(before) ? 'üe' : 'ue') + stem.slice(atD + 1);
+      }
+      return stem;
+    }
+    if (kind === 'ye') {
+      var atY = stem.lastIndexOf('e');
+      return atY >= 0 ? stem.slice(0, atY) + (atY === 0 ? 'ye' : 'ie') + stem.slice(atY + 1) : stem;
+    }
+
     var pairs = kind === 'ie' ? [['e', 'ie']] :
+                kind === 'i-ie' ? [['i', 'ie']] :
                 kind === 'ue' ? [['o', 'ue'], ['u', 'ue']] :
                 kind === 'i'  ? [['e', 'i']] : [];
     for (var p = 0; p < pairs.length; p++) {

@@ -13,4 +13,35 @@ Disallow: /tools/
 Disallow: /*.md$
 Disallow: /*.ps1$
 
+# The assistants, named explicitly.
+#
+# A bare "User-agent: *" already permits these, so this section changes
+# nothing technically. It is here because the default is ambiguous to a person
+# reading the file, and because a site that wants to be recommended by an
+# assistant should say so in the one place the assistant's crawler looks.
+#
+# Two kinds of bot are listed and they do different jobs. The -Bot names fetch
+# pages to answer a question someone is asking right now; Google-Extended and
+# Applebot-Extended are consent switches for training. Both are welcome here:
+# the guides exist to be read, and there is nothing on this site to keep back.
+
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-User
+User-agent: Claude-SearchBot
+User-agent: anthropic-ai
+User-agent: Google-Extended
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: Applebot-Extended
+User-agent: CCBot
+User-agent: Bingbot
+User-agent: Amazonbot
+User-agent: meta-externalagent
+Allow: /
+Disallow: /test/
+Disallow: /tools/
+
 Sitemap: https://lunosia.com/sitemap.xml
