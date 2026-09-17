@@ -86,7 +86,7 @@ function QuestService.start()
 				-- All three done? Pay the completion bonus once.
 				local all = true
 				for _, e in ipairs(data.quests.list) do
-					if not e.claimed then all = false break end
+					if not e.claimed then all = false; break end
 				end
 				if all and not data.quests.allClaimed then
 					data.quests.allClaimed = true

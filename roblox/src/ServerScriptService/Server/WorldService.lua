@@ -11,7 +11,6 @@
 -- attribute names (`ZoneId`, `NodeIndex`) and every other service keeps working.
 
 local Workspace = game:GetService("Workspace")
-local Players   = game:GetService("Players")
 local Lighting  = game:GetService("Lighting")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")

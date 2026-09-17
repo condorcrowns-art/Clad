@@ -8,11 +8,9 @@ local Players          = game:GetService("Players")
 local Workspace        = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
-local Zones  = require(Shared.Zones)
 local Format = require(Shared.Util.Format)
 
 local DataService  = require(script.Parent.DataService)
-local WorldService = require(script.Parent.WorldService)
 
 local LeaderboardService = {}
 

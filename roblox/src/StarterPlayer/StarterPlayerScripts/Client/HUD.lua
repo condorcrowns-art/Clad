@@ -5,8 +5,6 @@
 -- Design rule followed throughout: the player should be able to answer
 -- "am I getting stronger?" in under half a second, without opening anything.
 
-local Players = game:GetService("Players")
-
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Format   = require(Shared.Util.Format)
 local Rebirths = require(Shared.Rebirths)
@@ -30,7 +28,7 @@ local function pill(parent: Instance, order: number, icon: string, color: Color3
 	Theme.corner(f, 19)
 	Theme.stroke(f, color, 2, 0.4)
 
-	local dot = Theme.label({
+	Theme.label({
 		Position = UDim2.new(0, 10, 0, 0),
 		Size = UDim2.new(0, 28, 1, 0),
 		Text = icon,
@@ -246,7 +244,7 @@ local function setBoost(key: string, text: string?, color: Color3)
 		})
 		Theme.corner(row, 8)
 		Theme.stroke(row, color, 2, 0.35)
-		local l = Theme.label({
+		Theme.label({
 			Name = "L",
 			Size = UDim2.fromScale(1, 1),
 			Font = Theme.FONT_BLACK, TextSize = 13,
@@ -289,7 +287,7 @@ function HUD.update(state)
 	local questReady = false
 	for _, e in ipairs(state.quests.list or {}) do
 		local def = Quests.byId[e.id]
-		if def and not e.claimed and e.progress >= def.target then questReady = true break end
+		if def and not e.claimed and e.progress >= def.target then questReady = true; break end
 	end
 	if refs.questBadge then
 		local s = refs.questBadge:FindFirstChildOfClass("UIStroke")
@@ -303,7 +301,7 @@ function HUD.update(state)
 	local chestReady = false
 	for i, entry in ipairs(Quests.PLAYTIME) do
 		if (state.sessionTime or 0) >= entry.at and not state.playtimeClaimed[tostring(i)] then
-			chestReady = true break
+			chestReady = true; break
 		end
 	end
 	if refs.chest then refs.chest.Visible = chestReady end

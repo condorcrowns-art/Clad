@@ -9,12 +9,10 @@ local Players           = game:GetService("Players")
 local UserInputService  = game:GetService("UserInputService")
 local RunService        = game:GetService("RunService")
 local Workspace         = game:GetService("Workspace")
-local ContextActionService = game:GetService("ContextActionService")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config  = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
-local Format  = require(Shared.Util.Format)
 
 local Theme   = require(script.Theme)
 local Notify  = require(script.Notify)
@@ -154,7 +152,6 @@ local function swing(node: BasePart?)
 	local tool = char and char:FindFirstChild("ChipTool")
 	local handle = tool and tool:FindFirstChild("Handle") :: BasePart?
 	if handle then
-		local weld = handle:FindFirstChildOfClass("WeldConstraint")
 		-- Purely visual nudge; the weld keeps it attached.
 		Theme.tween(handle, 0.08, { Transparency = 0.25 })
 		task.delay(0.1, function()

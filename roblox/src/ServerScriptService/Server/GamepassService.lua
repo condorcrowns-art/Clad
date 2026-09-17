@@ -190,7 +190,7 @@ function GamepassService.start()
 					local after = StateService.passes[player]
 					if before and after then
 						for k, v in pairs(after) do
-							if v and not before[k] then StateService.push(player) break end
+							if v and not before[k] then StateService.push(player); break end
 						end
 					end
 				end)

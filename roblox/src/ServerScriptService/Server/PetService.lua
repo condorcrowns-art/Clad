@@ -143,7 +143,7 @@ local function deletePet(player: Player, uid: string)
 	local owned = data.pets[uid]
 	if not owned or owned.locked then return end
 	for i, e in ipairs(data.equipped) do
-		if e == uid then table.remove(data.equipped, i) break end
+		if e == uid then table.remove(data.equipped, i); break end
 	end
 	data.pets[uid] = nil
 	StateService.push(player)

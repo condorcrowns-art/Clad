@@ -4,8 +4,6 @@
 -- so other players see them -- half the value of a cosmetic pass is other
 -- people seeing it.
 
-local Players = game:GetService("Players")
-
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Tools = require(Shared.Tools)
 

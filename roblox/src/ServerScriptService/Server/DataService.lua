@@ -15,7 +15,6 @@
 -- kill games faster than bad balance.
 
 local DataStoreService = game:GetService("DataStoreService")
-local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 
 local Shared  = game:GetService("ReplicatedStorage"):WaitForChild("Shared")

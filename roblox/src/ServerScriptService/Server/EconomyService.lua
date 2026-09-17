@@ -3,8 +3,6 @@
 -- `award` / `spend` so there is a single audit point.
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 
 local Shared  = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config   = require(Shared.Config)

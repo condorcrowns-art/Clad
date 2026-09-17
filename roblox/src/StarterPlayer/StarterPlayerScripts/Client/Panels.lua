@@ -5,8 +5,6 @@
 -- (scrolling list of "thing + price + buy button"), and duplicating that six
 -- times is how UI drifts out of sync with itself.
 
-local Players = game:GetService("Players")
-local Marketplace = game:GetService("MarketplaceService")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Tools    = require(Shared.Tools)

@@ -3,7 +3,6 @@
 -- the game. Floating numbers, a screen shake on the nuke, and a slow reveal on
 -- rare hatches are what make an identical loop feel good instead of hollow.
 
-local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Debris       = game:GetService("Debris")
 local Workspace    = game:GetService("Workspace")
@@ -16,7 +15,6 @@ local Format = require(Shared.Util.Format)
 local Theme = require(script.Parent.Theme)
 
 local Effects = {}
-local player = Players.LocalPlayer
 local gui: ScreenGui
 
 function Effects.mount(parent: ScreenGui)

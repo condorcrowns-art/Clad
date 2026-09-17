@@ -1,7 +1,6 @@
 --!strict
 -- Toast notifications + the server-wide announcement banner.
 
-local Players = game:GetService("Players")
 local Theme = require(script.Parent.Theme)
 
 local Notify = {}
