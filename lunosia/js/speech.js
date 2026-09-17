@@ -6,27 +6,33 @@
  * localhost — file:// will not get a microphone). Everything degrades to
  * typing if recognition is missing.
  *
- * Output has three engines, tried in this order:
- *   1. Piper — a neural voice running on this machine, served by serve.ps1
+ * Output has four engines, tried in this order:
+ *   1. ElevenLabs — a BYO-API-key premium voice, called directly from the
+ *      browser (like the optional Gemini chat partner: the key lives only in
+ *      this browser's localStorage and is never sent through anything of
+ *      ours). Genuinely the best-sounding option there is, so when someone
+ *      has bothered to paste in a key it takes priority over everything else
+ *      unless they have explicitly chosen a different voice.
+ *   2. Piper — a neural voice running on this machine, served by serve.ps1
  *      at /tts. Same origin, so no CORS; free, offline, and it sounds like
  *      a person rather than a 2009 satnav. Only ever present when someone
  *      has run the Windows setup script — never on the public site, because
  *      there is no "this machine" for a visitor's browser to reach.
- *   2. The hosted neural voice — Cloudflare Workers AI's MeloTTS, called at
+ *   3. The hosted neural voice — Cloudflare Workers AI's MeloTTS, called at
  *      /api/speak on this same site, the same edge function pattern as the
  *      chat partner. This is what makes lunosia.com itself sound like a
- *      person: without it, a visitor who has never run the Windows setup
- *      gets whatever robotic voice their OS shipped, which is the actual
- *      answer to "why is the voice bad on the site" — there was nothing
- *      between "install Piper yourself" and "the built-in one".
- *   3. speechSynthesis — the browser's own voices. Always there and the
- *      final fallback if the other two are unavailable or fail; quality
+ *      person without any setup: without it, a visitor who has never run the
+ *      Windows setup or added an ElevenLabs key gets whatever robotic voice
+ *      their OS shipped.
+ *   4. speechSynthesis — the browser's own voices. Always there and the
+ *      final fallback if the others are unavailable or fail; quality
  *      entirely at the mercy of what the operating system shipped.
  *
- * A saved voice is a plain browser voiceURI, 'piper:<voice-id>', or
- * 'hosted:<lang>'. Piper wins if installed; otherwise the hosted voice wins
- * over the raw browser one, because it is very likely to sound better and
- * costs the visitor nothing extra to use.
+ * A saved voice is a plain browser voiceURI, 'piper:<voice-id>', 'hosted:<lang>',
+ * or 'eleven:<voice-id>'. With a key configured, ElevenLabs wins automatically;
+ * otherwise Piper wins if installed; otherwise the hosted voice wins over the
+ * raw browser one, because it is very likely to sound better and costs the
+ * visitor nothing extra to use.
  */
 window.LUNOSIA = window.LUNOSIA || {};
 
@@ -42,6 +48,10 @@ window.LUNOSIA = window.LUNOSIA || {};
 
   var PIPER_PREFIX = 'piper:';
   var HOSTED_PREFIX = 'hosted:';
+  var ELEVEN_PREFIX = 'eleven:';
+  // One of ElevenLabs' oldest, most stable premade voices ("Rachel"). Used
+  // whenever a key is configured but no particular voice has been chosen.
+  var DEFAULT_ELEVEN_VOICE = '21m00Tcm4TlvDq8ikWAM';
 
   /* Declared up here, not down with the Piper code, because the browser voice
    * list can settle synchronously during the bootstrap below and the ready
@@ -239,15 +249,24 @@ window.LUNOSIA = window.LUNOSIA || {};
 
   /* One list for the settings screen: neural voices first, then whatever the
    * browser has. Each entry is { id, label, quality, engine }. */
-  function allVoicesFor(lang) {
-    var out = piperVoicesFor(lang).map(function (v) {
+  function allVoicesFor(lang, eleven) {
+    var out = [];
+    if (eleven && eleven.key) {
+      out.push({
+        id: ELEVEN_PREFIX + (eleven.voiceId || DEFAULT_ELEVEN_VOICE),
+        label: 'Premium voice (ElevenLabs)',
+        quality: 'neural',
+        engine: 'eleven'
+      });
+    }
+    out = out.concat(piperVoicesFor(lang).map(function (v) {
       return {
         id: PIPER_PREFIX + v.id,
         label: titleCase(v.name) + ' (' + String(v.locale || '').replace('_', '-') + ')',
         quality: 'neural',
         engine: 'piper'
       };
-    });
+    }));
     if (hostedTTS.available) {
       out.push({
         // Short on purpose: this sits inside a <select>, which truncates a
@@ -336,11 +355,16 @@ window.LUNOSIA = window.LUNOSIA || {};
 
   /* Which installed voice should play this character, and at what pitch. */
   /* `engine` on the return value says which speak* function should run —
-   * 'piper', 'hosted', or null for the plain browser voice — decided here
-   * rather than guessed later from the shape of `id`, because a hosted id is
-   * just a language code and would otherwise be indistinguishable from
-   * "nothing picked". */
-  function castVoice(lang, uri, character, roles, basePitch) {
+   * 'eleven', 'piper', 'hosted', or null for the plain browser voice —
+   * decided here rather than guessed later from the shape of `id`, because a
+   * hosted id is just a language code and would otherwise be
+   * indistinguishable from "nothing picked".
+   *
+   * `eleven`, when passed, is { key, voiceId } from this browser's saved
+   * settings. It is not a probed availability flag like piper/hostedTTS
+   * below - a key is either configured for this call or it is not - so it
+   * comes in as an argument instead of module state. */
+  function castVoice(lang, uri, character, roles, basePitch, eleven) {
     var out = { id: null, pitch: basePitch || 1, engine: null };
     character = character || {};
     roles = roles || {};
@@ -348,8 +372,21 @@ window.LUNOSIA = window.LUNOSIA || {};
     if (character.age && AGE_PITCH[character.age]) out.pitch *= AGE_PITCH[character.age];
 
     // An explicitly chosen browser voice always wins - it is a direct request.
-    var isNeuralUri = uri && (uri.indexOf(PIPER_PREFIX) === 0 || uri.indexOf(HOSTED_PREFIX) === 0);
+    var isNeuralUri = uri && (uri.indexOf(PIPER_PREFIX) === 0 || uri.indexOf(HOSTED_PREFIX) === 0 ||
+                              uri.indexOf(ELEVEN_PREFIX) === 0);
     if (uri && !isNeuralUri) return out;
+
+    // ElevenLabs outranks everything else once a key is configured - it is
+    // the best-sounding option there is - unless the person explicitly saved
+    // a Piper or hosted voice instead, which is a direct request just like a
+    // browser voice is.
+    var wantsEleven = uri && uri.indexOf(ELEVEN_PREFIX) === 0;
+    var explicitOtherNeural = isNeuralUri && !wantsEleven;
+    if (eleven && eleven.key && (wantsEleven || !explicitOtherNeural)) {
+      out.engine = 'eleven';
+      out.id = (wantsEleven && uri.slice(ELEVEN_PREFIX.length)) || eleven.voiceId || DEFAULT_ELEVEN_VOICE;
+      return out;
+    }
 
     if (piper.available) {
       out.engine = 'piper';
@@ -413,35 +450,52 @@ window.LUNOSIA = window.LUNOSIA || {};
     cancelSpeech();
     var mine = ++token;
     var lang = opts.lang || 'es';
-    var cast = castVoice(lang, opts.voiceURI, opts.character, opts.voiceRoles, opts.pitchScale);
+    var eleven = opts.elevenlabsKey ? { key: opts.elevenlabsKey, voiceId: opts.elevenlabsVoiceId } : null;
+    var cast = castVoice(lang, opts.voiceURI, opts.character, opts.voiceRoles, opts.pitchScale, eleven);
 
-    if (cast.engine === 'piper') {
-      speaking = true;
-      speakPiper(text, opts, mine, cast.id, cast.pitch, function () {
-        // Piper failed — the server may have stopped, or the voice file may
-        // have gone. Try the hosted voice before giving up on sounding good.
-        if (mine !== token) return;
-        var hosted = hostedTTS.available ? lang : null;
-        if (hosted) {
-          speakHosted(text, opts, mine, lang, function () {
-            if (mine !== token) return;
+    function runEngine(cast) {
+      if (cast.engine === 'piper') {
+        speaking = true;
+        speakPiper(text, opts, mine, cast.id, cast.pitch, function () {
+          // Piper failed — the server may have stopped, or the voice file may
+          // have gone. Try the hosted voice before giving up on sounding good.
+          if (mine !== token) return;
+          var hosted = hostedTTS.available ? lang : null;
+          if (hosted) {
+            speakHosted(text, opts, mine, lang, function () {
+              if (mine !== token) return;
+              speakBrowser(text, opts, mine);
+            });
+          } else {
             speakBrowser(text, opts, mine);
-          });
-        } else {
+          }
+        });
+      } else if (cast.engine === 'hosted') {
+        speaking = true;
+        speakHosted(text, opts, mine, lang, function () {
+          // The edge function 404s (no AI binding on this deploy yet), the
+          // model failed, or the network dropped. Same rule as Piper: say it
+          // with something rather than nothing.
+          if (mine !== token) return;
           speakBrowser(text, opts, mine);
-        }
-      });
-    } else if (cast.engine === 'hosted') {
-      speaking = true;
-      speakHosted(text, opts, mine, lang, function () {
-        // The edge function 404s (no AI binding on this deploy yet), the
-        // model failed, or the network dropped. Same rule as Piper: say it
-        // with something rather than nothing.
-        if (mine !== token) return;
+        });
+      } else {
         speakBrowser(text, opts, mine);
+      }
+    }
+
+    if (cast.engine === 'eleven') {
+      speaking = true;
+      speakElevenLabs(text, opts, mine, cast.id, eleven.key, function () {
+        // A bad key, a spent quota, or the network dropped. Fall through to
+        // whatever would have played if ElevenLabs were not configured at
+        // all, rather than leaving the whole chain silent over one API call.
+        if (mine !== token) return;
+        var savedElsewhere = opts.voiceURI && opts.voiceURI.indexOf(ELEVEN_PREFIX) !== 0 ? opts.voiceURI : '';
+        runEngine(castVoice(lang, savedElsewhere, opts.character, opts.voiceRoles, opts.pitchScale));
       });
     } else {
-      speakBrowser(text, opts, mine);
+      runEngine(cast);
     }
 
     return function () { cancelSpeech(); };
@@ -531,6 +585,65 @@ window.LUNOSIA = window.LUNOSIA || {};
         if (settled) return;
         settled = true;
         try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+        if (audioEl === a) { audioEl = null; speaking = false; }
+        if (mine !== token) return;
+        if (failed) { onFail(); return; }
+        if (opts.onend) opts.onend();
+      }
+
+      a.onended = function () { finish(false); };
+      a.onerror = function () { finish(true); };
+
+      var p = a.play();
+      if (p && typeof p.catch === 'function') {
+        p['catch'](function () { finish(true); });
+      }
+    })['catch'](function () {
+      if (mine !== token) return;
+      speaking = false;
+      onFail();
+    });
+  }
+
+  /* ElevenLabs — a BYO-key premium voice, called directly from this browser
+   * exactly the way js/brain.js's geminiReply() calls Gemini: the key comes
+   * from this browser's own settings and is sent straight to ElevenLabs in a
+   * header, never through anything of ours. Unlike MeloTTS, the response
+   * body IS the audio — raw audio/mpeg bytes, no JSON envelope to parse —
+   * which is what makes this the simplest of the three network voices.
+   *
+   * No rate control here either (same reasoning as speakHosted above: a
+   * finished recording resampled to fake a speed change sounds worse, not
+   * slower), but casting per character does apply, unlike MeloTTS - a
+   * configured voice ID is one fixed speaker, so age/gender pitch is left
+   * for the caller's own choice of voice rather than fought with a resample. */
+  function speakElevenLabs(text, opts, mine, voiceId, apiKey, onFail) {
+    var url = 'https://api.elevenlabs.io/v1/text-to-speech/' +
+      encodeURIComponent(voiceId || DEFAULT_ELEVEN_VOICE);
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+        'Accept': 'audio/mpeg'
+      },
+      body: JSON.stringify({ text: text, model_id: 'eleven_multilingual_v2' })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('elevenlabs ' + r.status);
+      return r.blob();
+    }).then(function (blob) {
+      if (mine !== token) return;
+
+      var url2 = URL.createObjectURL(blob);
+      var a = new Audio(url2);
+      audioEl = a;
+
+      var settled = false;
+      function finish(failed) {
+        if (settled) return;
+        settled = true;
+        try { URL.revokeObjectURL(url2); } catch (e) { /* ignore */ }
         if (audioEl === a) { audioEl = null; speaking = false; }
         if (mine !== token) return;
         if (failed) { onFail(); return; }
@@ -963,6 +1076,8 @@ window.LUNOSIA = window.LUNOSIA || {};
     piperVoicesFor: piperVoicesFor,
     hostedTTS: hostedTTS,
     hostedPrefix: HOSTED_PREFIX,
+    elevenPrefix: ELEVEN_PREFIX,
+    defaultElevenVoice: DEFAULT_ELEVEN_VOICE,
     allVoicesFor: allVoicesFor,
     castVoice: castVoice,
     agePitch: AGE_PITCH,

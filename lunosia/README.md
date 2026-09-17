@@ -112,6 +112,15 @@ cannot be cast per character — Settings explains this where casting would othe
 The list prefers the accent the recogniser is listening in (`es-ES`), so both halves of the
 conversation stay in one accent rather than drifting between Madrid and Mexico City.
 
+### An even better voice: ElevenLabs (optional, bring your own key)
+If MeloTTS still isn't good enough, Settings → Voice has a spot for an
+[ElevenLabs](https://elevenlabs.io) API key — same idea as the Gemini key above: paste it in,
+it's stored only in your browser, and requests go straight from your browser to ElevenLabs,
+never through lunosia.com. With a key configured this becomes the voice everywhere in the
+app, automatically ranked above Piper and the hosted voice, until you clear it or explicitly
+pick something else in the dropdown. The free tier needs no credit card but is limited per
+month; there's an optional field for a specific voice ID if you don't want the default.
+
 ---
 
 ## When the microphone does not work
@@ -1125,9 +1134,10 @@ when moving a file between them is the hard part.
 ## Privacy
 
 Nothing you say or save leaves your device — except your typed/spoken turns when you
-deliberately choose the Gemini backend, which sends them to Google. Speech synthesis is
-local too: the text is never sent anywhere to be spoken. Built-in and Ollama send
-nothing anywhere. There is no analytics, no account, and no network call the app makes on its
-own. Clearing site data wipes your progress, so use Settings → Your progress → Save a
-copy if you care about it. That file never goes anywhere either: it is written by
-your browser and read back by your browser.
+deliberately choose the Gemini backend (sent to Google), the text you speak whenever the
+hosted MeloTTS voice plays (sent to Cloudflare Workers AI, same site), or the text you speak
+when you've deliberately pasted in an ElevenLabs key (sent to ElevenLabs). Built-in, Ollama
+and Piper send nothing anywhere. There is no analytics, no account, and no network call the
+app makes on its own beyond the backend you chose. Clearing site data wipes your progress, so
+use Settings → Your progress → Save a copy if you care about it. That file never goes
+anywhere either: it is written by your browser and read back by your browser.

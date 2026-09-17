@@ -62,6 +62,8 @@ window.LUNOSIA = window.LUNOSIA || {};
       pitchScale: s.voicePitch,
       character: character,
       rate: s.rate,
+      elevenlabsKey: s.elevenlabsKey,
+      elevenlabsVoiceId: s.elevenlabsVoiceId,
       onend: onend
     };
     if (extra) Object.keys(extra).forEach(function (k) { o[k] = extra[k]; });

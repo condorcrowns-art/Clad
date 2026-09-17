@@ -46,6 +46,11 @@ window.LUNOSIA = window.LUNOSIA || {};
         ollamaModel: '',      // empty = auto-pick the best model installed
         geminiKey: '',
         geminiModel: 'gemini-2.5-flash-lite',
+        // A premium voice, BYO key, same idea as geminiKey above: pasted into
+        // Settings, kept only in this browser, never synced by the device-merge
+        // feature. Empty means "not configured" and the tier is skipped entirely.
+        elevenlabsKey: '',
+        elevenlabsVoiceId: '',
         voiceURI: '',         // chosen TTS voice
         // Which installed neural voice plays female and male characters. A
         // barista called Marta speaking in a baritone is the kind of detail

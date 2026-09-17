@@ -285,7 +285,8 @@ window.LUNOSIA = window.LUNOSIA || {};
           lang: 'es', voiceURI: st.settings.voiceURI,
           voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch,
           character: sc.voice,
-          rate: Math.max(0.5, (st.settings.rate || 0.9) - 0.3)
+          rate: Math.max(0.5, (st.settings.rate || 0.9) - 0.3),
+          elevenlabsKey: st.settings.elevenlabsKey, elevenlabsVoiceId: st.settings.elevenlabsVoiceId
         });
       };
       thread.appendChild(b);

@@ -878,16 +878,52 @@ window.LUNOSIA = window.LUNOSIA || {};
     voiceCard.appendChild(ui.field('Spanish voice', voiceSel));
     voiceCard.appendChild(voiceNote);
 
-    /* Neural voices from Piper come first: they are the reason the app stopped
-     * sounding like a 2009 satnav, so they should be the obvious pick. The
-     * browser's own voices stay listed underneath as the fallback. */
+    /* — ElevenLabs, a BYO-key premium voice —
+     * Same idea as the Gemini API key above: pasted in here, kept only in
+     * this browser, never sent anywhere but straight to ElevenLabs. When a
+     * key is present it outranks every other voice automatically, because it
+     * is genuinely the best-sounding option there is - MeloTTS and the
+     * browser's own voices exist for people who have not bothered getting a
+     * key, not as a ceiling. */
+    var elevenKey = el('input', { type: 'password', value: s.elevenlabsKey, placeholder: 'sk_…' });
+    var elevenVoiceId = el('input', { type: 'text', value: s.elevenlabsVoiceId,
+      placeholder: 'Default (Rachel)' });
+    elevenKey.onchange = function () {
+      s.elevenlabsKey = elevenKey.value.trim();
+      LUNOSIA.store.save();
+      refreshVoiceList();
+    };
+    elevenVoiceId.onchange = function () {
+      s.elevenlabsVoiceId = elevenVoiceId.value.trim();
+      LUNOSIA.store.save();
+      refreshVoiceList();
+    };
+    voiceCard.appendChild(ui.banner('info',
+      '<strong>The best-sounding option here, free to start.</strong> Get a key at ' +
+      '<a href="https://elevenlabs.io" target="_blank" rel="noopener">elevenlabs.io</a> — ' +
+      'the free tier is limited per month but needs no card. Paste it in and this becomes ' +
+      'the voice everywhere in the app, above the built-in neural voices, until you clear it.'));
+    voiceCard.appendChild(ui.field('ElevenLabs API key', elevenKey, 'Stored only in this browser.'));
+    voiceCard.appendChild(ui.field('Voice ID (optional)', elevenVoiceId,
+      'Leave blank for the default voice. Find other voice IDs in the ElevenLabs voice library.'));
+
+    /* Neural voices from ElevenLabs, then Piper, come first: they are why the
+     * app stopped sounding like a 2009 satnav, so they should be the obvious
+     * pick. The browser's own voices stay listed underneath as the fallback. */
     // Kept outside the closure below so voiceSel.onchange can also re-derive
     // the rate hint when the person switches voices, without re-running the
     // whole probe.
     var currentVoiceList = [];
 
-    LUNOSIA.speech.onVoicesReady(function () {
-      var list = LUNOSIA.speech.allVoicesFor(st.profile.target || 'es');
+    function elevenSettings() {
+      return { key: s.elevenlabsKey, voiceId: s.elevenlabsVoiceId };
+    }
+
+    // Pulled out of onVoicesReady's callback so pasting an ElevenLabs key can
+    // rebuild the dropdown immediately too, without waiting on — or
+    // re-running — the piper/hosted-voice network probes.
+    function refreshVoiceList() {
+      var list = LUNOSIA.speech.allVoicesFor(st.profile.target || 'es', elevenSettings());
       currentVoiceList = list;
       ui.clear(voiceSel);
       if (!list.length) {
@@ -907,27 +943,32 @@ window.LUNOSIA = window.LUNOSIA || {};
       });
       if (!s.voiceURI) voiceSel.value = list[0].id;
       voiceNote.textContent =
-        list[0].engine === 'piper'
-          ? 'Neural voice running on this machine. No internet needed, nothing to pay.'
-          : list[0].engine === 'hosted'
-            ? 'Neural voice running on lunosia.com itself — nothing to install, works on ' +
-              'a phone, needs an internet connection. This is what plays if you have not ' +
-              'run the Windows setup, and it is why the site sounds better than it used to.'
-            : list[0].quality === 'basic'
-              ? 'Everything installed here is an old robotic voice. See the note below.'
-              : 'Sorted best-sounding first. Picking one plays a sample.';
+        list[0].engine === 'eleven'
+          ? 'Your ElevenLabs voice. Sent straight to ElevenLabs from this browser using the ' +
+            'key above — not through lunosia.com.'
+          : list[0].engine === 'piper'
+            ? 'Neural voice running on this machine. No internet needed, nothing to pay.'
+            : list[0].engine === 'hosted'
+              ? 'Neural voice running on lunosia.com itself — nothing to install, works on ' +
+                'a phone, needs an internet connection. This is what plays if you have not ' +
+                'run the Windows setup, and it is why the site sounds better than it used to.'
+              : list[0].quality === 'basic'
+                ? 'Everything installed here is an old robotic voice. See the note below.'
+                : 'Sorted best-sounding first. Picking one plays a sample.';
 
       updateRateHint(list);
-    });
+    }
+
+    LUNOSIA.speech.onVoicesReady(refreshVoiceList);
 
     // Whichever voice is actually selected, not just the top of the list —
     // someone may have picked something further down. Called again on
     // voiceSel.onchange below, so switching voices updates this live.
     function updateRateHint(list) {
       var selected = list.filter(function (v) { return v.id === voiceSel.value; })[0] || list[0];
-      rateHint.textContent = selected && selected.engine === 'hosted'
-        ? 'Not applied to this voice yet — MeloTTS does not support a rate control, and ' +
-          'crudely resampling finished audio to fake one made real speech sound worse, ' +
+      rateHint.textContent = selected && (selected.engine === 'hosted' || selected.engine === 'eleven')
+        ? 'Not applied to this voice yet — neither MeloTTS nor ElevenLabs takes a rate control, ' +
+          'and crudely resampling finished audio to fake one made real speech sound worse, ' +
           'not more natural. It always plays at the speed it was generated.'
         : 'Slower is easier to follow. 0.9 is a good place to start.';
     }
@@ -1038,7 +1079,7 @@ window.LUNOSIA = window.LUNOSIA || {};
       el('button', { onclick: function () { ui.say('Buenos días. ¿Qué tal estás hoy?'); } }, '🔊 Test voice'),
       el('button', {
         onclick: function () {
-          var list = LUNOSIA.speech.allVoicesFor(st.profile.target || 'es');
+          var list = LUNOSIA.speech.allVoicesFor(st.profile.target || 'es', elevenSettings());
           if (!list.length) return;
           s.voiceURI = list[0].id;
           voiceSel.value = s.voiceURI;

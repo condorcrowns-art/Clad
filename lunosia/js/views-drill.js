@@ -338,7 +338,8 @@ window.LUNOSIA = window.LUNOSIA || {};
               e.stopPropagation();
               LUNOSIA.speech.speak(it.es, {
                 lang: 'es', rate: 0.6,
-                voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch
+                voiceRoles: st.settings.voiceRoles, pitchScale: st.settings.voicePitch,
+                elevenlabsKey: st.settings.elevenlabsKey, elevenlabsVoiceId: st.settings.elevenlabsVoiceId
               });
             }
           }, '🐢 Slower')));
