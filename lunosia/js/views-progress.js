@@ -870,14 +870,25 @@ window.LUNOSIA = window.LUNOSIA || {};
     var voiceCard = el('div.card');
     var voiceSel = el('select');
     var voiceNote = el('div.hint');
+    // Declared here, ahead of the slider it describes further down, because
+    // onVoicesReady's callback can fire synchronously — voices are usually
+    // already settled by the time anyone opens Settings — and it needs to
+    // set this element's text the moment it runs.
+    var rateHint = el('div.hint', 'Slower is easier to follow. 0.9 is a good place to start.');
     voiceCard.appendChild(ui.field('Spanish voice', voiceSel));
     voiceCard.appendChild(voiceNote);
 
     /* Neural voices from Piper come first: they are the reason the app stopped
      * sounding like a 2009 satnav, so they should be the obvious pick. The
      * browser's own voices stay listed underneath as the fallback. */
+    // Kept outside the closure below so voiceSel.onchange can also re-derive
+    // the rate hint when the person switches voices, without re-running the
+    // whole probe.
+    var currentVoiceList = [];
+
     LUNOSIA.speech.onVoicesReady(function () {
       var list = LUNOSIA.speech.allVoicesFor(st.profile.target || 'es');
+      currentVoiceList = list;
       ui.clear(voiceSel);
       if (!list.length) {
         voiceSel.appendChild(el('option', { value: '' }, 'No Spanish voice found'));
@@ -905,10 +916,25 @@ window.LUNOSIA = window.LUNOSIA || {};
             : list[0].quality === 'basic'
               ? 'Everything installed here is an old robotic voice. See the note below.'
               : 'Sorted best-sounding first. Picking one plays a sample.';
+
+      updateRateHint(list);
     });
+
+    // Whichever voice is actually selected, not just the top of the list —
+    // someone may have picked something further down. Called again on
+    // voiceSel.onchange below, so switching voices updates this live.
+    function updateRateHint(list) {
+      var selected = list.filter(function (v) { return v.id === voiceSel.value; })[0] || list[0];
+      rateHint.textContent = selected && selected.engine === 'hosted'
+        ? 'Not applied to this voice yet — MeloTTS does not support a rate control, and ' +
+          'crudely resampling finished audio to fake one made real speech sound worse, ' +
+          'not more natural. It always plays at the speed it was generated.'
+        : 'Slower is easier to follow. 0.9 is a good place to start.';
+    }
     voiceSel.onchange = function () {
       s.voiceURI = voiceSel.value;
       LUNOSIA.store.save();
+      updateRateHint(currentVoiceList);
       ui.say('Hola, así sueno yo. ¿Te gusta esta voz?');
     };
 
@@ -919,8 +945,8 @@ window.LUNOSIA = window.LUNOSIA || {};
       rateOut.textContent = s.rate.toFixed(2) + '×';
     };
     rate.onchange = function () { LUNOSIA.store.save(); ui.say('Hablo a esta velocidad.'); };
-    voiceCard.appendChild(ui.field('Speaking speed', el('div', rate, rateOut),
-      'Slower is easier to follow. 0.9 is a good place to start.'));
+    voiceCard.appendChild(ui.field('Speaking speed', el('div', rate, rateOut)));
+    voiceCard.appendChild(rateHint);
 
     /* — casting —
      * Which installed voice plays women and which plays men. The app cannot

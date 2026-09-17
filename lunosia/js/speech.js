@@ -379,10 +379,11 @@ window.LUNOSIA = window.LUNOSIA || {};
     if (hostedTTS.available) {
       out.engine = 'hosted';
       out.id = lang;
-      // MeloTTS is one speaker per language: there is no separate voice to
-      // cast per gender, only this best-effort pitch nudge, applied by
-      // speeding up or slowing down playback rather than a true pitch shift.
-      if (character.gender) out.pitch *= CROSS_GENDER_PITCH[character.gender] || 1;
+      // No casting per gender: MeloTTS is one speaker per language, and
+      // speakHosted() does not resample audio to fake a pitch shift — a
+      // first version did, and the result was a genuinely worse-sounding
+      // voice than doing nothing, not a subtler one. `out.pitch` is left at
+      // its default and speakHosted() ignores it entirely.
       return out;
     }
 
@@ -422,7 +423,7 @@ window.LUNOSIA = window.LUNOSIA || {};
         if (mine !== token) return;
         var hosted = hostedTTS.available ? lang : null;
         if (hosted) {
-          speakHosted(text, opts, mine, lang, cast.pitch, function () {
+          speakHosted(text, opts, mine, lang, function () {
             if (mine !== token) return;
             speakBrowser(text, opts, mine);
           });
@@ -432,7 +433,7 @@ window.LUNOSIA = window.LUNOSIA || {};
       });
     } else if (cast.engine === 'hosted') {
       speaking = true;
-      speakHosted(text, opts, mine, lang, cast.pitch, function () {
+      speakHosted(text, opts, mine, lang, function () {
         // The edge function 404s (no AI binding on this deploy yet), the
         // model failed, or the network dropped. Same rule as Piper: say it
         // with something rather than nothing.
@@ -497,14 +498,20 @@ window.LUNOSIA = window.LUNOSIA || {};
   /* Same shape as speakPiper — same failure handling, same audio-element
    * bookkeeping — against the hosted endpoint instead of a local server.
    *
-   * There is no server-side pitch control here (MeloTTS takes text and a
-   * language, nothing else), so age and cross-gender casting fall back to
-   * nudging HTMLMediaElement.playbackRate. Browsers keep pitch roughly level
-   * under a small rate change by default (preservesPitch defaults to true),
-   * so this reads mostly as "a bit quicker", not "a chipmunk" — an
-   * approximation, not a match for what Piper's true resample does, but
-   * better than every character sounding identical. */
-  function speakHosted(text, opts, mine, lang, pitch, onFail) {
+   * There is no server-side rate or pitch control here (MeloTTS takes text
+   * and a language, nothing else). An earlier version of this tried to fake
+   * both by nudging HTMLMediaElement.playbackRate — and since the app's
+   * default speaking speed is 0.9, that meant every single hosted line
+   * played 10% slower than the model actually recorded it, by default, for
+   * everyone, before anyone had touched a setting. Crudely resampling a
+   * finished recording is not what "speaking speed" means for a proper
+   * neural voice the way it does for Piper's own resample-at-synthesis-time
+   * pitch trick — it just makes real speech sound warped. So this plays the
+   * clip exactly as the model made it: no rate change, no pitch nudge. The
+   * cost is that the speed slider and per-character casting do not reach
+   * this voice yet; Settings says so. A voice that sounds right at one fixed
+   * speed beats one that sounds wrong at a chosen one. */
+  function speakHosted(text, opts, mine, lang, onFail) {
     fetch('/api/speak', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -517,8 +524,6 @@ window.LUNOSIA = window.LUNOSIA || {};
 
       var url = URL.createObjectURL(blob);
       var a = new Audio(url);
-      try { a.playbackRate = Math.max(0.5, Math.min(2, (opts.rate != null ? opts.rate : 0.9) * (pitch || 1))); }
-      catch (e) { /* older browsers: play at normal speed rather than fail */ }
       audioEl = a;
 
       var settled = false;

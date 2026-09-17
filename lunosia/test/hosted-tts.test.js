@@ -155,13 +155,35 @@ function reset() {
     run('JSON.stringify(__speakCalls)'));
   run('LUNOSIA.speech._setPiper(false, []);');
 
-  console.log('\nSpeaking speed is applied as playback rate, since there is no server-side pitch control\n');
+  console.log('\nThe app\'s speaking-speed setting never touches this voice\n');
+  /* It used to: a first version nudged HTMLMediaElement.playbackRate to fake
+   * a speed and pitch change, and since the app's own default speed is 0.9,
+   * that meant every hosted line played 10% slower than MeloTTS actually
+   * recorded it — for everyone, by default, before anyone touched a
+   * setting. Crudely resampling finished audio like that does not read as
+   * "a bit slower"; it reads as a worse voice, which is exactly what got
+   * reported. Real audio, played at whatever rate the app happens to be
+   * configured for, some far from 1, is the regression this guards. */
   reset();
   run(`LUNOSIA.speech.speak('rapido', { lang: 'es', rate: 1.2 });`);
   await tick();
-  const rate = run('__players[0] ? __players[0].playbackRate : null');
-  check('the audio element\'s playbackRate reflects the requested speed',
-    typeof rate === 'number' && rate > 1, rate);
+  const rate1 = run('__players[0] ? __players[0].playbackRate : null');
+  check('a fast rate setting does not speed up the hosted voice',
+    rate1 === 1 || rate1 === null, rate1);
+
+  reset();
+  run(`LUNOSIA.speech.speak('despacio', { lang: 'es', rate: 0.9 });`);
+  await tick();
+  const rate2 = run('__players[0] ? __players[0].playbackRate : null');
+  check('and the app\'s own default of 0.9 does not slow it down either',
+    rate2 === 1 || rate2 === null, rate2);
+
+  reset();
+  run(`LUNOSIA.speech.speak('con acento', { lang: 'es', character: { gender: 'f', age: 'young' } });`);
+  await tick();
+  const rate3 = run('__players[0] ? __players[0].playbackRate : null');
+  check('nor does casting a young character nudge it',
+    rate3 === 1 || rate3 === null, rate3);
 
   console.log(fail.length ? '\n' + fail.length + ' FAILED\n' : '\nAll checks passed.\n');
   process.exit(fail.length ? 1 : 0);
