@@ -1,0 +1,128 @@
+/* Lunosia — the written pages
+ *
+ * About, privacy, terms, contact and the grammar guides: the parts of the site
+ * that are documents rather than application. They borrow the palette from
+ * style.css and nothing else, because the app's chrome — the nav, the fiesta
+ * layer, the sticky bars — is furniture for a screen you are working in, not
+ * for one you are reading.
+ *
+ * The shared header and footer here are the reason the site is navigable at
+ * all: every written page can reach every other, and all of them can reach the
+ * app. A page you can only arrive at from a sitemap is a page nobody reads.
+ */
+
+body { background: var(--bg); color: var(--ink); }
+
+.site-head {
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-raised);
+}
+.site-head .inner,
+.site-foot .inner,
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+.site-head .inner {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding-top: 14px; padding-bottom: 14px;
+}
+.site-head .wordmark {
+  display: flex; align-items: center; gap: 9px;
+  font-weight: 800; font-size: 1.06rem; letter-spacing: -.01em;
+  color: var(--ink); text-decoration: none;
+}
+.site-head .wordmark img { width: 26px; height: 26px; display: block; }
+.site-head nav { display: flex; gap: 16px; flex-wrap: wrap; margin-left: auto; }
+.site-head nav a {
+  color: var(--ink-soft); text-decoration: none; font-size: .92rem; font-weight: 600;
+}
+.site-head nav a:hover,
+.site-head nav a[aria-current="page"] { color: var(--accent-text); }
+.site-head nav a[aria-current="page"] { text-decoration: underline; text-underline-offset: 4px; }
+
+/* The reading column. 62ch is about eleven words a line, which is where the
+   eye stops losing its place on the way back to the left margin. */
+.page { padding-top: 34px; padding-bottom: 60px; }
+.page p, .page li { line-height: 1.7; max-width: 62ch; }
+.page h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 12px; }
+.page h2 { margin-top: 38px; font-size: 1.32rem; }
+.page h3 { margin-top: 26px; font-size: 1.04rem; }
+.page .lede { font-size: 1.12rem; color: var(--ink-soft); max-width: 60ch; }
+.page .updated { color: var(--ink-faint); font-size: .85rem; }
+
+.cta {
+  display: inline-block; margin: 22px 0 8px; padding: 12px 22px;
+  border-radius: var(--r); background: var(--accent);
+  color: var(--accent-ink); font-weight: 700; text-decoration: none;
+}
+.cta:hover { filter: brightness(1.06); }
+
+/* The one thing to remember, pulled out of the prose around it. */
+.rule {
+  margin: 16px 0; padding: 13px 16px;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--bg-raised);
+  font-size: 1.02rem;
+}
+.rule b { color: var(--accent-text); }
+
+/* Minimal pairs: the same words, the distinction visible. Two columns on a
+   desktop, stacked cards on a phone, because a four-column table at 380px is
+   a puzzle rather than a comparison. */
+.pairs { margin: 18px 0; display: grid; gap: 10px; }
+.pair {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--line-soft); border: 1px solid var(--line-soft);
+  border-radius: var(--r-md); overflow: hidden;
+}
+.pair > div { background: var(--bg-raised); padding: 11px 13px; }
+.pair .es { font-weight: 600; display: block; }
+.pair .en { color: var(--ink-soft); font-size: .9rem; display: block; margin-top: 2px; }
+.pair .wrong .es { color: var(--bad-text); }
+
+.drills { margin: 16px 0; padding-left: 0; list-style: none; }
+.drills li {
+  padding: 10px 0; border-bottom: 1px solid var(--line-soft);
+  max-width: none;
+}
+.drills li:last-child { border-bottom: 0; }
+.drills .q { font-weight: 600; }
+.drills .a { color: var(--good-text); font-weight: 700; }
+.drills .why { color: var(--ink-soft); font-size: .9rem; display: block; margin-top: 3px; }
+
+.cards { display: grid; gap: 12px; margin: 20px 0; }
+@media (min-width: 620px) { .cards { grid-template-columns: 1fr 1fr; } }
+.cards a {
+  display: block; padding: 15px 17px; text-decoration: none;
+  border: 1px solid var(--line-soft); border-radius: var(--r);
+  background: var(--bg-raised); color: var(--ink);
+}
+.cards a:hover { border-color: var(--accent); }
+.cards a b { display: block; font-size: 1.03rem; margin-bottom: 4px; }
+.cards a span { color: var(--ink-soft); font-size: .9rem; line-height: 1.5; display: block; }
+
+.level {
+  display: inline-block; font-size: .7rem; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--accent-text);
+  border: 1px solid var(--accent); border-radius: 100px;
+  padding: 2px 8px; margin-left: 8px; vertical-align: middle;
+}
+
+.site-foot {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 40px; color: var(--ink-soft); font-size: .88rem;
+}
+.site-foot .inner { padding-top: 22px; padding-bottom: 34px; }
+.site-foot nav { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.site-foot a { color: var(--ink-soft); }
+.site-foot a:hover { color: var(--accent-text); }
+
+@media (max-width: 560px) {
+  .page h1 { font-size: 1.6rem; }
+  .pair { grid-template-columns: 1fr; }
+  .site-head nav { margin-left: 0; width: 100%; gap: 14px; }
+}

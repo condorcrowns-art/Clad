@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy — Lunosia</title>
+<meta name="description" content="What Lunosia stores, where it stores it, and the one thing that leaves your device.">
+<link rel="canonical" href="https://lunosia.com/privacy.html">
+<meta property="og:title" content="Privacy — Lunosia">
+<meta property="og:description" content="What Lunosia stores, where it stores it, and the one thing that leaves your device.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lunosia.com/privacy.html">
+<meta property="og:site_name" content="Lunosia">
+<meta name="theme-color" content="#e01a76">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="alternate icon" href="icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/page.css">
+
+
+</head>
+<body>
+
+<header class="site-head">
+  <div class="inner">
+    <a class="wordmark" href="index.html"><img src="icon.svg" alt="" width="26" height="26">Lunosia</a>
+    <nav aria-label="Site">
+        <a href="index.html">The app</a>
+        <a href="guides/index.html">Guides</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+<h1>Privacy</h1>
+  <p class="updated">Last updated 14 September 2026. This describes what the app
+     actually does; check it still matches what you are running before publishing it.</p>
+
+  <h2>The short version</h2>
+  <p>Everything Lunosia knows about you — your progress, your words, your mistakes —
+     is stored in your own browser and is never sent anywhere. There is no account
+     and no server-side copy of any of it.</p>
+  <p>The one thing that does leave your device is the conversation itself. On this
+     site the conversation partner runs on Cloudflare's Workers AI, so what you say
+     to it is sent there to be answered. That is the default here, because it is the
+     only partner that works on a phone. You can switch it off in Settings — the
+     built-in partner runs entirely in the page. Both are described under
+     <a href="#partner">The conversation partner</a> below.</p>
+
+  <h2>What is stored, and where</h2>
+  <p>Lunosia keeps all of this in your browser's <code>localStorage</code>, on the
+     device you are using. There is no account, no server-side profile, and no
+     copy held anywhere else:</p>
+  <ul>
+    <li>the name and level you entered</li>
+    <li>your progress: XP, streak, which of the 60 days you have done</li>
+    <li>your vocabulary deck and its review schedule, including words you added yourself</li>
+    <li>your mistake journal — corrections you have been given</li>
+    <li>which reading passages you have read and which listening clips you have heard</li>
+    <li>your writing tasks and the drafts you wrote for them</li>
+    <li>your pronunciation scores and which grammar lessons you have finished</li>
+    <li>notes your conversation partner wrote about you, so it remembers you between sessions</li>
+    <li>your settings, including any API key you enter</li>
+  </ul>
+  <p>Clearing your browser's site data for this domain erases all of it
+     permanently. There is no backup. Settings → Export writes it to a file you
+     control if you want one.</p>
+
+  <h2>Speech</h2>
+  <p><strong>Speaking:</strong> Chrome and Edge perform speech recognition on
+     Google's servers, not on your device. When you use the microphone, the
+     audio is sent to Google by the browser itself. This is how the Web Speech
+     API works in those browsers and Lunosia cannot change it. If that is not
+     acceptable to you, type instead — everything works by typing.</p>
+  <p><strong>Listening:</strong> speech is generated locally where the neural
+     voice is installed, and by your operating system's own voices otherwise.
+     Nothing is uploaded to produce it.</p>
+
+  <h2>The dictionary</h2>
+  <p>The 31,000-word dictionary is a file served from this site and stored in your
+     browser's cache. Looking a word up, working out what form it is in, and every
+     number on the word bank screen happen entirely on your device. Nothing you look
+     up is sent anywhere, and nobody — including whoever runs this site — can see
+     which words you searched for.</p>
+  <p>It is built from <a href="https://en.wiktionary.org">en.wiktionary.org</a> and
+     from the OpenSubtitles frequency lists published as
+     <a href="https://github.com/hermitdave/FrequencyWords">hermitdave/FrequencyWords</a>,
+     both under Creative Commons Attribution-ShareAlike. The built file carries the
+     same licence.</p>
+
+  <h2 id="partner">The conversation partner</h2>
+  <ul>
+    <li><strong>Built-in (scripted):</strong> runs entirely in the page. Nothing leaves the device.</li>
+    <li><strong>Ollama:</strong> runs on a machine you control. Nothing leaves that machine.</li>
+    <li><strong>This site:</strong> <em>this one sends data off your device.</em> It is the
+        default on the public site, because it is the only partner that works on a
+        phone. What you type and what the microphone transcribed is sent to
+        Cloudflare's Workers AI — over this site's own address, not to a third-party
+        API you signed up for — along with the scenario and the recent turns of the
+        conversation, and a reply comes back. Cloudflare's own privacy terms apply to
+        that processing. Nothing is stored on the server: there is no account, no
+        conversation history kept off your device, and no key to leak. Switch to
+        Built-in or Ollama if you would rather nothing left the device at all.</li>
+    <li><strong>Gemini:</strong> <em>this one sends data off your device.</em> If you
+        switch it on, what you type and what the microphone transcribed is sent
+        to Google to generate a reply, along with the scenario and recent turns.
+        Google's own privacy policy applies to that. Your API key is stored in
+        your browser and sent only to Google.</li>
+  </ul>
+
+  <h2>Advertising</h2>
+  <p>Every page of this site loads Google AdSense. That script is Google's, it
+     runs in your browser, and it can set cookies and read device identifiers to
+     select and measure advertising — including on pages where no advert is
+     shown, because the same script does the measuring.</p>
+  <p>What it cannot do is see anything Lunosia knows about you. Your progress,
+     your words, your mistakes and your conversations are held in your browser's
+     own storage, which a script from another origin has no access to. Nothing
+     on this site passes any of it to Google, and no advert is targeted using it.</p>
+  <p>Google's use of advertising cookies is described in
+     <a href="https://policies.google.com/technologies/ads" rel="noopener">their
+     advertising policies</a>, and you can turn off personalised advertising at
+     <a href="https://myadcenter.google.com" rel="noopener">My Ad Center</a>. A
+     content blocker will stop the script loading at all, and nothing on this
+     site breaks if you use one — the app does not check, and would still work
+     offline with the network gone entirely.</p>
+  <p>If you are in the EU or the UK, a consent notice appears before any
+     advertising cookie is set, and your answer is respected.</p>
+
+  <h2>Analytics</h2>
+  <p>None. There is no analytics script, no telemetry and no error reporting,
+     and Lunosia itself makes no request on its own beyond fetching its own
+     files and, if you are using the hosted partner, sending your turn of the
+     conversation. The advertising script described above is the one thing on
+     these pages that talks to anyone else, and it is Google's rather than this
+     site's.</p>
+
+  <h2>Children</h2>
+  <p>This is a study tool with no accounts and no social features, and it
+     collects nothing that identifies anyone. The advertising described above is
+     subject to Google's own policies on ad serving, including those on
+     advertising to children.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy, or about anything the site does with your data,
+     go to <a href="mailto:Canarybears@gmail.com">Canarybears@gmail.com</a>.</p>
+</main>
+
+<footer class="site-foot">
+  <div class="inner">
+    <nav aria-label="Footer">
+      <a href="index.html">Open Lunosia</a>
+      <a href="guides/index.html">Guides</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </nav>
+    <p>Lunosia is a free Spanish trainer. No account, no subscription, and it
+       works offline once you have opened it.</p>
+  </div>
+</footer>
+
+</body>
+</html>
