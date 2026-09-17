@@ -481,3 +481,15 @@ js/main.js      game loop, input, camera, world switching, save/load
 Design research: Growtopia's punch→seed→splice loop ([splicing guide](https://growtopia.fandom.com/wiki/Guide:Splicing),
 [Wikipedia](https://en.wikipedia.org/wiki/Growtopia)) and Pixel Worlds' Netherworld boss/risk
 structure ([wiki](https://pixelworlds.fandom.com/wiki/Netherworld)).
+
+---
+
+## Also in this repo: `roblox/` — OVERCLOCK SIMULATOR
+
+A separate, standalone project: a complete original **Roblox simulator**
+(Rojo + Luau) built to the shape of a high-retention live game — nine sectors,
+48 familiars, rebirths, daily quests, login streaks, global leaderboards,
+session-locked DataStores, a full anti-cheat layer, and a bottom-heavy Robux
+ladder starting at a 9 R$ Data Nuke.
+
+Nothing in it is copied from another game. See [`roblox/README.md`](roblox/README.md).
