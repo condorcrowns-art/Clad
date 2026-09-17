@@ -92,15 +92,22 @@ Repeated phrases are cached as WAVs under `voices/cache/`, so drilling the same 
 words does not re-synthesise them fifty times.
 
 If Piper is missing — you skipped it, the download failed, the server isn't running — the
-app falls back to the browser's own voices silently and keeps working. Settings → **Voice**
-tells you which one you're on:
+app does not drop straight to the operating system's own voice. On **lunosia.com** it tries
+a second neural voice first: **Cloudflare Workers AI's MeloTTS**, called at `/api/speak` on
+the site itself — same account, same "AI" binding that already answers the chat partner, no
+extra signup. This is what makes the public site sound like a person even though nobody
+visiting it has run this setup script; only if that also fails does it drop to the browser's
+own voice. Settings → **Voice** tells you which one you're on:
 
 | Label | What it is |
 |---|---|
-| `[neural — best]` | Piper, running locally. This is the one you want. |
+| `[neural — best]` | Piper (installed here) or the hosted voice (on lunosia.com). Either is the one you want. |
 | `[best]` | Chrome's `Google español`, or a Windows 11 *Natural* voice. Decent. |
 | `[good]` / `[ok]` | Serviceable OS voices. |
 | `[robotic]` | Legacy SAPI. Only shown because something has to be. |
+
+The hosted voice is one speaker per language rather than a catalogue like Piper's, so it
+cannot be cast per character — Settings explains this where casting would otherwise be.
 
 The list prefers the accent the recogniser is listening in (`es-ES`), so both halves of the
 conversation stay in one accent rather than drifting between Madrid and Mexico City.

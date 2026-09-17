@@ -26,6 +26,17 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
  * inventory as unauthorised. */
 const PUBLISHER = 'ca-pub-6431955508681504';
 
+// The only pages substantial enough, by Google's own stated standard, to
+// carry a Google-served ad: the app itself and every navigational or
+// utility page (index, guides/index, contact, terms, privacy) are excluded
+// on purpose. Keep this in sync with the `ads: true` flags in
+// tools/build-pages.js — the generator is the source of truth and this list
+// is what the test checks it against.
+const AD_PAGES = ['about.html',
+  'guides/ser-estar.html', 'guides/gender-and-agreement.html',
+  'guides/verbs-that-differ.html', 'guides/past-and-subjunctive.html',
+  'guides/small-words.html', 'guides/pronunciation.html'];
+
 const PAGES = fs.readdirSync(ROOT).filter(f => f.endsWith('.html'))
   .concat(fs.readdirSync(path.join(ROOT, 'guides')).map(f => 'guides/' + f));
 const SITE = 'https://lunosia.com/';
@@ -65,14 +76,22 @@ PAGES.forEach(page => {
     check(page + '  → ' + target + ' exists', fs.existsSync(path.resolve(dir, target)));
   });
 
-  // AdSense verifies ownership by finding this on every page, so a page that
-  // misses it fails verification silently — the site looks fine and the
-  // account never goes live.
-  check(page + ' carries the AdSense snippet', /adsbygoogle\.js\?client=ca-pub-/.test(html));
-  const pub = /client=(ca-pub-[0-9]+)/.exec(html);
-  check(page + '  with the right publisher id', pub && pub[1] === PUBLISHER,
-    pub ? pub[1] : 'none');
-  check(page + '  and no placeholder left in it', !/ca-pub-(X|YOUR)/i.test(html));
+  // Google's own review rejected an earlier version of this site for
+  // "ads on screens without publisher content... used for alerts,
+  // navigation, or other behavioural purposes" — which is what every page
+  // here is except the seven listed below. The rule is now the opposite of
+  // "every page must carry it": every page must NOT carry it, unless it is
+  // one of the pages substantial enough to be "content" by that standard.
+  const hasAds = /adsbygoogle\.js\?client=ca-pub-/.test(html);
+  if (AD_PAGES.indexOf(page) !== -1) {
+    check(page + ' carries the AdSense snippet', hasAds);
+    const pub = /client=(ca-pub-[0-9]+)/.exec(html);
+    check(page + '  with the right publisher id', pub && pub[1] === PUBLISHER,
+      pub ? pub[1] : 'none');
+  } else {
+    check(page + ' does NOT carry an ad script — it is not a content page', !hasAds);
+  }
+  check(page + '  no placeholder id left in it', !/ca-pub-(X|YOUR)/i.test(html));
 });
 
 console.log('\n— What a crawler is told —\n');

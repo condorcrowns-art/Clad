@@ -4,6 +4,42 @@ Everything that can be done before you have a publisher id is done. This file
 is the rest: what to expect, the exact steps, and the two rules that get
 accounts banned permanently.
 
+## The violation notice — "ads on screens without publisher content"
+
+Approval came back with a Policy Center violation of exactly this shape:
+
+> **Google-served ads on screens without publisher content.** We do not allow
+> Google-served ads on screens without content or with low value content,
+> that are under construction, or that are used for alerts, navigation, or
+> other behavioural purposes.
+
+That is a precise description of the app. Home, Talk, Review, Games, Write,
+Say and Settings are interactive controls with almost no running text — the
+"navigation, or other behavioural purposes" clause is not a stretch, it is
+what those screens are. The mistake was loading the AdSense script in
+`index.html`, so Google's crawler found ads verified for a page that is, by
+design, mostly buttons.
+
+**The fix is not a smaller ad or fewer ads. It is that the script never loads
+inside the app at all.** It now loads only on the pages that are actually
+prose someone would read on their own: `about.html` and the six grammar
+guides under `guides/`. Nowhere else — not the app, not the guides hub page
+(itself mostly a grid of links), not the privacy, terms or contact pages,
+which are necessary but are not "content" in the sense the policy means.
+
+This is enforced in `tools/build-pages.js` — the script is emitted only when
+a page is built with `ads: true` — and checked by `test/pages.test.js`, which
+fails if any page outside that list ever carries it, or if one of the seven
+that should have it doesn't.
+
+**After this deploys:** wait a few minutes for Cloudflare Pages to build,
+confirm with `curl.exe -s https://lunosia.com/ | findstr adsbygoogle` (should
+print nothing) and `curl.exe -s https://lunosia.com/about.html | findstr adsbygoogle`
+(should print the script tag), then go back to the Policy Center screen, tick
+**"I confirm that I have fixed the issues"**, and click **Request review**.
+Google re-crawls rather than acting instantly, so the review can take from a
+few hours to a couple of weeks.
+
 ## What to expect
 
 **Approval is the hard part, not the code.** AdSense reviews a site for content

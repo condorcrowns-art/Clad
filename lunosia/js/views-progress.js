@@ -896,11 +896,15 @@ window.LUNOSIA = window.LUNOSIA || {};
       });
       if (!s.voiceURI) voiceSel.value = list[0].id;
       voiceNote.textContent =
-        list[0].quality === 'neural'
+        list[0].engine === 'piper'
           ? 'Neural voice running on this machine. No internet needed, nothing to pay.'
-          : list[0].quality === 'basic'
-            ? 'Everything installed here is an old robotic voice. See the note below.'
-            : 'Sorted best-sounding first. Picking one plays a sample.';
+          : list[0].engine === 'hosted'
+            ? 'Neural voice running on lunosia.com itself — nothing to install, works on ' +
+              'a phone, needs an internet connection. This is what plays if you have not ' +
+              'run the Windows setup, and it is why the site sounds better than it used to.'
+            : list[0].quality === 'basic'
+              ? 'Everything installed here is an old robotic voice. See the note below.'
+              : 'Sorted best-sounding first. Picking one plays a sample.';
     });
     voiceSel.onchange = function () {
       s.voiceURI = voiceSel.value;
@@ -929,8 +933,17 @@ window.LUNOSIA = window.LUNOSIA || {};
         ? LUNOSIA.speech.piperVoicesFor(st.profile.target || 'es') : [];
 
       if (!voices.length) {
+        // "Run setup again" only makes sense on the machine that can run
+        // setup-windows.ps1. On the public site — where the hosted voice is
+        // doing the work instead of Piper — that instruction is impossible
+        // to follow, so it only appears when Piper is genuinely the option.
         castCard.appendChild(el('div.hint',
-          'Casting needs the neural voices. Run setup again to install them.'));
+          LUNOSIA.speech.hostedTTS.available
+            ? 'The hosted voice is one speaker per language, so there is nothing to ' +
+              'cast per character yet — everyone speaks in the same voice. Casting ' +
+              'becomes available on a machine with the neural voices installed ' +
+              '(see the Windows setup in the README).'
+            : 'Casting needs the neural voices. Run setup again to install them.'));
         return;
       }
 

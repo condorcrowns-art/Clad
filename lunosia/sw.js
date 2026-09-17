@@ -6,7 +6,7 @@
  *
  * Bump CACHE when you change any shipped file, or browsers will keep the old one.
  */
-var CACHE = 'lunosia-v7';
+var CACHE = 'lunosia-v8';
 
 /* The dictionary is 1.5 MB and changes only when it is rebuilt, so it lives in
  * a cache of its own that deploys do not touch. In the single versioned cache
@@ -117,9 +117,11 @@ self.addEventListener('fetch', function (e) {
   // including for the person who then goes and installs one.
   if (/\/tts(\/|$)/.test(url.pathname)) return;
 
-  // Nor the site's own API. GET /api/chat is the probe that decides whether the
-  // app claims an AI partner is available; cached, it would answer from a
-  // snapshot of whether the binding existed the day it was first asked.
+  // Nor the site's own API. GET /api/chat and GET /api/speak are the probes
+  // that decide whether the app claims an AI partner or a hosted voice is
+  // available; cached, either would answer from a snapshot of whether the
+  // binding existed the day it was first asked. POST to either is a live
+  // reply or a live utterance, never something to replay from cache.
   if (/^\/api(\/|$)/.test(url.pathname)) return;
 
   // The dictionary: answer from the kept cache at once, and refresh behind it.

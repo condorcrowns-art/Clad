@@ -87,6 +87,13 @@ models, on Cloudflare's hardware, included free on your account. The code is
 already there. It just needs to be handed the model runner, which Cloudflare
 calls a *binding*.
 
+**The same binding also carries the voice.** `/api/speak` calls a text-to-speech
+model (MeloTTS) on this same "AI" binding — nothing extra to add. This is what
+lets lunosia.com sound like a neural voice rather than the operating system's
+own robotic one for a visitor who has never run `setup-windows.ps1`. If the
+steps below get the chat partner working, the voice is already working too;
+check it the same way, in the next section.
+
 1. **Workers & Pages → your Pages project → Settings → Functions**
 2. Scroll to **AI bindings** (some dashboards call it *Bindings* → *Add* → *AI*)
 3. **Add binding**
@@ -118,6 +125,30 @@ If Workers AI is ever down or rate-limited, the function walks through five
 different models before giving up, and the app falls back to the built-in
 scripted partner rather than showing you an error. You will notice the replies
 get simpler; nothing breaks.
+
+### Checking the voice
+
+Open `https://lunosia.com/api/speak` the same way — you want
+`{"available":true,"engine":"@cf/myshell-ai/melotts", ...}`. To hear it rather
+than just confirm it exists, on Windows PowerShell:
+
+```powershell
+curl.exe -s -X POST https://lunosia.com/api/speak -H "Content-Type: application/json" `
+  -d '{"text":"Hola, soy la voz de Lunosia.","lang":"es"}' -o speak-test.mp3
+Start-Process speak-test.mp3
+```
+
+If that plays a voice, it works end to end. If it does not — a 502 with a
+`bad-output` error, or a file that will not play — Cloudflare's MeloTTS
+returned something the function did not expect; the error names exactly what
+came back, and that is the fix: open `functions/api/speak.js`'s `audioFrom()`
+and add a branch for that shape. This is the one part of the site that could
+not be tested against the real API before it was written, because the tools
+used to build it cannot reach Cloudflare — see the comment at the top of that
+file.
+
+If it does not work, the app is no worse off than before: it falls back to the
+browser's own voice, silently, exactly like a missing Piper does.
 
 ---
 

@@ -31,6 +31,10 @@ function serve(port) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ available: true, models: ['x'] }));
     }
+    if (p === '/api/speak') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ available: true, engine: 'x' }));
+    }
     const file = path.join(ROOT, p === '/' ? 'index.html' : p.slice(1));
     if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       res.writeHead(404); return res.end('no');
@@ -76,11 +80,15 @@ const BASE = 'http://localhost:8791';
   check('it is kept apart from the shell',
     c.some(x => /^lunosia-data.*dict-es/.test(x)), c.filter(x => /dict/.test(x)).join(', '));
 
-  // A cached probe would let the app insist an AI partner exists long after the
-  // binding was removed — or deny one long after it was added.
-  await page.evaluate(() => fetch('/api/chat').then(r => r.json()).catch(() => null));
+  // A cached probe would let the app insist an AI partner — or the hosted
+  // voice — exists long after the binding was removed, or deny one long
+  // after it was added.
+  await page.evaluate(() => Promise.all([
+    fetch('/api/chat').then(r => r.json()).catch(() => null),
+    fetch('/api/speak').then(r => r.json()).catch(() => null)
+  ]));
   await page.waitForTimeout(400);
-  check('the API probe is never cached', !(await cached()).some(x => /\/api\//.test(x)),
+  check('neither API probe is ever cached', !(await cached()).some(x => /\/api\//.test(x)),
     (await cached()).filter(x => /api/.test(x)).join(', '));
 
   console.log('\nA deploy lands\n');

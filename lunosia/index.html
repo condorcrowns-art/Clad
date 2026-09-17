@@ -16,11 +16,13 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/fiesta.css">
-<!-- AdSense. Present on every page because Google verifies ownership by
-     finding it; ad units are a separate step and are kept off the
-     conversation screens. -->
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6431955508681504"
-     crossorigin="anonymous"></script>
+<!-- No AdSense here, deliberately. Google's own review rejected the site for
+     "ads on screens without publisher content... used for alerts, navigation,
+     or other behavioural purposes" — a precise description of this app: Home,
+     Talk, Review, Games and Settings are controls, not text. The script now
+     loads only on the prose pages (about.html, guides/*.html) that are
+     actually the kind of thing the policy means by "content". See
+     tools/build-pages.js and ADSENSE.md. -->
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="alternate icon" href="icon-192.png">
 <!-- With scripting off the chrome is furniture around nothing: a streak of

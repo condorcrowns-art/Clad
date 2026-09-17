@@ -195,6 +195,22 @@ function articleSchema(o) {
   };
 }
 
+/* Google's own review rejected the first version of this site for
+ * "Google-served ads on screens without publisher content... used for
+ * alerts, navigation, or other behavioural purposes" — which is a precise
+ * description of the app: Home, Talk, Review, Games and Settings are
+ * interactive controls with almost no running text, exactly the shape the
+ * policy exists to keep ads off. The fix is not a smaller ad, or fewer ads;
+ * it is that the script never loads inside the app at all.
+ *
+ * It loads only on pages that are substantial prose someone would read on
+ * their own: the six grammar guides, and the about page that describes the
+ * app in the same terms a search result would. Passed as `ads: true` per
+ * page below rather than unconditionally, so a page added later is opted in
+ * on purpose rather than by inheriting a default. */
+const AD_SNIPPET = '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js' +
+  '?client=ca-pub-6431955508681504" crossorigin="anonymous"><\/script>';
+
 function shell(o) {
   const up = o.depth ? '../' : '';
   const nav = NAV.map(([href, label]) => {
@@ -224,11 +240,7 @@ function shell(o) {
 <link rel="stylesheet" href="${up}css/style.css">
 <link rel="stylesheet" href="${up}css/page.css">
 ${o.jsonld ? '<script type="application/ld+json">' + JSON.stringify(o.jsonld) + '</script>' : ''}
-<!-- AdSense. Present on every page because Google verifies ownership by
-     finding it; ad units are a separate step and are kept off the
-     conversation screens. -->
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6431955508681504"
-     crossorigin="anonymous"></script>
+${o.ads ? AD_SNIPPET : ''}
 </head>
 <body>
 
@@ -328,6 +340,7 @@ ${g.lessons.map(id => lessonBlock(lesson(id))).join('\n\n<hr style="border:0;bor
     description: g.blurb,
     path: 'guides/' + g.slug + '.html',
     current: 'guides/', depth: 1,
+    ads: true,
     jsonld: articleSchema({ title: g.title + ' — Spanish for English speakers',
       description: g.blurb, path: 'guides/' + g.slug + '.html' }),
     body
@@ -368,6 +381,7 @@ write('guides/pronunciation.html', shell({
   title: 'Spanish pronunciation for English speakers — ten sounds that matter',
   description: 'The ten Spanish sounds English speakers get wrong by reflex: what your mouth does instead, what it should do, and the minimal pairs that prove it.',
   path: 'guides/pronunciation.html', current: 'guides/', depth: 1,
+  ads: true,
   jsonld: articleSchema({
     title: 'Spanish pronunciation for English speakers — ten sounds that matter',
     description: 'The ten Spanish sounds English speakers get wrong by reflex.',
@@ -727,6 +741,9 @@ const PAGES = [
 PAGES.forEach(p => write(p.slug + '.html', shell({
   title: p.title, description: p.description, path: p.slug + '.html',
   current: p.current, depth: 0,
+  // Only about.html: it is the one page here written as substantial prose
+  // about the app rather than a required legal or utility page.
+  ads: p.slug === 'about',
   // The app's own description belongs on the page that describes the app.
   jsonld: p.slug === 'about' ? APP_SCHEMA : null,
   body: p.body

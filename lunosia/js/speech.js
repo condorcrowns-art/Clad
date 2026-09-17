@@ -6,15 +6,27 @@
  * localhost — file:// will not get a microphone). Everything degrades to
  * typing if recognition is missing.
  *
- * Output has two engines, tried in this order:
+ * Output has three engines, tried in this order:
  *   1. Piper — a neural voice running on this machine, served by serve.ps1
  *      at /tts. Same origin, so no CORS; free, offline, and it sounds like
- *      a person rather than a 2009 satnav.
- *   2. speechSynthesis — the browser's own voices. Always there, quality
+ *      a person rather than a 2009 satnav. Only ever present when someone
+ *      has run the Windows setup script — never on the public site, because
+ *      there is no "this machine" for a visitor's browser to reach.
+ *   2. The hosted neural voice — Cloudflare Workers AI's MeloTTS, called at
+ *      /api/speak on this same site, the same edge function pattern as the
+ *      chat partner. This is what makes lunosia.com itself sound like a
+ *      person: without it, a visitor who has never run the Windows setup
+ *      gets whatever robotic voice their OS shipped, which is the actual
+ *      answer to "why is the voice bad on the site" — there was nothing
+ *      between "install Piper yourself" and "the built-in one".
+ *   3. speechSynthesis — the browser's own voices. Always there and the
+ *      final fallback if the other two are unavailable or fail; quality
  *      entirely at the mercy of what the operating system shipped.
  *
- * A saved voice is a plain browser voiceURI, or 'piper:<voice-id>'. If Piper
- * is installed and nothing is saved yet, Piper wins by default.
+ * A saved voice is a plain browser voiceURI, 'piper:<voice-id>', or
+ * 'hosted:<lang>'. Piper wins if installed; otherwise the hosted voice wins
+ * over the raw browser one, because it is very likely to sound better and
+ * costs the visitor nothing extra to use.
  */
 window.LUNOSIA = window.LUNOSIA || {};
 
@@ -29,11 +41,13 @@ window.LUNOSIA = window.LUNOSIA || {};
   };
 
   var PIPER_PREFIX = 'piper:';
+  var HOSTED_PREFIX = 'hosted:';
 
   /* Declared up here, not down with the Piper code, because the browser voice
    * list can settle synchronously during the bootstrap below and the ready
    * gate reads this the moment it does. */
   var piper = { available: false, voices: [], settled: false };
+  var hostedTTS = { available: false, settled: false };
 
   /* ── Browser voice inventory ────────────────────────────── */
 
@@ -115,12 +129,53 @@ window.LUNOSIA = window.LUNOSIA || {};
 
   function pickVoice(lang, uri) {
     var list = voicesFor(lang);
-    if (uri && uri.indexOf(PIPER_PREFIX) !== 0) {
+    if (uri && uri.indexOf(PIPER_PREFIX) !== 0 && uri.indexOf(HOSTED_PREFIX) !== 0) {
       var exact = list.filter(function (v) { return v.voiceURI === uri; })[0] ||
                   voices.filter(function (v) { return v.voiceURI === uri; })[0];
       if (exact) return exact;
     }
     return list[0] || null;
+  }
+
+  /* ── The hosted neural voice ────────────────────────────────
+   * Cloudflare Workers AI's MeloTTS, called at /api/speak — same origin, same
+   * edge-function pattern as the chat partner, and the same reason it exists:
+   * a visitor's browser cannot reach anything running on someone else's PC,
+   * so the only way the public site sounds like a person is a voice that
+   * lives on the site itself.
+   *
+   * One voice per language, not a catalogue like Piper's — MeloTTS ships a
+   * single speaker per language, so there is nothing to pick among and no
+   * per-character casting. It is still a large step up from the operating
+   * system's own voice, which is the actual gap this closes: previously a
+   * visitor who had never run the Windows setup had no better option than
+   * whatever their phone or laptop shipped. */
+
+  function probeHostedTTS() {
+    if (typeof fetch !== 'function' ||
+        typeof location === 'undefined' ||
+        !/^https?:$/.test(location.protocol)) {
+      hostedTTS.settled = true;
+      maybeReady();
+      return;
+    }
+
+    var done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      hostedTTS.settled = true;
+      maybeReady();
+    }
+    setTimeout(finish, 4000);
+
+    fetch('/api/speak', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.available) hostedTTS.available = true;
+        finish();
+      })
+      .catch(finish);
   }
 
   /* ── Piper inventory ────────────────────────────────────── */
@@ -193,6 +248,17 @@ window.LUNOSIA = window.LUNOSIA || {};
         engine: 'piper'
       };
     });
+    if (hostedTTS.available) {
+      out.push({
+        // Short on purpose: this sits inside a <select>, which truncates a
+        // long label with no way to see the rest. The full explanation is in
+        // the hint text under the dropdown, not in the option itself.
+        id: HOSTED_PREFIX + lang,
+        label: 'Neural voice (this site)',
+        quality: 'neural',
+        engine: 'hosted'
+      });
+    }
     voicesFor(lang).forEach(function (v) {
       out.push({
         id: v.voiceURI,
@@ -213,10 +279,12 @@ window.LUNOSIA = window.LUNOSIA || {};
   /* Enough to draw a useful list. A machine with Piper installed should not
    * stare at an empty dropdown for five seconds waiting on a browser voice
    * list that may turn out to be empty anyway. */
-  function usable() { return piper.settled && (voicesSettled || piper.available); }
+  function usable() {
+    return piper.settled && hostedTTS.settled && (voicesSettled || piper.available || hostedTTS.available);
+  }
 
-  /* Both inventories in. */
-  function complete() { return piper.settled && voicesSettled; }
+  /* All three inventories in. */
+  function complete() { return piper.settled && hostedTTS.settled && voicesSettled; }
 
   function call(fn) {
     try { fn(voices); } catch (e) { /* a broken listener is not our problem */ }
@@ -239,6 +307,7 @@ window.LUNOSIA = window.LUNOSIA || {};
   }
 
   probePiper();
+  probeHostedTTS();
 
   /* ── Text to speech ─────────────────────────────────────── */
 
@@ -266,34 +335,57 @@ window.LUNOSIA = window.LUNOSIA || {};
   }
 
   /* Which installed voice should play this character, and at what pitch. */
+  /* `engine` on the return value says which speak* function should run —
+   * 'piper', 'hosted', or null for the plain browser voice — decided here
+   * rather than guessed later from the shape of `id`, because a hosted id is
+   * just a language code and would otherwise be indistinguishable from
+   * "nothing picked". */
   function castVoice(lang, uri, character, roles, basePitch) {
-    var out = { id: null, pitch: basePitch || 1 };
+    var out = { id: null, pitch: basePitch || 1, engine: null };
     character = character || {};
     roles = roles || {};
 
     if (character.age && AGE_PITCH[character.age]) out.pitch *= AGE_PITCH[character.age];
 
     // An explicitly chosen browser voice always wins - it is a direct request.
-    if (uri && uri.indexOf(PIPER_PREFIX) !== 0) return out;
+    var isNeuralUri = uri && (uri.indexOf(PIPER_PREFIX) === 0 || uri.indexOf(HOSTED_PREFIX) === 0);
+    if (uri && !isNeuralUri) return out;
 
-    if (!piper.available) return out;
+    if (piper.available) {
+      out.engine = 'piper';
+      var list = piperVoicesFor(lang);
+      var fallback = (list[0] || {}).id || null;
 
-    var list = piperVoicesFor(lang);
-    var fallback = (list[0] || {}).id || null;
+      // A voice the person picked by hand, for everything.
+      var saved = (uri && uri.indexOf(PIPER_PREFIX) === 0) ? voiceById(uri.slice(PIPER_PREFIX.length)) : null;
 
-    // A voice the person picked by hand, for everything.
-    var saved = uri ? voiceById(uri.slice(PIPER_PREFIX.length)) : null;
+      if (character.gender) {
+        var cast = roles[character.gender] ? voiceById(roles[character.gender]) : null;
+        if (cast) { out.id = cast.id; return out; }
+        // Nothing tagged for this gender: shift whatever we do have towards it.
+        out.id = (saved && saved.id) || fallback;
+        out.pitch *= CROSS_GENDER_PITCH[character.gender] || 1;
+        return out;
+      }
 
-    if (character.gender) {
-      var cast = roles[character.gender] ? voiceById(roles[character.gender]) : null;
-      if (cast) { out.id = cast.id; return out; }
-      // Nothing tagged for this gender: shift whatever we do have towards it.
       out.id = (saved && saved.id) || fallback;
-      out.pitch *= CROSS_GENDER_PITCH[character.gender] || 1;
+      if (!out.id) out.engine = null;   // the fallback list was empty after all
       return out;
     }
 
-    out.id = (saved && saved.id) || fallback;
+    // No Piper installed. The hosted neural voice is the next best thing, and
+    // — on the public site, where nobody has installed Piper — the only
+    // reason a visitor hears anything better than their OS's own voice.
+    if (hostedTTS.available) {
+      out.engine = 'hosted';
+      out.id = lang;
+      // MeloTTS is one speaker per language: there is no separate voice to
+      // cast per gender, only this best-effort pitch nudge, applied by
+      // speeding up or slowing down playback rather than a true pitch shift.
+      if (character.gender) out.pitch *= CROSS_GENDER_PITCH[character.gender] || 1;
+      return out;
+    }
+
     return out;
   }
 
@@ -321,13 +413,29 @@ window.LUNOSIA = window.LUNOSIA || {};
     var mine = ++token;
     var lang = opts.lang || 'es';
     var cast = castVoice(lang, opts.voiceURI, opts.character, opts.voiceRoles, opts.pitchScale);
-    var piperId = cast.id;
 
-    if (piperId) {
+    if (cast.engine === 'piper') {
       speaking = true;
-      speakPiper(text, opts, mine, piperId, cast.pitch, function () {
+      speakPiper(text, opts, mine, cast.id, cast.pitch, function () {
         // Piper failed — the server may have stopped, or the voice file may
-        // have gone. Say it with a browser voice rather than saying nothing.
+        // have gone. Try the hosted voice before giving up on sounding good.
+        if (mine !== token) return;
+        var hosted = hostedTTS.available ? lang : null;
+        if (hosted) {
+          speakHosted(text, opts, mine, lang, cast.pitch, function () {
+            if (mine !== token) return;
+            speakBrowser(text, opts, mine);
+          });
+        } else {
+          speakBrowser(text, opts, mine);
+        }
+      });
+    } else if (cast.engine === 'hosted') {
+      speaking = true;
+      speakHosted(text, opts, mine, lang, cast.pitch, function () {
+        // The edge function 404s (no AI binding on this deploy yet), the
+        // model failed, or the network dropped. Same rule as Piper: say it
+        // with something rather than nothing.
         if (mine !== token) return;
         speakBrowser(text, opts, mine);
       });
@@ -376,6 +484,58 @@ window.LUNOSIA = window.LUNOSIA || {};
       var p = a.play();
       // Autoplay policy can reject this. speechSynthesis is treated more
       // leniently by browsers, so falling back actually helps here.
+      if (p && typeof p.catch === 'function') {
+        p['catch'](function () { finish(true); });
+      }
+    })['catch'](function () {
+      if (mine !== token) return;
+      speaking = false;
+      onFail();
+    });
+  }
+
+  /* Same shape as speakPiper — same failure handling, same audio-element
+   * bookkeeping — against the hosted endpoint instead of a local server.
+   *
+   * There is no server-side pitch control here (MeloTTS takes text and a
+   * language, nothing else), so age and cross-gender casting fall back to
+   * nudging HTMLMediaElement.playbackRate. Browsers keep pitch roughly level
+   * under a small rate change by default (preservesPitch defaults to true),
+   * so this reads mostly as "a bit quicker", not "a chipmunk" — an
+   * approximation, not a match for what Piper's true resample does, but
+   * better than every character sounding identical. */
+  function speakHosted(text, opts, mine, lang, pitch, onFail) {
+    fetch('/api/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, lang: (lang || 'es').slice(0, 2) })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('speak ' + r.status);
+      return r.blob();
+    }).then(function (blob) {
+      if (mine !== token) return;
+
+      var url = URL.createObjectURL(blob);
+      var a = new Audio(url);
+      try { a.playbackRate = Math.max(0.5, Math.min(2, (opts.rate != null ? opts.rate : 0.9) * (pitch || 1))); }
+      catch (e) { /* older browsers: play at normal speed rather than fail */ }
+      audioEl = a;
+
+      var settled = false;
+      function finish(failed) {
+        if (settled) return;
+        settled = true;
+        try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+        if (audioEl === a) { audioEl = null; speaking = false; }
+        if (mine !== token) return;
+        if (failed) { onFail(); return; }
+        if (opts.onend) opts.onend();
+      }
+
+      a.onended = function () { finish(false); };
+      a.onerror = function () { finish(true); };
+
+      var p = a.play();
       if (p && typeof p.catch === 'function') {
         p['catch'](function () { finish(true); });
       }
@@ -796,14 +956,21 @@ window.LUNOSIA = window.LUNOSIA || {};
     piper: piper,
     piperPrefix: PIPER_PREFIX,
     piperVoicesFor: piperVoicesFor,
+    hostedTTS: hostedTTS,
+    hostedPrefix: HOSTED_PREFIX,
     allVoicesFor: allVoicesFor,
     castVoice: castVoice,
     agePitch: AGE_PITCH,
-    // Exposed so the test harness can drive the probe without a network.
+    // Exposed so the test harness can drive the probes without a network.
     _setPiper: function (available, list) {
       piper.available = !!available;
       piper.voices = list || [];
       piper.settled = true;
+      maybeReady();
+    },
+    _setHostedTTS: function (available) {
+      hostedTTS.available = !!available;
+      hostedTTS.settled = true;
       maybeReady();
     }
   };
