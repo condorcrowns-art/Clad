@@ -51,7 +51,6 @@ Config.RATE_LIMITS = {
 	Equip      = { window = 1.0, max = 15 },
 	Rebirth    = { window = 5.0, max = 2  },
 	Code       = { window = 3.0, max = 3  },
-	Nuke       = { window = 1.0, max = 2  },
 }
 
 -- Data ---------------------------------------------------------------------

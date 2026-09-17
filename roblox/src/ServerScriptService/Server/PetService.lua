@@ -79,7 +79,7 @@ function PetService.grantHatches(player: Player, eggId: string, count: number)
 	local luck = StateService.luck(player, data)
 	local results = {}
 	for _ = 1, count do
-		if countPets(data) >= Pets.MAX_INVENTORY then break end
+		if countPets(data) >= StateService.maxInventory(player, data) then break end
 		local r = hatchOne(player, egg, data, luck)
 		if r then table.insert(results, r) end
 	end
@@ -115,21 +115,33 @@ local function hatch(player: Player, eggId: string)
 		return
 	end
 
-	if data.rebirths < egg.requiresRebirth then
-		StateService.notify(player, ("Requires %d Overclocks."):format(egg.requiresRebirth), "warn")
-		return
+	-- A pass can permanently unlock an egg regardless of sector/rebirth gates.
+	local unlockedByPass = false
+	for _, pass in ipairs(require(Shared.Products).passes) do
+		if pass.grantsEgg == egg.id and StateService.owns(player, pass.key) then
+			unlockedByPass = true
+			break
+		end
 	end
-	if not data.zones[egg.zone] then
-		StateService.notify(player, "Unlock that sector first.", "warn")
-		return
+
+	if not unlockedByPass then
+		if data.rebirths < egg.requiresRebirth then
+			StateService.notify(player, ("Requires %d Overclocks."):format(egg.requiresRebirth), "warn")
+			return
+		end
+		if not data.zones[egg.zone] then
+			StateService.notify(player, "Unlock that sector first.", "warn")
+			return
+		end
 	end
-	if countPets(data) >= Pets.MAX_INVENTORY then
+
+	if countPets(data) >= StateService.maxInventory(player, data) then
 		StateService.notify(player, "Familiar storage full \u{2014} delete some first.", "warn")
 		return
 	end
 
 	local count = if StateService.owns(player, "FastHatch") then 3 else 1
-	count = math.min(count, Pets.MAX_INVENTORY - countPets(data))
+	count = math.min(count, StateService.maxInventory(player, data) - countPets(data))
 	if count <= 0 then return end
 
 	local EconomyService = require(script.Parent.EconomyService)
@@ -209,6 +221,40 @@ local function deletePet(player: Player, uid: string)
 	end
 	data.pets[uid] = nil
 	StateService.push(player)
+end
+
+-- Hand a specific familiar to a player, once. Used by the familiar passes,
+-- which are the cheapest and best-converting item in the shop precisely
+-- because the player gets a real, permanent, equippable thing.
+function PetService.grantSpecific(player: Player, petId: string, variantId: string?): boolean
+	local data = DataService.get(player)
+	local def = Pets.byId[petId]
+	if not data or not def then return false end
+	if countPets(data) >= StateService.maxInventory(player, data) then
+		StateService.notify(player, "Familiar storage is full \u{2014} free a slot and rejoin to claim.", "warn")
+		return false
+	end
+
+	local variant = Pets.variantById[variantId or "normal"] or Pets.variants[1]
+	local uid = tostring(data.nextPetUid)
+	data.nextPetUid += 1
+	data.pets[uid] = {
+		id = def.id, variant = variant.id, locked = true,
+		serial = SerialService.mint(def.id), star = 0, xp = 0, level = 0,
+	}
+
+	local slots = StateService.petSlots(player, data)
+	if #data.equipped < slots then table.insert(data.equipped, uid) end
+
+	Remotes.event("HatchResult"):FireClient(player, { egg = "pass", pets = { {
+		uid = uid, id = def.id, variant = variant.id,
+		name = variant.name .. def.name,
+		mult = def.mult * variant.multScale,
+		weight = def.weight,
+		serial = data.pets[uid].serial,
+	} } })
+	StateService.push(player)
+	return true
 end
 
 function PetService.start()

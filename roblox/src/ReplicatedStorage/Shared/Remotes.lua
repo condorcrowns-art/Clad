@@ -19,8 +19,6 @@ Remotes.EVENTS = {
 	"DeletePet",    -- client -> server: { uid }
 	"Rebirth",      -- client -> server
 	"RedeemCode",   -- client -> server: string
-	"Nuke",         -- client -> server: gamepass ability
-	"ShatterAll",   -- client -> server: gamepass ability
 	"ClaimQuest",   -- client -> server: questId
 	"ClaimPlaytime",-- client -> server: index
 	"PromptPurchase", -- client -> server: { kind = "pass"|"product", key }

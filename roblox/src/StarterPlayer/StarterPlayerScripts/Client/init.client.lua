@@ -20,6 +20,7 @@ local HUD     = require(script.HUD)
 local Panels  = require(script.Panels)
 local Effects = require(script.Effects)
 local Trade   = require(script.Trade)
+local Sound   = require(script.Sound)
 
 local player = Players.LocalPlayer
 local mouse  = player:GetMouse()
@@ -85,16 +86,15 @@ end)
 Remotes.event("Effect").OnClientEvent:Connect(function(payload)
 	if payload.kind == "nodeBreak" then
 		Effects.nodeBreak(payload.position, payload.color, payload.amount or 0, payload.player == player.Name)
-	elseif payload.kind == "nuke" then
-		Effects.nuke(payload.position)
-	elseif payload.kind == "shatter" then
-		Effects.shatter(payload.position, payload.radius)
 	elseif payload.kind == "sell" then
 		Effects.shake(0.25, 0.15)
+		Sound.play("sell")
 	elseif payload.kind == "rebirth" then
 		Effects.shake(1.0, 0.5)
+		Sound.play("rebirth")
 	elseif payload.kind == "evolve" then
 		Effects.shake(0.6, 0.4)
+		Sound.play("evolve")
 	end
 end)
 
@@ -114,18 +114,58 @@ end)
 -- ------------------------------------------------------------------ input
 local lastSwing = 0
 
-local function nodeUnderMouse(): BasePart?
-	local target = mouse.Target
-	if target and target:IsA("BasePart") then
-		-- The glowing core is a child of the node; resolve up one level.
-		if target.Name == "Core" and target.Parent and target.Parent:IsA("BasePart") then
-			target = target.Parent :: BasePart
-		end
-		if target:GetAttribute("NodeIndex") ~= nil and not target:GetAttribute("Broken") then
-			return target
+-- Nodes are Models now (a crystal cluster), so a click can land on any shard.
+-- Resolve whatever was hit up to the part carrying the NodeIndex attribute.
+local function resolveNode(target: Instance?): BasePart?
+	if not target then return nil end
+	local model = target:FindFirstAncestorOfClass("Model")
+	if target:IsA("BasePart") and target:GetAttribute("NodeIndex") ~= nil then
+		return if target:GetAttribute("Broken") then nil else target
+	end
+	if model then
+		for _, child in ipairs(model:GetChildren()) do
+			if child:IsA("BasePart") and child:GetAttribute("NodeIndex") ~= nil then
+				return if child:GetAttribute("Broken") then nil else child
+			end
 		end
 	end
 	return nil
+end
+
+local function nodeUnderMouse(): BasePart?
+	return resolveNode(mouse.Target)
+end
+
+-- Egg pedestals: walk up and click. A physical egg you can see other players
+-- hatching at is worth far more than a row in a menu.
+local function eggUnderMouse(): (string?, BasePart?)
+	local target = mouse.Target
+	if not target then return nil, nil end
+	local candidates = { target }
+	local model = target:FindFirstAncestorOfClass("Model")
+	if model then
+		for _, child in ipairs(model:GetChildren()) do table.insert(candidates, child) end
+	end
+	for _, c in ipairs(candidates) do
+		if c:IsA("BasePart") then
+			local eggId = c:GetAttribute("EggId")
+			if type(eggId) == "string" then return eggId, c end
+		end
+	end
+	return nil, nil
+end
+
+local EGG_REACH = 26
+
+local function tryHatchAt(eggId: string, pad: BasePart): boolean
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then return false end
+	if (root.Position - pad.Position).Magnitude > EGG_REACH then
+		Notify.toast("Walk closer to the egg to hatch it.", "warn")
+		return false
+	end
+	Remotes.event("Hatch"):FireServer(eggId)
+	return true
 end
 
 local function nearestNode(maxDist: number): BasePart?
@@ -134,20 +174,50 @@ local function nearestNode(maxDist: number): BasePart?
 	if not root then return nil end
 
 	local best, bestDist = nil, maxDist
-	for _, model in ipairs(Workspace:GetChildren()) do
-		if model:IsA("Model") and model.Name:sub(1, 5) == "Zone_" then
-			local folder = model:FindFirstChild("Nodes")
+	for _, zoneModel in ipairs(Workspace:GetChildren()) do
+		if zoneModel:IsA("Model") and zoneModel.Name:sub(1, 5) == "Zone_" then
+			local folder = zoneModel:FindFirstChild("Nodes")
 			if folder then
-				for _, node in ipairs(folder:GetChildren()) do
-					if node:IsA("BasePart") and not node:GetAttribute("Broken") then
-						local d = (node.Position - root.Position).Magnitude
-						if d < bestDist then best, bestDist = node, d end
+				for _, nodeModel in ipairs(folder:GetChildren()) do
+					for _, node in ipairs(nodeModel:GetChildren()) do
+						if node:IsA("BasePart") and node:GetAttribute("NodeIndex") ~= nil
+							and not node:GetAttribute("Broken") then
+							local d = (node.Position - root.Position).Magnitude
+							if d < bestDist then best, bestDist = node, d end
+							break
+						end
 					end
 				end
 			end
 		end
 	end
 	return best
+end
+
+-- Nearest egg pedestal, for the AUTO-HATCH pass.
+local function nearestEgg(maxDist: number): (string?, BasePart?)
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then return nil, nil end
+	local bestId, bestPad, bestDist = nil, nil, maxDist
+	for _, zoneModel in ipairs(Workspace:GetChildren()) do
+		if zoneModel:IsA("Model") and zoneModel.Name:sub(1, 5) == "Zone_" then
+			for _, child in ipairs(zoneModel:GetChildren()) do
+				if child:IsA("Model") and child.Name:sub(1, 4) == "Egg_" then
+					for _, p in ipairs(child:GetChildren()) do
+						if p:IsA("BasePart") and type(p:GetAttribute("EggId")) == "string" then
+							local d = (p.Position - root.Position).Magnitude
+							if d < bestDist then
+								bestId, bestPad, bestDist = p:GetAttribute("EggId") :: string, p, d
+							end
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+	return bestId, bestPad
 end
 
 local function swing(node: BasePart?)
@@ -158,6 +228,7 @@ local function swing(node: BasePart?)
 	lastSwing = now
 
 	Remotes.event("Swing"):FireServer(node)
+	Sound.play("mine", 0.12)
 
 	-- Local swing animation so the feedback is instant rather than one
 	-- round-trip late.
@@ -178,16 +249,17 @@ UserInputService.InputBegan:Connect(function(input, processed)
 
 	if input.UserInputType == Enum.UserInputType.MouseButton1
 		or input.UserInputType == Enum.UserInputType.Touch then
+		local eggId, pad = eggUnderMouse()
+		if eggId and pad then
+			tryHatchAt(eggId, pad)
+			return
+		end
 		swing(nodeUnderMouse() or nearestNode(Config.MAX_SWING_REACH))
 		return
 	end
 
 	if input.KeyCode == Enum.KeyCode.E then
 		Remotes.event("Sell"):FireServer()
-	elseif input.KeyCode == Enum.KeyCode.N then
-		Remotes.event("Nuke"):FireServer()
-	elseif input.KeyCode == Enum.KeyCode.K then
-		Remotes.event("ShatterAll"):FireServer()
 	elseif input.KeyCode == Enum.KeyCode.M then
 		Panels.toggle("shop")
 	elseif input.KeyCode == Enum.KeyCode.P then
@@ -211,6 +283,19 @@ RunService.Heartbeat:Connect(function()
 		swing(nodeUnderMouse() or nearestNode(Config.MAX_SWING_REACH))
 	elseif state.passes and state.passes.AutoSwing then
 		swing(nearestNode(Config.MAX_SWING_REACH))
+	end
+end)
+
+-- AUTO-HATCH: stand at a pedestal and it hatches while you can afford it.
+task.spawn(function()
+	while true do
+		task.wait(1.2)
+		if state and state.passes and state.passes.AutoHatch and not Trade.isOpen() then
+			local eggId, pad = nearestEgg(EGG_REACH)
+			if eggId and pad then
+				Remotes.event("Hatch"):FireServer(eggId)
+			end
+		end
 	end
 end)
 
@@ -254,5 +339,7 @@ if UserInputService.TouchEnabled then
 		Remotes.event("Sell"):FireServer()
 	end)
 end
+
+Sound.startMusic()
 
 print("[Overclock] client ready")

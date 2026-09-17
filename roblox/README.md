@@ -54,18 +54,32 @@ never on a stat. So the entry rung is toys:
 
 | Pass | Price | Why it sells |
 |---|---|---|
-| ☢ **DATA NUKE** | **9 R$** | Press N, the whole sector detonates, the server sees your name. Impulse-priced. |
-| 💥 **SHATTER ALL** | 19 R$ | Press K, everything in 120 studs breaks |
-| ✨ Overclock Trail | 15 R$ | Pure drip, visible to others |
-| 👤 Big Head | 12 R$ | No stats. Sells anyway. |
+| 🐾 **STARTER FAMILIAR** | **25 R$** | Hands over a real, permanent, equipped familiar — not an abstract stat |
+| 📦 +150 Storage | 35 R$ | Room to hoard duplicates for fusion |
+| ✨ Chrome Companion | 79 R$ | A guaranteed Chrome variant most players never pull |
 
-Then convenience (49–149 R$: 2× Bits, Auto-Sell, Auto-Swing, +3 Pet Slots,
-Lucky Hatch, Triple Hatch), then identity (399 R$ VIP: 1.5× Bits, 1.5× luck,
-gold nametag, **offline earnings**, faster walk).
+Then convenience (49–169 R$: Triple Hatch, Auto-Mine, Auto-Sell, 2× Bits,
+2× Training, Auto-Hatch, +3 Familiar Slots, Lucky Hatch), an exclusive-egg
+pass (199 R$ Void Egg access), then identity (399 R$ VIP).
+
+Every item is simulator-native — more familiars, better familiars, faster
+familiars, more Bits, more storage. No destruction toys or novelty gimmicks:
+those teach players the shop sells jokes instead of progression.
 
 Repeatable dev products carry the top of the curve — Shard bundles, personal
 boosts, and a **Server 2× Bits** product that announces the buyer's name to
 everyone, which is the single highest-converting product type in the genre.
+
+### Art: bring your own
+
+Every model in the game is procedural by default — real crystal clusters,
+egg pedestals and 3D familiars, not coloured cubes — and **every one is
+swappable from a single table**. Drop a free Creator Store model into
+`ReplicatedStorage/GameAssets/Pets/<petId>` (or `/Nodes/<zoneId>`,
+`/Eggs/<eggId>`) and it replaces the procedural version in the world, the
+hatch reveal and the inventory at once. Sound and particle ids go in the same
+file. See [`docs/FREE_ASSETS.md`](docs/FREE_ASSETS.md) and
+`Shared/Assets.lua`.
 
 > **Every `id = 0` in `Products.lua` is a placeholder.** Create the passes and
 > products in the Creator Dashboard, paste the real IDs in, and nothing else
@@ -111,6 +125,8 @@ src/
     Quests.lua      daily pool, login streak, playtime chests
     Codes.lua       redeemable codes
     Remotes.lua     the single remote registry
+    Assets.lua      THE ASSET SWAP LAYER -- paste Toolbox ids here
+    ModelFactory.lua procedural familiars, eggs and crystal nodes
     Util/Format.lua number abbreviation (1.2Qa)
     Util/Rng.lua    weighted rolls with honest luck
 
@@ -140,6 +156,8 @@ src/
     Panels.lua       every menu (one window, swapped contents)
     Effects.lua      floating numbers, screen shake, hatch reveal
     Trade.lua        the two-pane trade window
+    Viewport.lua     renders real 3D familiars/eggs inside the UI
+    Sound.lua        audio, all ids from Assets.lua (silent until filled)
     Notify.lua       toasts + server-wide banner
 ```
 

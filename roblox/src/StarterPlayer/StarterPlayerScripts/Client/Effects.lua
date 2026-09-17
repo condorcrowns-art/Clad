@@ -12,7 +12,10 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Pets   = require(Shared.Pets)
 local Format = require(Shared.Util.Format)
 
-local Theme = require(script.Parent.Theme)
+local Theme    = require(script.Parent.Theme)
+local Viewport = require(script.Parent.Viewport)
+local Sound    = require(script.Parent.Sound)
+local Assets   = require(Shared.Assets)
 
 local Effects = {}
 local gui: ScreenGui
@@ -69,6 +72,8 @@ function Effects.nodeBreak(position: Vector3, color: Color3, amount: number, isM
 	part.Parent = Workspace
 
 	local emitter = Instance.new("ParticleEmitter")
+	local texture = Assets.particleId("nodeBreak")
+	if texture then emitter.Texture = texture end
 	emitter.Color = ColorSequence.new(color)
 	emitter.LightEmission = 1
 	emitter.Lifetime = NumberRange.new(0.3, 0.6)
@@ -103,47 +108,6 @@ function Effects.shake(intensity: number, duration: number)
 			(math.random() - 0.5) * intensity * falloff,
 			0)
 	end)
-end
-
-function Effects.nuke(position: Vector3)
-	local part = Instance.new("Part")
-	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(4, 4, 4)
-	part.Position = position
-	part.Anchored = true
-	part.CanCollide = false
-	part.Material = Enum.Material.Neon
-	part.Color = Color3.fromRGB(255, 180, 60)
-	part.Transparency = 0.15
-	part.Parent = Workspace
-
-	TweenService:Create(part, TweenInfo.new(0.7, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-		Size = Vector3.new(220, 220, 220),
-		Transparency = 1,
-	}):Play()
-	Debris:AddItem(part, 1)
-
-	local dist = (position - (Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position or position)).Magnitude
-	if dist < 300 then Effects.shake(1.6, 0.6) end
-end
-
-function Effects.shatter(position: Vector3, radius: number)
-	local ring = Instance.new("Part")
-	ring.Shape = Enum.PartType.Cylinder
-	ring.Size = Vector3.new(1, 4, 4)
-	ring.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
-	ring.Anchored = true
-	ring.CanCollide = false
-	ring.Material = Enum.Material.Neon
-	ring.Color = Color3.fromRGB(140, 220, 255)
-	ring.Transparency = 0.3
-	ring.Parent = Workspace
-	TweenService:Create(ring, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-		Size = Vector3.new(1, radius * 2, radius * 2),
-		Transparency = 1,
-	}):Play()
-	Debris:AddItem(ring, 0.8)
-	Effects.shake(0.8, 0.35)
 end
 
 -- ------------------------------------------------------------ hatch reveal
@@ -192,14 +156,22 @@ function Effects.hatchReveal(results)
 		Theme.corner(card, 16)
 		Theme.stroke(card, color, 3, 0.1)
 
+		-- Placeholder shown while the reveal spins; swapped for the real 3D
+		-- familiar at the reveal moment.
+		local iconHost = Theme.frame({
+			Position = UDim2.new(0, 10, 0, 22),
+			Size = UDim2.new(1, -20, 0, 100),
+			BackgroundTransparency = 1,
+			ZIndex = 22,
+			Parent = card,
+		})
 		local icon = Theme.label({
-			Position = UDim2.new(0, 0, 0, 30),
-			Size = UDim2.new(1, 0, 0, 90),
+			Size = UDim2.fromScale(1, 1),
 			Text = "\u{2753}",
 			TextSize = 64,
 			TextXAlignment = Enum.TextXAlignment.Center,
-			ZIndex = 22,
-			Parent = card,
+			ZIndex = 23,
+			Parent = iconHost,
 		})
 		local name = Theme.label({
 			Position = UDim2.new(0, 8, 0, 128),
@@ -223,7 +195,7 @@ function Effects.hatchReveal(results)
 			ZIndex = 22,
 			Parent = card,
 		})
-		cards[i] = { card = card, icon = icon, name = name, mult = mult, color = color, r = r, variant = variant }
+		cards[i] = { card = card, icon = icon, iconHost = iconHost, name = name, mult = mult, color = color, r = r, variant = variant }
 		Theme.pop(card, UDim2.new(0, 200, 0, 220))
 	end
 
@@ -240,18 +212,22 @@ function Effects.hatchReveal(results)
 			end
 		end)
 
+		Sound.play("hatch")
 		task.wait(1.4)
 		spinning = false
+		Sound.play("reveal")
 
 		for _, c in ipairs(cards) do
-			c.icon.Text = "\u{1F43E}"
-			c.icon.TextColor3 = c.color
-			c.name.Text = c.r.name
+			-- Reveal: drop the placeholder, render the actual familiar in 3D.
+			c.icon:Destroy()
+			Viewport.pet(c.iconHost, c.r.id, c.r.variant, 23)
+			c.name.Text = c.r.name .. (c.r.serial and ("  #" .. c.r.serial) or "")
 			c.mult.Text = "+" .. Format.mult(c.r.mult):gsub("x", "") .. " multiplier"
 			Theme.pop(c.card, UDim2.new(0, 200, 0, 220))
 
 			if c.variant and c.variant.id ~= "normal" then
 				Effects.shake(0.5, 0.3)
+				Sound.play("rare")
 			end
 		end
 

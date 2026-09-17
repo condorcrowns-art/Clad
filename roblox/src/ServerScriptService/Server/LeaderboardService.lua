@@ -5,12 +5,12 @@
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players          = game:GetService("Players")
-local Workspace        = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Format = require(Shared.Util.Format)
 
 local DataService  = require(script.Parent.DataService)
+local WorldService = require(script.Parent.WorldService)
 
 local LeaderboardService = {}
 
@@ -30,33 +30,25 @@ local function valueFor(key: string, data): number
 	return 0
 end
 
-local function buildBoard(index: number, board)
-	local origin = Vector3.new(-60 + (index - 1) * 60, 14, 100)
-	local part = Instance.new("Part")
-	part.Name = "Leaderboard_" .. board.key
-	part.Size = Vector3.new(44, 28, 2)
-	part.CFrame = CFrame.new(origin) * CFrame.Angles(0, math.rad(180), 0)
-	part.Anchored = true
-	part.Color = Color3.fromRGB(14, 16, 26)
-	part.Material = Enum.Material.SmoothPlastic
-	part.Parent = Workspace
-
+-- The physical boards are positioned by WorldService (relative to the starter
+-- sector's spawn, in a row, all facing the same way). This function only
+-- builds the SurfaceGui onto the backing part it is handed.
+local function buildBoardGui(backing: BasePart, board): Frame
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "Board"
 	gui.Face = Enum.NormalId.Back
-	gui.CanvasSize = Vector2.new(440, 280)
-	gui.AlwaysOnTop = false
+	gui.CanvasSize = Vector2.new(460, 300)
 	gui.LightInfluence = 0
-	gui.Parent = part
+	gui.Parent = backing
 
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.fromScale(1, 1)
-	frame.BackgroundColor3 = Color3.fromRGB(14, 16, 26)
+	frame.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
 	frame.BorderSizePixel = 0
 	frame.Parent = gui
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, 0, 0, 34)
+	title.Size = UDim2.new(1, 0, 0, 40)
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBlack
 	title.TextScaled = true
@@ -64,10 +56,18 @@ local function buildBoard(index: number, board)
 	title.Text = board.title
 	title.Parent = frame
 
+	local underline = Instance.new("Frame")
+	underline.Position = UDim2.new(0, 20, 0, 42)
+	underline.Size = UDim2.new(1, -40, 0, 2)
+	underline.BorderSizePixel = 0
+	underline.BackgroundColor3 = Color3.fromRGB(120, 220, 255)
+	underline.BackgroundTransparency = 0.5
+	underline.Parent = frame
+
 	local list = Instance.new("Frame")
 	list.Name = "List"
-	list.Position = UDim2.new(0, 8, 0, 38)
-	list.Size = UDim2.new(1, -16, 1, -46)
+	list.Position = UDim2.new(0, 12, 0, 50)
+	list.Size = UDim2.new(1, -24, 1, -58)
 	list.BackgroundTransparency = 1
 	list.Parent = frame
 
@@ -101,9 +101,11 @@ local function render(list: Frame, pages, fmt)
 end
 
 function LeaderboardService.start()
+	local backings = WorldService.buildLeaderboardWall(BOARDS)
 	local lists = {}
-	for i, board in ipairs(BOARDS) do
-		lists[board.key] = buildBoard(i, board)
+	for _, board in ipairs(BOARDS) do
+		local backing = backings[board.key]
+		if backing then lists[board.key] = buildBoardGui(backing, board) end
 		board.ods = DataStoreService:GetOrderedDataStore(board.store)
 	end
 
@@ -132,7 +134,7 @@ function LeaderboardService.start()
 				local ok, pages = pcall(function()
 					return board.ods:GetSortedAsync(false, TOP_N):GetCurrentPage()
 				end)
-				if ok and pages then
+				if ok and pages and lists[board.key] then
 					local rows = {}
 					for _, entry in ipairs(pages) do
 						local name = "Player"

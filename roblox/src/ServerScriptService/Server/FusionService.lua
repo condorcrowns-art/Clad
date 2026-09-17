@@ -124,6 +124,9 @@ function FusionService.awardXp(player: Player, data, amount: number)
 	if StateService.owns(player, "VIP") then
 		amount *= Progression.XP_VIP_BONUS
 	end
+	if StateService.owns(player, "FastTrain") then
+		amount *= 2
+	end
 	local each = math.max(1, math.floor(amount / #data.equipped))
 
 	local levelledUp = nil

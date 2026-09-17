@@ -47,6 +47,7 @@ local function onPlayerAdded(player: Player)
 	GamepassService.onJoin(player)   -- must run before rewards (VIP offline pay)
 
 	DataService.onJoin(player, function(data)
+		GamepassService.applyPassGrants(player)
 		QuestService.onJoin(player, data)
 		RewardService.onJoin(player, data)
 		StateService.buildLeaderstats(player, data)

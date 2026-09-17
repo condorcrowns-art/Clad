@@ -219,7 +219,7 @@ function HUD.mount(parent: ScreenGui, openPanel: (string) -> ())
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -16),
 		Size = UDim2.new(0, 620, 0, 22),
-		Text = "<b>CLICK</b> mine  \u{2022}  <b>E</b> sell  \u{2022}  <b>N</b> nuke  \u{2022}  <b>K</b> shatter  \u{2022}  <b>P</b> familiars  \u{2022}  <b>T</b> trade  \u{2022}  <b>R</b> overclock",
+		Text = "<b>CLICK</b> mine  \u{2022}  <b>E</b> sell  \u{2022}  <b>P</b> familiars  \u{2022}  <b>T</b> trade  \u{2022}  <b>R</b> overclock",
 		TextSize = 13,
 		TextColor3 = Theme.TEXT_DIM,
 		TextXAlignment = Enum.TextXAlignment.Center,

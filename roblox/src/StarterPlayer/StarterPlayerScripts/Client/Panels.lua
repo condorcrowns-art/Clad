@@ -22,7 +22,8 @@ local Trading     = require(Shared.Trading)
 local Remotes  = require(Shared.Remotes)
 local Format   = require(Shared.Util.Format)
 
-local Theme = require(script.Parent.Theme)
+local Theme    = require(script.Parent.Theme)
+local Viewport = require(script.Parent.Viewport)
 
 local Panels = {}
 
@@ -150,25 +151,34 @@ local function row(opts)
 	Theme.stroke(f, opts.color or Theme.BG_LIFT, 2, 0.5)
 
 	local chip = Theme.frame({
-		Position = UDim2.new(0, 10, 0.5, -22),
-		Size = UDim2.new(0, 44, 0, 44),
+		Position = UDim2.new(0, 10, 0.5, -28),
+		Size = UDim2.new(0, 56, 0, 56),
 		BackgroundColor3 = (opts.color or Theme.ACCENT):Lerp(Theme.BG, 0.55),
 		ZIndex = 6,
 		Parent = f,
 	})
 	Theme.corner(chip, 10)
-	Theme.label({
-		Size = UDim2.fromScale(1, 1),
-		Text = opts.icon or "\u{25C6}",
-		TextSize = 22, TextXAlignment = Enum.TextXAlignment.Center,
-		TextColor3 = opts.color or Theme.ACCENT,
-		ZIndex = 6,
-		Parent = chip,
-	})
+
+	-- A row can render a real 3D model instead of an emoji. Used for every
+	-- familiar and every egg, which is most of what players look at.
+	if opts.viewportPet then
+		Viewport.pet(chip, opts.viewportPet.id, opts.viewportPet.variant, 7)
+	elseif opts.viewportEgg then
+		Viewport.egg(chip, opts.viewportEgg.id, opts.viewportEgg.color, opts.viewportEgg.accent, 7)
+	else
+		Theme.label({
+			Size = UDim2.fromScale(1, 1),
+			Text = opts.icon or "\u{25C6}",
+			TextSize = 22, TextXAlignment = Enum.TextXAlignment.Center,
+			TextColor3 = opts.color or Theme.ACCENT,
+			ZIndex = 6,
+			Parent = chip,
+		})
+	end
 
 	Theme.label({
-		Position = UDim2.new(0, 66, 0, 10),
-		Size = UDim2.new(1, -240, 0, 22),
+		Position = UDim2.new(0, 76, 0, 10),
+		Size = UDim2.new(1, -250, 0, 22),
 		Text = opts.title,
 		Font = Theme.FONT_BLACK, TextSize = 17,
 		TextColor3 = opts.color or Theme.TEXT,
@@ -176,7 +186,7 @@ local function row(opts)
 		Parent = f,
 	})
 	Theme.label({
-		Position = UDim2.new(0, 66, 0, 32),
+		Position = UDim2.new(0, 76, 0, 32),
 		Size = UDim2.new(1, -240, 0, opts.height and (opts.height - 40) or 26),
 		Text = opts.subtitle or "",
 		TextSize = 13.5, TextColor3 = Theme.TEXT_DIM,
@@ -288,9 +298,14 @@ builders.eggs = function()
 		local names = {}
 		for _, p in ipairs(Pets.byEgg[egg.id] or {}) do table.insert(names, p.name) end
 
+		local zoneColor = Zones.byId[egg.zone] and Zones.byId[egg.zone].color or Theme.ACCENT
 		row({
 			order = egg.order,
-			icon = isRobux and "\u{1F48E}" or "\u{1F95A}",
+			viewportEgg = {
+				id = egg.id,
+				color = zoneColor:Lerp(Color3.new(1, 1, 1), 0.25),
+				accent = isRobux and Theme.GOLD or zoneColor,
+			},
 			color = isRobux and Theme.GOLD or Theme.ACCENT_2,
 			height = 84,
 			title = egg.name .. (isRobux and "   \u{2B50} EXCLUSIVE" or ""),
@@ -326,7 +341,7 @@ builders.pets = function()
 	row({
 		order = 0, icon = "\u{1F43E}", color = Theme.ACCENT_2, height = 56,
 		title = ("Equipped %d / %d  \u{2022}  %s multiplier"):format(#state.equipped, state.slots, Format.mult(state.petMult)),
-		subtitle = ("%d / %d familiars stored."):format(count, Pets.MAX_INVENTORY),
+		subtitle = ("%d / %d familiars stored."):format(count, state.maxPets or Pets.MAX_INVENTORY),
 		button = (state.passes and state.passes.PetSlots) and "MAX SLOTS" or "+3 SLOTS",
 		buttonColor = Theme.GOLD,
 		disabled = state.passes and state.passes.PetSlots,
@@ -382,7 +397,8 @@ builders.pets = function()
 		end
 
 		local f = row({
-			order = i, icon = owned.locked and "\u{1F512}" or "\u{1F43E}",
+			order = i,
+			viewportPet = { id = owned.id, variant = owned.variant },
 			height = 92,
 			color = if tier and tier.label ~= "" then tier.color
 				elseif entry.variant.id ~= "normal" then entry.variant.color
@@ -524,7 +540,12 @@ builders.robux = function()
 	for i, pass in ipairs(Products.passes) do
 		local owned = state.passes and state.passes[pass.key]
 		row({
-			order = i, icon = pass.icon,
+			order = i,
+			icon = pass.icon,
+			viewportPet = pass.grantsPet and {
+				id = pass.grantsPet,
+				variant = pass.key == "ChromePet" and "chrome" or "normal",
+			} or nil,
 			color = if pass.tier == "vip" then Theme.GOLD elseif pass.tier == "toy" then Theme.ACCENT_2 else Theme.ACCENT,
 			height = 76,
 			title = pass.name,

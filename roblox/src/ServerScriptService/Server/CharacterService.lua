@@ -67,32 +67,24 @@ local function applyCosmetics(player: Player, char: Model)
 
 	local root = char:FindFirstChild("HumanoidRootPart") :: BasePart?
 
-	if StateService.owns(player, "Trail") and root then
-		local a0 = Instance.new("Attachment"); a0.Position = Vector3.new(0, 1.2, 0);  a0.Parent = root
-		local a1 = Instance.new("Attachment"); a1.Position = Vector3.new(0, -1.2, 0); a1.Parent = root
+	-- VIP aura: a gold ring that follows the player. Cosmetics are built
+	-- server-side so OTHER players see them -- half the value of a paid
+	-- cosmetic is being seen wearing it.
+	if StateService.owns(player, "VIP") and root then
+		local a0 = Instance.new("Attachment"); a0.Position = Vector3.new(0, 1.4, 0);  a0.Parent = root
+		local a1 = Instance.new("Attachment"); a1.Position = Vector3.new(0, -1.4, 0); a1.Parent = root
 		local trail = Instance.new("Trail")
 		trail.Attachment0, trail.Attachment1 = a0, a1
-		trail.Lifetime = 0.9
+		trail.Lifetime = 0.8
 		trail.LightEmission = 1
-		trail.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 220, 255)),
-			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(200, 140, 255)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 120, 200)),
-		})
+		trail.Color = ColorSequence.new(
+			Color3.fromRGB(255, 215, 0),
+			Color3.fromRGB(255, 150, 60))
 		trail.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0, 0.2),
 			NumberSequenceKeypoint.new(1, 1),
 		})
 		trail.Parent = root
-	end
-
-	if StateService.owns(player, "BigHead") then
-		local head = char:FindFirstChild("Head") :: BasePart?
-		if head then
-			head.Size = head.Size * 2.2
-			local mesh = head:FindFirstChildOfClass("SpecialMesh")
-			if mesh then mesh.Scale = mesh.Scale * 2.2 end
-		end
 	end
 
 	-- VIP walkspeed: small, but it is felt on every single trip to the Uplink,

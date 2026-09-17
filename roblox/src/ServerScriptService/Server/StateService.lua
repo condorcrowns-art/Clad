@@ -17,6 +17,7 @@ local Pets     = require(Shared.Pets)
 local Progression = require(Shared.Progression)
 local Rebirths = require(Shared.Rebirths)
 local Remotes  = require(Shared.Remotes)
+local Products = require(Shared.Products)
 
 local DataService = require(script.Parent.DataService)
 
@@ -100,6 +101,14 @@ function StateService.capacity(player: Player, data): number
 	return cap
 end
 
+-- Familiar storage cap. A pass raises it, so nothing may read
+-- Pets.MAX_INVENTORY directly any more.
+function StateService.maxInventory(player: Player, data): number
+	local cap = Pets.MAX_INVENTORY
+	if owns(player, "PetStorage") then cap += Products.STORAGE_BONUS end
+	return cap
+end
+
 function StateService.petSlots(player: Player, data): number
 	local slots = Pets.EQUIP_BASE
 	if owns(player, "PetSlots") then slots += Pets.EQUIP_GAMEPASS_BONUS end
@@ -166,6 +175,7 @@ function StateService.snapshot(player: Player)
 		petMult   = StateService.petMultiplier(data),
 		luck      = StateService.luck(player, data),
 		slots     = StateService.petSlots(player, data),
+		maxPets   = StateService.maxInventory(player, data),
 		cooldown  = StateService.swingCooldown(player, data),
 		passes    = StateService.passes[player] or {},
 		serverBoost = StateService.serverBoostUntil,

@@ -53,6 +53,7 @@ local function template()
 		totalBits = 0,
 		boosts    = { bits = 0, luck = 0 },   -- os.time() expiries
 		receipts  = {},             -- PurchaseId -> timestamp (see GamepassService)
+		passGrants= {},             -- passKey -> true, for one-time pass rewards
 		lastLeave = 0,
 		-- session lock
 		_lock     = nil,

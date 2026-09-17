@@ -42,6 +42,27 @@ function GamepassService.onJoin(player: Player)
 	refreshPasses(player)
 end
 
+-- One-time rewards attached to a pass (a free familiar, an unlocked egg).
+-- Applied on join and after any purchase, and recorded in the player's own
+-- save so it can never be claimed twice.
+function GamepassService.applyPassGrants(player: Player)
+	local data = DataService.get(player)
+	if not data then return end
+	data.passGrants = data.passGrants or {}
+
+	for _, pass in ipairs(Products.passes) do
+		if pass.grantsPet and StateService.owns(player, pass.key) and not data.passGrants[pass.key] then
+			local PetService = require(script.Parent.PetService)
+			-- The Chrome pass grants the Chrome variant specifically.
+			local variant = if pass.key == "ChromePet" then "chrome" else "normal"
+			if PetService.grantSpecific(player, pass.grantsPet, variant) then
+				data.passGrants[pass.key] = true
+				StateService.notify(player, ("%s claimed! It's locked so you can't lose it."):format(pass.name), "good")
+			end
+		end
+	end
+end
+
 -- ---------------------------------------------------------------- grants
 local function grantProduct(player: Player, product): boolean
 	local data = DataService.get(player)
@@ -142,6 +163,7 @@ function GamepassService.start()
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
 		if not purchased then return end
 		refreshPasses(player)
+		GamepassService.applyPassGrants(player)
 		local data = DataService.get(player)
 		if data then
 			local RebirthService = require(script.Parent.RebirthService)
