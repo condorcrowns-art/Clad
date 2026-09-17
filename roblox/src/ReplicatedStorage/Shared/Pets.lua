@@ -38,6 +38,12 @@ local Eggs: { Egg } = {
 	{ id="egg_void",    name="Void Egg",       order=6, cost=170_000_000,currency="Bits",   zone="void",     requiresRebirth=2 },
 	{ id="egg_solar",   name="Solar Egg",      order=7, cost=2e9,        currency="Bits",   zone="solar",    requiresRebirth=4 },
 	{ id="egg_omega",   name="OMEGA Egg",      order=8, cost=120,        currency="Shards", zone="quantum",  requiresRebirth=7 },
+	-- Robux-only egg. No Bits price, no sector gate, no rebirth gate -- it is
+	-- bought directly with a developer product. Its pool is strictly stronger
+	-- than anything grindable at the same point in the game, which is what
+	-- makes it worth buying, but it is NOT stronger than the late Bits eggs, so
+	-- it accelerates rather than replaces the grind.
+	{ id="egg_prime",   name="PRIME Egg",      order=9, cost=0,          currency="Robux",  zone="boot",     requiresRebirth=0 },
 }
 
 -- Rarity ladder per egg: ~55 / 27 / 12 / 5 / 0.9 / 0.1
@@ -107,6 +113,16 @@ local Pets: { Pet } = {
 	{ id="superpos",   name="Superposition",egg="egg_omega", weight=W.epic,     mult=460000,  luck=0.30, color=Color3.fromRGB(160,200,255) },
 	{ id="observer",   name="THE OBSERVER", egg="egg_omega", weight=W.legend,   mult=1_050_000,luck=0.60,color=Color3.fromRGB(210,190,255) },
 	{ id="overclock",  name="OVERCLOCK",    egg="egg_omega", weight=W.mythic,   mult=2_500_000,luck=1.25,color=Color3.fromRGB(255,255,255) },
+
+	-- PRIME Egg (Robux) -- exclusive species, never obtainable any other way.
+	-- Exclusivity is most of the value: a player who owns one is visibly
+	-- someone who supported the game.
+	{ id="prime_spark", name="Prime Spark",  egg="egg_prime", weight=W.common,   mult=900,      luck=0.04, color=Color3.fromRGB(255,240,180) },
+	{ id="prime_core",  name="Prime Core",   egg="egg_prime", weight=W.uncommon, mult=2_400,    luck=0.08, color=Color3.fromRGB(255,225,150) },
+	{ id="prime_wyrm",  name="Prime Wyrm",   egg="egg_prime", weight=W.rare,     mult=6_500,    luck=0.14, color=Color3.fromRGB(255,205,110) },
+	{ id="prime_titan", name="Prime Titan",  egg="egg_prime", weight=W.epic,     mult=17_000,   luck=0.22, color=Color3.fromRGB(255,180,90)  },
+	{ id="prime_king",  name="PRIME SOVEREIGN",egg="egg_prime",weight=W.legend,  mult=48_000,   luck=0.45, color=Color3.fromRGB(255,140,60)  },
+	{ id="prime_god",   name="THE PRIME",    egg="egg_prime", weight=W.mythic,   mult=150_000,  luck=0.95, color=Color3.fromRGB(255,255,240) },
 }
 
 local byId: { [string]: Pet } = {}

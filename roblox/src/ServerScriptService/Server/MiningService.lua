@@ -13,12 +13,14 @@ local Zones    = require(Shared.Zones)
 local Products = require(Shared.Products)
 local Remotes  = require(Shared.Remotes)
 local Format   = require(Shared.Util.Format)
+local Progression = require(Shared.Progression)
 
 local DataService  = require(script.Parent.DataService)
 local StateService = require(script.Parent.StateService)
 local WorldService = require(script.Parent.WorldService)
 local AntiCheat    = require(script.Parent.AntiCheat)
 local QuestService = require(script.Parent.QuestService)
+local FusionService = require(script.Parent.FusionService)
 
 local MiningService = {}
 
@@ -65,6 +67,8 @@ local function mine(player: Player, node: BasePart, freeSwing: boolean?): boolea
 	WorldService.breakNode(node)
 	data.stats.mined += 1
 	QuestService.progress(player, "mine", 1)
+
+	FusionService.awardXp(player, data, Progression.XP_PER_NODE)
 
 	Remotes.event("Effect"):FireAllClients({
 		kind = "nodeBreak",

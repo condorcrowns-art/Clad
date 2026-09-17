@@ -73,6 +73,10 @@ local function grantProduct(player: Player, product): boolean
 			:format(player.Name, Format.time(product.amount)))
 		for _, p in ipairs(Players:GetPlayers()) do StateService.push(p) end
 
+	elseif product.kind == "egg" then
+		local PetService = require(script.Parent.PetService)
+		PetService.grantHatches(player, product.eggId :: string, product.amount)
+
 	else
 		return false
 	end

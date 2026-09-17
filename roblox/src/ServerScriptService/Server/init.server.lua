@@ -23,6 +23,8 @@ local GamepassService   = require(script.GamepassService)
 local CodeService       = require(script.CodeService)
 local LeaderboardService= require(script.LeaderboardService)
 local CharacterService  = require(script.CharacterService)
+local FusionService     = require(script.FusionService)
+local TradeService      = require(script.TradeService)
 
 print(("[%s] booting..."):format(Config.GAME_NAME))
 
@@ -37,6 +39,8 @@ RewardService.start()
 GamepassService.start()
 CodeService.start()
 LeaderboardService.start()
+FusionService.start()
+TradeService.start()
 
 -- --------------------------------------------------------------- players
 local function onPlayerAdded(player: Player)

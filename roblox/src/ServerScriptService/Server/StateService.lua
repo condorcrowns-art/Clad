@@ -14,6 +14,7 @@ local Tools    = require(Shared.Tools)
 local Buffers  = require(Shared.Buffers)
 local Zones    = require(Shared.Zones)
 local Pets     = require(Shared.Pets)
+local Progression = require(Shared.Progression)
 local Rebirths = require(Shared.Rebirths)
 local Remotes  = require(Shared.Remotes)
 
@@ -50,7 +51,12 @@ function StateService.petMultiplier(data): number
 			local def = Pets.byId[owned.id]
 			local variant = Pets.variantById[owned.variant or "normal"]
 			if def and variant then
-				total += def.mult * variant.multScale
+				-- Single source of truth: fusion stars, evolution stage and
+				-- level all fold in here via Progression.petPower, so the trade
+				-- window, the pet list and the server can never disagree.
+				total += Progression.petPower(
+					def.mult, variant.multScale,
+					owned.star or 0, owned.level or 0)
 			end
 		end
 	end

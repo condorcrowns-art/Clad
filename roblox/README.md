@@ -35,6 +35,10 @@ reasons to run it again.
 | 7-day login streak | Day 7 = 400K + 8 Shards | Week-one retention has a finish line |
 | Playtime chests (5m → 4h) | Escalating in-session payouts | Makes the *session* long |
 | Global leaderboards | Physical boards, top 15 | Long-tail grind for players past the curve |
+| **Trading** | Player-to-player, anti-scam confirm flow | Duplicates become currency; creates a player-run economy |
+| **Fusion (★)** | Burn duplicates to raise a familiar's star | Gives volume hatching a destination |
+| **Evolution** | Familiars earn XP while equipped and evolve at Lv.10 / Lv.25 | Rewards time played, not just luck |
+| **Serial numbers** | Every familiar minted gets a permanent global serial | "THE PRIME #7" — a chase that costs nothing to produce |
 | Codes | One per update | Every code drop = a social post = a session |
 | Server-wide announcements | Rare hatches, rebirths, unlocks | Makes a server feel alive and busy |
 
@@ -99,7 +103,9 @@ src/
     Zones.lua       9 sectors: cost, multiplier, colour, rebirth gate
     Tools.lua       11 chips (swing power + swing speed)
     Buffers.lua     11 backpacks (capacity)
-    Pets.lua        48 familiars across 8 eggs + 4 variants
+    Pets.lua        54 familiars across 9 eggs + 4 variants
+    Progression.lua fusion stars, evolution XP curve, serial tiers
+    Trading.lua     trade rules, shared so the client can pre-validate
     Rebirths.lua    cost/shard/multiplier curves + titles
     Products.lua    the whole monetisation ladder
     Quests.lua      daily pool, login streak, playtime chests
@@ -123,6 +129,9 @@ src/
     CodeService         code redemption
     AntiCheat           token-bucket rate limits + payload guards
     CharacterService    chip model, trail, big head, VIP perks
+    SerialService       global serial minting (block-reserved, throttle-safe)
+    FusionService       fusion, evolution XP, pet locking
+    TradeService        two-party trading with atomic, re-validated swaps
 
   StarterPlayer/.../Client/
     init.client.lua  input, hold-to-mine, mobile buttons
@@ -130,6 +139,7 @@ src/
     HUD.lua          currencies, buffer bar, menu rail, boost timers
     Panels.lua       every menu (one window, swapped contents)
     Effects.lua      floating numbers, screen shake, hatch reveal
+    Trade.lua        the two-pane trade window
     Notify.lua       toasts + server-wide banner
 ```
 
@@ -160,6 +170,9 @@ Everything a designer touches is a table in `Shared/`. Some starting points:
 - **Nobody rebirths?** `Rebirths.BASE_COST` is too high relative to zone 4 income.
 - **Hatches feel bad?** Widen the gap between `W.common` and `W.legend` in
   `Pets.lua` rather than adding more pets.
+
+Free art from the Creator Store drops in without code changes — see
+[`docs/FREE_ASSETS.md`](docs/FREE_ASSETS.md).
 
 See [`docs/BALANCE.md`](docs/BALANCE.md) for the full curve reasoning and
 [`docs/LAUNCH.md`](docs/LAUNCH.md) for the ship checklist.

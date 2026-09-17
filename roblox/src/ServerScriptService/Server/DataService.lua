@@ -52,6 +52,7 @@ local function template()
 		bestBits  = 0,
 		totalBits = 0,
 		boosts    = { bits = 0, luck = 0 },   -- os.time() expiries
+		receipts  = {},             -- PurchaseId -> timestamp (see GamepassService)
 		lastLeave = 0,
 		-- session lock
 		_lock     = nil,
@@ -87,6 +88,22 @@ local function migrate(data)
 		end
 		data.version = 1
 	end
+	-- Familiars gained fusion stars, evolution XP and serials after launch.
+	-- Backfill them so a returning player's old pets are valid, never nil-indexed.
+	if type(data.pets) == "table" then
+		for _, owned in pairs(data.pets) do
+			if type(owned) == "table" then
+				owned.star   = owned.star or 0
+				owned.xp     = owned.xp or 0
+				owned.level  = owned.level or 0
+				owned.locked = owned.locked or false
+				-- `serial` is deliberately left nil for pre-serial familiars:
+				-- minting one now would hand an old pet a misleadingly high
+				-- number, and the UI shows "unserialised" cleanly.
+			end
+		end
+	end
+
 	-- Defensive top-up for any field added without a version bump.
 	local base = template()
 	for k, v in pairs(base) do

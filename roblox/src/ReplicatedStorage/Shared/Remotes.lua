@@ -24,12 +24,21 @@ Remotes.EVENTS = {
 	"ClaimQuest",   -- client -> server: questId
 	"ClaimPlaytime",-- client -> server: index
 	"PromptPurchase", -- client -> server: { kind = "pass"|"product", key }
+	"FusePet",      -- client -> server: { uid } -- fuse duplicates into it
+	"LockPet",      -- client -> server: { uid, locked }
+	"TradeRequest", -- client -> server: { target = userId }
+	"TradeRespond", -- client -> server: { accept = bool }
+	"TradeOffer",   -- client -> server: { uid, add = bool }
+	"TradeConfirm", -- client -> server: { confirmed = bool }
+	"TradeCancel",  -- client -> server
 
 	"StateUpdate",  -- server -> client: partial player state
 	"Notify",       -- server -> client: { text, color, kind }
 	"HatchResult",  -- server -> client: { pets = {...} }
 	"Effect",       -- server -> client: { kind, ... } cosmetic only
 	"Announce",     -- server -> client: server-wide banner
+	"TradeUpdate",  -- server -> client: full trade window state (or nil to close)
+	"TradeInvite",  -- server -> client: { from, fromName }
 }
 
 Remotes.FUNCTIONS = {

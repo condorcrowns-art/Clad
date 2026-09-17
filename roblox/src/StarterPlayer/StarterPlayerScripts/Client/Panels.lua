@@ -6,6 +6,8 @@
 -- times is how UI drifts out of sync with itself.
 
 
+local Players = game:GetService("Players")
+
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Tools    = require(Shared.Tools)
 local Buffers  = require(Shared.Buffers)
@@ -14,7 +16,9 @@ local Pets     = require(Shared.Pets)
 local Quests   = require(Shared.Quests)
 local Products = require(Shared.Products)
 local Rebirths = require(Shared.Rebirths)
-local Codes    = require(Shared.Codes)
+local Codes       = require(Shared.Codes)
+local Progression = require(Shared.Progression)
+local Trading     = require(Shared.Trading)
 local Remotes  = require(Shared.Remotes)
 local Format   = require(Shared.Util.Format)
 
@@ -39,6 +43,7 @@ local TITLES = {
 	rebirth = { "OVERCLOCK",       "Reset your Bits, chip, buffer and sectors \u{2014} keep your familiars." },
 	robux   = { "PREMIUM SHOP",    "Passes are permanent. Thank you for supporting the game!" },
 	codes   = { "CODES",           "Follow the game's socials for new codes." },
+	trade   = { "TRADE",           "Trade familiars with players nearby. Lock anything you never want to lose." },
 }
 
 -- ------------------------------------------------------------------ mount
@@ -274,7 +279,8 @@ builders.eggs = function()
 		subtitle = "Luck raises the odds of rare familiars and rare variants (Chrome / Corrupt / Golden).",
 	})
 	for _, egg in ipairs(Pets.eggs) do
-		local locked = state.rebirths < egg.requiresRebirth or not state.zones[egg.zone]
+		local isRobux = egg.currency == "Robux"
+		local locked = (not isRobux) and (state.rebirths < egg.requiresRebirth or not state.zones[egg.zone])
 		local have = if egg.currency == "Shards" then state.shards else state.bits
 		local multi = state.passes and state.passes.FastHatch
 
@@ -283,17 +289,29 @@ builders.eggs = function()
 		for _, p in ipairs(Pets.byEgg[egg.id] or {}) do table.insert(names, p.name) end
 
 		row({
-			order = egg.order, icon = "\u{1F95A}", color = Theme.ACCENT_2,
+			order = egg.order,
+			icon = isRobux and "\u{1F48E}" or "\u{1F95A}",
+			color = isRobux and Theme.GOLD or Theme.ACCENT_2,
 			height = 84,
-			title = egg.name,
+			title = egg.name .. (isRobux and "   \u{2B50} EXCLUSIVE" or ""),
 			subtitle = ("%s\n%s"):format(
 				table.concat(names, "  \u{2022}  "),
-				locked and "LOCKED \u{2014} unlock the matching sector first" or ""),
-			button = locked and "LOCKED" or ("%s %s%s"):format(
-				Format.short(egg.cost * (multi and 3 or 1)), egg.currency, multi and "  (x3)" or ""),
-			buttonColor = if (not locked and have >= egg.cost) then Theme.GOOD else Theme.BG_LIFT,
-			disabled = locked or have < egg.cost,
-			onClick = function() Remotes.event("Hatch"):FireServer(egg.id) end,
+				isRobux and "Robux only \u{2014} these familiars are not obtainable any other way."
+					or (locked and "LOCKED \u{2014} unlock the matching sector first" or "")),
+			button = if isRobux then "BUY \u{2192}"
+				elseif locked then "LOCKED"
+				else ("%s %s%s"):format(Format.short(egg.cost * (multi and 3 or 1)), egg.currency, multi and "  (x3)" or ""),
+			buttonColor = if isRobux then Theme.GOLD
+				elseif (not locked and have >= egg.cost) then Theme.GOOD
+				else Theme.BG_LIFT,
+			disabled = (not isRobux) and (locked or have < egg.cost),
+			onClick = function()
+				if isRobux then
+					Panels.open("robux")
+				else
+					Remotes.event("Hatch"):FireServer(egg.id)
+				end
+			end,
 		})
 	end
 end
@@ -323,26 +341,104 @@ builders.pets = function()
 		local def = Pets.byId[owned.id]
 		local variant = Pets.variantById[owned.variant or "normal"]
 		if def and variant then
-			table.insert(sorted, { uid = uid, def = def, variant = variant, mult = def.mult * variant.multScale })
+			table.insert(sorted, {
+				uid = uid, def = def, variant = variant, owned = owned,
+				mult = Progression.petPower(def.mult, variant.multScale, owned.star or 0, owned.level or 0),
+			})
 		end
 	end
 	table.sort(sorted, function(a, b) return a.mult > b.mult end)
 
 	for i, entry in ipairs(sorted) do
 		local isEquipped = equipped[entry.uid]
-		row({
-			order = i, icon = "\u{1F43E}",
-			color = if entry.variant.id == "normal" then entry.def.color else entry.variant.color,
-			title = entry.variant.name .. entry.def.name,
-			subtitle = ("+%s Bits multiplier  \u{2022}  +%.2f luck%s")
-				:format(Format.mult(entry.mult):gsub("x", ""), entry.def.luck,
-					entry.variant.id ~= "normal" and ("  \u{2022}  %s\u{00D7}%d variant"):format(entry.variant.name, entry.variant.multScale) or ""),
+		local owned = entry.owned
+		local star = owned.star or 0
+		local level = owned.level or 0
+		local evo = Progression.evoFor(level)
+		local tier = owned.serial and Progression.serialTier(owned.serial) or nil
+
+		-- XP progress toward the next level, shown as a fraction rather than a
+		-- bar: the pet list is dense and a number reads faster here.
+		local xpLine
+		if level >= Progression.MAX_LEVEL then
+			xpLine = "MAX LEVEL"
+		else
+			local need = Progression.xpForLevel(level + 1)
+			local have = owned.xp or 0
+			local prev = Progression.xpForLevel(level)
+			xpLine = ("Lv.%d  %s/%s XP"):format(level, Format.short(have - prev), Format.short(need - prev))
+		end
+
+		local fusion = Progression.fusionRule(star)
+		local dupes = 0
+		if fusion then
+			for uid2, o2 in pairs(state.pets) do
+				if uid2 ~= entry.uid and o2.id == owned.id
+					and (o2.variant or "normal") == (owned.variant or "normal")
+					and not o2.locked and not equipped[uid2] then
+					dupes += 1
+				end
+			end
+		end
+
+		local f = row({
+			order = i, icon = owned.locked and "\u{1F512}" or "\u{1F43E}",
+			height = 92,
+			color = if tier and tier.label ~= "" then tier.color
+				elseif entry.variant.id ~= "normal" then entry.variant.color
+				else entry.def.color,
+			title = ("%s%s"):format(
+				Progression.displayName(entry.def.name, entry.variant.name, star, level),
+				owned.serial and ("  #" .. owned.serial) or ""),
+			subtitle = ("+%s multiplier  \u{2022}  %s  \u{2022}  +%.2f luck%s%s\n%s")
+				:format(
+					Format.short(entry.mult),
+					xpLine,
+					entry.def.luck,
+					evo.stage > 0 and ("  \u{2022}  %s\u{00D7}%.1f"):format(evo.name, evo.multScale) or "",
+					(tier and tier.label ~= "") and ("  \u{2022}  " .. tier.label) or "",
+					fusion and ((dupes >= fusion.cost)
+						and ("\u{2728} READY TO FUSE \u{2014} %d duplicates \u{2192} %d\u{2605} (\u{00D7}%.1f)"):format(fusion.cost, star + 1, fusion.multScale)
+						or ("Fuse to %d\u{2605}: %d/%d duplicates"):format(star + 1, dupes, fusion.cost))
+						or "\u{2605} Maximum stars"),
 			button = if isEquipped then "UNEQUIP" else "EQUIP",
 			buttonColor = if isEquipped then Theme.WARN else Theme.GOOD,
 			onClick = function()
 				Remotes.event("EquipPet"):FireServer({ uid = entry.uid, equip = not isEquipped })
 			end,
 		})
+
+		-- Secondary actions sit under the main button so the row keeps one
+		-- obvious primary action.
+		local fuseBtn = Theme.button({
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -12, 1, -8),
+			Size = UDim2.new(0, 72, 0, 26),
+			BackgroundColor3 = (fusion and dupes >= fusion.cost) and Theme.ACCENT_2 or Theme.BG_LIFT,
+			TextColor3 = (fusion and dupes >= fusion.cost) and Theme.BG or Theme.TEXT_DIM,
+			Font = Theme.FONT_BLACK, TextSize = 12,
+			Text = "FUSE",
+			ZIndex = 7, Parent = f,
+		})
+		if fusion and dupes >= fusion.cost then
+			fuseBtn.MouseButton1Click:Connect(function()
+				Remotes.event("FusePet"):FireServer({ uid = entry.uid })
+			end)
+		end
+
+		local lockBtn = Theme.button({
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -90, 1, -8),
+			Size = UDim2.new(0, 72, 0, 26),
+			BackgroundColor3 = owned.locked and Theme.GOLD or Theme.BG_LIFT,
+			TextColor3 = owned.locked and Theme.BG or Theme.TEXT_DIM,
+			Font = Theme.FONT_BLACK, TextSize = 12,
+			Text = owned.locked and "LOCKED" or "LOCK",
+			ZIndex = 7, Parent = f,
+		})
+		lockBtn.MouseButton1Click:Connect(function()
+			Remotes.event("LockPet"):FireServer({ uid = entry.uid, locked = not owned.locked })
+		end)
 	end
 
 	if #sorted == 0 then
@@ -510,6 +606,50 @@ builders.codes = function()
 			buttonColor = Theme.BG_LIFT,
 			disabled = true,
 		})
+	end
+end
+
+builders.trade = function()
+	row({
+		order = 0, icon = "\u{1F6E1}", color = Theme.WARN, height = 76,
+		title = "Trade safety",
+		subtitle = "Both sides must confirm, and ANY change to either offer clears both confirmations. "
+			.. "Lock a familiar (\u{1F512} in MY FAMILIARS) and it can never be traded, fused away or deleted. "
+			.. "Nobody from this game will ever ask you to trade first.",
+	})
+
+	local me = Players.LocalPlayer
+	local myRoot = me.Character and me.Character:FindFirstChild("HumanoidRootPart")
+	local found = 0
+
+	for i, other in ipairs(Players:GetPlayers()) do
+		if other ~= me then
+			local theirRoot = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+			local dist = (myRoot and theirRoot)
+				and ((myRoot :: BasePart).Position - (theirRoot :: BasePart).Position).Magnitude
+				or math.huge
+			local close = dist <= Trading.MAX_DISTANCE
+			found += 1
+			row({
+				order = i, icon = "\u{1F464}",
+				color = close and Theme.GOOD or Theme.BG_LIFT,
+				title = other.DisplayName ~= other.Name
+					and ("%s (@%s)"):format(other.DisplayName, other.Name) or other.Name,
+				subtitle = close and ("%d studs away \u{2014} in range"):format(math.floor(dist))
+					or "Too far away \u{2014} walk closer to trade",
+				button = close and "REQUEST" or "TOO FAR",
+				buttonColor = close and Theme.GOOD or Theme.BG_LIFT,
+				disabled = not close,
+				onClick = function()
+					Remotes.event("TradeRequest"):FireServer({ target = other.UserId })
+				end,
+			})
+		end
+	end
+
+	if found == 0 then
+		row({ order = 1, icon = "\u{1F465}", title = "Nobody else here yet",
+			subtitle = "Trading needs another player in the server. Invite a friend!" })
 	end
 end
 

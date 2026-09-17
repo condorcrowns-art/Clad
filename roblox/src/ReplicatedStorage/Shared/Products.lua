@@ -71,6 +71,7 @@ local Passes: { Pass } = {
 export type Product = {
 	key: string, id: number, name: string, price: number,
 	kind: string, amount: number, desc: string, icon: string,
+	eggId: string?,
 }
 
 local Products: { Product } = {
@@ -85,6 +86,19 @@ local Products: { Product } = {
 	{ key="ServerBoost", id=0, price=149, name="SERVER 2x BITS", kind="server_boost", amount=600, icon="\u{1F310}",
 	  desc="Give EVERYONE in the server 2x Bits for 10 minutes. Your name is announced." },
 	{ key="LuckBoost", id=0, price=45, name="3x Luck (10 min)", kind="luck_boost", amount=600, icon="\u{1F340}", desc="Triple hatch luck for 10 minutes." },
+
+	-- PRIME eggs: bought directly with Robux, exclusive species, and the bulk
+	-- tiers carry a rising bonus so the big pack is always the better deal.
+	-- Bulk hatch products are the highest-revenue item in every pet game that
+	-- ships them, because the chase is per-hatch, not per-purchase.
+	{ key="Egg_Prime_1",  id=0, price=49,  name="PRIME Egg x1",  kind="egg", amount=1,  eggId="egg_prime", icon="\u{1F95A}",
+	  desc="One PRIME Egg. Exclusive familiars you cannot get any other way." },
+	{ key="Egg_Prime_5",  id=0, price=199, name="PRIME Egg x5",  kind="egg", amount=5,  eggId="egg_prime", icon="\u{1F95A}",
+	  desc="Five PRIME Eggs (save 20%)." },
+	{ key="Egg_Prime_20", id=0, price=699, name="PRIME Egg x20", kind="egg", amount=20, eggId="egg_prime", icon="\u{1F95A}",
+	  desc="Twenty PRIME Eggs (save 30%) \u{2014} best value, and 20 rolls at THE PRIME." },
+	{ key="Egg_Omega_R",  id=0, price=99,  name="OMEGA Egg x3",  kind="egg", amount=3,  eggId="egg_omega", icon="\u{1F48E}",
+	  desc="Three OMEGA Eggs without spending Shards." },
 }
 
 local passByKey, productByKey, productById = {}, {}, {}

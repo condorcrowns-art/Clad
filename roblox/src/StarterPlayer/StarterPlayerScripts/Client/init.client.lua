@@ -19,6 +19,7 @@ local Notify  = require(script.Notify)
 local HUD     = require(script.HUD)
 local Panels  = require(script.Panels)
 local Effects = require(script.Effects)
+local Trade   = require(script.Trade)
 
 local player = Players.LocalPlayer
 local mouse  = player:GetMouse()
@@ -34,6 +35,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 Notify.mount(gui)
 Effects.mount(gui)
 Panels.mount(gui)
+Trade.mount(gui, function() return state end)
 HUD.mount(gui, function(id) Panels.toggle(id) end)
 
 -- ----------------------------------------------------------------- state
@@ -91,11 +93,22 @@ Remotes.event("Effect").OnClientEvent:Connect(function(payload)
 		Effects.shake(0.25, 0.15)
 	elseif payload.kind == "rebirth" then
 		Effects.shake(1.0, 0.5)
+	elseif payload.kind == "evolve" then
+		Effects.shake(0.6, 0.4)
 	end
 end)
 
 Remotes.event("PromptPurchase").OnClientEvent:Connect(function(payload)
 	Panels.open("robux")
+end)
+
+Remotes.event("TradeUpdate").OnClientEvent:Connect(function(payload)
+	Trade.update(payload)
+	if payload and payload.active then Panels.close() end
+end)
+
+Remotes.event("TradeInvite").OnClientEvent:Connect(function(payload)
+	Trade.invite(payload, gui)
 end)
 
 -- ------------------------------------------------------------------ input
@@ -181,6 +194,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		Panels.toggle("pets")
 	elseif input.KeyCode == Enum.KeyCode.R then
 		Panels.toggle("rebirth")
+	elseif input.KeyCode == Enum.KeyCode.T then
+		Panels.toggle("trade")
 	elseif input.KeyCode == Enum.KeyCode.Escape then
 		Panels.close()
 	end
@@ -192,7 +207,7 @@ end)
 RunService.Heartbeat:Connect(function()
 	if not state then return end
 	local holding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-	if holding and not Panels.isOpen() then
+	if holding and not Panels.isOpen() and not Trade.isOpen() then
 		swing(nodeUnderMouse() or nearestNode(Config.MAX_SWING_REACH))
 	elseif state.passes and state.passes.AutoSwing then
 		swing(nearestNode(Config.MAX_SWING_REACH))
