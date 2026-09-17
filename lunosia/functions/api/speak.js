@@ -39,6 +39,26 @@
 
 const MODEL = '@cf/myshell-ai/melotts';
 
+/* KNOWN LIVE BUG, CLOUDFLARE'S SIDE, CONFIRMED 2026-09-17:
+ * env.AI.run(MODEL, { prompt, lang: 'es' }) fails outright on Cloudflare's own
+ * infrastructure — reproduced against the real deployed function, not a guess.
+ * The request shape here already matches Cloudflare's own documented example
+ * exactly (`{ prompt, lang }`), so this is not something a change to what we
+ * send can fix. Others have hit the same thing for non-English languages
+ * since at least 2025:
+ *   https://community.cloudflare.com/t/cf-myshell-ai-melotts-doesnt-work-in-spanish/811141
+ *   https://community.cloudflare.com/t/melotts-3043-internal-server-error-since-july-9th/939369
+ * Since this app only ever asks for 'es' (and occasionally 'fr'), the hosted
+ * voice is currently non-functional for every real use this app has, even
+ * though the AI binding itself is present and billing/quota is not the
+ * issue. It is left wired up as-is (rather than hard-disabled) because
+ * Cloudflare could fix this on their end at any time with no code change
+ * needed here — the existing client-side fallback to the browser voice
+ * already covers the failure gracefully. If this is still broken a while
+ * from now, the honest fix is to stop advertising `available: true` from
+ * onRequestGet below for these languages so Settings does not offer a
+ * "neural" voice that silently never plays. */
+
 // MeloTTS's published languages. Anything else falls back to Spanish rather
 // than erroring, since every caller in this app already knows its own
 // language and a typo here should degrade, not break the voice entirely.

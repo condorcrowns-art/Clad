@@ -949,9 +949,10 @@ window.LUNOSIA = window.LUNOSIA || {};
           : list[0].engine === 'piper'
             ? 'Neural voice running on this machine. No internet needed, nothing to pay.'
             : list[0].engine === 'hosted'
-              ? 'Neural voice running on lunosia.com itself — nothing to install, works on ' +
-                'a phone, needs an internet connection. This is what plays if you have not ' +
-                'run the Windows setup, and it is why the site sounds better than it used to.'
+              ? 'Neural voice running on lunosia.com itself, when Cloudflare\'s end is having ' +
+                'a good day — their Spanish text-to-speech has been unreliable, so if this ' +
+                'sounds robotic rather than neural, it silently fell back to your browser\'s ' +
+                'own voice rather than failing loudly. No setup needed either way.'
               : list[0].quality === 'basic'
                 ? 'Everything installed here is an old robotic voice. See the note below.'
                 : 'Sorted best-sounding first. Picking one plays a sample.';

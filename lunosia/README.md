@@ -92,12 +92,19 @@ Repeated phrases are cached as WAVs under `voices/cache/`, so drilling the same 
 words does not re-synthesise them fifty times.
 
 If Piper is missing — you skipped it, the download failed, the server isn't running — the
-app does not drop straight to the operating system's own voice. On **lunosia.com** it tries
-a second neural voice first: **Cloudflare Workers AI's MeloTTS**, called at `/api/speak` on
-the site itself — same account, same "AI" binding that already answers the chat partner, no
-extra signup. This is what makes the public site sound like a person even though nobody
-visiting it has run this setup script; only if that also fails does it drop to the browser's
-own voice. Settings → **Voice** tells you which one you're on:
+app tries a second neural voice first, before dropping to the operating system's own: **Cloudflare
+Workers AI's MeloTTS**, called at `/api/speak` on the site itself — same account, same "AI"
+binding that already answers the chat partner, no extra signup or billing needed.
+
+**Known issue, confirmed 2026-09-17:** Cloudflare's own MeloTTS currently fails for Spanish
+(and reportedly other non-English languages) on their end — not a request-shape bug in
+`functions/api/speak.js`, not a billing/quota issue, and not fixable from this codebase. Others
+have hit the same thing since 2025 ([1](https://community.cloudflare.com/t/cf-myshell-ai-melotts-doesnt-work-in-spanish/811141),
+[2](https://community.cloudflare.com/t/melotts-3043-internal-server-error-since-july-9th/939369)).
+The app already falls back to the browser's own voice automatically when this happens, so
+nothing breaks — but until Cloudflare fixes it, this tier does not currently improve on the
+browser voice for a visitor who hasn't set up Piper. Settings → **Voice** tells you which
+engine you're actually on:
 
 | Label | What it is |
 |---|---|
